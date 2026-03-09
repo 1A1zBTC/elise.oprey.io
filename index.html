@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Room</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    h1 {
+      color: #fff;
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .subtitle {
+      color: #a0a8c0;
+      font-size: 0.95rem;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .games {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .game-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 20px;
+      padding: 20px;
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .game-card:active {
+      transform: scale(0.97);
+    }
+
+    .game-card:hover {
+      border-color: #e94560;
+      box-shadow: 0 0 24px rgba(233, 69, 96, 0.25);
+      transform: translateY(-2px);
+    }
+
+    .game-icon {
+      font-size: 3rem;
+      line-height: 1;
+      flex-shrink: 0;
+      width: 64px;
+      height: 64px;
+      background: #0f3460;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .game-info {
+      flex: 1;
+    }
+
+    .game-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .game-meta {
+      font-size: 0.8rem;
+      color: #a0a8c0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .players-badge {
+      background: #0f3460;
+      color: #e94560;
+      font-weight: 700;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .arrow {
+      color: #a0a8c0;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .footer {
+      margin-top: 48px;
+      color: #3d4466;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Game Room</h1>
+  <p class="subtitle">Pick a game &amp; play with friends</p>
+
+  <div class="games">
+
+    <a href="/battleships/index.html" class="game-card">
+      <div class="game-icon">🚢</div>
+      <div class="game-info">
+        <div class="game-title">Battleships</div>
+        <div class="game-meta">
+          <span class="players-badge">2 players</span>
+          <span>Strategy · Turn based</span>
+        </div>
+      </div>
+      <span class="arrow">›</span>
+    </a>
+
+    <a href="/snakes-and-ladders/index.html" class="game-card">
+      <div class="game-icon">🎲</div>
+      <div class="game-info">
+        <div class="game-title">Snakes &amp; Ladders</div>
+        <div class="game-meta">
+          <span class="players-badge">1 – 4 players</span>
+          <span>Classic · Family</span>
+        </div>
+      </div>
+      <span class="arrow">›</span>
+    </a>
+
+  </div>
+
+  <p class="footer">Pass &amp; play on one device</p>
+
+</body>
+</html>
