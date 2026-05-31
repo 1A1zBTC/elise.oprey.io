@@ -8,212 +8,108 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      -webkit-tap-highlight-color: transparent;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
       background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      display: flex; flex-direction: column; align-items: center;
       padding: 16px;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-
-    @media (min-width: 768px) {
-      body { justify-content: center; }
+      user-select: none; -webkit-user-select: none;
     }
 
     .topbar {
-      width: 100%;
-      max-width: 440px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      width: 100%; max-width: 480px;
+      display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 8px;
     }
-
-    .back {
-      color: #a0a8c0;
-      text-decoration: none;
-      font-weight: 700;
-      font-size: 0.95rem;
-      padding: 6px 10px;
-      border-radius: 12px;
-      transition: color 0.15s ease, background 0.15s ease;
-    }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
     .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
 
-    .title {
-      font-family: 'Pacifico', cursive;
-      color: #fff;
-      font-size: 1.6rem;
-      line-height: 1;
+    /* ---------- scoreboard (3 players + roles) ---------- */
+    .roles { width: 100%; max-width: 480px; display: flex; gap: 8px; margin: 6px 0 12px; }
+    .pchip {
+      flex: 1; background: #16213e; border: 2px solid #0f3460; border-radius: 14px;
+      padding: 8px 6px; text-align: center; transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-
-    .scorebar {
-      width: 100%;
-      max-width: 440px;
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      margin: 6px 0 14px;
-    }
-
-    .stat {
-      flex: 1;
-      background: #16213e;
-      border: 2px solid #0f3460;
-      border-radius: 14px;
-      padding: 8px 10px;
-      text-align: center;
-    }
-    .stat .label { color: #a0a8c0; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-    .stat .value { color: #fff; font-size: 1.3rem; font-weight: 800; }
+    .pchip .nm { color: #cfd6ea; font-size: 0.78rem; font-weight: 800; }
+    .pchip .sc { color: #fff; font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
+    .pchip .role { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; min-height: 0.8rem; color: #6f7799; }
+    .pchip.judge { border-color: #ffd23f; box-shadow: 0 0 16px rgba(255,210,63,0.28); }
+    .pchip.judge .role { color: #ffd23f; }
+    .pchip.picker { border-color: #e94560; box-shadow: 0 0 16px rgba(233,69,96,0.28); }
+    .pchip.picker .role { color: #ff8aa0; }
 
     .caption {
-      width: 100%;
-      max-width: 440px;
-      background: #fff;
-      color: #1a1a2e;
-      border-radius: 18px;
-      padding: 20px 22px;
-      font-size: 1.25rem;
-      font-weight: 800;
-      line-height: 1.3;
-      text-align: center;
-      position: relative;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-      margin-bottom: 8px;
+      width: 100%; max-width: 480px; background: #fff; color: #1a1a2e;
+      border-radius: 18px; padding: 18px 20px; font-size: 1.2rem; font-weight: 800;
+      line-height: 1.3; text-align: center; position: relative;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35); margin-bottom: 18px;
     }
     .caption::after {
-      content: '';
-      position: absolute;
-      bottom: -12px;
-      left: 50%;
-      transform: translateX(-50%);
-      border-left: 14px solid transparent;
-      border-right: 14px solid transparent;
-      border-top: 14px solid #fff;
+      content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+      border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 14px solid #fff;
     }
 
-    .prompt {
-      color: #ffe8b0;
-      font-weight: 800;
-      font-size: 0.9rem;
-      margin: 16px 0 12px;
-      text-align: center;
-    }
+    .turn-label { color: #ffe8b0; font-weight: 800; font-size: 0.95rem; margin-bottom: 12px; text-align: center; min-height: 1.2em; }
 
-    .cards {
-      width: 100%;
-      max-width: 440px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
+    /* ---------- card areas ---------- */
+    .hand, .duel { width: 100%; max-width: 480px; display: grid; gap: 10px; }
+    .hand { grid-template-columns: repeat(3, 1fr); }
+    .duel { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    @media (max-width: 380px) { .hand { grid-template-columns: repeat(2, 1fr); } }
 
     .card {
-      position: relative;
-      height: 230px;
-      background: #0f1830;
-      border: 3px solid #0f3460;
-      border-radius: 18px;
-      overflow: hidden;
-      cursor: pointer;
+      position: relative; background: #0f1830; border: 3px solid #0f3460; border-radius: 16px;
+      overflow: hidden; cursor: pointer;
       transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
     }
-    .card:hover:not(.locked) {
-      border-color: #e94560;
-      transform: translateY(-2px);
-      box-shadow: 0 0 22px rgba(233, 69, 96, 0.25);
-    }
+    .hand .card { aspect-ratio: 1 / 1; }
+    .duel .card { aspect-ratio: 3 / 4; }
+    .card:hover:not(.locked) { border-color: #e94560; transform: translateY(-2px); box-shadow: 0 0 22px rgba(233,69,96,0.25); }
     .card:active:not(.locked) { transform: scale(0.98); }
-
-    .card img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
+    .card.locked { cursor: default; }
+    .card.correct { border-color: #46c46a; box-shadow: 0 0 26px rgba(70,196,106,0.55); }
+    .card.dim { opacity: 0.4; }
+    .card img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity 0.3s ease; }
     .card img.loaded { opacity: 1; }
-
     .card .spinner {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.8rem;
-      color: #3d4466;
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; color: #3d4466;
       background: linear-gradient(100deg, #14203c 30%, #1b2a4a 50%, #14203c 70%);
-      background-size: 200% 100%;
-      animation: shimmer 1.2s linear infinite;
+      background-size: 200% 100%; animation: shimmer 1.2s linear infinite;
     }
     @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
-    .card.locked { cursor: default; }
-    .card.correct {
-      border-color: #46c46a;
-      box-shadow: 0 0 26px rgba(70, 196, 106, 0.5);
-    }
-    .card.wrong {
-      border-color: #e94560;
-      box-shadow: 0 0 22px rgba(233, 69, 96, 0.4);
-    }
-    .card.dim { opacity: 0.4; }
-
-    .badge {
-      position: absolute;
-      top: 8px;
-      left: 8px;
-      font-size: 0.78rem;
-      font-weight: 800;
-      color: #fff;
-      padding: 3px 9px;
-      border-radius: 12px;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-    .card.correct .badge { opacity: 1; background: #46c46a; }
-    .card.wrong .badge { opacity: 1; background: #e94560; }
-
-    .feedback {
-      min-height: 28px;
-      margin-top: 16px;
-      font-size: 1.1rem;
-      font-weight: 800;
-      text-align: center;
-      color: #cfd6ea;
-    }
+    .feedback { min-height: 26px; margin-top: 16px; font-size: 1.15rem; font-weight: 800; text-align: center; color: #cfd6ea; }
     .feedback.good { color: #7be39a; }
-    .feedback.bad { color: #ff8aa0; }
 
-    .next-btn {
-      margin-top: 14px;
-      font-family: 'Nunito', sans-serif;
-      font-weight: 800;
-      font-size: 1.05rem;
-      color: #fff;
-      background: #e94560;
-      border: none;
-      border-radius: 16px;
-      padding: 14px 34px;
-      cursor: pointer;
-      box-shadow: 0 6px 0 #b22a44;
-      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.2s ease;
+    .next-btn, .start-btn {
+      margin-top: 16px; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.05rem;
+      color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 14px 30px;
+      cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease;
     }
-    .next-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+    .next-btn:active, .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
     .next-btn[hidden] { display: none; }
+
+    /* ---------- overlays (setup + pass-the-device) ---------- */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(10,14,28,0.92); backdrop-filter: blur(5px);
+      display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20;
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: 100%; max-width: 380px; background: #16213e; border: 2px solid #0f3460;
+      border-radius: 24px; padding: 26px 22px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.8rem; font-weight: 400; margin-bottom: 8px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.95rem; line-height: 1.45; margin-bottom: 6px; }
+    .pass-emoji { font-size: 3rem; margin-bottom: 6px; }
+    .role-pill { display: inline-block; font-weight: 800; font-size: 0.72rem; letter-spacing: 0.6px; padding: 4px 12px; border-radius: 20px; margin: 4px 0 10px; }
+    .role-pill.picker { background: rgba(233,69,96,0.18); color: #ff8aa0; }
+    .role-pill.judge { background: rgba(255,210,63,0.18); color: #ffd23f; }
   </style>
 </head>
 <body>
@@ -224,184 +120,288 @@
     <span style="width:56px"></span>
   </div>
 
-  <div class="scorebar">
-    <div class="stat"><div class="label">Score</div><div class="value" id="score">0</div></div>
-    <div class="stat"><div class="label">Round</div><div class="value" id="round">1</div></div>
-    <div class="stat"><div class="label">Streak</div><div class="value" id="streak">0</div></div>
+  <div class="roles" id="scores"></div>
+  <div class="caption" id="caption">…</div>
+  <div class="turn-label" id="turn"></div>
+  <div id="cards"></div>
+  <div class="feedback" id="feedback"></div>
+  <button class="next-btn" id="next" hidden>Next round ›</button>
+
+  <!-- Setup -->
+  <div class="overlay" id="setup">
+    <div class="panel">
+      <h2>PicWits</h2>
+      <div class="sub">A 3-player pass-&amp;-play game. Two players each pick the funniest picture for the caption — the third <b style="color:#ffd23f">judges</b> which wins. Roles rotate every round! 🤪</div>
+      <button class="start-btn" id="start">Start · 3 Players</button>
+    </div>
   </div>
 
-  <div class="caption" id="caption">…</div>
-
-  <div class="prompt">Pick the picture that fits best 👇</div>
-
-  <div class="cards" id="cards"></div>
-
-  <div class="feedback" id="feedback"></div>
-
-  <button class="next-btn" id="next" hidden>Next ›</button>
+  <!-- Pass the device -->
+  <div class="overlay" id="pass" hidden>
+    <div class="panel">
+      <div class="pass-emoji">🙈</div>
+      <h2 id="pass-name">Player 1</h2>
+      <div class="role-pill" id="pass-role">PICKER</div>
+      <div class="sub" id="pass-sub">…</div>
+      <button class="start-btn" id="ready">I'm Ready</button>
+    </div>
+  </div>
 
   <script>
   (function () {
-    // The caption hints a cute subject; the BEST picture is a real photo of that
-    // subject. The two distractors are photos of OTHER cute animals from the pool.
-    // Photos come from LoremFlickr (royalty-free Creative Commons stock images).
-    const ROUNDS = [
-      { caption: "Certified goodest boy 🐾",                       best: "puppy" },
-      { caption: "Tiny tiger who runs the entire household",      best: "kitten" },
-      { caption: "Hop champion of the whole meadow",              best: "rabbit" },
-      { caption: "Smol fluffy chaos goblin",                      best: "hamster" },
-      { caption: "Pond royalty, reporting for quack duty",        best: "duckling" },
-      { caption: "Professional mud enthusiast",                   best: "piglet" },
-      { caption: "A walking, woolly little cloud",                best: "lamb" },
-      { caption: "Suspiciously cute and clearly up to no good",   best: "fox" },
-      { caption: "World's slowest, snuggliest tree hugger",       best: "sloth" },
-      { caption: "Wears a tuxedo, can't fly, still iconic",       best: "penguin" },
-      { caption: "Floating river cutie cracking snacks",          best: "otter" },
-      { caption: "Bouncy little mountain climber",                best: "goat" },
-      { caption: "Fresh out of the egg and adorable",             best: "chick" },
-      { caption: "Short legs, big personality, royal floof",      best: "corgi" },
-      { caption: "A tiny spiky ball of cuteness",                 best: "hedgehog" },
-      { caption: "Bamboo-munching black-and-white sweetheart",    best: "panda" },
-      { caption: "Eucalyptus enjoyer, professional napper",       best: "koala" },
-      { caption: "Big ears, tiny trunk, the biggest heart",       best: "elephant" },
-      { caption: "Wobbly-legged, spotty woodland sweetheart",     best: "deer" },
-      { caption: "The fluffiest little orange floofball",         best: "pomeranian" },
-      { caption: "Talkative feathered show-off",                  best: "parrot" },
-      { caption: "Tiny masked midnight snack bandit",             best: "raccoon" },
-      { caption: "Hyperactive park acorn collector",              best: "squirrel" },
-      { caption: "Fluffy-necked, judgmental spitting champion",   best: "alpaca" }
+    // Hand-picked silly pictures (chosen via picker.html). Each is a SPECIFIC LoremFlickr
+    // image locked by [subject-query, lock]. These are the cards players choose from.
+    const PICKS = [
+      ['pug',48271],['alpaca',241355],['capybara',337897],['goose',434439],['parrot',675794],['monkey',724065],
+      ['penguin',772336],['pig',917149],['cow',965420],['lemur',255046],['mascot',448130],['inflatable',544672],
+      ['pug,costume',27382],['jester',737756],['chicken',703176],['frog',654905],['donkey',992802],['hedgehog',185886],
+      ['owl',137615],['cow',89344],['turkey',330699],['chicken',827100],['donkey',116726],['pig',164997],
+      ['owl',261539],['ferret',358081],['flamingo',406352],['mascot',695978],['costume',744249],['gnome',647707],
+      ['clown',599436],['turkey',454623],['funny,dog',909951],['mascot',572054],['costume',620325],['silly,animal',6493],
+      ['funny,cat',958222],['funny,face',54764],['jester',861680],['pinata',813409],['pug,costume',151306],['dog,hat',199577],
+      ['cat,grumpy',247848],['alpaca',489203],['sloth',537474],['capybara',585745],['funny,dog',33875],['silly,animal',130417],
+      ['funny,face',178688],['pug,costume',275230],['corgi',468314],['llama',564856],['hamster',999295],['chicken',951024],
+      ['duck',854482],['donkey',240650],['goat',192379],['cow',337192],['corgi',592238],['costume',868173],
+      ['clown',723360],['gnome',771631],['jester',109528],['pinata',61257],['pug,costume',399154],['dog,hat',447425],
+      ['capybara',833593],['chicken',74948],['balloon',88639],['corgi',716162],['pug,costume',523078],['chicken',198872],
+      ['pig',536769],['silly,animal',502189],['balloon',212563],['lemur',874666],['hedgehog',681582],['ferret',729853],
+      ['owl',633311],['parrot',295414],['penguin',391956],['funny,face',550460],['derp',598731],['pug,costume',647002],
+      ['funny,cat',577842],['silly,animal',626113],['dachshund',12281],['derp',722655],['pug,costume',770926],['capybara',205365],
+      ['hedgehog',929430],['pug,costume',894850],['pug',39663],['corgi',87934],['dachshund',136205],['owl',5083],
+      ['clown',342980],['funny,cat',825690],['corgi',211858],['dachshund',260129],['funny,face',922232],['inflatable',536064],
+      ['lemur',246438],['ferret',101625],['goat',811999],['penguin',763728],['monkey',715457],['alpaca',356671],
+      ['capybara',453213],['pig',32465],['corgi',335782],['dachshund',384053],['alpaca',480595],['llama',432324],
+      ['raccoon',625408],['cat,grumpy',239240],['pug',287511],['derp',94427],['pug,costume',142698],['funny,face',46156],
+      ['duck',721950],['frog',770221],['chicken',818492],['owl',252931],['dog,hat',314893],['pug,costume',266622],
+      ['capybara',701061],['cat,grumpy',363164],['funny,dog',25267],['funny,cat',73538],['mascot',687370],['lemur',494286],
+      ['turkey',446015],['meerkat',542557],['balloon',832183],['funny,face',170080],['scarecrow',880454],['raccoon',749332]
     ];
 
-    // Distractor pool — every cute subject we might show as a "wrong" option.
-    const SUBJECTS = ROUNDS.map(function (r) { return r.best; });
+    // Caption prompts — the round's challenge. Players pick the funniest card for it.
+    const CAPTIONS = [
+      'When you wake up 5 minutes before the alarm',
+      'Me pretending to listen',
+      'The last slice of pizza, defended at all costs',
+      'When the WiFi finally connects',
+      'Trying to look busy',
+      "When someone says “we need to talk”",
+      'My energy at 3pm',
+      "When the teacher says “group project”",
+      'Sneaking a snack after bedtime',
+      'When your favourite song comes on',
+      'The main character of this story',
+      'When you hear there’s a surprise',
+      'Walking in like you own the place',
+      'When you trip but play it cool',
+      'Me after doing one chore',
+      'The vibe on a Friday',
+      'When you smell food cooking',
+      'Staying calm in the group photo',
+      "When the game says “YOU WIN”",
+      'The face of pure mischief',
+      'When you remember something embarrassing',
+      'Ready for absolute chaos',
+      'When someone eats your leftovers',
+      'Living my best life',
+      'When the weekend finally arrives',
+      'Me the moment school ends',
+      'When you nail it on the first try',
+      'Plotting something sneaky',
+      'When the snacks run out',
+      'The boss of the whole playground'
+    ];
 
+    const HAND_SIZE = 6;
+    function imgUrl(q, lock) {
+      return 'https://loremflickr.com/500/500/' + q.split(',').map(encodeURIComponent).join(',') + '?lock=' + lock;
+    }
+
+    // ---- elements ----
+    const scoresEl = document.getElementById('scores');
     const captionEl = document.getElementById('caption');
+    const turnEl = document.getElementById('turn');
     const cardsEl = document.getElementById('cards');
     const feedbackEl = document.getElementById('feedback');
     const nextBtn = document.getElementById('next');
-    const scoreEl = document.getElementById('score');
-    const roundEl = document.getElementById('round');
-    const streakEl = document.getElementById('streak');
+    const setupEl = document.getElementById('setup');
+    const passEl = document.getElementById('pass');
+    const passNameEl = document.getElementById('pass-name');
+    const passRoleEl = document.getElementById('pass-role');
+    const passSubEl = document.getElementById('pass-sub');
 
-    let score = 0, roundNum = 0, streak = 0;
-    let queue = [];
-    let current = null;
-    let locked = false;
+    // ---- state ----
+    let players = [];
+    let round = 0;
+    let judge = 0, pickers = [1, 2];
+    let phase = 'setup';     // setup | pass | pick | judge | reveal
+    let caption = '';
+    let playerHands = [[], [], []];  // a persistent hand per player — unplayed cards are kept
+    let deck = [];           // draw pile (reshuffles from PICKS when empty)
+    let picks = [];          // [{card, by}]
+    let pickerTurn = 0;
+    let capQueue = [];
+    let pending = null;      // { player, phase } for the pass screen
 
     function shuffle(a) {
       const arr = a.slice();
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
-      }
+      for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
       return arr;
     }
-
-    function imageUrl(tag, seed) {
-      // LoremFlickr: /<w>/<h>/<keyword>?lock=<seed> returns a stable CC photo per seed.
-      return 'https://loremflickr.com/500/500/' + encodeURIComponent(tag) + '?lock=' + seed;
+    function nextCaption() {
+      if (!capQueue.length) capQueue = shuffle(CAPTIONS.map(function (_, i) { return i; }));
+      return CAPTIONS[capQueue.pop()];
     }
 
-    function randSeed() { return Math.floor(Math.random() * 1e6); }
-
-    function nextRoundData() {
-      if (queue.length === 0) queue = shuffle(ROUNDS.map(function (_, i) { return i; }));
-      const entry = ROUNDS[queue.pop()];
-      const distractors = shuffle(SUBJECTS.filter(function (s) { return s !== entry.best; })).slice(0, 2);
-      const options = shuffle(
-        [{ tag: entry.best, best: true }].concat(
-          distractors.map(function (s) { return { tag: s, best: false }; })
-        )
-      );
-      return { caption: entry.caption, options: options };
+    function newDeck() { deck = shuffle(PICKS.slice()); }
+    // Draw a card not already in `hand` (reshuffles the deck when it runs dry).
+    function drawCard(hand) {
+      for (var t = 0; t < 8; t++) {
+        if (!deck.length) newDeck();
+        var c = deck.pop();
+        if (!hand.some(function (h) { return h[0] === c[0] && h[1] === c[1]; })) return c;
+      }
+      return deck.pop() || PICKS[Math.floor(Math.random() * PICKS.length)];
+    }
+    function dealHand() {
+      var hand = [];
+      for (var i = 0; i < HAND_SIZE; i++) hand.push(drawCard(hand));
+      return hand;
     }
 
-    function makeCard(opt) {
-      const card = document.createElement('div');
-      card.className = 'card';
+    function renderScores() {
+      scoresEl.innerHTML = '';
+      players.forEach(function (p, i) {
+        const chip = document.createElement('div');
+        let role = '', cls = 'pchip';
+        if (i === judge) { role = 'Judge'; cls += ' judge'; }
+        else { role = 'Picker'; if (phase === 'pick' && pickers[pickerTurn] === i) cls += ' picker'; }
+        chip.className = cls;
+        chip.innerHTML = '<div class="nm">' + p.name + '</div><div class="sc">' + p.score + '</div><div class="role">' + role + '</div>';
+        scoresEl.appendChild(chip);
+      });
+    }
 
-      const badge = document.createElement('div');
-      badge.className = 'badge';
-
-      const spinner = document.createElement('div');
-      spinner.className = 'spinner';
-      spinner.textContent = '🐾';
-
-      const img = document.createElement('img');
-      img.alt = '';
-      img.referrerPolicy = 'no-referrer';
+    function makeCard(card) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      const spinner = document.createElement('div'); spinner.className = 'spinner'; spinner.textContent = '🤪';
+      const img = document.createElement('img'); img.alt = ''; img.referrerPolicy = 'no-referrer';
       let tries = 0;
-      function load() {
-        img.src = imageUrl(opt.tag, randSeed());
-      }
-      img.addEventListener('load', function () {
-        img.classList.add('loaded');
-        spinner.style.display = 'none';
-      });
-      img.addEventListener('error', function () {
-        tries++;
-        if (tries < 4) load();              // retry with a fresh photo
-        else spinner.textContent = '🐾';    // give up gracefully, keep the paw
-      });
+      function load() { img.src = imgUrl(card[0], card[1]) + (tries ? '&r=' + tries : ''); }
+      img.addEventListener('load', function () { img.classList.add('loaded'); spinner.style.display = 'none'; });
+      img.addEventListener('error', function () { tries++; if (tries < 4) load(); else spinner.textContent = '🖼️'; });
       load();
-
-      card.appendChild(img);
-      card.appendChild(spinner);
-      card.appendChild(badge);
-      card.addEventListener('click', function () { pick(card, badge, opt); });
-      return card;
+      el.appendChild(img); el.appendChild(spinner);
+      return el;
     }
 
-    function render() {
-      current = nextRoundData();
-      locked = false;
-      roundNum++;
-      roundEl.textContent = roundNum;
-      captionEl.textContent = current.caption;
-      feedbackEl.textContent = '';
-      feedbackEl.className = 'feedback';
+    // ---- flow ----
+    function startGame() {
+      players = [ { name: 'Player 1', score: 0 }, { name: 'Player 2', score: 0 }, { name: 'Player 3', score: 0 } ];
+      round = 0; capQueue = [];
+      newDeck();
+      playerHands = [ dealHand(), dealHand(), dealHand() ];   // each player keeps their own hand
+      setupEl.hidden = true;
+      beginRound();
+    }
+
+    function beginRound() {
+      caption = nextCaption();
+      judge = round % 3;
+      pickers = [(judge + 1) % 3, (judge + 2) % 3];
+      picks = [];
+      pickerTurn = 0;
+      captionEl.textContent = caption;
+      feedbackEl.textContent = ''; feedbackEl.className = 'feedback';
       nextBtn.hidden = true;
+      renderScores();
+      passTo(pickers[0], 'pick');
+    }
 
+    function passTo(playerIdx, nextPhase) {
+      phase = 'pass';
+      pending = { player: playerIdx, phase: nextPhase };
+      renderScores();
       cardsEl.innerHTML = '';
-      current.options.forEach(function (opt) {
-        cardsEl.appendChild(makeCard(opt));
+      turnEl.textContent = '';
+      const judging = nextPhase === 'judge';
+      passNameEl.textContent = players[playerIdx].name;
+      passRoleEl.textContent = judging ? 'JUDGE' : 'PICKER';
+      passRoleEl.className = 'role-pill ' + (judging ? 'judge' : 'picker');
+      passSubEl.innerHTML = judging
+        ? 'You’re the <b style="color:#ffd23f">judge</b>! Pick which picture fits the caption best.'
+        : 'Pick the funniest picture for the caption — keep your choice secret! 🤫';
+      passEl.hidden = false;
+    }
+
+    function onReady() {
+      if (!pending) return;
+      passEl.hidden = true;
+      const p = pending; pending = null;
+      if (p.phase === 'pick') showPick(p.player);
+      else showJudge();
+    }
+
+    function showPick(playerIdx) {
+      phase = 'pick';
+      renderScores();
+      captionEl.textContent = caption;
+      turnEl.textContent = players[playerIdx].name + ', tap the funniest card 👇';
+      cardsEl.className = 'hand';
+      cardsEl.innerHTML = '';
+      playerHands[playerIdx].forEach(function (card) {
+        const el = makeCard(card);
+        el.addEventListener('click', function () { choose(card, playerIdx); });
+        cardsEl.appendChild(el);
       });
     }
 
-    function pick(card, badge, opt) {
-      if (locked) return;
-      locked = true;
-      const cards = cardsEl.querySelectorAll('.card');
+    function choose(card, playerIdx) {
+      if (phase !== 'pick') return;
+      picks.push({ card: card, by: playerIdx });
+      // remove the played card; the player keeps the rest and draws one new card
+      const hand = playerHands[playerIdx];
+      const ci = hand.indexOf(card);
+      if (ci !== -1) hand.splice(ci, 1);
+      hand.push(drawCard(hand));
+      pickerTurn++;
+      if (pickerTurn < pickers.length) passTo(pickers[pickerTurn], 'pick');
+      else passTo(judge, 'judge');
+    }
 
-      cards.forEach(function (c, idx) {
-        c.classList.add('locked');
-        const isBest = current.options[idx].best;
-        const cBadge = c.querySelector('.badge');
-        if (isBest) { c.classList.add('correct'); cBadge.textContent = '✓ Best'; }
-        else if (c === card) { c.classList.add('wrong'); cBadge.textContent = '✕'; }
-        else c.classList.add('dim');
+    function showJudge() {
+      phase = 'judge';
+      renderScores();
+      captionEl.textContent = caption;
+      turnEl.textContent = players[judge].name + ' (Judge): which one fits best?';
+      cardsEl.className = 'duel';
+      cardsEl.innerHTML = '';
+      // show the two picks in random order so the judge can't tell who chose which
+      shuffle([0, 1]).forEach(function (pi) {
+        const el = makeCard(picks[pi].card);
+        el.addEventListener('click', function () { judgePick(pi, el); });
+        cardsEl.appendChild(el);
       });
+    }
 
-      if (opt.best) {
-        score++;
-        streak++;
-        const cheers = ['Nice pick! +1 🎉', 'You get it! +1 🌟', 'Perfect match! +1 ✨', 'Spot on! +1 🏆'];
-        feedbackEl.textContent = cheers[Math.floor(Math.random() * cheers.length)];
-        feedbackEl.className = 'feedback good';
-      } else {
-        streak = 0;
-        feedbackEl.textContent = 'Nope — the green one was the best match!';
-        feedbackEl.className = 'feedback bad';
-      }
-
-      scoreEl.textContent = score;
-      streakEl.textContent = streak;
+    function judgePick(pi, el) {
+      if (phase !== 'judge') return;
+      phase = 'reveal';
+      const winner = picks[pi].by;
+      players[winner].score++;
+      cardsEl.querySelectorAll('.card').forEach(function (c) { c.classList.add('locked'); if (c !== el) c.classList.add('dim'); });
+      el.classList.add('correct');
+      renderScores();
+      turnEl.textContent = '';
+      feedbackEl.className = 'feedback good';
+      feedbackEl.textContent = '🏆 ' + players[winner].name + ' wins the round!';
       nextBtn.hidden = false;
     }
 
-    nextBtn.addEventListener('click', render);
-
-    render();
+    // ---- wiring ----
+    document.getElementById('start').addEventListener('click', startGame);
+    document.getElementById('ready').addEventListener('click', onReady);
+    nextBtn.addEventListener('click', function () { round++; beginRound(); });
   })();
   </script>
 

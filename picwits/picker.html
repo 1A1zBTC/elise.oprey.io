@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pick Silly Pictures — PicWits</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #fff;
+      padding: 16px;
+    }
+    .topbar {
+      max-width: 1100px; margin: 0 auto 6px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; font-size: 1.6rem; }
+
+    .intro {
+      max-width: 1100px; margin: 4px auto 14px;
+      color: #cfd6ea; font-size: 0.95rem; line-height: 1.5;
+    }
+    .intro b { color: #ffe8b0; }
+
+    /* Sticky selection bar */
+    .pickbar {
+      position: sticky; top: 0; z-index: 10;
+      max-width: 1100px; margin: 0 auto 16px;
+      background: #16213e; border: 2px solid #0f3460; border-radius: 16px;
+      padding: 12px 16px;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .count { font-weight: 800; font-size: 1.05rem; }
+    .count .n { color: #e94560; font-size: 1.3rem; }
+    .pickbar button {
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.95rem;
+      color: #fff; background: #e94560; border: none; border-radius: 12px;
+      padding: 10px 16px; cursor: pointer; box-shadow: 0 4px 0 #b22a44;
+    }
+    .pickbar button:active { transform: translateY(3px); box-shadow: 0 1px 0 #b22a44; }
+    .pickbar button.ghost { background: #0f1830; box-shadow: 0 4px 0 #0a1228; color: #cfd6ea; }
+    .picks {
+      flex: 1 1 240px; min-width: 200px;
+      background: #0f1830; border: 1px solid #0f3460; border-radius: 10px;
+      padding: 8px 10px; color: #7be39a; font-weight: 800; font-size: 0.95rem;
+      min-height: 38px; word-break: break-word; max-height: 120px; overflow: auto;
+    }
+    .picks .empty { color: #6f7799; font-weight: 700; }
+
+    .grid {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+    }
+    .cell {
+      position: relative; cursor: pointer;
+      border: 3px solid #0f3460; border-radius: 16px; overflow: hidden;
+      background: #0f1830; aspect-ratio: 1 / 1;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+    }
+    .cell:hover { border-color: #6f86c4; transform: translateY(-2px); }
+    .cell.selected { border-color: #46c46a; box-shadow: 0 0 0 3px rgba(70,196,106,0.35), 0 0 22px rgba(70,196,106,0.45); }
+    .cell img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block; opacity: 0; transition: opacity 0.3s ease;
+    }
+    .cell img.loaded { opacity: 1; }
+    .cell .spinner {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; color: #3d4466;
+      background: linear-gradient(100deg, #14203c 30%, #1b2a4a 50%, #14203c 70%);
+      background-size: 200% 100%; animation: shimmer 1.2s linear infinite;
+    }
+    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    .num {
+      position: absolute; top: 6px; left: 6px; z-index: 2;
+      background: rgba(10,14,28,0.82); color: #fff; font-weight: 800; font-size: 0.85rem;
+      padding: 2px 8px; border-radius: 10px;
+    }
+    .cell.selected .num { background: #46c46a; }
+    .name {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 2;
+      background: linear-gradient(to top, rgba(10,14,28,0.9), rgba(10,14,28,0));
+      color: #fff; font-weight: 800; font-size: 0.78rem; padding: 16px 8px 6px; text-align: center;
+    }
+    .check {
+      position: absolute; top: 6px; right: 6px; z-index: 2;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #46c46a; color: #fff; font-weight: 800;
+      display: none; align-items: center; justify-content: center;
+    }
+    .cell.selected .check { display: flex; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Pick Silly Pictures</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <p class="intro">
+    Tap the silly pictures you want in <b>PicWits</b> — pick as many as you like. Images load as
+    you scroll. When you're done, hit <b>Copy picks</b> and paste them back to me, or just tell me
+    the numbers. <b>500</b> pictures below 🤪
+  </p>
+
+  <div class="pickbar">
+    <span class="count"><span class="n" id="count">0</span> selected</span>
+    <button id="copy">Copy picks</button>
+    <button class="ghost" id="clear">Clear</button>
+    <div class="picks" id="picks"><span class="empty">Your picks will show here…</span></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script>
+  (function () {
+    // Silly / funny subjects, each verified to return real LoremFlickr photos (CC-licensed).
+    const TAGS = [
+      { q: 'pug',          name: 'Pug' },
+      { q: 'corgi',        name: 'Corgi' },
+      { q: 'dachshund',    name: 'Dachshund' },
+      { q: 'llama',        name: 'Llama' },
+      { q: 'alpaca',       name: 'Alpaca' },
+      { q: 'sloth',        name: 'Sloth' },
+      { q: 'capybara',     name: 'Capybara' },
+      { q: 'raccoon',      name: 'Raccoon' },
+      { q: 'goose',        name: 'Goose' },
+      { q: 'duck',         name: 'Duck' },
+      { q: 'frog',         name: 'Frog' },
+      { q: 'chicken',      name: 'Chicken' },
+      { q: 'hamster',      name: 'Hamster' },
+      { q: 'parrot',       name: 'Parrot' },
+      { q: 'monkey',       name: 'Monkey' },
+      { q: 'penguin',      name: 'Penguin' },
+      { q: 'goat',         name: 'Goat' },
+      { q: 'donkey',       name: 'Donkey' },
+      { q: 'pig',          name: 'Pig' },
+      { q: 'cow',          name: 'Cow' },
+      { q: 'owl',          name: 'Owl' },
+      { q: 'hedgehog',     name: 'Hedgehog' },
+      { q: 'ferret',       name: 'Ferret' },
+      { q: 'flamingo',     name: 'Flamingo' },
+      { q: 'turkey',       name: 'Turkey' },
+      { q: 'lemur',        name: 'Lemur' },
+      { q: 'meerkat',      name: 'Meerkat' },
+      { q: 'clown',        name: 'Clown' },
+      { q: 'gnome',        name: 'Gnome' },
+      { q: 'mascot',       name: 'Mascot' },
+      { q: 'costume',      name: 'Costume' },
+      { q: 'inflatable',   name: 'Inflatable' },
+      { q: 'balloon',      name: 'Balloon' },
+      { q: 'scarecrow',    name: 'Scarecrow' },
+      { q: 'pinata',       name: 'Piñata' },
+      { q: 'jester',       name: 'Jester' },
+      { q: 'funny,dog',    name: 'Funny dog' },
+      { q: 'funny,cat',    name: 'Funny cat' },
+      { q: 'silly,animal', name: 'Silly animal' },
+      { q: 'funny,face',   name: 'Funny face' },
+      { q: 'derp',         name: 'Derp' },
+      { q: 'pug,costume',  name: 'Pug in costume' },
+      { q: 'dog,hat',      name: 'Dog in a hat' },
+      { q: 'cat,grumpy',   name: 'Grumpy cat' }
+    ];
+
+    const TOTAL = 500;
+    // Deterministic seed per card so reloading shows the SAME 500 pics and your picks stay
+    // valid. seed(n) = ((n+1) * 48271) % 1000000 — reproducible when I wire them into PicWits.
+    function seedFor(n) { return ((n + 1) * 48271) % 1000000; }
+    function urlFor(q, seed) {
+      const path = q.split(',').map(encodeURIComponent).join(',');
+      return 'https://loremflickr.com/500/500/' + path + '?lock=' + seed;
+    }
+
+    const grid = document.getElementById('grid');
+    const countEl = document.getElementById('count');
+    const picksEl = document.getElementById('picks');
+    const selected = []; // ordered list of selected ids
+
+    const ENTRIES = [];
+    for (let i = 0; i < TOTAL; i++) {
+      const tag = TAGS[i % TAGS.length];
+      ENTRIES.push({ id: i + 1, q: tag.q, name: tag.name, seed: seedFor(i) });
+    }
+
+    ENTRIES.forEach(function (e) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.id = e.id;
+
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner'; spinner.textContent = '🤪';
+
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.alt = e.name;
+      let tries = 0;
+      function load() { img.src = urlFor(e.q, e.seed + tries * 1000); }
+      img.addEventListener('load', function () { img.classList.add('loaded'); spinner.style.display = 'none'; });
+      img.addEventListener('error', function () { tries++; if (tries < 4) load(); });
+      load();
+
+      const num = document.createElement('div'); num.className = 'num'; num.textContent = '#' + e.id;
+      const name = document.createElement('div'); name.className = 'name'; name.textContent = e.name;
+      const check = document.createElement('div'); check.className = 'check'; check.textContent = '✓';
+
+      cell.appendChild(img);
+      cell.appendChild(spinner);
+      cell.appendChild(num);
+      cell.appendChild(name);
+      cell.appendChild(check);
+      cell.addEventListener('click', function () { toggle(e.id, cell); });
+      grid.appendChild(cell);
+    });
+
+    function toggle(id, cell) {
+      const idx = selected.indexOf(id);
+      if (idx === -1) { selected.push(id); cell.classList.add('selected'); }
+      else { selected.splice(idx, 1); cell.classList.remove('selected'); }
+      render();
+    }
+
+    function render() {
+      countEl.textContent = selected.length;
+      if (selected.length === 0) {
+        picksEl.innerHTML = '<span class="empty">Your picks will show here…</span>';
+        return;
+      }
+      picksEl.textContent = buildText();
+    }
+
+    // Output each pick with its exact search token + seed so the picture can be reproduced 1:1.
+    function buildText() {
+      return selected.map(function (id) {
+        const e = ENTRIES[id - 1];
+        return '#' + id + ' ' + e.q + ' lock=' + e.seed;
+      }).join('\n');
+    }
+
+    document.getElementById('copy').addEventListener('click', function () {
+      if (!selected.length) return;
+      navigator.clipboard && navigator.clipboard.writeText(buildText());
+      const btn = this; const old = btn.textContent;
+      btn.textContent = 'Copied ✓';
+      setTimeout(function () { btn.textContent = old; }, 1400);
+    });
+
+    document.getElementById('clear').addEventListener('click', function () {
+      selected.length = 0;
+      grid.querySelectorAll('.cell.selected').forEach(function (c) { c.classList.remove('selected'); });
+      render();
+    });
+  })();
+  </script>
+</body>
+</html>
