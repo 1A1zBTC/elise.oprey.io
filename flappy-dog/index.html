@@ -323,6 +323,19 @@
       <div class="bones-bar">🦴 <span id="boneCount">0</span> bones — spend or save up</div>
 
       <div class="shop-section">
+        <div class="shop-label">Levels · <b>25🦴</b></div>
+        <div id="levels" class="chips"></div>
+      </div>
+
+      <div class="shop-section" id="dressToggle" hidden>
+        <div class="shop-label">Customising</div>
+        <div class="players-toggle">
+          <button id="dressP1" class="seg" type="button">Player 1</button>
+          <button id="dressP2" class="seg" type="button">Player 2</button>
+        </div>
+      </div>
+
+      <div class="shop-section">
         <div class="shop-label">Breeds · <b>10🦴</b></div>
         <div id="breeds" class="chips"></div>
       </div>
@@ -383,25 +396,30 @@
     let playFrames = 0;  // frames spent in 'playing' state, drives the ramp
 
     function applyDifficulty() {
-      // ease-in (t²) so the early game stays easy longer before ramping up
-      const lin = Math.min(playFrames / RAMP_FRAMES, 1);  // 0 → 1
+      // ease-in (t²) so the early game stays easy longer before ramping up.
+      // Speed/gap/ramp come from the active level (later levels start slower & ramp slower).
+      const L = LEVELS[level];
+      const lin = Math.min(playFrames / L.ramp, 1);  // 0 → 1
       const t = lin * lin;
       GRAVITY = GRAVITY_MIN + (GRAVITY_MAX - GRAVITY_MIN) * t;
       FLAP = FLAP_MIN + (FLAP_MAX - FLAP_MIN) * t;
-      PIPE_SPEED = SPEED_MIN + (SPEED_MAX - SPEED_MIN) * t;
-      GAP = GAP_MAX + (GAP_MIN - GAP_MAX) * t;
+      PIPE_SPEED = L.speedMin + (L.speedMax - L.speedMin) * t;
+      GAP = L.gapMax + (L.gapMin - L.gapMax) * t;
     }
 
     const BEST_KEY = 'flappydog.best';     // legacy single best (migrated to per-breed)
     const BESTS_KEY = 'flappydog.bests';   // per-breed high scores
     const TREATS_KEY = 'flappydog.treats';     // spendable bone balance
-    const OWNED_KEY = 'flappydog.owned';       // how many breeds are unlocked
-    const SKIN_KEY = 'flappydog.skin';         // currently equipped breed
-    const COSTUMES_KEY = 'flappydog.costumes'; // which costumes are owned
-    const COSTUME_KEY = 'flappydog.costume';   // currently equipped costume (-1 = none)
+    const OWNED_KEY = 'flappydog.owned';       // how many breeds are unlocked (shared)
+    const SKIN_KEYS = ['flappydog.skin', 'flappydog.skin2'];        // equipped breed, per player
+    const COSTUMES_KEY = 'flappydog.costumes'; // which costumes are owned (shared pool)
+    const COSTUME_KEYS = ['flappydog.costume', 'flappydog.costume2']; // equipped costume, per player (-1 = none)
+    const LEVELS_KEY = 'flappydog.levels';     // how many levels are unlocked
+    const LEVEL_KEY = 'flappydog.level';       // currently selected level index
 
     const BREED_COST = 10;     // bones to unlock a breed
     const COSTUME_COST = 5;    // bones to unlock a costume
+    const LEVEL_COST = 25;     // bones to unlock the next level
 
     // Dog breeds (skins). Collect 10 treats to morph into the next one.
     // Each defines a fur palette + shape traits drawDog() reads to build a
@@ -484,6 +502,17 @@
       { name: 'Viking Helm',  id: 'viking' }
     ];
 
+    // Levels — each has its own backdrop, obstacle style, vertical bob, and a
+    // (deliberately gentler) difficulty ramp. Extra levels are bought with bones.
+    const LEVELS = [
+      { name: 'Meadow',     cost: 0,  obstacle: 'pipe',  ground: 'grass',
+        sky: ['#5ec8f0', '#9fe0f5', '#d6f3ff'],
+        speedMin: 0.9,  speedMax: 2.3, gapMin: 205, gapMax: 260, ramp: 60 * 80,  amp: 0,  motionFreq: 0 },
+      { name: 'Coral Reef', cost: 25, obstacle: 'coral', ground: 'sand',
+        sky: ['#073b5e', '#16618c', '#39a7c4'],
+        speedMin: 0.55, speedMax: 1.7, gapMin: 215, gapMax: 268, ramp: 60 * 150, amp: 36, motionFreq: 0.018 }
+    ];
+
     // ---- State ----
     const PLAYERS_KEY = 'flappydog.players';   // 1 or 2 player mode
     let state = 'ready';       // 'ready' | 'playing' | 'gameover'
@@ -506,16 +535,15 @@
       };
     }
 
-    // P2 flies a different breed so the two dogs are easy to tell apart: the next
-    // breed you own, or — if you only own one — a contrasting pup as the challenger.
-    function p2BreedIndex() {
-      return owned > 1 ? (skinIndex + 1) % owned : (skinIndex + 5) % BREEDS.length;
+    // Costume id for a player slot, or null when nothing valid is equipped.
+    function costumeIdFor(slot) {
+      const c = costumes[slot];
+      return (c >= 0 && costumesOwned.has(c)) ? COSTUMES[c].id : null;
     }
 
     function buildPlayers() {
-      const p1costume = (costumeIndex >= 0 && costumesOwned.has(costumeIndex)) ? COSTUMES[costumeIndex].id : null;
-      players = [ makePlayer(0, skinIndex, numPlayers === 2 ? 96 : DOG_X, p1costume) ];
-      if (numPlayers === 2) players.push(makePlayer(1, p2BreedIndex(), 132, null));
+      players = [ makePlayer(0, skins[0], numPlayers === 2 ? 96 : DOG_X, costumeIdFor(0)) ];
+      if (numPlayers === 2) players.push(makePlayer(1, skins[1], 132, costumeIdFor(1)));
     }
 
     // Per-breed high scores (one entry per breed).
@@ -544,39 +572,53 @@
     let treats = parseInt(localStorage.getItem(TREATS_KEY) || '0', 10) || 0;
     let owned = parseInt(localStorage.getItem(OWNED_KEY) || '1', 10) || 1;
     owned = Math.max(1, Math.min(BREEDS.length, owned));
+    let levelsOwned = parseInt(localStorage.getItem(LEVELS_KEY) || '1', 10) || 1;
+    levelsOwned = Math.max(1, Math.min(LEVELS.length, levelsOwned));
+    let level = parseInt(localStorage.getItem(LEVEL_KEY) || '0', 10) || 0;
+    level = Math.max(0, Math.min(levelsOwned - 1, level));
     let unlockName = null, unlockUntil = 0;  // for the "new unlock!" toast
 
-    // owned costumes stored as a comma list of indices
+    // owned costumes stored as a comma list of indices (shared pool both dogs draw from)
     const costumesOwned = new Set(
       (localStorage.getItem(COSTUMES_KEY) || '').split(',')
         .map(function (s) { return parseInt(s, 10); })
         .filter(function (n) { return !isNaN(n); })
     );
-    let costumeIndex = parseInt(localStorage.getItem(COSTUME_KEY), 10);
-    if (isNaN(costumeIndex) || !costumesOwned.has(costumeIndex)) costumeIndex = -1;
 
-    let skinIndex = parseInt(localStorage.getItem(SKIN_KEY) || '0', 10) || 0;
-    if (skinIndex < 0 || skinIndex >= owned) skinIndex = owned - 1;
-    let skin = BREEDS[skinIndex];
-    let pendingSkin = null;  // breed to apply after the dog falls (set during play)
+    // Per-player equipped selections. Slot 0 = P1, slot 1 = P2; both pick from the same
+    // owned pool, only slot 0 matters in 1P. `editSlot` is the dog the shop edits.
+    function clampOwned(v, dflt) {
+      if (isNaN(v)) v = dflt;
+      return Math.max(0, Math.min(owned - 1, v));
+    }
+    let skins = [ clampOwned(parseInt(localStorage.getItem(SKIN_KEYS[0]) || '0', 10), 0), 0 ];
+    skins[1] = clampOwned(parseInt(localStorage.getItem(SKIN_KEYS[1]), 10),
+                          owned > 1 ? (skins[0] + 1) % owned : skins[0]);
+    function loadCostume(slot) {
+      const v = parseInt(localStorage.getItem(COSTUME_KEYS[slot]), 10);
+      return (!isNaN(v) && costumesOwned.has(v)) ? v : -1;
+    }
+    let costumes = [ loadCostume(0), loadCostume(1) ];
+    let pendingSkins = [null, null];  // breed to apply after each dog falls (set during play)
+    let editSlot = 0;                 // which player the shop currently customises
 
     function saveBones() { try { localStorage.setItem(TREATS_KEY, String(treats)); } catch (e) {} }
 
-    function equipSkin(i) {
-      skinIndex = i;
-      skin = BREEDS[i];
-      try { localStorage.setItem(SKIN_KEY, String(i)); } catch (e) {}
-      if (players[0] && state !== 'playing') { players[0].breedIndex = i; players[0].skin = skin; }
+    function equipSkin(slot, i) {
+      skins[slot] = i;
+      try { localStorage.setItem(SKIN_KEYS[slot], String(i)); } catch (e) {}
+      const pl = players[slot];
+      if (pl && state !== 'playing') { pl.breedIndex = i; pl.skin = BREEDS[i]; }
       refreshShop();
     }
 
     function selectSkin(i) {
       if (i < 0 || i >= owned) return;        // can't pick a locked breed
       if (state === 'playing') {              // you only become the new breed after you fall
-        pendingSkin = i;
+        pendingSkins[editSlot] = i;
         return;
       }
-      equipSkin(i);
+      equipSkin(editSlot, i);
     }
 
     function buyBreed() {
@@ -593,15 +635,16 @@
     }
 
     function equipCostume(i) {
-      costumeIndex = i;
-      try { localStorage.setItem(COSTUME_KEY, String(i)); } catch (e) {}
-      if (players[0]) players[0].costume = (i >= 0 && costumesOwned.has(i)) ? COSTUMES[i].id : null;
+      costumes[editSlot] = i;
+      try { localStorage.setItem(COSTUME_KEYS[editSlot], String(i)); } catch (e) {}
+      const pl = players[editSlot];
+      if (pl) pl.costume = (i >= 0 && costumesOwned.has(i)) ? COSTUMES[i].id : null;
       refreshShop();
     }
 
     function buyOrEquipCostume(i) {
       if (costumesOwned.has(i)) {
-        equipCostume(i === costumeIndex ? -1 : i);   // toggle on/off
+        equipCostume(i === costumes[editSlot] ? -1 : i);   // toggle on/off
         return;
       }
       if (treats < COSTUME_COST) return;
@@ -655,13 +698,27 @@
       return btn;
     });
 
+    const levelsEl = document.getElementById('levels');
+    const levelBtns = LEVELS.map(function (L, i) {
+      const btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.type = 'button';
+      btn.addEventListener('click', function () {
+        if (i < levelsOwned) selectLevel(i);
+        else if (i === levelsOwned) buyLevel();
+        btn.blur();
+      });
+      levelsEl.appendChild(btn);
+      return btn;
+    });
+
     function refreshBreeds() {
       for (let i = 0; i < breedBtns.length; i++) {
         const btn = breedBtns[i];
         if (i < owned) {                       // owned → selectable (shows its best)
           btn.disabled = false;
           btn.textContent = BREEDS[i].name + (bests[i] > 0 ? ' · ' + bests[i] : '');
-          btn.classList.toggle('active', i === skinIndex);
+          btn.classList.toggle('active', i === skins[editSlot]);
           btn.classList.remove('buy');
         } else if (i === owned) {              // next in line → buyable
           const afford = treats >= BREED_COST;
@@ -678,13 +735,13 @@
     }
 
     function refreshCostumes() {
-      noCostumeBtn.classList.toggle('active', costumeIndex < 0);
+      noCostumeBtn.classList.toggle('active', costumes[editSlot] < 0);
       for (let i = 0; i < costumeBtns.length; i++) {
         const btn = costumeBtns[i];
         if (costumesOwned.has(i)) {            // owned → toggle wear
           btn.disabled = false;
           btn.textContent = COSTUMES[i].name;
-          btn.classList.toggle('active', i === costumeIndex);
+          btn.classList.toggle('active', i === costumes[editSlot]);
           btn.classList.remove('buy');
         } else {                               // buyable
           const afford = treats >= COSTUME_COST;
@@ -696,10 +753,49 @@
       }
     }
 
+    function selectLevel(i) {
+      if (i >= levelsOwned || i === level) return;
+      level = i;
+      try { localStorage.setItem(LEVEL_KEY, String(i)); } catch (e) {}
+      reset(); state = 'ready';
+      refreshShop();
+    }
+    function buyLevel() {
+      if (treats < LEVEL_COST || levelsOwned >= LEVELS.length) return;
+      treats -= LEVEL_COST; saveBones();
+      const ni = levelsOwned;
+      levelsOwned++;
+      try { localStorage.setItem(LEVELS_KEY, String(levelsOwned)); } catch (e) {}
+      unlockName = LEVELS[ni].name; unlockUntil = frame + 160;
+      selectLevel(ni);   // auto-switch to the freshly unlocked level (resets + refreshes)
+    }
+    function refreshLevels() {
+      for (let i = 0; i < levelBtns.length; i++) {
+        const btn = levelBtns[i];
+        if (i < levelsOwned) {                 // owned → selectable
+          btn.disabled = false;
+          btn.textContent = LEVELS[i].name;
+          btn.classList.toggle('active', i === level);
+          btn.classList.remove('buy');
+        } else if (i === levelsOwned) {        // next → buyable for 25🦴
+          const afford = treats >= LEVEL_COST;
+          btn.disabled = !afford;
+          btn.textContent = '＋ ' + LEVELS[i].name + ' · ' + LEVEL_COST + '🦴';
+          btn.classList.remove('active');
+          btn.classList.toggle('buy', afford);
+        } else {                               // locked
+          btn.disabled = true;
+          btn.textContent = '🔒 ' + LEVELS[i].name;
+          btn.classList.remove('active', 'buy');
+        }
+      }
+    }
+
     function refreshShop() {
       if (boneCountEl) boneCountEl.textContent = treats;
       refreshBreeds();
       refreshCostumes();
+      refreshLevels();
     }
     refreshShop();
 
@@ -717,10 +813,30 @@
       reset();
       state = 'ready';
       refreshPlayersToggle();
+      setEditSlot(0);   // back to P1 whenever the player count changes
     }
     if (onePBtn) onePBtn.addEventListener('click', function () { setPlayers(1); onePBtn.blur(); });
     if (twoPBtn) twoPBtn.addEventListener('click', function () { setPlayers(2); twoPBtn.blur(); });
     refreshPlayersToggle();
+
+    // --- "Customising P1 / P2" toggle (2P only): picks which dog the shop dresses ---
+    const dressToggle = document.getElementById('dressToggle');
+    const dressP1 = document.getElementById('dressP1');
+    const dressP2 = document.getElementById('dressP2');
+    function refreshDressToggle() {
+      if (dressToggle) dressToggle.hidden = numPlayers !== 2;
+      if (numPlayers !== 2) editSlot = 0;
+      if (dressP1) dressP1.classList.toggle('active', editSlot === 0);
+      if (dressP2) dressP2.classList.toggle('active', editSlot === 1);
+    }
+    function setEditSlot(s) {
+      editSlot = s;
+      refreshDressToggle();
+      refreshShop();   // re-highlight the active dog's equipped breed + costume
+    }
+    if (dressP1) dressP1.addEventListener('click', function () { setEditSlot(0); dressP1.blur(); });
+    if (dressP2) dressP2.addEventListener('click', function () { setEditSlot(1); dressP2.blur(); });
+    refreshDressToggle();
 
     // ---- Start dialog (shown at launch only; replay flow is unchanged) ----
     const setupEl = document.getElementById('setup');
@@ -740,6 +856,7 @@
       setPlayers(chosenPlayers);   // rebuilds the run if the count changed
       numPlayers = chosenPlayers;  // ensure applied even when unchanged
       refreshPlayersToggle();
+      setEditSlot(0);              // show/hide the Customising toggle for this mode
       state = 'ready';
       setupEl.hidden = true;
     });
@@ -772,7 +889,8 @@
         ? { collected: false, offY: gap * (0.3 + Math.random() * 0.4) }
         : null;
       // passedBy tracks which dog has already scored this pipe (keyed by player id).
-      return { x: x, top: top, gap: gap, passedBy: {}, treat: treat };
+      // baseTop/phase drive the vertical bob on levels that move (amp > 0).
+      return { x: x, top: top, baseTop: top, phase: Math.random() * Math.PI * 2, gap: gap, passedBy: {}, treat: treat };
     }
 
     // Flap a specific dog (idx 0 = P1, 1 = P2). On the game-over screen any input
@@ -880,6 +998,18 @@
         pipes.push(makePipe(lastX + PIPE_SPACING));
       }
 
+      // moving obstacles: levels with amp > 0 bob each gap up and down
+      const Lm = LEVELS[level];
+      if (Lm.amp > 0) {
+        for (const pipe of pipes) {
+          const room = (H - GROUND_H - pipe.gap - PIPE_MIN_TOP * 2) / 2;
+          const amp = Math.max(0, Math.min(Lm.amp, room));
+          const lo = PIPE_MIN_TOP + amp, hi = H - GROUND_H - pipe.gap - PIPE_MIN_TOP - amp;
+          const mid = Math.min(Math.max(pipe.baseTop, lo), hi);
+          pipe.top = mid + Math.sin(frame * Lm.motionFreq + pipe.phase) * amp;
+        }
+      }
+
       // collisions per living dog
       for (const p of players) {
         if (!p.alive) continue;
@@ -932,22 +1062,28 @@
       state = 'gameover';
       deathFrame = frame;
       // apply any breed unlocked/selected during the run now that the dogs have fallen
-      if (pendingSkin !== null) { equipSkin(pendingSkin); pendingSkin = null; }
+      for (let s = 0; s < pendingSkins.length; s++) {
+        if (pendingSkins[s] !== null) { equipSkin(s, pendingSkins[s]); pendingSkins[s] = null; }
+      }
       refreshShop();   // reflect updated bests on the chips
     }
 
     // ---- Rendering ----
     function draw() {
-      // sky
+      // sky (per level)
+      const L = LEVELS[level];
       const sky = ctx.createLinearGradient(0, 0, 0, H);
-      sky.addColorStop(0, '#5ec8f0');
-      sky.addColorStop(0.7, '#9fe0f5');
-      sky.addColorStop(1, '#d6f3ff');
+      sky.addColorStop(0, L.sky[0]);
+      sky.addColorStop(0.7, L.sky[1]);
+      sky.addColorStop(1, L.sky[2]);
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, H);
 
-      // clouds
-      for (const c of clouds) drawCloud(c.x, c.y, c.s);
+      // backdrop drifters — clouds, or bubbles underwater
+      for (const c of clouds) {
+        if (L.ground === 'sand') drawBubble(c.x, c.y, c.s);
+        else drawCloud(c.x, c.y, c.s);
+      }
 
       // pipes
       for (const p of pipes) drawPipe(p);
@@ -961,8 +1097,8 @@
         }
       }
 
-      // ground
-      drawGround();
+      // ground (per level)
+      if (LEVELS[level].ground === 'sand') drawSand(); else drawGround();
 
       // dogs (P1 first so P2 layers on top in 2-player)
       for (const p of players) drawDog(p);
@@ -1028,6 +1164,7 @@
     }
 
     function drawPipe(p) {
+      if (LEVELS[level].obstacle === 'coral') { drawCoral(p); return; }
       const gapTop = p.top;
       const gapBottom = p.top + p.gap;
       const x = p.x;
@@ -1065,6 +1202,39 @@
       segment(gapBottom, H - GROUND_H, true);
     }
 
+    // Coral Reef obstacle — pink coral columns with a knobbly edge at the gap.
+    function drawCoral(p) {
+      const gapTop = p.top, gapBottom = p.top + p.gap, x = p.x;
+      function column(yTop, yBot, lipAtTop) {
+        const g = ctx.createLinearGradient(x, 0, x + PIPE_W, 0);
+        g.addColorStop(0, '#c0407a');
+        g.addColorStop(0.5, '#ff8fb8');
+        g.addColorStop(1, '#b8356f');
+        ctx.fillStyle = g;
+        ctx.fillRect(x, yTop, PIPE_W, yBot - yTop);
+        ctx.strokeStyle = '#9c2e63';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, yTop, PIPE_W - 3, yBot - yTop);
+        // light flecks
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        for (let yy = yTop + 14; yy < yBot - 6; yy += 24) {
+          ctx.fillRect(x + 12, yy, 5, 5); ctx.fillRect(x + 36, yy + 11, 4, 4);
+        }
+        // knobbly lip of coral at the gap end
+        const lipY = lipAtTop ? yTop : yBot;
+        ctx.fillStyle = '#ffb3d1';
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath(); ctx.arc(x + 9 + i * 16, lipY, 9, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = '#ff8fb8';
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath(); ctx.arc(x + 9 + i * 16, lipY, 4, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      column(0, gapTop, false);            // top column, knobs at its bottom edge
+      column(gapBottom, H - GROUND_H, true); // bottom column, knobs at its top edge
+    }
+
     function drawGround() {
       const gy = H - GROUND_H;
       // dirt
@@ -1090,6 +1260,38 @@
         ctx.fillRect(x + 6, gy + 40, 4, 4);
         ctx.fillRect(x + 16, gy + 60, 3, 3);
       }
+    }
+
+    // Rising bubble (Coral Reef backdrop drifter, reuses cloud slots).
+    function drawBubble(x, y, s) {
+      const r = 10 * s + 6;
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#bfefff';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // Sandy sea floor for the Coral Reef level.
+    function drawSand() {
+      const gy = H - GROUND_H;
+      ctx.fillStyle = '#e6cf94';
+      ctx.fillRect(0, gy, W, GROUND_H);
+      ctx.fillStyle = '#d9bd76';
+      ctx.fillRect(0, gy, W, 14);
+      ctx.fillStyle = '#c9a85e';
+      ctx.fillRect(0, gy + 12, W, 4);
+      // little pebbles/shells scrolling
+      ctx.fillStyle = 'rgba(150,110,60,0.45)';
+      for (let x = groundX; x < W; x += 24) {
+        ctx.fillRect(x + 6, gy + 40, 4, 4);
+        ctx.fillRect(x + 16, gy + 60, 3, 3);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      for (let x = groundX; x < W; x += 48) ctx.fillRect(x + 10, gy + 26, 5, 3);
     }
 
     // Lighten a #rrggbb color toward white by amt (0..1).
@@ -1697,7 +1899,7 @@
             ctx.fillText('Collect bones → unlock breeds', W / 2, cy0 + 22);
             ctx.fillStyle = '#cfd6ea';
             ctx.font = "700 13px 'Nunito', sans-serif";
-            ctx.fillText("You're a " + skin.name + '  ·  Best: ' + bests[skinIndex], W / 2, cy0 + 46);
+            ctx.fillText("You're a " + BREEDS[skins[0]].name + '  ·  Best: ' + bests[skins[0]], W / 2, cy0 + 46);
           }
         });
       }
@@ -1751,7 +1953,7 @@
 
           ctx.fillStyle = '#9fe0f5';
           ctx.font = "800 14px 'Nunito', sans-serif";
-          ctx.fillText("You're a " + skin.name, W / 2, cy0 + 52);
+          ctx.fillText("You're a " + BREEDS[skins[0]].name, W / 2, cy0 + 52);
 
           ctx.fillStyle = '#9fe0f5';
           ctx.font = "700 15px 'Nunito', sans-serif";
