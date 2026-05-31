@@ -115,10 +115,10 @@
     const PLAT_SPEED_BASE = 1.9;       // incoming platform slide speed at the bottom
     const PLAT_SPEED_PER = 0.045;      // slide-speed ramp per floor climbed
     const PLAT_SPEED_MAX = 4.6;
-    const WATER_START_DELAY = 150;     // frames before water starts rising
-    const WATER_BASE = 0.085;          // px/frame water rise at start (tuned to the 30px stack step)
-    const WATER_RAMP = 0.000034;       // water acceleration per frame
-    const WATER_START_OFFSET = 210;    // px below floor 0 where the water begins
+    const WATER_START_DELAY = 180;     // frames before water starts rising
+    const WATER_BASE = 0.055;          // px/frame water rise at start (slow — leaves time to stack straight)
+    const WATER_RAMP = 0.00002;        // water acceleration per frame
+    const WATER_START_OFFSET = 230;    // px below floor 0 where the water begins
     const CAM_EASE = 0.12;
 
     const BEST_KEY = 'kittenjump.best';

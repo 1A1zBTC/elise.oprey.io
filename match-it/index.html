@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Match It</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .back {
+      color: #a0a8c0;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 6px 10px;
+      border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+    .title {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+
+    /* ---------- Scoreboard ---------- */
+    .scorebar {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin: 10px 0 14px;
+    }
+    .player {
+      flex: 1 1 0;
+      min-width: 110px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 8px 10px;
+      text-align: center;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .player.active {
+      border-color: #e94560;
+      box-shadow: 0 0 20px rgba(233, 69, 96, 0.35);
+      transform: translateY(-2px);
+    }
+    .player .name { color: #a0a8c0; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+    .player.active .name { color: #ffd2dc; }
+    .player .score { color: #fff; font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
+    .player .turn { color: #e94560; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; min-height: 0.8rem; }
+    .player:not(.active) .turn { visibility: hidden; }
+
+    /* ---------- Board ---------- */
+    .board {
+      width: 100%;
+      max-width: 560px;
+      display: grid;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .card {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      cursor: pointer;
+      perspective: 700px;
+      background: transparent;
+    }
+    .card-inner {
+      position: absolute;
+      inset: 0;
+      transition: transform 0.4s cubic-bezier(.4,.0,.2,1);
+      transform-style: preserve-3d;
+    }
+    .card.flipped .card-inner,
+    .card.matched .card-inner { transform: rotateY(180deg); }
+
+    .face {
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      overflow: hidden;
+    }
+
+    /* Back (face-down) */
+    .face-back {
+      background: linear-gradient(150deg, #1d2c52 0%, #0f3460 100%);
+      border: 3px solid #234080;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: #6f86c4;
+    }
+    .card:hover:not(.matched):not(.disabled) .face-back {
+      border-color: #e94560;
+      box-shadow: inset 0 0 22px rgba(233, 69, 96, 0.25);
+    }
+    .card:active:not(.matched):not(.disabled) { transform: scale(0.97); }
+
+    /* Front (the photo) */
+    .face-front {
+      transform: rotateY(180deg);
+      background: #0f1830;
+      border: 3px solid #0f3460;
+    }
+    .face-front img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      /* Show the whole square photo (LoremFlickr serves square images), matching what you
+         saw in the picker — no zoom, so the full image is visible. */
+      display: block;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .face-front img.loaded { opacity: 1; }
+    .face-front .spinner {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      color: #3d4466;
+      background: linear-gradient(100deg, #14203c 30%, #1b2a4a 50%, #14203c 70%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s linear infinite;
+    }
+    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+    .card.matched .face-front {
+      border-color: #46c46a;
+      box-shadow: 0 0 22px rgba(70, 196, 106, 0.55);
+    }
+    .card.matched { animation: pop 0.4s ease; }
+    @keyframes pop { 0%,100% { transform: scale(1); } 40% { transform: scale(1.06); } }
+
+    .card.disabled { cursor: default; }
+
+    /* ---------- Overlay (setup + win) ---------- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 14, 28, 0.86);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 20;
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: 100%;
+      max-width: 380px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 24px;
+      padding: 26px 22px;
+      text-align: center;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    }
+    .panel h2 {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.7rem;
+      font-weight: 400;
+      margin-bottom: 6px;
+    }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 18px; }
+    .panel .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 16px 0 8px; }
+
+    .choices { display: flex; gap: 10px; justify-content: center; }
+    .choice {
+      flex: 1;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      color: #cfd6ea;
+      background: #0f1830;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 14px 6px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    }
+    .choice .big { display: block; font-size: 1.5rem; line-height: 1.2; color: #fff; }
+    .choice .small { display: block; font-size: 0.68rem; color: #8b93b0; font-weight: 700; margin-top: 2px; }
+    .choice:hover { border-color: #6f86c4; }
+    .choice:active { transform: scale(0.96); }
+    .choice.selected {
+      border-color: #e94560;
+      background: rgba(233, 69, 96, 0.12);
+      color: #fff;
+      box-shadow: 0 0 18px rgba(233, 69, 96, 0.25);
+    }
+    .choice.selected .small { color: #ffb3c2; }
+
+    .start-btn, .again-btn {
+      margin-top: 22px;
+      width: 100%;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #fff;
+      background: #e94560;
+      border: none;
+      border-radius: 16px;
+      padding: 15px 20px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b22a44;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .start-btn:active, .again-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+
+    .results { list-style: none; margin: 4px 0 0; }
+    .results li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f1830;
+      border: 2px solid #0f3460;
+      border-radius: 12px;
+      padding: 9px 14px;
+      margin-top: 8px;
+      font-weight: 800;
+      color: #cfd6ea;
+    }
+    .results li.winner { border-color: #46c46a; color: #fff; box-shadow: 0 0 16px rgba(70,196,106,0.3); }
+    .results li .pts { color: #ffe8b0; }
+    .results li.winner .pts { color: #7be39a; }
+    .trophy { font-size: 2.6rem; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Match It</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="scorebar" id="scorebar"></div>
+
+  <div class="board" id="board"></div>
+
+  <!-- Setup overlay -->
+  <div class="overlay" id="setup">
+    <div class="panel">
+      <h2>Match It</h2>
+      <div class="sub">Flip two cards. Find a matching pair to score &amp; go again! 🐾</div>
+
+      <div class="group-label">Players</div>
+      <div class="choices" id="player-choices">
+        <button class="choice" data-players="2"><span class="big">2</span><span class="small">players</span></button>
+        <button class="choice" data-players="3"><span class="big">3</span><span class="small">players</span></button>
+        <button class="choice" data-players="4"><span class="big">4</span><span class="small">players</span></button>
+      </div>
+
+      <div class="group-label">Difficulty</div>
+      <div class="choices" id="diff-choices">
+        <button class="choice" data-pairs="6"><span class="big">Easy</span><span class="small">12 cards</span></button>
+        <button class="choice" data-pairs="8"><span class="big">Medium</span><span class="small">16 cards</span></button>
+        <button class="choice" data-pairs="10"><span class="big">Hard</span><span class="small">20 cards</span></button>
+      </div>
+
+      <button class="start-btn" id="start-btn">Start Game</button>
+    </div>
+  </div>
+
+  <!-- Win overlay -->
+  <div class="overlay" id="win" hidden>
+    <div class="panel">
+      <div class="trophy">🏆</div>
+      <h2 id="win-title">Player 1 wins!</h2>
+      <div class="sub" id="win-sub">Final scores</div>
+      <ul class="results" id="results"></ul>
+      <button class="again-btn" id="again-btn">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    // Photos of cute BABY animal FACES come from LoremFlickr (royalty-free Creative Commons).
+    // A given (tag, lock-seed) pair always returns the SAME photo — that's how we make
+    // two identical cards for every pair: both cards share one resolved URL.
+    // Comma-separated tags require ALL words to match. Every query includes 'face' so we get
+    // clear close-up portraits (not random full scenes), plus 'baby' wherever that 3-word
+    // combo still has matches. Each query below is verified to return a real photo, not the
+    // blank fallback. ("chick"/"lamb"/"piglet" are avoided — Flickr tags them on food too.)
+    const ANIMALS = [
+      'baby,puppy,face', 'baby,kitten,face', 'baby,duckling,face', 'baby,rabbit,face',
+      'hamster,face', 'baby,fox,face', 'baby,penguin,face', 'otter,face',
+      'corgi,face', 'hedgehog,face', 'baby,panda,face', 'baby,koala,face',
+      'baby,squirrel,face', 'chinchilla,face', 'pug,face', 'baby,raccoon,face'
+    ];
+
+    const boardEl = document.getElementById('board');
+    const scorebarEl = document.getElementById('scorebar');
+    const setupEl = document.getElementById('setup');
+    const winEl = document.getElementById('win');
+
+    // ---- Setup state ----
+    let numPlayers = 2;
+    let numPairs = 6;
+
+    // ---- Game state ----
+    let players = [];
+    let currentPlayer = 0;
+    let flipped = [];        // card DOM elements currently face-up (0–2)
+    let matchedCount = 0;
+    let locked = false;      // block taps during the reveal delay
+
+    function shuffle(a) {
+      const arr = a.slice();
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+      return arr;
+    }
+    function randSeed() { return Math.floor(Math.random() * 1e6); }
+    function imageUrl(tag, seed) {
+      // Comma-separated tags (e.g. 'baby,fox') must be passed as literal commas, so encode
+      // each word but keep the commas between them. 640×640 keeps cards sharp on big boards
+      // and retina screens. (No /g/ prefix — that flag is grayscale; we want full color.)
+      const path = tag.split(',').map(encodeURIComponent).join(',');
+      return 'https://loremflickr.com/640/640/' + path + '?lock=' + seed;
+    }
+
+    // ---------- Setup overlay wiring ----------
+    function selectChoice(container, el) {
+      container.querySelectorAll('.choice').forEach(function (c) { c.classList.remove('selected'); });
+      el.classList.add('selected');
+    }
+
+    const playerChoices = document.getElementById('player-choices');
+    const diffChoices = document.getElementById('diff-choices');
+
+    // Default difficulty scales with player count: 2p→Easy, 3p→Medium, 4p→Hard.
+    function defaultPairsFor(p) { return p === 2 ? 6 : p === 3 ? 8 : 10; }
+
+    playerChoices.addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      numPlayers = parseInt(btn.dataset.players, 10);
+      selectChoice(playerChoices, btn);
+      // Suggest a matching difficulty default (user can still override).
+      numPairs = defaultPairsFor(numPlayers);
+      const diffBtn = diffChoices.querySelector('[data-pairs="' + numPairs + '"]');
+      selectChoice(diffChoices, diffBtn);
+    });
+
+    diffChoices.addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      numPairs = parseInt(btn.dataset.pairs, 10);
+      selectChoice(diffChoices, btn);
+    });
+
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('again-btn').addEventListener('click', function () {
+      winEl.hidden = true;
+      setupEl.hidden = false;
+    });
+
+    // ---------- Scoreboard ----------
+    function renderScorebar() {
+      scorebarEl.innerHTML = '';
+      players.forEach(function (p, i) {
+        const el = document.createElement('div');
+        el.className = 'player' + (i === currentPlayer ? ' active' : '');
+        el.innerHTML =
+          '<div class="name">' + p.name + '</div>' +
+          '<div class="score">' + p.score + '</div>' +
+          '<div class="turn">Your turn</div>';
+        scorebarEl.appendChild(el);
+      });
+    }
+
+    // ---------- Card creation ----------
+    // Each pair shares one resolved photo URL. A single Image() preloads it; on error we
+    // retry with a fresh seed, then commit the working URL to BOTH cards so they stay identical.
+    function buildCards() {
+      const tags = shuffle(ANIMALS).slice(0, numPairs);
+      const deck = [];
+      tags.forEach(function (tag) {
+        const pair = { tag: tag, url: null };
+        preloadPair(pair);
+        deck.push({ pair: pair }, { pair: pair });
+      });
+      return shuffle(deck);
+    }
+
+    function preloadPair(pair) {
+      let tries = 0;
+      const probe = new Image();
+      probe.referrerPolicy = 'no-referrer';
+      function attempt() {
+        const url = imageUrl(pair.tag, randSeed());
+        probe.onload = function () {
+          pair.url = url;
+          // Fill any cards already waiting on this pair.
+          (pair.cards || []).forEach(function (img) { applyImage(img, url); });
+        };
+        probe.onerror = function () {
+          tries++;
+          if (tries < 5) attempt();
+          else (pair.cards || []).forEach(function (img) { img.parentNode.querySelector('.spinner').textContent = '🐾'; });
+        };
+        probe.src = url;
+      }
+      attempt();
+    }
+
+    function applyImage(img, url) {
+      if (img.dataset.applied) return;
+      img.dataset.applied = '1';
+      img.src = url;
+    }
+
+    function createCardEl(data) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.tag = data.pair.tag;
+
+      const inner = document.createElement('div');
+      inner.className = 'card-inner';
+
+      const back = document.createElement('div');
+      back.className = 'face face-back';
+      back.textContent = '🐾';
+
+      const front = document.createElement('div');
+      front.className = 'face face-front';
+
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      spinner.textContent = '🐾';
+
+      const img = document.createElement('img');
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.addEventListener('load', function () {
+        img.classList.add('loaded');
+        spinner.style.display = 'none';
+      });
+
+      front.appendChild(spinner);
+      front.appendChild(img);
+      inner.appendChild(back);
+      inner.appendChild(front);
+      card.appendChild(inner);
+
+      // Register this card's <img> with its pair so the preloader can fill it.
+      data.pair.cards = data.pair.cards || [];
+      data.pair.cards.push(img);
+      if (data.pair.url) applyImage(img, data.pair.url);
+
+      card.addEventListener('click', function () { onCardTap(card); });
+      return card;
+    }
+
+    // ---------- Game flow ----------
+    function startGame() {
+      players = [];
+      for (let i = 0; i < numPlayers; i++) players.push({ name: 'Player ' + (i + 1), score: 0 });
+      currentPlayer = 0;
+      flipped = [];
+      matchedCount = 0;
+      locked = false;
+
+      const cols = numPairs <= 6 ? 4 : (window.innerWidth < 420 ? 3 : (numPairs === 8 ? 4 : 5));
+      boardEl.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+
+      const deck = buildCards();
+      boardEl.innerHTML = '';
+      deck.forEach(function (d) { boardEl.appendChild(createCardEl(d)); });
+
+      renderScorebar();
+      setupEl.hidden = true;
+      winEl.hidden = true;
+    }
+
+    function onCardTap(card) {
+      if (locked) return;
+      if (card.classList.contains('matched') || card.classList.contains('flipped')) return;
+      if (flipped.length >= 2) return;
+
+      card.classList.add('flipped');
+      flipped.push(card);
+
+      if (flipped.length === 2) resolveTurn();
+    }
+
+    function resolveTurn() {
+      locked = true;
+      boardEl.querySelectorAll('.card').forEach(function (c) { c.classList.add('disabled'); });
+      const a = flipped[0], b = flipped[1];
+      const isMatch = a.dataset.tag === b.dataset.tag;
+
+      setTimeout(function () {
+        if (isMatch) {
+          a.classList.add('matched');
+          b.classList.add('matched');
+          players[currentPlayer].score++;
+          matchedCount++;
+          renderScorebar();
+          flipped = [];
+          locked = false;
+          enableCards();
+          if (matchedCount === numPairs) endGame();
+          // Same player goes again — currentPlayer unchanged.
+        } else {
+          a.classList.remove('flipped');
+          b.classList.remove('flipped');
+          flipped = [];
+          currentPlayer = (currentPlayer + 1) % players.length;
+          renderScorebar();
+          locked = false;
+          enableCards();
+        }
+      }, 900);
+    }
+
+    function enableCards() {
+      boardEl.querySelectorAll('.card').forEach(function (c) {
+        if (!c.classList.contains('matched')) c.classList.remove('disabled');
+      });
+    }
+
+    function endGame() {
+      const max = Math.max.apply(null, players.map(function (p) { return p.score; }));
+      const winners = players.filter(function (p) { return p.score === max; });
+
+      const titleEl = document.getElementById('win-title');
+      const subEl = document.getElementById('win-sub');
+      if (winners.length === 1) {
+        titleEl.textContent = winners[0].name + ' wins!';
+        subEl.textContent = 'Final scores';
+      } else {
+        titleEl.textContent = "It's a tie!";
+        subEl.textContent = winners.map(function (w) { return w.name; }).join(' & ') + ' tied';
+      }
+
+      const list = document.getElementById('results');
+      list.innerHTML = '';
+      players.slice().sort(function (x, y) { return y.score - x.score; }).forEach(function (p) {
+        const li = document.createElement('li');
+        if (p.score === max) li.className = 'winner';
+        li.innerHTML = '<span>' + (p.score === max ? '👑 ' : '') + p.name + '</span>' +
+                       '<span class="pts">' + p.score + (p.score === 1 ? ' pair' : ' pairs') + '</span>';
+        list.appendChild(li);
+      });
+
+      setTimeout(function () { winEl.hidden = false; }, 650);
+    }
+
+    // ---- Initialise default selections on the setup screen ----
+    selectChoice(playerChoices, playerChoices.querySelector('[data-players="2"]'));
+    selectChoice(diffChoices, diffChoices.querySelector('[data-pairs="6"]'));
+  })();
+  </script>
+</body>
+</html>
