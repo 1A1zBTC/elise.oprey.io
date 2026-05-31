@@ -521,8 +521,11 @@ function placementClick(r, c) {
 function randomPlace() {
   if (phase !== 'placing') return;
   const p = players[currentPlayer];
+  // Clear any current placement so every press is a fresh, full re-roll (not a one-shot
+  // "fill the rest"). Lets the player keep randomizing until they like the layout.
+  p.grid = makeEmptyGrid();
+  p.ships.forEach(s => { s.placed = false; s.cells = []; });
   p.ships.forEach(ship => {
-    if (ship.placed) return;
     let attempts = 0;
     while (attempts < 1000) {
       attempts++;

@@ -1,34 +1,37 @@
-# Task: Match It-style start dialog for games that need input
+# Task: Flappy Dog — per-player breed + costume customisation in 2P
 
-Reference design: Match It setup overlay (`.overlay` > `.panel` with `<h2>` title, `.sub`,
-`.group-label`, `.choices`/`.choice`, `.start-btn`).
+## Goal
+In 2-player mode, each dog (P1 and P2) can be given its own breed and costume.
+Bones/unlocks stay a shared pool; only the *equipped* selection is per-player.
 
-## Scope (confirmed with user)
-- [x] Match It — already the reference (no change)
-- [ ] Snakes & Ladders — convert `#setup` (player count 2/3/4) to styled dialog
-- [ ] Kitten Jump — replace canvas `select` screen with HTML dialog (1/2 players)
-- [ ] Flappy Dog — add launch dialog (1/2 players), shop stays; replay unchanged
-- Out of scope: PicWits, Battleship (no start options)
-
-## Decisions
-- Dialog shown at first launch only; existing replay/game-over flow untouched.
-- Kitten Jump: `state==='select'` now drives the HTML dialog (replay returns to select = shows dialog, matching existing flow).
-- Reuse exact Match It CSS block + `selectChoice` interaction pattern in each file.
+## Design
+- Per-slot selections: `skins=[p1,p2]`, `costumes=[p1,p2]`, `pendingSkins=[null,null]`.
+- `editSlot` (0/1) = which dog the shop currently customises. Always 0 in 1P.
+- New "Customising: Player 1 / Player 2" toggle in the shop, shown only in 2P.
+- Persist per-player: SKIN_KEYS/COSTUME_KEYS arrays (P1 keys unchanged → old saves preserved).
+- P2 default breed = next owned breed (or same if only one owned). Replaces the old
+  auto "contrasting challenger" default (which could be a locked breed).
 
 ## Steps
-1. [x] Snakes & Ladders: add shared dialog CSS, rewrite `#setup` markup, wire selection + Start → startGame(n)
-2. [x] Kitten Jump: add CSS + `#setup` markup; show/hide via state; strip canvas select text/buttons
-3. [x] Flappy Dog: add CSS + `#setup` markup; show at load; Start → setPlayers + hide; keep shop toggle
-4. [x] Verify each in browser (headless, GSTACK_CHROMIUM_NO_SANDBOX=1)
+1. [ ] Keys → arrays (SKIN_KEYS, COSTUME_KEYS); keep COSTUMES_KEY (shared owned set)
+2. [ ] State: skins/costumes/pendingSkins arrays + editSlot; drop scalar skin/skinIndex/costumeIndex
+3. [ ] equipSkin(slot,i)/selectSkin/buyBreed/equipCostume/buyOrEquipCostume → editSlot-aware
+4. [ ] buildPlayers uses per-slot selections; remove p2BreedIndex
+5. [ ] endRound applies pendingSkins for both slots
+6. [ ] refreshBreeds/refreshCostumes highlight editSlot's selection
+7. [ ] draw text (1P screens) use skins[0]
+8. [ ] Add dress toggle markup + wiring; refresh in setPlayers/dialog-start/init
+9. [ ] Verify in browser (1P unaffected; 2P per-dog breed+costume)
 
 ## Review
-- Shared Match It dialog (`.overlay`/`.panel`/`.choices`/`.choice`/`.start-btn`) added to all three
-  games; same Pacifico title + red 3D Start button + selectable cards.
-- Snakes: `#setup` now the styled overlay; select player count → Start → `startGame(n)`. Verified
-  setup hides / game shows / numPlayers=4.
-- Kitten Jump: `state==='select'` drives the HTML overlay; canvas `drawSelect` reduced to scenery
-  (kittens) behind the blur. Start → split-screen game. Replay (over → select) re-shows the dialog,
-  matching existing flow.
-- Flappy Dog: overlay shown at launch; Start applies player count + hides; shop sidebar and 1P/2P
-  toggle untouched. Replay unchanged (tap to restart).
-- No console errors on any game. Browse needed GSTACK_CHROMIUM_NO_SANDBOX=1 (host AppArmor userns).
+Done — all steps complete, verified headless in browser:
+- 1P unchanged: Customising toggle hidden, single dog uses P1's saved breed/costume.
+- 2P: "Customising · Player 1 / Player 2" toggle in shop picks which dog the breed+costume
+  grids edit. Each dog equips independently from the shared owned pool.
+- Persistence: flappydog.skin/skin2 + flappydog.costume/costume2 (P1 keys unchanged → old
+  saves intact). Verified skin_p1=2/skin_p2=3, costume_p1=0/costume_p2=1 after equipping.
+- Switching P1↔P2 re-highlights each dog's own selection; ready screen shows "Dalmatian vs Husky".
+- No console errors. Browse needed GSTACK_CHROMIUM_NO_SANDBOX=1 (host AppArmor userns).
+
+Behaviour change to note: P2's default breed is now the next *owned* breed (or same as P1 if
+only one owned), replacing the old auto "contrasting challenger" that could show a locked breed.

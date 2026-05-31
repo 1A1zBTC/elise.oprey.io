@@ -90,6 +90,36 @@
     .player .turn { color: #e94560; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; min-height: 0.8rem; }
     .player:not(.active) .turn { visibility: hidden; }
 
+    /* ---------- Power-ups bar ---------- */
+    .powerups {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .powerups[hidden] { display: none; }
+    .pu-btn {
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 0.9rem;
+      color: #fff;
+      background: #2a3a64;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 9px 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    }
+    .pu-btn:hover:not(:disabled) { border-color: #e94560; background: #33457a; }
+    .pu-btn:active:not(:disabled) { transform: translateY(2px); }
+    .pu-btn:disabled { opacity: 0.45; cursor: default; }
+    .pu-count { background: #0f1830; color: #ffe8b0; border-radius: 20px; padding: 1px 8px; font-size: 0.8rem; }
+
     /* ---------- Board ---------- */
     .board {
       width: 100%;
@@ -179,6 +209,10 @@
     @keyframes pop { 0%,100% { transform: scale(1); } 40% { transform: scale(1.06); } }
 
     .card.disabled { cursor: default; }
+
+    /* Power-up reveals: flip the front into view WITHOUT touching turn/flip state. */
+    .card.peek .card-inner { transform: rotateY(180deg); transition: transform 0.18s ease; }
+    .card.spin .card-inner { transition: transform 0.1s ease; }   /* "Show" — fast 0.1s spin */
 
     /* ---------- Overlay (setup + win) ---------- */
     .overlay {
@@ -285,6 +319,8 @@
 
   <div class="scorebar" id="scorebar"></div>
 
+  <div class="powerups" id="powerups" hidden></div>
+
   <div class="board" id="board"></div>
 
   <!-- Setup overlay -->
@@ -305,6 +341,12 @@
         <button class="choice" data-pairs="6"><span class="big">Easy</span><span class="small">12 cards</span></button>
         <button class="choice" data-pairs="8"><span class="big">Medium</span><span class="small">16 cards</span></button>
         <button class="choice" data-pairs="10"><span class="big">Hard</span><span class="small">20 cards</span></button>
+      </div>
+
+      <div class="group-label">Power-ups</div>
+      <div class="choices" id="power-choices">
+        <button class="choice" data-powerups="on"><span class="big">On</span><span class="small">Peek &amp; Show</span></button>
+        <button class="choice" data-powerups="off"><span class="big">Off</span><span class="small">classic</span></button>
       </div>
 
       <button class="start-btn" id="start-btn">Start Game</button>
@@ -388,12 +430,21 @@
 
     const boardEl = document.getElementById('board');
     const scorebarEl = document.getElementById('scorebar');
+    const powerupsEl = document.getElementById('powerups');
     const setupEl = document.getElementById('setup');
     const winEl = document.getElementById('win');
+
+    // ---- Power-up tuning ----
+    const PEEKS_PER_PLAYER = 3;   // "Peek": reveal one random tile
+    const SHOWS_PER_PLAYER = 1;   // "Show": flash the whole board
+    const PEEK_MS = 500;          // a single tile stays revealed this long
+    const SHOW_SPIN_MS = 100;     // "Show" flip speed (0.1s)
+    const SHOW_HOLD_MS = 700;     // ...how long all cards stay face-up before spinning back
 
     // ---- Setup state ----
     let numPlayers = 2;
     let numPairs = 6;
+    let powerupsEnabled = true;
 
     // ---- Game state ----
     let players = [];
@@ -401,6 +452,7 @@
     let flipped = [];        // card DOM elements currently face-up (0–2)
     let matchedCount = 0;
     let locked = false;      // block taps during the reveal delay
+    let powerActive = false; // block taps while a Peek/Show reveal is playing
 
     function shuffle(a) {
       const arr = a.slice();
@@ -448,6 +500,14 @@
       selectChoice(diffChoices, btn);
     });
 
+    const powerChoices = document.getElementById('power-choices');
+    powerChoices.addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      powerupsEnabled = btn.dataset.powerups === 'on';
+      selectChoice(powerChoices, btn);
+    });
+
     document.getElementById('start-btn').addEventListener('click', startGame);
     document.getElementById('again-btn').addEventListener('click', function () {
       winEl.hidden = true;
@@ -466,6 +526,92 @@
           '<div class="turn">Your turn</div>';
         scorebarEl.appendChild(el);
       });
+      renderPowerups();
+    }
+
+    // ---------- Power-ups ----------
+    function busy() { return locked || powerActive; }
+
+    function renderPowerups() {
+      if (!powerupsEnabled || !players.length) {
+        powerupsEl.hidden = true;
+        powerupsEl.innerHTML = '';
+        return;
+      }
+      powerupsEl.hidden = false;
+      const p = players[currentPlayer];
+      const disabled = busy();
+      powerupsEl.innerHTML = '';
+
+      const peekBtn = document.createElement('button');
+      peekBtn.className = 'pu-btn';
+      peekBtn.disabled = disabled || p.peeks <= 0;
+      peekBtn.innerHTML = '👀 Peek <span class="pu-count">' + p.peeks + '</span>';
+      peekBtn.addEventListener('click', usePeek);
+      powerupsEl.appendChild(peekBtn);
+
+      const showBtn = document.createElement('button');
+      showBtn.className = 'pu-btn';
+      showBtn.disabled = disabled || p.shows <= 0;
+      showBtn.innerHTML = '🔄 Show <span class="pu-count">' + p.shows + '</span>';
+      showBtn.addEventListener('click', useShow);
+      powerupsEl.appendChild(showBtn);
+    }
+
+    function disableAllCards() {
+      boardEl.querySelectorAll('.card').forEach(function (c) { c.classList.add('disabled'); });
+    }
+
+    // Peek: flip ONE random face-down tile up for PEEK_MS, then flip it back.
+    function usePeek() {
+      if (!powerupsEnabled || busy()) return;
+      const p = players[currentPlayer];
+      if (p.peeks <= 0) return;
+      const candidates = [].filter.call(boardEl.querySelectorAll('.card'), function (c) {
+        return !c.classList.contains('matched') && !c.classList.contains('flipped') && !c.classList.contains('peek');
+      });
+      if (!candidates.length) return;
+
+      p.peeks--;
+      powerActive = true;
+      disableAllCards();
+      renderPowerups();
+
+      const card = candidates[Math.floor(Math.random() * candidates.length)];
+      card.classList.add('peek');
+      setTimeout(function () {
+        card.classList.remove('peek');
+        powerActive = false;
+        enableCards();
+        renderPowerups();
+      }, PEEK_MS);
+    }
+
+    // Show: spin EVERY face-down tile around fast, hold briefly, then spin back.
+    function useShow() {
+      if (!powerupsEnabled || busy()) return;
+      const p = players[currentPlayer];
+      if (p.shows <= 0) return;
+      const cards = [].filter.call(boardEl.querySelectorAll('.card'), function (c) {
+        return !c.classList.contains('matched') && !c.classList.contains('flipped');
+      });
+      if (!cards.length) return;
+
+      p.shows--;
+      powerActive = true;
+      disableAllCards();
+      renderPowerups();
+
+      cards.forEach(function (c) { c.classList.add('spin', 'peek'); });
+      setTimeout(function () {
+        cards.forEach(function (c) { c.classList.remove('peek'); });   // spin back
+        setTimeout(function () {
+          cards.forEach(function (c) { c.classList.remove('spin'); });
+          powerActive = false;
+          enableCards();
+          renderPowerups();
+        }, SHOW_SPIN_MS + 20);
+      }, SHOW_SPIN_MS + SHOW_HOLD_MS);
     }
 
     // ---------- Card creation ----------
@@ -530,7 +676,10 @@
     // ---------- Game flow ----------
     function startGame() {
       players = [];
-      for (let i = 0; i < numPlayers; i++) players.push({ name: 'Player ' + (i + 1), score: 0 });
+      for (let i = 0; i < numPlayers; i++) {
+        players.push({ name: 'Player ' + (i + 1), score: 0, peeks: PEEKS_PER_PLAYER, shows: SHOWS_PER_PLAYER });
+      }
+      powerActive = false;
       currentPlayer = 0;
       flipped = [];
       matchedCount = 0;
@@ -549,7 +698,7 @@
     }
 
     function onCardTap(card) {
-      if (locked) return;
+      if (locked || powerActive) return;
       if (card.classList.contains('matched') || card.classList.contains('flipped')) return;
       if (flipped.length >= 2) return;
 
@@ -571,9 +720,9 @@
           b.classList.add('matched');
           players[currentPlayer].score++;
           matchedCount++;
-          renderScorebar();
           flipped = [];
-          locked = false;
+          locked = false;        // clear BEFORE rendering so power-up buttons aren't drawn disabled
+          renderScorebar();
           enableCards();
           if (matchedCount === numPairs) endGame();
           // Same player goes again — currentPlayer unchanged.
@@ -582,8 +731,8 @@
           b.classList.remove('flipped');
           flipped = [];
           currentPlayer = (currentPlayer + 1) % players.length;
+          locked = false;        // clear BEFORE rendering so the new player's power-ups are enabled
           renderScorebar();
-          locked = false;
           enableCards();
         }
       }, 900);
@@ -625,6 +774,7 @@
     // ---- Initialise default selections on the setup screen ----
     selectChoice(playerChoices, playerChoices.querySelector('[data-players="2"]'));
     selectChoice(diffChoices, diffChoices.querySelector('[data-pairs="6"]'));
+    selectChoice(powerChoices, powerChoices.querySelector('[data-powerups="on"]'));
   })();
   </script>
 
