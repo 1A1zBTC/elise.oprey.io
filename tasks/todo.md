@@ -1,25 +1,26 @@
-# Task: Kitten Jump — different fur coats
+# Task: "‹ Games" back button on every game (mobile)
 
-Replaced the 2 hardcoded colour themes with 8 distinct patterned fur coats; players pick
-their coat in the start dialog (per-player in 2P, like Flappy Dog breeds); choices persist.
+Every game needs a top "‹ Games" button linking to ../index.html (the elise.oprey.io
+games list). On mobile the homepage navigates full-page to a game, so the game's own
+topbar must carry the back link; on desktop the homepage loads games in an iframe pane
+and the link is hidden (redundant with the sidebar).
 
-## Coats (COATS array, each has a `pattern`)
-Grey Tabby, Orange Tabby, Brown Tabby (tabby stripes) · Tuxedo (black + white chest/muzzle)
-· Calico (cream + orange/dark patches) · Siamese (cream + dark face/points) · Black Cat,
-Snowy White (solid).
+## Findings
+- flappy-dog, kitten-jump, match-it, picwits, crossy-pets already had `.topbar` > `.back`
+  ("‹ Games", href ../index.html) + an iframe-hide script (window.self !== window.top).
+- battleships and snakes-and-ladders had NO topbar/back button → the gap.
 
-## Implementation
-- COATS array (was THEMES) with pattern + extra colours (stripe/white/patchA/patchB/points).
-- drawKitten: clip-to-body and clip-to-head pattern layers (tabby stripes, tuxedo muzzle,
-  calico patches, siamese mask). Solid coats draw nothing extra.
-- State: coats=[p1,p2] loaded from COAT_KEYS (kittenjump.coat / .coat2), editCoatSlot.
-- Start dialog: "Fur coat" swatch row (CSS gradient previews per pattern) + a P1/P2 tab row
-  shown only in 2P. Picking saves to localStorage; player-count change resets to P1.
-- startGame + drawSelect demo kittens use the chosen coats.
+## Changes (battleships + snakes-and-ladders)
+- Added `.topbar` + `.back` CSS (matching the other games' muted-link style).
+- Added `<div class="topbar"><a class="back" href="../index.html">‹ Games</a>…</div>`
+  at the top of the body, above the game's `<h1>`.
+- Added the standard iframe-hide script so the link hides in the desktop pane.
 
-## Review — DONE, verified headless (no console errors):
-- Dialog shows 8 coat swatches with pattern previews; tabs hidden in 1P, shown in 2P.
-- In-game patterns confirmed: Calico, Siamese, Tuxedo, Grey Tabby all render distinctly.
-- 2P uses each player's own coat (P1 Siamese / P2 Tuxedo); panel labels show coat names.
-- Persistence verified: coat=5/coat2=3 restored after reload.
-- Browse needed GSTACK_CHROMIUM_NO_SANDBOX=1 (host AppArmor userns).
+## Review — DONE, verified headless at 390×844 (mobile):
+- All 7 games: `.back` present, text "‹ Games", href "../index.html", visibility visible.
+- battleships + snakes show the button (screenshots); snakes shows it during play once the
+  start dialog is dismissed.
+- Back link → index.html, which lists all 7 game cards (Battleships, Snakes & Ladders,
+  Flappy Dog, PicWits, Match It, Kitten Jump, Crossy Pets).
+- Desktop iframe pane still hides the link (same script as the 4 already-working games;
+  file:// cross-origin blocks parent introspection but the in-iframe script is identical).

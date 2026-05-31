@@ -72,9 +72,17 @@
   .fleet-name { width: 85px; }
   .fleet-cell { width: 16px; height: 16px; border: 1px solid #1e3a5f; display: inline-block; background: #37474f; }
   .fleet-row.sunk-ship .fleet-cell { background: #8b0000; }
+  .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
+  .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
 </style>
 </head>
 <body>
+
+<div class="topbar">
+  <a href="../index.html" class="back">‹ Games</a>
+  <span style="width:56px"></span>
+</div>
 
 <h1>Battleships</h1>
 <div id="status">Player 1: Place your ships</div>
@@ -116,6 +124,10 @@
 </div>
 
 <script>
+function playerName(i, fallback) {
+  try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+  catch (e) { return fallback; }
+}
 const SHIPS = [
   { name: 'Carrier', size: 5 },
   { name: 'Battleship', size: 4 },
@@ -181,7 +193,7 @@ function startGame() {
   hideOverlay();
   renderShipSelect();
   renderBoards();
-  setStatus("Player 1: Place your ships");
+  setStatus(playerName(0, 'Player 1') + ": Place your ships");
   document.getElementById('rotate-btn').classList.remove('hidden');
   document.getElementById('random-btn').classList.remove('hidden');
 }
@@ -336,8 +348,8 @@ function renderBoards() {
     renderBoard(`board-${winnerIdx}`, players[winnerIdx].grid, null, true, null);
     renderBoard(`board-${loserIdx}`, players[loserIdx].grid, null, false, null);
   }
-  document.getElementById('left-label').textContent = 'Player 1';
-  document.getElementById('right-label').textContent = 'Player 2';
+  document.getElementById('left-label').textContent = playerName(0, 'Player 1');
+  document.getElementById('right-label').textContent = playerName(1, 'Player 2');
   renderFleet(0);
   renderFleet(1);
   updateHighlight();
@@ -555,7 +567,7 @@ function finishPlacement() {
     selectedShip = null;
     orientation = 'h';
     document.getElementById('rotate-btn').textContent = 'Horizontal';
-    showOverlay('Pass the device', "It's Player 2's turn to place ships.", 'OK');
+    showOverlay('Pass the device', "It's " + playerName(1, 'Player 2') + "'s turn to place ships.", 'OK');
   } else {
     currentPlayer = 0;
     phase = 'battle';
@@ -566,7 +578,7 @@ function finishPlacement() {
     document.getElementById('rotate-btn').classList.add('hidden');
     document.getElementById('random-btn').classList.add('hidden');
     renderBoards();
-    setStatus("Player 1: Fire a shot!");
+    setStatus(playerName(0, 'Player 1') + ": Fire a shot!");
   }
 }
 
@@ -581,7 +593,7 @@ function switchTurnDelayed(delay) {
     activeWeapon = null;
     tripleTriesLeft = 0;
     renderBoards();
-    setStatus(`Player ${currentPlayer + 1}: Fire a shot!`);
+    setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: Fire a shot!`);
   }, delay || 900);
 }
 
@@ -590,7 +602,7 @@ function checkWin(enemyIdx) {
   if (players[enemyIdx].ships.every(s => s.sunk)) {
     phase = 'gameover';
     renderBoards();
-    showOverlay('Game Over!', `Player ${currentPlayer + 1} wins!`, 'Play Again');
+    showOverlay('Game Over!', `${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))} wins!`, 'Play Again');
     return true;
   }
   return false;
@@ -618,10 +630,10 @@ function fireShot(r, c) {
   if (cell.ship) {
     maybeSink(players[enemyIdx].grid, cell.ship);
     if (checkWin(enemyIdx)) return;
-    setStatus(`Player ${currentPlayer + 1}: Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''}`);
+    setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''}`);
     renderBoards();
   } else {
-    setStatus(`Player ${currentPlayer + 1}: Miss!`);
+    setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: Miss!`);
     renderBoards();
     switchTurnDelayed(800);
   }
@@ -648,8 +660,8 @@ function fireSpecialBomb(r, c) {
   if (checkWin(enemyIdx)) return;
   const names = [...shipsHit].map(s => s.name).join(', ');
   setStatus(shipsHit.size > 0
-    ? `Player ${currentPlayer + 1}: 💣 BOOM! Sunk: ${names}!`
-    : `Player ${currentPlayer + 1}: 💣 BOOM! No ships hit.`);
+    ? `${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 💣 BOOM! Sunk: ${names}!`
+    : `${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 💣 BOOM! No ships hit.`);
   renderBoards();
   switchTurnDelayed(1200);
 }
@@ -673,7 +685,7 @@ function fireSpecialMissile(r, c) {
   const hitCount = shipsHit.size;
   const sunkShips = [...shipsHit].filter(s => s.sunk);
   const label = missileDir === 'row' ? `row ${r + 1}` : `column ${COLS[c]}`;
-  let msg = `Player ${currentPlayer + 1}: 🚀 Missile across ${label}! `;
+  let msg = `${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 🚀 Missile across ${label}! `;
   if (hitCount > 0) {
     msg += `Hit ${hitCount} ship${hitCount > 1 ? 's' : ''}!`;
     if (sunkShips.length > 0) msg += ` Sunk: ${sunkShips.map(s => s.name).join(', ')}!`;
@@ -697,7 +709,7 @@ function fireSonar(r, c) {
       if (cell.ship && !cell.revealed) { cell.revealed = true; found++; }
     });
   }
-  setStatus(`Player ${currentPlayer + 1}: 📡 Sonar on column ${COLS[c]} — ${found} ship cell${found === 1 ? '' : 's'} revealed (both fleets)!`);
+  setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 📡 Sonar on column ${COLS[c]} — ${found} ship cell${found === 1 ? '' : 's'} revealed (both fleets)!`);
   renderBoards();
   switchTurnDelayed(1300);
 }
@@ -718,15 +730,15 @@ function fireTriple(r, c) {
   if (cell.ship) {
     maybeSink(grid, cell.ship);
     if (checkWin(enemyIdx)) return;
-    setStatus(`Player ${currentPlayer + 1}: 🎯 Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''} (${tripleTriesLeft} ${tripleTriesLeft === 1 ? 'try' : 'tries'} left)`);
+    setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 🎯 Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''} (${tripleTriesLeft} ${tripleTriesLeft === 1 ? 'try' : 'tries'} left)`);
     renderBoards();                        // free hit — keep firing, tries unchanged
   } else {
     tripleTriesLeft--;
     if (tripleTriesLeft > 0) {
-      setStatus(`Player ${currentPlayer + 1}: 🎯 Miss! ${tripleTriesLeft} ${tripleTriesLeft === 1 ? 'try' : 'tries'} left.`);
+      setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 🎯 Miss! ${tripleTriesLeft} ${tripleTriesLeft === 1 ? 'try' : 'tries'} left.`);
       renderBoards();
     } else {
-      setStatus(`Player ${currentPlayer + 1}: 🎯 Miss! Triple bomb spent.`);
+      setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 🎯 Miss! Triple bomb spent.`);
       renderBoards();
       switchTurnDelayed(900);
     }
@@ -748,7 +760,7 @@ function fireDiscovery(r, c) {
     activeWeapon = null;
     maybeSink(grid, cell.ship);
     if (checkWin(enemyIdx)) return;
-    setStatus(`Player ${currentPlayer + 1}: 🔍 Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''} (Discovery saved — still yours)`);
+    setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 🔍 Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''} (Discovery saved — still yours)`);
     renderBoards();
     return;
   }
@@ -760,8 +772,8 @@ function fireDiscovery(r, c) {
   const near = getBombCells(r, c).some(([nr, nc]) => grid[nr][nc].ship);
   cell.near = near;
   setStatus(near
-    ? `Player ${currentPlayer + 1}: 🔍 Miss — but a ship is hiding right next to it!`
-    : `Player ${currentPlayer + 1}: 🔍 Miss — all clear nearby.`);
+    ? `${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 🔍 Miss — but a ship is hiding right next to it!`
+    : `${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: 🔍 Miss — all clear nearby.`);
   renderBoards();
   switchTurnDelayed(1100);
 }
@@ -778,10 +790,10 @@ function showOverlay(title, text, btnText) {
     if (phase === 'placing') {
       renderShipSelect();
       renderBoards();
-      setStatus(`Player ${currentPlayer + 1}: Place your ships`);
+      setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: Place your ships`);
     } else {
       renderBoards();
-      setStatus(`Player ${currentPlayer + 1}: Fire a shot!`);
+      setStatus(`${playerName(currentPlayer, 'Player ' + (currentPlayer + 1))}: Fire a shot!`);
     }
   };
   document.getElementById('overlay').classList.remove('hidden');
@@ -793,6 +805,13 @@ function hideOverlay() {
 
 // Skip the intro splash — drop straight into ship placement on load.
 startGame();
+</script>
+<script>
+  // On desktop the homepage loads this game in a pane; hide the redundant "‹ Games"
+  // back link there. Standalone/mobile (top-level) pages keep it.
+  if (window.self !== window.top) {
+    var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+  }
 </script>
 </body>
 </html>

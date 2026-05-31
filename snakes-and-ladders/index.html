@@ -34,6 +34,27 @@
     font-weight: 400;
   }
 
+  /* ---------- top bar (back to games) ---------- */
+  .topbar {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+  .back {
+    color: rgba(255,255,255,0.85);
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 0.95rem;
+    padding: 6px 10px;
+    border-radius: 12px;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .back:hover { color: #fff; background: rgba(255,255,255,0.12); }
+
   /* ---------- start dialog (shared format) ---------- */
   .overlay {
     position: fixed;
@@ -114,12 +135,20 @@
   #game { display: none; flex-direction: column; align-items: center; }
 
   /* board */
-  #board-wrap { position: relative; margin: 8px 0; }
+  #board-wrap { position: relative; margin: 8px auto; width: 100%; max-width: 1180px; padding: 0 10px; display: flex; justify-content: center; }
   canvas#board {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    /* Fit the WHOLE board within the screen (height included) so it's fully visible at once;
+       the board keeps its aspect ratio and you can pinch-zoom for a closer look. */
+    max-height: calc(100vh - 220px);
+    max-height: calc(100dvh - 220px);
+    width: auto;
+    height: auto;
     border: 4px solid rgba(255,255,255,0.5);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    display: block;
   }
 
   /* info bar */
@@ -167,6 +196,11 @@
   #roll-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #b06010; }
   #roll-btn:disabled { opacity: .5; cursor: default; transform: none; box-shadow: 0 4px 0 #b06010; }
 
+  /* On the tall portrait board, keep the roll button reachable without scrolling to the bottom. */
+  @media (max-width: 767px) {
+    #roll-btn { position: sticky; bottom: 12px; z-index: 5; }
+  }
+
   #dice-display {
     font-size: 40px;
     margin: 4px 0;
@@ -210,6 +244,10 @@
 </head>
 <body>
 
+<div class="topbar">
+  <a href="../index.html" class="back">‹ Games</a>
+</div>
+
 <h1>Snakes &amp; Ladders</h1>
 
 <!-- Setup screen -->
@@ -250,12 +288,22 @@
 
 <script>
 /* ---- constants ---- */
-const COLS = 30, ROWS = 10, TOTAL = 300;
-const CELL = 40;    // px per cell (horizontal)
-const CELL_H = 60;  // px per cell (vertical, 1.5× stretch)
+// Phones (portrait) get a tall 10-wide board; desktop/landscape keeps the classic wide 30×10.
+const PORTRAIT = window.matchMedia('(max-width: 767px)').matches;
+const COLS = PORTRAIT ? 10 : 30;
+const ROWS = PORTRAIT ? 30 : 10;
+const TOTAL = COLS * ROWS;            // 300 either way
+const CELL = 40;                      // px per cell (horizontal)
+const CELL_H = PORTRAIT ? 40 : 60;    // square cells in portrait; 1.5× vertical stretch in landscape
 const PLAYER_COLORS = ['#e83238','#3a70ff','#26c96e','#ff9c2a'];
 const PLAYER_NAMES  = ['Dan','Elise','Luke','PiJiu'];
 const DICE_FACES = ['\u2680','\u2681','\u2682','\u2683','\u2684','\u2685'];
+
+/* ---- custom player names set on the homepage (localStorage) ---- */
+function playerName(i, fallback) {
+  try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+  catch (e) { return fallback; }
+}
 
 /* ---- state ---- */
 let numPlayers, positions, currentPlayer, snakes, ladders, animating;
@@ -387,11 +435,13 @@ function generateSnakesAndLadders() {
 /* ---- drawing ---- */
 const canvas = document.getElementById('board');
 const ctx = canvas.getContext('2d');
+canvas.width = COLS * CELL;     // intrinsic resolution; CSS scales it to fit the screen
+canvas.height = ROWS * CELL_H;
 
 // Offscreen cache for the static board — redrawn only once per game
 const boardCache = document.createElement('canvas');
-boardCache.width = 1200;
-boardCache.height = 600;
+boardCache.width = COLS * CELL;
+boardCache.height = ROWS * CELL_H;
 const bctx = boardCache.getContext('2d');
 
 // Tropical tile palette — golden sand / turquoise water
@@ -720,7 +770,7 @@ function updateInfo() {
     tag.className = 'player-tag' + (i === currentPlayer ? ' active' : '');
     tag.style.background = PLAYER_COLORS[i];
     tag.style.boxShadow = `inset -2px -2px 0 rgba(0,0,0,.4), inset 2px 2px 0 rgba(255,255,255,.2), 2px 2px 0 #000`;
-    tag.textContent = `${PLAYER_NAMES[i]}: ${positions[i]}`;
+    tag.textContent = `${playerName(i, PLAYER_NAMES[i])}: ${positions[i]}`;
     info.appendChild(tag);
   }
 }
@@ -741,7 +791,7 @@ function startGame(n) {
   document.getElementById('setup').style.display = 'none';
   document.getElementById('game').style.display = 'flex';
   updateInfo();
-  setMessage(`${PLAYER_NAMES[currentPlayer]} goes first — roll the dice!`);
+  setMessage(`${playerName(currentPlayer, PLAYER_NAMES[currentPlayer])} goes first — roll the dice!`);
   render();
 }
 
@@ -753,7 +803,7 @@ function rollDice() {
   btn.disabled = true;
   animating = true;
 
-  const name = PLAYER_NAMES[currentPlayer];
+  const name = playerName(currentPlayer, PLAYER_NAMES[currentPlayer]);
   let target = positions[currentPlayer] + roll;
 
   if (target > TOTAL) {
@@ -979,7 +1029,7 @@ function finishTurn() {
     // winner!
     render();
     document.getElementById('winner-text').textContent =
-      `${PLAYER_NAMES[currentPlayer]} WINS!`;
+      `${playerName(currentPlayer, PLAYER_NAMES[currentPlayer])} WINS!`;
     document.getElementById('winner-overlay').classList.add('show');
     return;
   }
@@ -991,7 +1041,7 @@ function finishTurn() {
 function nextTurn() {
   currentPlayer = (currentPlayer + 1) % numPlayers;
   updateInfo();
-  setMessage(`${PLAYER_NAMES[currentPlayer]}'s turn — roll the dice!`);
+  setMessage(`${playerName(currentPlayer, PLAYER_NAMES[currentPlayer])}'s turn — roll the dice!`);
 }
 
 document.addEventListener('keydown', e => {
@@ -1019,6 +1069,13 @@ document.addEventListener('keydown', e => {
   // default selection
   selectChoice(playerChoices.querySelector('[data-players="2"]'));
 })();
+</script>
+<script>
+  // On desktop the homepage loads this game in a pane; hide the redundant "‹ Games"
+  // back link there. Standalone/mobile (top-level) pages keep it.
+  if (window.self !== window.top) {
+    var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+  }
 </script>
 </body>
 </html>

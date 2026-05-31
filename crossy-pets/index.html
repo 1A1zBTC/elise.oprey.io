@@ -501,13 +501,19 @@
       if (kind === 'eagle' || kind === 'leash') eagle = { y: -120 };
     }
 
+    // Player names set centrally on the homepage (shared localStorage). Blank = default.
+    function playerName(i, fallback) {
+      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+      catch (e) { return fallback; }
+    }
+
     function deathReason(kind, idx) {
-      const who = numPlayers === 2 ? ('Player ' + (idx + 1) + ' ') : '';
+      const who = numPlayers === 2 ? (playerName(idx, 'Player ' + (idx + 1)) + ' ') : '';
       if (kind === 'squash') return who + (who ? 'got squashed! 🚗' : 'Squashed flat! 🚗');
       if (kind === 'drown') return who + (who ? 'drowned! 🌊' : 'Glug glug… 🌊');
       if (kind === 'train') return who + (who ? 'hit a train! 🚆' : 'Hit by a train! 🚆');
       if (kind === 'eagle') return who + (who ? 'was caught by the eagle! 🦅' : 'The eagle got you! 🦅');
-      if (kind === 'leash') return 'Player ' + (idx + 1) + ' fell behind! 🦅';
+      if (kind === 'leash') return playerName(idx, 'Player ' + (idx + 1)) + ' fell behind! 🦅';
       return 'Game Over';
     }
 
@@ -516,9 +522,9 @@
       players.forEach(function (pl) { if (pl.score > loadBest(pl.pet)) saveBest(pl.pet, pl.score); });
       document.getElementById('over-sub').textContent = deathReason(deadKind, deadIdx);
       if (numPlayers === 2) {
-        document.getElementById('over-title').textContent = 'Player ' + (winnerIdx + 1) + ' wins! 🏆';
-        document.getElementById('over-l1').textContent = 'Player 1';
-        document.getElementById('over-l2').textContent = 'Player 2';
+        document.getElementById('over-title').textContent = playerName(winnerIdx, 'Player ' + (winnerIdx + 1)) + ' wins! 🏆';
+        document.getElementById('over-l1').textContent = playerName(0, 'Player 1');
+        document.getElementById('over-l2').textContent = playerName(1, 'Player 2');
         document.getElementById('over-score').textContent = players[0].score;
         document.getElementById('over-best').textContent = players[1].score;
       } else {

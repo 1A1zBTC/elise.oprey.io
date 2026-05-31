@@ -129,6 +129,36 @@
     .welcome .hint { color: #a0a8c0; font-size: 1.1rem; font-weight: 700; }
     .welcome .paw { font-size: 3rem; margin-bottom: 14px; }
 
+    /* ---------- Shared player names (used by every game) ---------- */
+    .names {
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .names-label { color: #ffe8b0; font-weight: 800; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
+    .names-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .name-field { display: flex; flex-direction: column; gap: 3px; }
+    .name-field span { color: #8b93b0; font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; padding-left: 3px; }
+    .name-field input {
+      width: 100%;
+      min-width: 0;
+      background: #0f1830;
+      border: 2px solid #0f3460;
+      border-radius: 10px;
+      color: #fff;
+      font-family: inherit;
+      font-weight: 800;
+      font-size: 0.85rem;
+      padding: 7px 9px;
+      outline: none;
+    }
+    .name-field input::placeholder { color: #5a648a; font-weight: 700; }
+    .name-field input:focus { border-color: #e94560; }
+
     /* ---------- Mobile: collapse to the classic full-width list ---------- */
     @media (max-width: 759px) {
       .shell { display: block; height: auto; }
@@ -156,6 +186,16 @@
     <nav class="sidebar">
       <div class="brand">Elise's Games</div>
       <div class="brand-sub">Pick a game &amp; play with friends</div>
+
+      <div class="names" id="names">
+        <div class="names-label">Player names</div>
+        <div class="names-grid">
+          <label class="name-field"><span>Player 1</span><input id="pn0" type="text" maxlength="12" placeholder="Player 1"></label>
+          <label class="name-field"><span>Player 2</span><input id="pn1" type="text" maxlength="12" placeholder="Player 2"></label>
+          <label class="name-field"><span>Player 3</span><input id="pn2" type="text" maxlength="12" placeholder="Player 3"></label>
+          <label class="name-field"><span>Player 4</span><input id="pn3" type="text" maxlength="12" placeholder="Player 4"></label>
+        </div>
+      </div>
 
       <a href="battleships/index.html" class="game-card">
         <div class="game-icon">🚢</div>
@@ -250,6 +290,29 @@
       var stage = document.getElementById('stage');
       var welcome = document.getElementById('welcome');
       var cards = document.querySelectorAll('.game-card');
+
+      // ---- Shared player names: edited here, read by every game via same-origin localStorage.
+      // Stored as a JSON array of up to 4 strings under 'elise.playerNames'; blank = default.
+      var PLAYER_NAMES_KEY = 'elise.playerNames';
+      function loadNames() {
+        try { var a = JSON.parse(localStorage.getItem(PLAYER_NAMES_KEY)); return Array.isArray(a) ? a : []; }
+        catch (e) { return []; }
+      }
+      (function wireNames() {
+        var saved = loadNames();
+        for (var i = 0; i < 4; i++) {
+          (function (idx) {
+            var inp = document.getElementById('pn' + idx);
+            if (!inp) return;
+            inp.value = saved[idx] || '';
+            inp.addEventListener('input', function () {
+              var a = loadNames();
+              a[idx] = inp.value;
+              try { localStorage.setItem(PLAYER_NAMES_KEY, JSON.stringify(a)); } catch (e) {}
+            });
+          })(i);
+        }
+      })();
 
       // Only take over on desktop; on mobile the links navigate to the full-page game.
       function isDesktop() { return window.matchMedia('(min-width: 760px)').matches; }

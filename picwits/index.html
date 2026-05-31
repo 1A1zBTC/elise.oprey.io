@@ -149,6 +149,10 @@
 
   <script>
   (function () {
+    function playerName(i, fallback) {
+      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+      catch (e) { return fallback; }
+    }
     // Hand-picked silly pictures (chosen via picker.html). Each is a SPECIFIC LoremFlickr
     // image locked by [subject-query, lock]. These are the cards players choose from.
     const PICKS = [
@@ -276,7 +280,7 @@
         if (i === judge) { role = 'Judge'; cls += ' judge'; }
         else { role = 'Picker'; if (phase === 'pick' && pickers[pickerTurn] === i) cls += ' picker'; }
         chip.className = cls;
-        chip.innerHTML = '<div class="nm">' + p.name + '</div><div class="sc">' + p.score + '</div><div class="role">' + role + '</div>';
+        chip.innerHTML = '<div class="nm">' + playerName(i, 'Player ' + (i + 1)) + '</div><div class="sc">' + p.score + '</div><div class="role">' + role + '</div>';
         scoresEl.appendChild(chip);
       });
     }
@@ -325,7 +329,7 @@
       cardsEl.innerHTML = '';
       turnEl.textContent = '';
       const judging = nextPhase === 'judge';
-      passNameEl.textContent = players[playerIdx].name;
+      passNameEl.textContent = playerName(playerIdx, 'Player ' + (playerIdx + 1));
       passRoleEl.textContent = judging ? 'JUDGE' : 'PICKER';
       passRoleEl.className = 'role-pill ' + (judging ? 'judge' : 'picker');
       passSubEl.innerHTML = judging
@@ -346,7 +350,7 @@
       phase = 'pick';
       renderScores();
       captionEl.textContent = caption;
-      turnEl.textContent = players[playerIdx].name + ', tap the funniest card 👇';
+      turnEl.textContent = playerName(playerIdx, 'Player ' + (playerIdx + 1)) + ', tap the funniest card 👇';
       cardsEl.className = 'hand';
       cardsEl.innerHTML = '';
       playerHands[playerIdx].forEach(function (card) {
@@ -373,7 +377,7 @@
       phase = 'judge';
       renderScores();
       captionEl.textContent = caption;
-      turnEl.textContent = players[judge].name + ' (Judge): which one fits best?';
+      turnEl.textContent = playerName(judge, 'Player ' + (judge + 1)) + ' (Judge): which one fits best?';
       cardsEl.className = 'duel';
       cardsEl.innerHTML = '';
       // show the two picks in random order so the judge can't tell who chose which
@@ -394,7 +398,7 @@
       renderScores();
       turnEl.textContent = '';
       feedbackEl.className = 'feedback good';
-      feedbackEl.textContent = '🏆 ' + players[winner].name + ' wins the round!';
+      feedbackEl.textContent = '🏆 ' + playerName(winner, 'Player ' + (winner + 1)) + ' wins the round!';
       nextBtn.hidden = false;
     }
 

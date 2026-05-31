@@ -466,7 +466,6 @@
     let numPlayers = 2;
     let numPairs = 6;
     let powerupsEnabled = true;
-    let playerNames = [];   // custom names typed into the scorebar, remembered between games
 
     // ---- Game state ----
     let players = [];
@@ -475,6 +474,12 @@
     let matchedCount = 0;
     let locked = false;      // block taps during the reveal delay
     let powerActive = false; // block taps while a Peek/Show reveal is playing
+
+    // Player names set centrally on the homepage (shared localStorage). Blank = default.
+    function playerName(i, fallback) {
+      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+      catch (e) { return fallback; }
+    }
 
     function shuffle(a) {
       const arr = a.slice();
@@ -538,50 +543,33 @@
 
     // ---------- Scoreboard ----------
     function renderScorebar() {
-      // Build the player cards (with an editable name box) ONCE, then update score/active in
-      // place — so a name being typed isn't wiped out by the frequent re-renders during play.
-      // startGame() clears the bar to force a rebuild for a fresh game.
-      if (scorebarEl.children.length !== players.length) {
-        scorebarEl.innerHTML = '';
-        players.forEach(function (p, i) {
-          const el = document.createElement('div');
-          el.className = 'player';
-
-          const input = document.createElement('input');
-          input.className = 'name-input';
-          input.type = 'text';
-          input.maxLength = 12;
-          input.value = p.name;
-          input.setAttribute('aria-label', 'Player ' + (i + 1) + ' name');
-          input.addEventListener('input', function () {
-            players[i].name = input.value;
-            playerNames[i] = input.value;   // remember it for the next game too
-          });
-          input.addEventListener('focus', function () { input.select(); });
-
-          const score = document.createElement('div');
-          score.className = 'score';
-
-          const turn = document.createElement('div');
-          turn.className = 'turn';
-          turn.textContent = 'Your turn';
-
-          el.appendChild(input);
-          el.appendChild(score);
-          el.appendChild(turn);
-          scorebarEl.appendChild(el);
-        });
-      }
+      scorebarEl.innerHTML = '';
       players.forEach(function (p, i) {
-        const el = scorebarEl.children[i];
-        el.classList.toggle('active', i === currentPlayer);
-        el.querySelector('.score').textContent = p.score;
+        const el = document.createElement('div');
+        el.className = 'player' + (i === currentPlayer ? ' active' : '');
+
+        const nm = document.createElement('div');
+        nm.className = 'name';
+        nm.textContent = playerName(i, p.defaultName);   // textContent: names can't inject markup
+
+        const sc = document.createElement('div');
+        sc.className = 'score';
+        sc.textContent = p.score;
+
+        const tn = document.createElement('div');
+        tn.className = 'turn';
+        tn.textContent = 'Your turn';
+
+        el.appendChild(nm);
+        el.appendChild(sc);
+        el.appendChild(tn);
+        scorebarEl.appendChild(el);
       });
       renderPowerups();
     }
 
-    // Name to show (falls back to the default when a box is left blank).
-    function nameOf(p) { return (p.name && p.name.trim()) ? p.name.trim() : p.defaultName; }
+    // Name to show, sourced from the homepage's shared store (falls back to the default).
+    function nameOf(p) { return playerName(players.indexOf(p), p.defaultName); }
 
     // ---------- Power-ups ----------
     function busy() { return locked || powerActive; }
@@ -732,9 +720,8 @@
       players = [];
       for (let i = 0; i < numPlayers; i++) {
         const def = 'Player ' + (i + 1);
-        players.push({ name: playerNames[i] || def, defaultName: def, score: 0, peeks: PEEKS_PER_PLAYER, shows: SHOWS_PER_PLAYER });
+        players.push({ name: def, defaultName: def, score: 0, peeks: PEEKS_PER_PLAYER, shows: SHOWS_PER_PLAYER });
       }
-      scorebarEl.innerHTML = '';   // force a fresh rebuild (re-seeds the name boxes)
       powerActive = false;
       currentPlayer = 0;
       flipped = [];
