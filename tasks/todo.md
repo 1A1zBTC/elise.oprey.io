@@ -1,37 +1,25 @@
-# Task: Flappy Dog — per-player breed + costume customisation in 2P
+# Task: Kitten Jump — different fur coats
 
-## Goal
-In 2-player mode, each dog (P1 and P2) can be given its own breed and costume.
-Bones/unlocks stay a shared pool; only the *equipped* selection is per-player.
+Replaced the 2 hardcoded colour themes with 8 distinct patterned fur coats; players pick
+their coat in the start dialog (per-player in 2P, like Flappy Dog breeds); choices persist.
 
-## Design
-- Per-slot selections: `skins=[p1,p2]`, `costumes=[p1,p2]`, `pendingSkins=[null,null]`.
-- `editSlot` (0/1) = which dog the shop currently customises. Always 0 in 1P.
-- New "Customising: Player 1 / Player 2" toggle in the shop, shown only in 2P.
-- Persist per-player: SKIN_KEYS/COSTUME_KEYS arrays (P1 keys unchanged → old saves preserved).
-- P2 default breed = next owned breed (or same if only one owned). Replaces the old
-  auto "contrasting challenger" default (which could be a locked breed).
+## Coats (COATS array, each has a `pattern`)
+Grey Tabby, Orange Tabby, Brown Tabby (tabby stripes) · Tuxedo (black + white chest/muzzle)
+· Calico (cream + orange/dark patches) · Siamese (cream + dark face/points) · Black Cat,
+Snowy White (solid).
 
-## Steps
-1. [ ] Keys → arrays (SKIN_KEYS, COSTUME_KEYS); keep COSTUMES_KEY (shared owned set)
-2. [ ] State: skins/costumes/pendingSkins arrays + editSlot; drop scalar skin/skinIndex/costumeIndex
-3. [ ] equipSkin(slot,i)/selectSkin/buyBreed/equipCostume/buyOrEquipCostume → editSlot-aware
-4. [ ] buildPlayers uses per-slot selections; remove p2BreedIndex
-5. [ ] endRound applies pendingSkins for both slots
-6. [ ] refreshBreeds/refreshCostumes highlight editSlot's selection
-7. [ ] draw text (1P screens) use skins[0]
-8. [ ] Add dress toggle markup + wiring; refresh in setPlayers/dialog-start/init
-9. [ ] Verify in browser (1P unaffected; 2P per-dog breed+costume)
+## Implementation
+- COATS array (was THEMES) with pattern + extra colours (stripe/white/patchA/patchB/points).
+- drawKitten: clip-to-body and clip-to-head pattern layers (tabby stripes, tuxedo muzzle,
+  calico patches, siamese mask). Solid coats draw nothing extra.
+- State: coats=[p1,p2] loaded from COAT_KEYS (kittenjump.coat / .coat2), editCoatSlot.
+- Start dialog: "Fur coat" swatch row (CSS gradient previews per pattern) + a P1/P2 tab row
+  shown only in 2P. Picking saves to localStorage; player-count change resets to P1.
+- startGame + drawSelect demo kittens use the chosen coats.
 
-## Review
-Done — all steps complete, verified headless in browser:
-- 1P unchanged: Customising toggle hidden, single dog uses P1's saved breed/costume.
-- 2P: "Customising · Player 1 / Player 2" toggle in shop picks which dog the breed+costume
-  grids edit. Each dog equips independently from the shared owned pool.
-- Persistence: flappydog.skin/skin2 + flappydog.costume/costume2 (P1 keys unchanged → old
-  saves intact). Verified skin_p1=2/skin_p2=3, costume_p1=0/costume_p2=1 after equipping.
-- Switching P1↔P2 re-highlights each dog's own selection; ready screen shows "Dalmatian vs Husky".
-- No console errors. Browse needed GSTACK_CHROMIUM_NO_SANDBOX=1 (host AppArmor userns).
-
-Behaviour change to note: P2's default breed is now the next *owned* breed (or same as P1 if
-only one owned), replacing the old auto "contrasting challenger" that could show a locked breed.
+## Review — DONE, verified headless (no console errors):
+- Dialog shows 8 coat swatches with pattern previews; tabs hidden in 1P, shown in 2P.
+- In-game patterns confirmed: Calico, Siamese, Tuxedo, Grey Tabby all render distinctly.
+- 2P uses each player's own coat (P1 Siamese / P2 Tuxedo); panel labels show coat names.
+- Persistence verified: coat=5/coat2=3 restored after reload.
+- Browse needed GSTACK_CHROMIUM_NO_SANDBOX=1 (host AppArmor userns).

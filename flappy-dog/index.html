@@ -323,7 +323,7 @@
       <div class="bones-bar">🦴 <span id="boneCount">0</span> bones — spend or save up</div>
 
       <div class="shop-section">
-        <div class="shop-label">Levels · <b>25🦴</b></div>
+        <div class="shop-label">Levels</div>
         <div id="levels" class="chips"></div>
       </div>
 
@@ -405,6 +405,11 @@
       FLAP = FLAP_MIN + (FLAP_MAX - FLAP_MIN) * t;
       PIPE_SPEED = L.speedMin + (L.speedMax - L.speedMin) * t;
       GAP = L.gapMax + (L.gapMin - L.gapMax) * t;
+
+      // Outer Space — low gravity: softer pull + gentler flap so the dog floats.
+      if (L.mechanic === 'lowgrav') { GRAVITY *= 0.55; FLAP *= 0.8; }
+      // Candy Land — sugar rush: the whole world periodically speeds up.
+      if (L.mechanic === 'rush') PIPE_SPEED *= rushMult(frame);
     }
 
     const BEST_KEY = 'flappydog.best';     // legacy single best (migrated to per-breed)
@@ -419,7 +424,7 @@
 
     const BREED_COST = 10;     // bones to unlock a breed
     const COSTUME_COST = 5;    // bones to unlock a costume
-    const LEVEL_COST = 25;     // bones to unlock the next level
+    // (level unlock prices live per-level in the LEVELS array's `cost` field)
 
     // Dog breeds (skins). Collect 10 treats to morph into the next one.
     // Each defines a fur palette + shape traits drawDog() reads to build a
@@ -502,16 +507,53 @@
       { name: 'Viking Helm',  id: 'viking' }
     ];
 
-    // Levels — each has its own backdrop, obstacle style, vertical bob, and a
-    // (deliberately gentler) difficulty ramp. Extra levels are bought with bones.
+    // Levels — each has its own backdrop, obstacle style, difficulty ramp, AND a unique
+    // mechanic (`mechanic`) that adds a themed challenge. Extra levels bought with bones.
+    //   bob      = gaps slide up/down (amp/motionFreq)
+    //   blackout = the scene periodically dims (city lights flicker)
+    //   wind     = vertical gusts nudge the dog
+    //   rush     = world speed periodically surges (sugar rush)
+    //   lowgrav  = weaker gravity + softer flap (floaty)
     const LEVELS = [
-      { name: 'Meadow',     cost: 0,  obstacle: 'pipe',  ground: 'grass',
+      { name: 'Meadow',      cost: 0,   obstacle: 'pipe',     ground: 'grass',    drifter: 'cloud',
+        mechanic: 'none',     tagline: 'Wide open skies — just flap!',
         sky: ['#5ec8f0', '#9fe0f5', '#d6f3ff'],
         speedMin: 0.9,  speedMax: 2.3, gapMin: 205, gapMax: 260, ramp: 60 * 80,  amp: 0,  motionFreq: 0 },
-      { name: 'Coral Reef', cost: 25, obstacle: 'coral', ground: 'sand',
+      { name: 'Coral Reef',  cost: 25,  obstacle: 'coral',    ground: 'sand',     drifter: 'bubble',
+        mechanic: 'bob',      tagline: 'The tide sways the coral up & down',
         sky: ['#073b5e', '#16618c', '#39a7c4'],
-        speedMin: 0.55, speedMax: 1.7, gapMin: 215, gapMax: 268, ramp: 60 * 150, amp: 36, motionFreq: 0.018 }
+        speedMin: 0.55, speedMax: 1.7, gapMin: 215, gapMax: 268, ramp: 60 * 150, amp: 36, motionFreq: 0.018 },
+      { name: 'Night City',  cost: 40,  obstacle: 'building', ground: 'pavement', drifter: 'star',
+        mechanic: 'blackout', tagline: 'Watch out — the lights black out!',
+        sky: ['#0b1026', '#241a4d', '#4a2f6e'],
+        speedMin: 0.95, speedMax: 2.4, gapMin: 200, gapMax: 256, ramp: 60 * 90,  amp: 0,  motionFreq: 0 },
+      { name: 'Snowy Peaks', cost: 60,  obstacle: 'ice',      ground: 'snow',     drifter: 'snow',
+        mechanic: 'wind',     tagline: 'Mountain winds gust you around',
+        sky: ['#7fb2d9', '#bcd9ee', '#eaf4fb'],
+        speedMin: 0.85, speedMax: 2.2, gapMin: 210, gapMax: 264, ramp: 60 * 120, amp: 0,  motionFreq: 0 },
+      { name: 'Candy Land',  cost: 85,  obstacle: 'candy',    ground: 'frosting', drifter: 'cloud',
+        mechanic: 'rush',     tagline: 'Sugar rushes speed everything up!',
+        sky: ['#ff9ec9', '#ffc1dd', '#ffe3f0'],
+        speedMin: 0.9,  speedMax: 2.3, gapMin: 206, gapMax: 260, ramp: 60 * 100, amp: 0,  motionFreq: 0 },
+      { name: 'Outer Space', cost: 120, obstacle: 'crystal',  ground: 'moon',     drifter: 'star',
+        mechanic: 'lowgrav',  tagline: 'Low gravity — slow, floaty flapping',
+        sky: ['#05030f', '#0e0a2a', '#1b1240'],
+        speedMin: 0.6,  speedMax: 1.8, gapMin: 215, gapMax: 270, ramp: 60 * 150, amp: 0,  motionFreq: 0 }
     ];
+
+    // ---- Per-level mechanic helpers (frame-driven, bounded so they stay kid-fair) ----
+    // Sugar-rush speed multiplier: rests at 1×, surges toward ~1.7× in smooth pulses.
+    function rushMult(f) { return 1 + 0.7 * Math.max(0, Math.sin(f * 0.012)); }
+    // Wind gust acceleration added to the dog's vertical velocity (bounded ≈ ±0.035).
+    // Kept well under gravity (~0.085–0.16) so it's a gentle nudge, not a fight — the old
+    // ±0.12 was nearly as strong as gravity and made Snowy Peaks brutally hard.
+    function windAt(f) { return Math.sin(f * 0.018) * 0.022 + Math.sin(f * 0.0047) * 0.013; }
+    // Night-City blackout opacity: mostly clear, smooth dark pulse over the last ~40%
+    // of each ~6s cycle (lights flicker out, then back).
+    function blackoutAlpha(f) {
+      const c = (f % 360) / 360;
+      return c > 0.6 ? Math.sin((c - 0.6) / 0.4 * Math.PI) * 0.78 : 0;
+    }
 
     // ---- State ----
     const PLAYERS_KEY = 'flappydog.players';   // 1 or 2 player mode
@@ -761,8 +803,10 @@
       refreshShop();
     }
     function buyLevel() {
-      if (treats < LEVEL_COST || levelsOwned >= LEVELS.length) return;
-      treats -= LEVEL_COST; saveBones();
+      if (levelsOwned >= LEVELS.length) return;
+      const cost = LEVELS[levelsOwned].cost;
+      if (treats < cost) return;
+      treats -= cost; saveBones();
       const ni = levelsOwned;
       levelsOwned++;
       try { localStorage.setItem(LEVELS_KEY, String(levelsOwned)); } catch (e) {}
@@ -777,10 +821,11 @@
           btn.textContent = LEVELS[i].name;
           btn.classList.toggle('active', i === level);
           btn.classList.remove('buy');
-        } else if (i === levelsOwned) {        // next → buyable for 25🦴
-          const afford = treats >= LEVEL_COST;
+        } else if (i === levelsOwned) {        // next → buyable at its own price
+          const cost = LEVELS[i].cost;
+          const afford = treats >= cost;
           btn.disabled = !afford;
-          btn.textContent = '＋ ' + LEVELS[i].name + ' · ' + LEVEL_COST + '🦴';
+          btn.textContent = '＋ ' + LEVELS[i].name + ' · ' + cost + '🦴';
           btn.classList.remove('active');
           btn.classList.toggle('buy', afford);
         } else {                               // locked
@@ -873,7 +918,30 @@
         pipes.push(makePipe(x));
         x += PIPE_SPACING;
       }
-      clouds = [
+      clouds = seedDrifters(LEVELS[level].drifter);
+    }
+
+    // Backdrop drifters depend on the level: a few big clouds/bubbles, or a scattered
+    // field of stars / snowflakes spread across the sky.
+    function seedDrifters(kind) {
+      if (kind === 'star') {
+        const arr = [];
+        for (let i = 0; i < 22; i++) {
+          arr.push({ x: Math.random() * W, y: Math.random() * (H - GROUND_H) * 0.85,
+                     s: 0.4 + Math.random() * 0.9, phase: Math.random() * Math.PI * 2 });
+        }
+        return arr;
+      }
+      if (kind === 'snow') {
+        const arr = [];
+        for (let i = 0; i < 26; i++) {
+          arr.push({ x: Math.random() * W, y: Math.random() * H,
+                     s: 0.5 + Math.random() * 1.0, vy: 0.5 + Math.random() * 0.9,
+                     phase: Math.random() * Math.PI * 2 });
+        }
+        return arr;
+      }
+      return [   // cloud / bubble: a few large drifters up high
         { x: 80,  y: 90,  s: 1.0 },
         { x: 240, y: 150, s: 0.7 },
         { x: 340, y: 70,  s: 0.85 }
@@ -935,10 +1003,19 @@
       frame++;
       groundX = (groundX - PIPE_SPEED) % 24;
 
-      // parallax clouds always drift
+      // backdrop drifters move by kind: clouds/bubbles slide left, snow falls, stars barely drift
+      const drift = LEVELS[level].drifter;
       for (const c of clouds) {
-        c.x -= 0.25 * c.s;
-        if (c.x < -60) { c.x = W + 40; c.y = 50 + Math.random() * 130; }
+        if (drift === 'snow') {
+          c.y += c.vy; c.x += Math.sin((frame + c.phase * 40) / 40) * 0.3;
+          if (c.y > H + 6) { c.y = -6; c.x = Math.random() * W; }
+        } else if (drift === 'star') {
+          c.x -= 0.08 * c.s;                 // slow parallax; keep y so the field stays even
+          if (c.x < -6) c.x = W + 6;
+        } else {
+          c.x -= 0.25 * c.s;
+          if (c.x < -60) { c.x = W + 40; c.y = 50 + Math.random() * 130; }
+        }
       }
 
       for (const p of players) if (p.flapAnim > 0) p.flapAnim--;
@@ -961,10 +1038,13 @@
       playFrames++;
       applyDifficulty();  // ramp gravity/speed/gap with elapsed play time
 
+      // Snowy Peaks — vertical wind gusts nudge each living dog.
+      const wind = LEVELS[level].mechanic === 'wind' ? windAt(frame) : 0;
+
       // per-dog physics (dead dogs keep falling to the ground)
       for (const p of players) {
         if (!p.alive) { settleDead(p); continue; }
-        p.v = Math.min(p.v + GRAVITY, MAX_FALL);
+        p.v = Math.min(p.v + GRAVITY + wind, MAX_FALL);
         p.y += p.v;
         const target = p.v < 0 ? -0.45 : Math.min(p.v / 12, 1.2);
         p.angle += (target - p.angle) * 0.18;
@@ -1079,14 +1159,11 @@
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, H);
 
-      // backdrop drifters — clouds, or bubbles underwater
-      for (const c of clouds) {
-        if (L.ground === 'sand') drawBubble(c.x, c.y, c.s);
-        else drawCloud(c.x, c.y, c.s);
-      }
+      // backdrop drifters — clouds / bubbles / stars / snow, per level
+      for (const c of clouds) drawDrifter(L.drifter, c);
 
-      // pipes
-      for (const p of pipes) drawPipe(p);
+      // obstacles (style per level)
+      for (const p of pipes) drawObstacle(p);
 
       // treats (floating in the gaps)
       for (const p of pipes) {
@@ -1098,10 +1175,20 @@
       }
 
       // ground (per level)
-      if (LEVELS[level].ground === 'sand') drawSand(); else drawGround();
+      drawGroundFor(LEVELS[level].ground);
 
       // dogs (P1 first so P2 layers on top in 2-player)
       for (const p of players) drawDog(p);
+
+      // Night City — blackout: dim the whole scene in recurring pulses (only mid-run,
+      // so the menu/ready screen stays clear). Sits under the score/HUD.
+      if (L.mechanic === 'blackout' && state === 'playing') {
+        const a = blackoutAlpha(frame);
+        if (a > 0.01) {
+          ctx.fillStyle = 'rgba(4, 6, 18, ' + a + ')';
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
 
       // UI overlays
       drawUI();
@@ -1164,7 +1251,6 @@
     }
 
     function drawPipe(p) {
-      if (LEVELS[level].obstacle === 'coral') { drawCoral(p); return; }
       const gapTop = p.top;
       const gapBottom = p.top + p.gap;
       const x = p.x;
@@ -1292,6 +1378,234 @@
       }
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       for (let x = groundX; x < W; x += 48) ctx.fillRect(x + 10, gy + 26, 5, 3);
+    }
+
+    // ---- Per-level dispatchers (obstacle / ground / backdrop drifter) ----
+    function drawObstacle(p) {
+      switch (LEVELS[level].obstacle) {
+        case 'coral':    return drawCoral(p);
+        case 'building': return drawBuilding(p);
+        case 'ice':      return drawIce(p);
+        case 'candy':    return drawCandy(p);
+        case 'crystal':  return drawCrystal(p);
+        default:         return drawPipe(p);
+      }
+    }
+    function drawGroundFor(kind) {
+      switch (kind) {
+        case 'sand':     return drawSand();
+        case 'pavement': return drawPavement();
+        case 'snow':     return drawSnowGround();
+        case 'frosting': return drawFrosting();
+        case 'moon':     return drawMoon();
+        default:         return drawGround();
+      }
+    }
+    function drawDrifter(kind, c) {
+      if (kind === 'bubble')     drawBubble(c.x, c.y, c.s);
+      else if (kind === 'star')  drawStar(c.x, c.y, c.s, c.phase || 0);
+      else if (kind === 'snow')  drawSnowflake(c.x, c.y, c.s);
+      else                       drawCloud(c.x, c.y, c.s);
+    }
+
+    // Generic two-column obstacle: runs `body(yTop, yBot, gapEdgeY, dir)` for the top
+    // pillar (gap edge at its bottom, decorations point down) and the bottom pillar
+    // (gap edge at its top, decorations point up). dir = +1 down, -1 up.
+    function eachPillar(p, body) {
+      const gapTop = p.top, gapBottom = p.top + p.gap;
+      body(0, gapTop, gapTop, 1);                       // top pillar
+      body(gapBottom, H - GROUND_H, gapBottom, -1);     // bottom pillar
+    }
+
+    // Night City — lit-window skyscrapers with a flat roof cap at the gap.
+    function drawBuilding(p) {
+      const x = p.x, seed = Math.floor(p.phase * 1000);
+      eachPillar(p, function (yTop, yBot, edgeY, dir) {
+        const g = ctx.createLinearGradient(x, 0, x + PIPE_W, 0);
+        g.addColorStop(0, '#2a3357'); g.addColorStop(0.5, '#3c4775'); g.addColorStop(1, '#222a4a');
+        ctx.fillStyle = g; ctx.fillRect(x, yTop, PIPE_W, yBot - yTop);
+        ctx.strokeStyle = '#151b32'; ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, yTop, PIPE_W - 3, yBot - yTop);
+        // window grid (lit pattern is stable per building via the pipe's seed)
+        let row = 0;
+        for (let wy = yTop + 12; wy < yBot - 10; wy += 18, row++) {
+          let colN = 0;
+          for (let wx = x + 9; wx < x + PIPE_W - 9; wx += 16, colN++) {
+            const lit = ((row * 7 + colN * 13 + seed) % 7) < 4;
+            ctx.fillStyle = lit ? '#ffe08a' : '#1b2240';
+            ctx.fillRect(wx, wy, 9, 11);
+          }
+        }
+        // roof cap at the gap edge
+        const capH = 14, capX = x - 5, capW = PIPE_W + 10;
+        const capY = dir === 1 ? edgeY - capH : edgeY;
+        ctx.fillStyle = '#161d36'; ctx.fillRect(capX, capY, capW, capH);
+        ctx.strokeStyle = '#0c1024'; ctx.strokeRect(capX + 1.5, capY + 1.5, capW - 3, capH - 3);
+      });
+    }
+
+    // Snowy Peaks — pale ice columns with icicle spikes pointing into the gap.
+    function drawIce(p) {
+      const x = p.x;
+      eachPillar(p, function (yTop, yBot, edgeY, dir) {
+        const g = ctx.createLinearGradient(x, 0, x + PIPE_W, 0);
+        g.addColorStop(0, '#9ec9e8'); g.addColorStop(0.5, '#e6f4fc'); g.addColorStop(1, '#86b6dc');
+        ctx.fillStyle = g; ctx.fillRect(x, yTop, PIPE_W, yBot - yTop);
+        ctx.strokeStyle = '#6f9fc4'; ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, yTop, PIPE_W - 3, yBot - yTop);
+        // frosty glints
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        for (let yy = yTop + 14; yy < yBot - 10; yy += 28) ctx.fillRect(x + 11, yy, 4, 12);
+        // icicles along the gap edge
+        ctx.fillStyle = '#dff1fb';
+        for (let i = 0; i < 4; i++) {
+          const ix = x + 8 + i * 15, len = 12 + (i % 2) * 8;
+          ctx.beginPath();
+          ctx.moveTo(ix, edgeY); ctx.lineTo(ix + 12, edgeY); ctx.lineTo(ix + 6, edgeY + dir * len);
+          ctx.closePath(); ctx.fill();
+        }
+      });
+    }
+
+    // Candy Land — glossy candy-cane poles with diagonal stripes and a rounded gap end.
+    function drawCandy(p) {
+      const x = p.x;
+      eachPillar(p, function (yTop, yBot, edgeY, dir) {
+        ctx.save();
+        ctx.beginPath(); ctx.rect(x, yTop, PIPE_W, yBot - yTop); ctx.clip();
+        ctx.fillStyle = '#fff'; ctx.fillRect(x, yTop, PIPE_W, yBot - yTop);
+        ctx.fillStyle = '#ff5d8f';
+        const stripe = 13, period = stripe * 2;
+        for (let d = -PIPE_W; d < (yBot - yTop) + PIPE_W; d += period) {
+          ctx.beginPath();
+          ctx.moveTo(x, yTop + d);
+          ctx.lineTo(x + PIPE_W, yTop + d - PIPE_W);
+          ctx.lineTo(x + PIPE_W, yTop + d - PIPE_W + stripe);
+          ctx.lineTo(x, yTop + d + stripe);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        // glossy highlight + border
+        ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillRect(x + 7, yTop, 6, yBot - yTop);
+        ctx.strokeStyle = '#d83f72'; ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, yTop, PIPE_W - 3, yBot - yTop);
+        // rounded knob at the gap end
+        ctx.fillStyle = '#ffd1e3';
+        ctx.beginPath();
+        ctx.ellipse(x + PIPE_W / 2, edgeY, PIPE_W / 2 + 3, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#d83f72'; ctx.stroke();
+      });
+    }
+
+    // Outer Space — glowing faceted crystals tapering to a point at the gap.
+    function drawCrystal(p) {
+      const x = p.x;
+      eachPillar(p, function (yTop, yBot, edgeY, dir) {
+        const tipY = edgeY + dir * 26;
+        const cx = x + PIPE_W / 2;
+        ctx.save();
+        ctx.shadowColor = 'rgba(150,110,255,0.8)'; ctx.shadowBlur = 16;
+        const g = ctx.createLinearGradient(x, 0, x + PIPE_W, 0);
+        g.addColorStop(0, '#5a32c8'); g.addColorStop(0.5, '#b89bff'); g.addColorStop(1, '#6a3cff');
+        ctx.fillStyle = g;
+        // body (rectangle from far edge to gap edge) + a triangular tip into the gap
+        const bodyTop = dir === 1 ? yTop : edgeY;
+        const bodyBot = dir === 1 ? edgeY : yBot;
+        ctx.fillRect(x, bodyTop, PIPE_W, bodyBot - bodyTop);
+        ctx.beginPath();
+        ctx.moveTo(x, edgeY); ctx.lineTo(x + PIPE_W, edgeY); ctx.lineTo(cx, tipY);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+        // facet seam + sparkle
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, Math.min(bodyTop, edgeY)); ctx.lineTo(cx, Math.max(bodyBot, edgeY)); ctx.stroke();
+        ctx.strokeStyle = '#3c2299'; ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, bodyTop, PIPE_W - 2, bodyBot - bodyTop);
+      });
+    }
+
+    // Night City pavement.
+    function drawPavement() {
+      const gy = H - GROUND_H;
+      ctx.fillStyle = '#2b2f44'; ctx.fillRect(0, gy, W, GROUND_H);
+      ctx.fillStyle = '#3a3f5c'; ctx.fillRect(0, gy, W, 12);            // kerb
+      ctx.fillStyle = '#1e2236'; ctx.fillRect(0, gy + 12, W, 4);
+      // dashed road line scrolling
+      ctx.fillStyle = '#ffd54f';
+      for (let x = groundX; x < W; x += 40) ctx.fillRect(x, gy + 44, 20, 5);
+    }
+
+    // Snowy Peaks ground.
+    function drawSnowGround() {
+      const gy = H - GROUND_H;
+      ctx.fillStyle = '#eef6fc'; ctx.fillRect(0, gy, W, GROUND_H);
+      ctx.fillStyle = '#cfe2f2'; ctx.fillRect(0, gy + 14, W, 5);
+      // rolling snow mounds scrolling
+      ctx.fillStyle = '#ffffff';
+      for (let x = groundX; x < W; x += 60) {
+        ctx.beginPath(); ctx.ellipse(x + 30, gy + 10, 34, 14, 0, Math.PI, 0); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(160,190,220,0.5)';
+      for (let x = groundX; x < W; x += 30) ctx.fillRect(x + 8, gy + 46, 3, 3);
+    }
+
+    // Candy Land frosting ground with sprinkles.
+    function drawFrosting() {
+      const gy = H - GROUND_H;
+      ctx.fillStyle = '#fff0f6'; ctx.fillRect(0, gy, W, GROUND_H);
+      // wavy frosting top edge
+      ctx.fillStyle = '#ff8ec0';
+      ctx.beginPath(); ctx.moveTo(0, gy + 6);
+      for (let x = 0; x <= W; x += 20) ctx.quadraticCurveTo(x + 10, gy - 6, x + 20, gy + 6);
+      ctx.lineTo(W, gy + 22); ctx.lineTo(0, gy + 22); ctx.closePath(); ctx.fill();
+      // sprinkles scrolling
+      const cols = ['#ff5d8f', '#ffd54f', '#6ad1ff', '#7be39a'];
+      for (let x = groundX; x < W; x += 22) {
+        ctx.fillStyle = cols[(Math.abs(Math.round(x)) / 22 | 0) % cols.length];
+        ctx.fillRect(x + 6, gy + 40, 7, 3);
+        ctx.fillStyle = cols[(Math.abs(Math.round(x)) / 22 + 2 | 0) % cols.length];
+        ctx.fillRect(x + 15, gy + 60, 3, 7);
+      }
+    }
+
+    // Outer Space moon-rock ground with craters.
+    function drawMoon() {
+      const gy = H - GROUND_H;
+      ctx.fillStyle = '#3a3550'; ctx.fillRect(0, gy, W, GROUND_H);
+      ctx.fillStyle = '#4a4566'; ctx.fillRect(0, gy, W, 12);
+      ctx.fillStyle = '#2c2840';
+      for (let x = groundX; x < W; x += 70) {
+        ctx.beginPath(); ctx.ellipse(x + 26, gy + 34, 16, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 54, gy + 60, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // Twinkling star backdrop (Night City + Outer Space).
+    function drawStar(x, y, s, phase) {
+      const tw = 0.5 + 0.5 * Math.sin(frame * 0.05 + phase);
+      ctx.save();
+      ctx.globalAlpha = tw;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(x, y, 1.3 * s + 0.6, 0, Math.PI * 2); ctx.fill();
+      if (s > 1.05) {                       // bigger stars get a sparkle cross
+        ctx.strokeStyle = 'rgba(255,255,255,' + (tw * 0.7) + ')'; ctx.lineWidth = 1;
+        const r = 3 * s;
+        ctx.beginPath();
+        ctx.moveTo(x - r, y); ctx.lineTo(x + r, y);
+        ctx.moveTo(x, y - r); ctx.lineTo(x, y + r);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Falling snowflake (Snowy Peaks).
+    function drawSnowflake(x, y, s) {
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(x, y, 2 * s + 1, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
 
     // Lighten a #rrggbb color toward white by amt (0..1).
@@ -1878,29 +2192,33 @@
       }
 
       if (state === 'ready') {
-        panel(W / 2, H * 0.6, 300, 168, function () {
+        panel(W / 2, H * 0.6, 300, 196, function () {
           const cy0 = H * 0.6;
           ctx.fillStyle = '#fff';
           ctx.font = "800 26px 'Nunito', sans-serif";
-          ctx.fillText('Flappy Dog', W / 2, cy0 - 50);
+          ctx.fillText('Flappy Dog', W / 2, cy0 - 62);
           ctx.fillStyle = '#ffe8b0';
           ctx.font = "800 15px 'Nunito', sans-serif";
-          ctx.fillText(numPlayers === 2 ? '2 Players — race a friend!' : '1 Player', W / 2, cy0 - 24);
+          ctx.fillText(numPlayers === 2 ? '2 Players — race a friend!' : '1 Player', W / 2, cy0 - 36);
           ctx.fillStyle = '#9fe0f5';
           ctx.font = "700 14px 'Nunito', sans-serif";
           if (numPlayers === 2) {
-            ctx.fillText('P1: Space / ↑ / tap bottom', W / 2, cy0 + 2);
-            ctx.fillText('P2: Right Ctrl / tap top', W / 2, cy0 + 22);
+            ctx.fillText('P1: Space / ↑ / tap bottom', W / 2, cy0 - 12);
+            ctx.fillText('P2: Right Ctrl / tap top', W / 2, cy0 + 8);
             ctx.fillStyle = '#cfd6ea';
             ctx.font = "700 13px 'Nunito', sans-serif";
-            ctx.fillText(players[0].skin.name + '  vs  ' + players[1].skin.name, W / 2, cy0 + 46);
+            ctx.fillText(players[0].skin.name + '  vs  ' + players[1].skin.name, W / 2, cy0 + 32);
           } else {
-            ctx.fillText('Tap / Space / ↑ to flap', W / 2, cy0 + 2);
-            ctx.fillText('Collect bones → unlock breeds', W / 2, cy0 + 22);
+            ctx.fillText('Tap / Space / ↑ to flap', W / 2, cy0 - 12);
+            ctx.fillText('Collect bones → unlock breeds', W / 2, cy0 + 8);
             ctx.fillStyle = '#cfd6ea';
             ctx.font = "700 13px 'Nunito', sans-serif";
-            ctx.fillText("You're a " + BREEDS[skins[0]].name + '  ·  Best: ' + bests[skins[0]], W / 2, cy0 + 46);
+            ctx.fillText("You're a " + BREEDS[skins[0]].name + '  ·  Best: ' + bests[skins[0]], W / 2, cy0 + 32);
           }
+          // this level's unique mechanic (level name is shown in the shop's Levels list)
+          ctx.fillStyle = '#ffd27d';
+          ctx.font = "800 13px 'Nunito', sans-serif";
+          ctx.fillText('✦ ' + LEVELS[level].tagline, W / 2, cy0 + 60);
         });
       }
 

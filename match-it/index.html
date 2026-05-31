@@ -86,6 +86,27 @@
     }
     .player .name { color: #a0a8c0; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
     .player.active .name { color: #ffd2dc; }
+    /* Editable player name, lives right in the scorebar. */
+    .player .name-input {
+      width: 100%;
+      min-width: 0;
+      background: transparent;
+      border: none;
+      border-bottom: 1px dashed transparent;
+      color: #a0a8c0;
+      font-family: inherit;
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-align: center;
+      padding: 1px 2px 2px;
+      outline: none;
+      cursor: text;
+    }
+    .player .name-input:hover { border-bottom-color: #3a4a6f; }
+    .player .name-input:focus { border-bottom-color: #e94560; color: #fff; text-transform: none; }
+    .player.active .name-input { color: #ffd2dc; }
     .player .score { color: #fff; font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
     .player .turn { color: #e94560; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; min-height: 0.8rem; }
     .player:not(.active) .turn { visibility: hidden; }
@@ -445,6 +466,7 @@
     let numPlayers = 2;
     let numPairs = 6;
     let powerupsEnabled = true;
+    let playerNames = [];   // custom names typed into the scorebar, remembered between games
 
     // ---- Game state ----
     let players = [];
@@ -516,18 +538,50 @@
 
     // ---------- Scoreboard ----------
     function renderScorebar() {
-      scorebarEl.innerHTML = '';
+      // Build the player cards (with an editable name box) ONCE, then update score/active in
+      // place — so a name being typed isn't wiped out by the frequent re-renders during play.
+      // startGame() clears the bar to force a rebuild for a fresh game.
+      if (scorebarEl.children.length !== players.length) {
+        scorebarEl.innerHTML = '';
+        players.forEach(function (p, i) {
+          const el = document.createElement('div');
+          el.className = 'player';
+
+          const input = document.createElement('input');
+          input.className = 'name-input';
+          input.type = 'text';
+          input.maxLength = 12;
+          input.value = p.name;
+          input.setAttribute('aria-label', 'Player ' + (i + 1) + ' name');
+          input.addEventListener('input', function () {
+            players[i].name = input.value;
+            playerNames[i] = input.value;   // remember it for the next game too
+          });
+          input.addEventListener('focus', function () { input.select(); });
+
+          const score = document.createElement('div');
+          score.className = 'score';
+
+          const turn = document.createElement('div');
+          turn.className = 'turn';
+          turn.textContent = 'Your turn';
+
+          el.appendChild(input);
+          el.appendChild(score);
+          el.appendChild(turn);
+          scorebarEl.appendChild(el);
+        });
+      }
       players.forEach(function (p, i) {
-        const el = document.createElement('div');
-        el.className = 'player' + (i === currentPlayer ? ' active' : '');
-        el.innerHTML =
-          '<div class="name">' + p.name + '</div>' +
-          '<div class="score">' + p.score + '</div>' +
-          '<div class="turn">Your turn</div>';
-        scorebarEl.appendChild(el);
+        const el = scorebarEl.children[i];
+        el.classList.toggle('active', i === currentPlayer);
+        el.querySelector('.score').textContent = p.score;
       });
       renderPowerups();
     }
+
+    // Name to show (falls back to the default when a box is left blank).
+    function nameOf(p) { return (p.name && p.name.trim()) ? p.name.trim() : p.defaultName; }
 
     // ---------- Power-ups ----------
     function busy() { return locked || powerActive; }
@@ -677,8 +731,10 @@
     function startGame() {
       players = [];
       for (let i = 0; i < numPlayers; i++) {
-        players.push({ name: 'Player ' + (i + 1), score: 0, peeks: PEEKS_PER_PLAYER, shows: SHOWS_PER_PLAYER });
+        const def = 'Player ' + (i + 1);
+        players.push({ name: playerNames[i] || def, defaultName: def, score: 0, peeks: PEEKS_PER_PLAYER, shows: SHOWS_PER_PLAYER });
       }
+      scorebarEl.innerHTML = '';   // force a fresh rebuild (re-seeds the name boxes)
       powerActive = false;
       currentPlayer = 0;
       flipped = [];
@@ -751,11 +807,11 @@
       const titleEl = document.getElementById('win-title');
       const subEl = document.getElementById('win-sub');
       if (winners.length === 1) {
-        titleEl.textContent = winners[0].name + ' wins!';
+        titleEl.textContent = nameOf(winners[0]) + ' wins!';
         subEl.textContent = 'Final scores';
       } else {
         titleEl.textContent = "It's a tie!";
-        subEl.textContent = winners.map(function (w) { return w.name; }).join(' & ') + ' tied';
+        subEl.textContent = winners.map(nameOf).join(' & ') + ' tied';
       }
 
       const list = document.getElementById('results');
@@ -763,8 +819,13 @@
       players.slice().sort(function (x, y) { return y.score - x.score; }).forEach(function (p) {
         const li = document.createElement('li');
         if (p.score === max) li.className = 'winner';
-        li.innerHTML = '<span>' + (p.score === max ? '👑 ' : '') + p.name + '</span>' +
-                       '<span class="pts">' + p.score + (p.score === 1 ? ' pair' : ' pairs') + '</span>';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = (p.score === max ? '👑 ' : '') + nameOf(p);   // textContent: names can't inject HTML
+        const ptsSpan = document.createElement('span');
+        ptsSpan.className = 'pts';
+        ptsSpan.textContent = p.score + (p.score === 1 ? ' pair' : ' pairs');
+        li.appendChild(nameSpan);
+        li.appendChild(ptsSpan);
         list.appendChild(li);
       });
 

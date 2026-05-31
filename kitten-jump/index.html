@@ -154,6 +154,29 @@
       transition: transform 0.1s ease, box-shadow 0.1s ease;
     }
     .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+
+    /* fur-coat picker */
+    .coat-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
+    .coat-tabs[hidden] { display: none; }
+    .coat-tab {
+      flex: 1; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.82rem;
+      color: #cfd6ea; background: #0f1830; border: 2px solid #0f3460; border-radius: 12px;
+      padding: 7px 10px; cursor: pointer;
+    }
+    .coat-tab.selected { border-color: #e94560; color: #fff; background: rgba(233,69,96,0.12); }
+    .coats { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+    .coat {
+      width: 70px; background: transparent; border: none; padding: 0; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .coat .dot {
+      width: 34px; height: 34px; border-radius: 50%; border: 2px solid #0f3460;
+      box-sizing: border-box; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .coat .label { font-size: 0.62rem; font-weight: 700; color: #8b93b0; line-height: 1.1; }
+    .coat.selected .dot { border-color: #e94560; box-shadow: 0 0 14px rgba(233,69,96,0.4); }
+    .coat.selected .label { color: #fff; }
   </style>
 </head>
 <body>
@@ -179,6 +202,13 @@
         <button class="choice" data-players="1"><span class="big">1</span><span class="small">player</span></button>
         <button class="choice" data-players="2"><span class="big">2</span><span class="small">players</span></button>
       </div>
+
+      <div class="group-label">Fur coat</div>
+      <div class="coat-tabs" id="coat-tabs" hidden>
+        <button class="coat-tab" data-slot="0" type="button">Player 1</button>
+        <button class="coat-tab" data-slot="1" type="button">Player 2</button>
+      </div>
+      <div class="coats" id="coat-choices"></div>
 
       <button class="start-btn" id="start-btn">Start Game</button>
     </div>
@@ -206,17 +236,25 @@
     const PLAT_SPEED_PER = 0.045;      // slide-speed ramp per floor climbed
     const PLAT_SPEED_MAX = 4.6;
     const WATER_START_DELAY = 180;     // frames before water starts rising
-    const WATER_BASE = 0.055;          // px/frame water rise at start (slow — leaves time to stack straight)
-    const WATER_RAMP = 0.00002;        // water acceleration per frame
+    const WATER_BASE = 0.036;          // px/frame water rise at start (slow — leaves time to stack straight)
+    const WATER_RAMP = 0.000012;       // water acceleration per frame
     const WATER_START_OFFSET = 230;    // px below floor 0 where the water begins
     const CAM_EASE = 0.12;
 
     const BEST_KEY = 'kittenjump.best';
 
-    // Two kitten color themes (P1 grey tabby, P2 orange).
-    const THEMES = [
-      { name: 'Player 1', body: '#9aa4b2', dark: '#6f7a8a', belly: '#e7ecf3', ear: '#7c8696', nose: '#3a3f4a' },
-      { name: 'Player 2', body: '#f0a64e', dark: '#d9842f', belly: '#fbe6cd', ear: '#e8954a', nose: '#7a4a20' }
+    // Fur coats — each a colour palette plus a `pattern` drawKitten layers on
+    // (tabby stripes, tuxedo chest, calico patches, siamese points, or plain solid).
+    // Players pick their coat in the start dialog; choices persist in localStorage.
+    const COATS = [
+      { name: 'Grey Tabby',   pattern: 'tabby',   body: '#9aa4b2', dark: '#6f7a8a', belly: '#e7ecf3', ear: '#7c8696', nose: '#3a3f4a', stripe: '#6f7a8a' },
+      { name: 'Orange Tabby', pattern: 'tabby',   body: '#f0a64e', dark: '#d9842f', belly: '#fbe6cd', ear: '#e8954a', nose: '#7a4a20', stripe: '#d9842f' },
+      { name: 'Brown Tabby',  pattern: 'tabby',   body: '#a9794e', dark: '#7c5532', belly: '#e9d2b4', ear: '#915f38', nose: '#5a3a20', stripe: '#7c5532' },
+      { name: 'Tuxedo',       pattern: 'tuxedo',  body: '#2c2f3a', dark: '#1c1e26', belly: '#ffffff', ear: '#3a3e4c', nose: '#d98aa0', white: '#ffffff' },
+      { name: 'Calico',       pattern: 'calico',  body: '#f7f3ec', dark: '#caa46a', belly: '#fffaf2', ear: '#e8b06a', nose: '#d98aa0', patchA: '#e8954a', patchB: '#5a4636' },
+      { name: 'Siamese',      pattern: 'siamese', body: '#efe4cf', dark: '#6b5038', belly: '#fbf3e3', ear: '#5a4130', nose: '#b07a86', points: '#6b5038' },
+      { name: 'Black Cat',    pattern: 'solid',   body: '#33373f', dark: '#202329', belly: '#454a55', ear: '#3c4049', nose: '#caa0aa' },
+      { name: 'Snowy White',  pattern: 'solid',   body: '#f4f6fa', dark: '#cfd6e2', belly: '#ffffff', ear: '#f6dde2', nose: '#e79ab0' }
     ];
 
     let state = 'select';   // 'select' | 'playing' | 'over'
@@ -226,11 +264,21 @@
     let winnerText = '';
     let panels = [];
 
+    // Chosen fur coat per player slot (0 = P1, 1 = P2), persisted. editCoatSlot is the
+    // player whose coat the picker currently edits (always 0 in 1P).
+    const COAT_KEYS = ['kittenjump.coat', 'kittenjump.coat2'];
+    function loadCoat(slot, dflt) {
+      const v = parseInt(localStorage.getItem(COAT_KEYS[slot]), 10);
+      return (!isNaN(v) && v >= 0 && v < COATS.length) ? v : dflt;
+    }
+    let coats = [ loadCoat(0, 0), loadCoat(1, 1) ];   // defaults: P1 grey tabby, P2 orange tabby
+    let editCoatSlot = 0;
+
     // ---------- Panel (one independent climb world) ----------
-    function makePanel(px, pw, themeIndex) {
+    function makePanel(px, pw, coatIndex) {
       const p = {
         x: px, w: pw,            // screen rect of this panel (within canvas)
-        theme: THEMES[themeIndex],
+        theme: COATS[coatIndex],
         cur: 0,                  // current floor / height
         standing: null,          // { y, left, w } the static platform the kitten rests on
         incoming: null,          // { y, left, w, vx } the single sliding platform
@@ -381,9 +429,51 @@
       if (!btn) return;
       chosenPlayers = parseInt(btn.dataset.players, 10);
       selectChoice(btn);
+      setEditCoatSlot(0);   // back to P1; show/hide the P1·P2 coat tabs for this mode
     });
     document.getElementById('start-btn').addEventListener('click', function () { startGame(chosenPlayers); });
     selectChoice(playerChoices.querySelector('[data-players="1"]'));  // default 1 player
+
+    // ---------- Fur-coat picker (per player, like Flappy Dog breeds) ----------
+    const coatChoicesEl = document.getElementById('coat-choices');
+    const coatTabsEl = document.getElementById('coat-tabs');
+    const coatTabBtns = coatTabsEl.querySelectorAll('.coat-tab');
+
+    // CSS background that previews a coat's colour + pattern in the swatch dot.
+    function coatSwatch(c) {
+      if (c.pattern === 'tabby')   return 'repeating-linear-gradient(45deg, ' + c.body + ' 0 6px, ' + c.stripe + ' 6px 9px)';
+      if (c.pattern === 'tuxedo')  return 'linear-gradient(155deg, ' + c.body + ' 52%, ' + c.white + ' 52%)';
+      if (c.pattern === 'calico')  return 'linear-gradient(120deg, ' + c.body + ' 38%, ' + c.patchA + ' 38% 68%, ' + c.patchB + ' 68%)';
+      if (c.pattern === 'siamese') return 'linear-gradient(180deg, ' + c.body + ' 50%, ' + c.points + ' 50%)';
+      return c.body;
+    }
+    const coatBtns = COATS.map(function (c, i) {
+      const btn = document.createElement('button');
+      btn.className = 'coat';
+      btn.type = 'button';
+      btn.innerHTML = '<span class="dot"></span><span class="label">' + c.name + '</span>';
+      btn.querySelector('.dot').style.background = coatSwatch(c);
+      btn.addEventListener('click', function () {
+        coats[editCoatSlot] = i;
+        try { localStorage.setItem(COAT_KEYS[editCoatSlot], String(i)); } catch (e) {}
+        refreshCoats();
+        btn.blur();
+      });
+      coatChoicesEl.appendChild(btn);
+      return btn;
+    });
+    function refreshCoats() {
+      coatTabsEl.hidden = chosenPlayers !== 2;
+      coatTabBtns.forEach(function (t) {
+        t.classList.toggle('selected', parseInt(t.dataset.slot, 10) === editCoatSlot);
+      });
+      coatBtns.forEach(function (b, i) { b.classList.toggle('selected', i === coats[editCoatSlot]); });
+    }
+    function setEditCoatSlot(s) { editCoatSlot = s; refreshCoats(); }
+    coatTabBtns.forEach(function (t) {
+      t.addEventListener('click', function () { setEditCoatSlot(parseInt(t.dataset.slot, 10)); });
+    });
+    refreshCoats();
 
     // ---------- State transitions ----------
     function startSelect() { state = 'select'; if (setupEl) setupEl.hidden = false; }
@@ -395,10 +485,10 @@
       winnerText = '';
       if (n === 1) {
         const pad = W * 0.22;
-        panels = [ makePanel(pad, W - pad * 2, 0) ];
+        panels = [ makePanel(pad, W - pad * 2, coats[0]) ];
       } else {
         const half = (W - DIVIDER) / 2;
-        panels = [ makePanel(0, half, 0), makePanel(half + DIVIDER, half, 1) ];
+        panels = [ makePanel(0, half, coats[0]), makePanel(half + DIVIDER, half, coats[1]) ];
       }
       state = 'playing';
     }
@@ -680,12 +770,49 @@
       ctx.fillStyle = t.belly;
       roundRect(-KIT_W * 0.28, bodyTop + KIT_H * 0.45, KIT_W * 0.56, KIT_H * 0.5, 8); ctx.fill();
 
+      // coat pattern on the body (clipped to the body shape)
+      ctx.save();
+      roundRect(-KIT_W / 2, bodyTop + 6, KIT_W, KIT_H - 2, 10); ctx.clip();
+      if (t.pattern === 'tabby') {
+        ctx.fillStyle = t.stripe;
+        for (let i = 0; i < 3; i++) ctx.fillRect(-KIT_W / 2, bodyTop + 11 + i * 8, KIT_W, 3);
+      } else if (t.pattern === 'calico') {
+        ctx.fillStyle = t.patchA;
+        ctx.beginPath(); ctx.arc(-KIT_W * 0.24, bodyTop + KIT_H * 0.42, KIT_W * 0.26, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = t.patchB;
+        ctx.beginPath(); ctx.arc(KIT_W * 0.26, bodyTop + KIT_H * 0.78, KIT_W * 0.23, 0, Math.PI * 2); ctx.fill();
+      } else if (t.pattern === 'siamese') {
+        ctx.fillStyle = t.points; ctx.globalAlpha = 0.3;
+        ctx.fillRect(-KIT_W / 2, bodyTop + KIT_H * 0.72, KIT_W, KIT_H); ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+
       // head
       const hy = bodyTop + 2;
       ctx.fillStyle = t.body;
       ctx.beginPath();
       ctx.arc(0, hy, KIT_W * 0.42, 0, Math.PI * 2);
       ctx.fill();
+
+      // coat pattern on the head (clipped to the head circle)
+      ctx.save();
+      ctx.beginPath(); ctx.arc(0, hy, KIT_W * 0.42, 0, Math.PI * 2); ctx.clip();
+      if (t.pattern === 'tabby') {
+        ctx.fillStyle = t.stripe;
+        ctx.fillRect(-1.5, hy - KIT_W * 0.42, 3, KIT_W * 0.22);
+        ctx.fillRect(-KIT_W * 0.14, hy - KIT_W * 0.4, 2.5, KIT_W * 0.2);
+        ctx.fillRect(KIT_W * 0.14 - 2.5, hy - KIT_W * 0.4, 2.5, KIT_W * 0.2);
+      } else if (t.pattern === 'tuxedo') {
+        ctx.fillStyle = t.white;                       // white muzzle/chin
+        ctx.beginPath(); ctx.arc(0, hy + 5, KIT_W * 0.2, 0, Math.PI * 2); ctx.fill();
+      } else if (t.pattern === 'calico') {
+        ctx.fillStyle = t.patchA;                      // patch over one ear/brow
+        ctx.beginPath(); ctx.arc(-KIT_W * 0.2, hy - KIT_W * 0.08, KIT_W * 0.22, 0, Math.PI * 2); ctx.fill();
+      } else if (t.pattern === 'siamese') {
+        ctx.fillStyle = t.points; ctx.globalAlpha = 0.45;   // dark mask/points on the face
+        ctx.beginPath(); ctx.arc(0, hy + 4, KIT_W * 0.27, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+      }
+      ctx.restore();
       // ears
       ctx.fillStyle = t.ear;
       triangle(-KIT_W * 0.30, hy - KIT_W * 0.22, -KIT_W * 0.10, hy - KIT_W * 0.5, -KIT_W * 0.02, hy - KIT_W * 0.2);
@@ -744,8 +871,8 @@
 
       // two demo kittens — pure scenery; the HTML #setup overlay carries the title,
       // player choice and Start button on top of this backdrop.
-      drawKitten(W * 0.30, H * 0.5, THEMES[0], 0, false, false);
-      drawKitten(W * 0.70, H * 0.5, THEMES[1], 0, false, false);
+      drawKitten(W * 0.30, H * 0.5, COATS[coats[0]], 0, false, false);
+      drawKitten(W * 0.70, H * 0.5, COATS[coats[1]], 0, false, false);
     }
 
     function btn(x, y, w, h, label, color) {
