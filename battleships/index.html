@@ -13,8 +13,9 @@
   @media (min-width: 768px) { body { justify-content: center; } }
   h1 { font-family: 'Pacifico', cursive; font-size: 2.2rem; margin-bottom: 10px; color: #fff; font-weight: 400; }
   #status { font-size: 1.1rem; margin-bottom: 16px; min-height: 1.4em; color: #ffd54f; }
-  .boards { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; }
+  .boards { display: flex; flex-direction: column; gap: 22px; align-items: center; }
   .board-container { text-align: center; padding: 12px; border-radius: 8px; border: 3px solid transparent; transition: border-color 0.3s, box-shadow 0.3s; }
+  .board-row { display: flex; gap: 18px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
   .board-container.active { border-color: #ffd54f; box-shadow: 0 0 20px rgba(255,213,79,0.3); }
   .board-container h2 { margin-bottom: 8px; font-size: 1rem; color: #90caf9; transition: color 0.3s; }
   .board-container.active h2 { color: #ffd54f; }
@@ -65,7 +66,7 @@
   #overlay .msg h2 { color: #ffd54f; margin-bottom: 12px; }
   #overlay .msg button { margin-top: 16px; font-size: 1.1rem; padding: 10px 30px; }
   .hidden { display: none !important; }
-  .fleet { margin-top: 10px; text-align: left; font-size: 0.85rem; }
+  .fleet { text-align: left; font-size: 0.85rem; min-width: 150px; padding-top: 26px; }
   .fleet-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
   .fleet-row.sunk-ship { opacity: 0.5; text-decoration: line-through; color: #c62828; }
   .fleet-name { width: 85px; }
@@ -90,13 +91,17 @@
 <div class="boards">
   <div class="board-container" id="p1-container">
     <h2 id="left-label">Player 1</h2>
-    <table id="board-0"></table>
-    <div class="fleet" id="fleet-0"></div>
+    <div class="board-row">
+      <table id="board-0"></table>
+      <div class="fleet" id="fleet-0"></div>
+    </div>
   </div>
   <div class="board-container" id="p2-container">
     <h2 id="right-label">Player 2</h2>
-    <table id="board-1"></table>
-    <div class="fleet" id="fleet-1"></div>
+    <div class="board-row">
+      <table id="board-1"></table>
+      <div class="fleet" id="fleet-1"></div>
+    </div>
   </div>
 </div>
 
