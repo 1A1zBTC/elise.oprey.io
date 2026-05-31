@@ -108,6 +108,7 @@
     }
     .choice .big { display: block; font-size: 1.7rem; line-height: 1.3; }
     .choice .small { display: block; font-size: 0.66rem; color: #8b93b0; font-weight: 700; margin-top: 2px; }
+    .choice .pb { display: block; font-size: 0.62rem; color: #ffe8b0; font-weight: 800; margin-top: 4px; }
     .choice:hover { border-color: #6f86c4; }
     .choice:active { transform: scale(0.96); }
     .choice.selected {
@@ -158,10 +159,15 @@
         <div class="sub">Hop across roads, rivers &amp; railways — how far can you go? 🐔</div>
         <div class="group-label">Pick your pet</div>
         <div class="choices" id="pet-choices">
-          <button class="choice" data-pet="chick"><span class="big">🐤</span><span class="small">Chick</span></button>
-          <button class="choice" data-pet="pup"><span class="big">🐶</span><span class="small">Pup</span></button>
-          <button class="choice" data-pet="kitty"><span class="big">🐱</span><span class="small">Kitty</span></button>
-          <button class="choice" data-pet="frog"><span class="big">🐸</span><span class="small">Froggy</span></button>
+          <button class="choice" data-pet="chick"><span class="big">🐤</span><span class="small">Chick</span><span class="pb"></span></button>
+          <button class="choice" data-pet="pup"><span class="big">🐶</span><span class="small">Pup</span><span class="pb"></span></button>
+          <button class="choice" data-pet="kitty"><span class="big">🐱</span><span class="small">Kitty</span><span class="pb"></span></button>
+          <button class="choice" data-pet="frog"><span class="big">🐸</span><span class="small">Froggy</span><span class="pb"></span></button>
+        </div>
+        <div class="group-label">Players</div>
+        <div class="choices" id="count-choices">
+          <button class="choice" data-players="1"><span class="big">1</span><span class="small">solo</span></button>
+          <button class="choice" data-players="2"><span class="big">2</span><span class="small">P1 WASD · P2 ◄►</span></button>
         </div>
         <button class="start-btn" id="start-btn">Start Game</button>
       </div>
@@ -172,15 +178,15 @@
       <div class="panel">
         <h2 id="over-title">Game Over</h2>
         <div class="sub" id="over-sub">Squashed!</div>
-        <div class="scoreline"><span class="lbl">Score</span><span class="big" id="over-score">0</span></div>
-        <div class="scoreline"><span class="lbl">Best</span><span class="big" id="over-best">0</span></div>
+        <div class="scoreline"><span class="lbl" id="over-l1">Score</span><span class="big" id="over-score">0</span></div>
+        <div class="scoreline"><span class="lbl" id="over-l2">Best</span><span class="big" id="over-best">0</span></div>
         <button class="start-btn" id="again-btn">Play Again</button>
       </div>
     </div>
   </div>
 
   <p class="hint">
-    <b>Arrows / WASD</b> to hop &nbsp;·&nbsp; <b>Click</b> = forward &nbsp;·&nbsp; <b>Swipe</b> to steer &nbsp;·&nbsp; don't get squashed, drowned, or caught by the eagle! 🦅
+    <b>P1: WASD</b> &nbsp;·&nbsp; <b>P2: Arrow keys</b> &nbsp;·&nbsp; in 2-player, hop ahead to leave your rival behind — don't get squashed, drowned, or caught by the eagle! 🦅
   </p>
 
   <script>
@@ -200,9 +206,13 @@
     const VIS_BACK = 4;        // rows visible behind camZ
     const VIS_FWD = 8;         // rows visible ahead of camZ
     const HOP_FRAMES = 9;
-    const EAGLE_BEHIND = 4.2;  // if player.z falls this far below camZ → eagle
+    const IDLE_MS = 10000;     // 1P: real milliseconds idle (no forward progress) before the eagle swoops
+    const IDLE_WARN_MS = 3000; // ms before that to start the looming-shadow warning
+    const LEAD_LIMIT = 6;      // 2P: if the leader gets this many rows ahead, the laggard dies
 
-    const BEST_KEY = 'crossypets.best';
+    const BEST_PREFIX = 'crossypets.best.';   // per-pet best score, keyed by pet id
+    function loadBest(p) { try { return parseInt(localStorage.getItem(BEST_PREFIX + p) || '0', 10) || 0; } catch (e) { return 0; } }
+    function saveBest(p, v) { try { localStorage.setItem(BEST_PREFIX + p, String(v)); } catch (e) {} }
 
     // ---------- pets ----------
     const PETS = {
@@ -214,17 +224,23 @@
 
     // ---------- state ----------
     let state = 'select';        // 'select' | 'playing' | 'dying' | 'over'
-    let pet = 'chick';
+    let numPlayers = 2;          // 1 or 2
+    let p1pet = 'chick';
     let rows = {};               // z -> row descriptor
     let maxGen = -1;             // furthest generated row
     let camZ = 0;                // camera row (float)
     let creep = 0;               // forward camera creep per frame
-    let score = 0, best = 0;
     let frame = 0;
-    let deathTimer = 0, deadKind = '';
+    let players = [];            // 1 or 2 active players
+    let deathTimer = 0, deadKind = '', deadIdx = -1, winnerIdx = -1;
+    let idleMs = 0;              // 1P only: real ms since last forward progress (drives the eagle)
+    let lastTs = 0, dtMs = 16.7; // frame delta in ms — keeps the eagle timer refresh-rate independent
     let eagle = null;
-    let player = null;
-    try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) {}
+    const PET_ORDER = ['chick', 'pup', 'kitty', 'frog'];
+    function secondPet(p) { return PET_ORDER.find(function (q) { return q !== p; }) || 'pup'; }
+    function makePlayer(petId, x) {
+      return { pet: petId, x: x, z: 2, face: 1, hopping: false, hopT: 0, fromX: x, fromZ: 2, toX: x, toZ: 2, ride: null, score: 0 };
+    }
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
@@ -238,7 +254,7 @@
     const CAR_COLORS = ['#e94560', '#3ec8be', '#ffd23f', '#7a5cff', '#ff8a3c', '#46c46a', '#ff5da2'];
 
     // ---------- row generation ----------
-    function laneSpeed() { return 0.018 + Math.min(score, 60) * 0.0009 + rnd(0, 0.012); }
+    function laneSpeed() { return 0.011 + Math.min(camZ, 60) * 0.0005 + rnd(0, 0.007); }
 
     function spawnMovers(lenMin, lenMax, gapMin, gapMax, dir, speed) {
       const items = [];
@@ -285,7 +301,7 @@
       } else if (type === 'road') {
         const dir = chance(0.5) ? 1 : -1;
         const speed = laneSpeed();
-        row.cars = spawnMovers(1, chance(0.3) ? 2 : 1, 2, 5, dir, speed);
+        row.cars = spawnMovers(1, chance(0.3) ? 2 : 1, 4, 9, dir, speed);
       } else if (type === 'river') {
         const dir = chance(0.5) ? 1 : -1;
         const speed = laneSpeed() * 0.85;
@@ -336,21 +352,27 @@
       const el = document.querySelector('#pet-choices .choice.selected');
       return el ? el.dataset.pet : 'chick';
     }
+    function selectedCount() {
+      const el = document.querySelector('#count-choices .choice.selected');
+      return el ? parseInt(el.dataset.players, 10) : 2;
+    }
 
-    function hop(dx, dz) {
-      if (state !== 'playing' || !player || player.hopping) return;
-      let nx = Math.round(player.x) + dx;
-      let nz = Math.round(player.z) + dz;
+    function hop(pi, dx, dz) {
+      if (state !== 'playing') return;
+      const pl = players[pi];
+      if (!pl || pl.hopping) return;
+      let nx = Math.round(pl.x) + dx;
+      let nz = Math.round(pl.z) + dz;
       if (nx < 0 || nx > COLS - 1) return;          // walled by edges
       if (nz < 0) nz = 0;
       ensureRows(nz + VIS_FWD);
       const dest = rows[nz];
       if (dest && dest.type === 'grass' && dest.obstacles[nx]) return;  // blocked by tree/rock
-      player.hopping = true; player.hopT = 0;
-      player.fromX = player.x; player.fromZ = player.z;
-      player.toX = nx; player.toZ = nz;
-      player.face = dx < 0 ? -1 : (dx > 0 ? 1 : player.face);
-      if (nz > score) { score = nz; }
+      pl.hopping = true; pl.hopT = 0;
+      pl.fromX = pl.x; pl.fromZ = pl.z;
+      pl.toX = nx; pl.toZ = nz;
+      pl.face = dx < 0 ? -1 : (dx > 0 ? 1 : pl.face);
+      if (nz > pl.score) { pl.score = nz; if (pi === 0) idleMs = 0; }   // forward progress resets the 1P eagle timer
     }
 
     window.addEventListener('keydown', function (e) {
@@ -364,10 +386,20 @@
         if (k === 'Space' || k === 'Enter') { e.preventDefault(); showSelect(); }
         return;
       }
-      if (k === 'ArrowUp' || k === 'KeyW' || k === 'Space') { e.preventDefault(); hop(0, 1); }
-      else if (k === 'ArrowDown' || k === 'KeyS') { e.preventDefault(); hop(0, -1); }
-      else if (k === 'ArrowLeft' || k === 'KeyA') { e.preventDefault(); hop(-1, 0); }
-      else if (k === 'ArrowRight' || k === 'KeyD') { e.preventDefault(); hop(1, 0); }
+      // Player 1 — WASD (always controls player 0)
+      if (k === 'KeyW') { e.preventDefault(); hop(0, 0, 1); }
+      else if (k === 'KeyS') { e.preventDefault(); hop(0, 0, -1); }
+      else if (k === 'KeyA') { e.preventDefault(); hop(0, -1, 0); }
+      else if (k === 'KeyD') { e.preventDefault(); hop(0, 1, 0); }
+      else {
+        // Arrow keys → player 2 in 2P, player 0 in solo. Space → forward (solo only).
+        const pi = numPlayers === 2 ? 1 : 0;
+        if (k === 'ArrowUp') { e.preventDefault(); hop(pi, 0, 1); }
+        else if (k === 'ArrowDown') { e.preventDefault(); hop(pi, 0, -1); }
+        else if (k === 'ArrowLeft') { e.preventDefault(); hop(pi, -1, 0); }
+        else if (k === 'ArrowRight') { e.preventDefault(); hop(pi, 1, 0); }
+        else if (k === 'Space' && numPlayers === 1) { e.preventDefault(); hop(0, 0, 1); }
+      }
     });
 
     // tap = forward, swipe = direction
@@ -384,9 +416,9 @@
       const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : e;
       const dx = t.clientX - touchSX, dy = t.clientY - touchSY;
       const TH = 24;
-      if (Math.abs(dx) < TH && Math.abs(dy) < TH) { hop(0, 1); return; }   // tap → forward
-      if (Math.abs(dx) > Math.abs(dy)) hop(dx > 0 ? 1 : -1, 0);
-      else hop(0, dy < 0 ? 1 : -1);                                         // swipe up → forward
+      if (Math.abs(dx) < TH && Math.abs(dy) < TH) { hop(0, 0, 1); return; }   // tap → forward
+      if (Math.abs(dx) > Math.abs(dy)) hop(0, dx > 0 ? 1 : -1, 0);
+      else hop(0, 0, dy < 0 ? 1 : -1);                                        // swipe up → forward
     }
     canvas.addEventListener('mousedown', pointerDown);
     canvas.addEventListener('mouseup', pointerUp);
@@ -401,58 +433,99 @@
       btn.classList.add('selected');
     });
     document.querySelector('#pet-choices .choice').classList.add('selected');
+
+    document.getElementById('count-choices').addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      document.querySelectorAll('#count-choices .choice').forEach(function (c) { c.classList.remove('selected'); });
+      btn.classList.add('selected');
+    });
+    document.querySelector('#count-choices [data-players="2"]').classList.add('selected');
+
+    function refreshPetBests() {
+      document.querySelectorAll('#pet-choices .choice').forEach(function (btn) {
+        const el = btn.querySelector('.pb');
+        if (el) el.textContent = '★ ' + loadBest(btn.dataset.pet);
+      });
+    }
+    refreshPetBests();
     document.getElementById('start-btn').addEventListener('click', beginGame);
     document.getElementById('again-btn').addEventListener('click', showSelect);
 
-    function showSelect() { state = 'select'; overEl.hidden = true; setupEl.hidden = false; }
+    function showSelect() { state = 'select'; overEl.hidden = true; setupEl.hidden = false; refreshPetBests(); }
 
     function beginGame() {
-      pet = selectedPet();
+      p1pet = selectedPet();
+      numPlayers = selectedCount();
       rows = {}; maxGen = -1;
+      camZ = 0.5;                 // so laneSpeed/gen difficulty starts low
       ensureRows(VIS_FWD + 6);
-      score = 0; frame = 0; creep = 0;
-      deathTimer = 0; deadKind = ''; eagle = null;
-      player = { x: 4, z: 2, face: 1, hopping: false, hopT: 0, fromX: 4, fromZ: 2, toX: 4, toZ: 2, ride: null };
-      camZ = player.z - 1.5;
+      frame = 0; creep = 0;
+      deathTimer = 0; deadKind = ''; deadIdx = -1; winnerIdx = -1; eagle = null; idleMs = 0;
+      players = (numPlayers === 1)
+        ? [ makePlayer(p1pet, 4) ]
+        : [ makePlayer(p1pet, 3), makePlayer(secondPet(p1pet), 5) ];
+      camZ = 2 - 1.5;
       setupEl.hidden = true; overEl.hidden = true;
       state = 'playing';
     }
 
-    function die(kind) {
+    function die(pi, kind) {
       if (state !== 'playing') return;
       state = 'dying';
+      deadIdx = pi;
       deadKind = kind;
-      deathTimer = (kind === 'eagle') ? 46 : 34;
-      if (kind === 'eagle') eagle = { y: -120, grabbed: false };
+      winnerIdx = (numPlayers === 2) ? (1 - pi) : -1;
+      deathTimer = (kind === 'eagle' || kind === 'leash') ? 46 : 34;
+      if (kind === 'eagle' || kind === 'leash') eagle = { y: -120 };
+    }
+
+    function deathReason(kind, idx) {
+      const who = numPlayers === 2 ? ('Player ' + (idx + 1) + ' ') : '';
+      if (kind === 'squash') return who + (who ? 'got squashed! 🚗' : 'Squashed flat! 🚗');
+      if (kind === 'drown') return who + (who ? 'drowned! 🌊' : 'Glug glug… 🌊');
+      if (kind === 'train') return who + (who ? 'hit a train! 🚆' : 'Hit by a train! 🚆');
+      if (kind === 'eagle') return who + (who ? 'was caught by the eagle! 🦅' : 'The eagle got you! 🦅');
+      if (kind === 'leash') return 'Player ' + (idx + 1) + ' fell behind! 🦅';
+      return 'Game Over';
     }
 
     function finishDeath() {
       state = 'over';
-      if (score > best) { best = score; try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {} }
-      document.getElementById('over-score').textContent = score;
-      document.getElementById('over-best').textContent = best;
-      document.getElementById('over-sub').textContent =
-        deadKind === 'squash' ? 'Squashed flat! 🚗' :
-        deadKind === 'drown' ? 'Glug glug… 🌊' :
-        deadKind === 'train' ? 'Hit by a train! 🚆' :
-        deadKind === 'eagle' ? 'The eagle got you! 🦅' : 'Game Over';
+      players.forEach(function (pl) { if (pl.score > loadBest(pl.pet)) saveBest(pl.pet, pl.score); });
+      document.getElementById('over-sub').textContent = deathReason(deadKind, deadIdx);
+      if (numPlayers === 2) {
+        document.getElementById('over-title').textContent = 'Player ' + (winnerIdx + 1) + ' wins! 🏆';
+        document.getElementById('over-l1').textContent = 'Player 1';
+        document.getElementById('over-l2').textContent = 'Player 2';
+        document.getElementById('over-score').textContent = players[0].score;
+        document.getElementById('over-best').textContent = players[1].score;
+      } else {
+        document.getElementById('over-title').textContent = 'Game Over';
+        document.getElementById('over-l1').textContent = 'Score';
+        document.getElementById('over-l2').textContent = 'Best';
+        document.getElementById('over-score').textContent = players[0].score;
+        document.getElementById('over-best').textContent = loadBest(players[0].pet);
+      }
       overEl.hidden = false;
     }
 
     // ---------- update ----------
     function update() {
       if (state === 'dying') {
-        if (eagle) { eagle.y += 7; if (eagle.y > rowY(player.z) - 40) eagle.grabbed = true; }
+        if (eagle) eagle.y += 7;
         deathTimer--; if (deathTimer <= 0) finishDeath();
         return;
       }
       if (state !== 'playing') return;
       frame++;
 
-      // camera: follow + creep
-      const follow = player.z;
-      camZ += (follow - camZ) * 0.08;
-      creep = 0.0045 + Math.min(score, 80) * 0.00018;
+      // camera follows the REAR-most player so both stay on screen
+      const zs = players.map(function (p) { return p.z; });
+      const rearZ = Math.min.apply(null, zs);
+      const leadZ = Math.max.apply(null, zs);
+      camZ += (rearZ - camZ) * 0.08;
+      creep = (numPlayers === 1) ? (0.0045 + Math.min(players[0].score, 80) * 0.00018) : 0;
       camZ += creep;
       ensureRows(Math.ceil(camZ) + VIS_FWD + 2);
 
@@ -463,53 +536,56 @@
         if (row.type === 'road') moveItems(row.cars);
         else if (row.type === 'river') {
           moveItems(row.logs);
-          row.logs.forEach(l => { if (l.gator) { l.subT = (l.subT + 1) % 200; l.submerged = l.subT > 150; } });
+          row.logs.forEach(function (l) { if (l.gator) { l.subT = (l.subT + 1) % 200; l.submerged = l.subT > 150; } });
         } else if (row.type === 'rail') updateRail(row);
       }
 
-      // player hop animation
-      if (player.hopping) {
-        player.hopT++;
-        const t = player.hopT / HOP_FRAMES;
-        player.x = player.fromX + (player.toX - player.fromX) * t;
-        player.z = player.fromZ + (player.toZ - player.fromZ) * t;
-        if (player.hopT >= HOP_FRAMES) {
-          player.hopping = false;
-          player.x = player.toX; player.z = player.toZ;
-          player.ride = null;
-        }
-        return; // no hazards mid-hop
+      // 1P: eagle swoops if you idle (no forward progress) too long
+      if (numPlayers === 1) {
+        idleMs += dtMs;
+        if (idleMs > IDLE_MS) { die(0, 'eagle'); return; }
       }
 
-      // settled — evaluate the tile the pet stands on
-      const rz = Math.round(player.z);
-      const row = rows[rz];
-      if (row) {
+      // 2P leash: if the leader pulls too far ahead, the rear player is left behind & dies
+      if (numPlayers === 2 && leadZ - rearZ > LEAD_LIMIT) {
+        const rearIdx = players[0].z <= players[1].z ? 0 : 1;
+        die(rearIdx, 'leash');
+        return;
+      }
+
+      // per-player hop animation + settled-tile hazards
+      for (let i = 0; i < players.length; i++) {
+        const pl = players[i];
+        if (pl.hopping) {
+          pl.hopT++;
+          const t = pl.hopT / HOP_FRAMES;
+          pl.x = pl.fromX + (pl.toX - pl.fromX) * t;
+          pl.z = pl.fromZ + (pl.toZ - pl.fromZ) * t;
+          if (pl.hopT >= HOP_FRAMES) { pl.hopping = false; pl.x = pl.toX; pl.z = pl.toZ; pl.ride = null; }
+          continue; // no hazards mid-hop
+        }
+        const row = rows[Math.round(pl.z)];
+        if (!row) continue;
         if (row.type === 'river') {
-          // must be on a (surfaced) log/gator, else drown; ride its drift
           let onLog = null;
           for (const l of row.logs) {
             if (l.submerged) continue;
-            if (player.x > l.x - 0.55 && player.x < l.x + l.len - 0.45) { onLog = l; break; }
+            if (pl.x > l.x - 0.55 && pl.x < l.x + l.len - 0.45) { onLog = l; break; }
           }
-          if (!onLog) { die('drown'); return; }
-          player.x += onLog.dir * onLog.speed;
-          player.ride = onLog;
-          if (player.x < -0.5 || player.x > COLS - 0.5) { die('drown'); return; }
+          if (!onLog) { die(i, 'drown'); return; }
+          pl.x += onLog.dir * onLog.speed; pl.ride = onLog;
+          if (pl.x < -0.5 || pl.x > COLS - 0.5) { die(i, 'drown'); return; }
         } else if (row.type === 'road') {
           for (const c of row.cars) {
-            if (player.x > c.x - 0.6 && player.x < c.x + c.len - 0.4) { die('squash'); return; }
+            if (pl.x > c.x - 0.6 && pl.x < c.x + c.len - 0.4) { die(i, 'squash'); return; }
           }
         } else if (row.type === 'rail') {
           if (row.phase === 'pass' && row.train) {
             const tr = row.train;
-            if (player.x > tr.x - 0.5 && player.x < tr.x + tr.len - 0.5) { die('train'); return; }
+            if (pl.x > tr.x - 0.5 && pl.x < tr.x + tr.len - 0.5) { die(i, 'train'); return; }
           }
         }
       }
-
-      // eagle: fell too far behind the creeping camera
-      if (player.z < camZ - EAGLE_BEHIND) die('eagle');
     }
 
     function moveItems(items) {
@@ -524,7 +600,7 @@
     function updateRail(row) {
       row.timer--;
       if (row.phase === 'idle') {
-        if (row.timer <= 0) { row.phase = 'warn'; row.timer = 55; }
+        if (row.timer <= 0) { row.phase = 'warn'; row.timer = 75; }
       } else if (row.phase === 'warn') {
         if (row.timer <= 0) {
           row.phase = 'pass';
@@ -534,7 +610,7 @@
         }
       } else if (row.phase === 'pass') {
         const tr = row.train;
-        tr.x += row.dir * 0.42;
+        tr.x += row.dir * 0.16;
         if ((row.dir > 0 && tr.x > COLS + 1) || (row.dir < 0 && tr.x < -tr.len - 1)) {
           row.phase = 'idle'; row.timer = ri(120, 260); row.train = null;
         }
@@ -632,39 +708,103 @@
       ctx.fillRect(cx - tr.len * TW / 2 + 8, y, tr.len * TW - 16, 8);
     }
 
-    function drawPet() {
-      const p = PETS[pet] || PETS.chick;
+    function tri(x1, y1, x2, y2, x3, y3) {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); ctx.fill();
+    }
+
+    function drawPet(pl, i) {
+      const p = PETS[pl.pet] || PETS.chick;
       let lift = 0;
-      if (player.hopping) lift = Math.sin((player.hopT / HOP_FRAMES) * Math.PI) * 0.65;
-      const x = player.x, z = player.z;
-      let squashH = 1, bodyH = 1;
-      if (state === 'dying' && deadKind === 'squash') { squashH = Math.max(0.12, 1 - (1 - deathTimer / 34)); }
-      // body
-      drawBox(x, z, 0.74, bodyH * squashH, lift, p.body, p.dark, 0.5);
-      // head (on top)
-      const headLift = lift + bodyH * squashH;
-      drawBox(x, z, 0.6, 0.7 * squashH, headLift, p.body, p.dark, 0.45);
-      // face feature
-      const fb = drawBox(x, z, 0.6, 0.0001, headLift + 0.7 * squashH, p.body, p.body, 0.45);
-      const cx = colX(x), eyeY = rowY(z) - (headLift + 0.35) * HH;
-      ctx.fillStyle = '#1a1a2e';
-      ctx.fillRect(cx - 8, eyeY, 4, 4); ctx.fillRect(cx + 4, eyeY, 4, 4);
-      if (p.kind === 'beak') { ctx.fillStyle = p.feat; ctx.fillRect(cx - 3, eyeY + 6, 6, 4); }
-      else if (p.kind === 'ears') {
-        ctx.fillStyle = p.feat;
-        const topY = rowY(z) - (headLift + 0.7 * squashH) * HH - TD * 0.45;
-        ctx.fillRect(cx - 14, topY - 6, 8, 8); ctx.fillRect(cx + 6, topY - 6, 8, 8);
-      } else if (p.kind === 'eyesbig') {
+      if (pl.hopping) lift = Math.sin((pl.hopT / HOP_FRAMES) * Math.PI) * 0.65;
+      const x = pl.x, z = pl.z;
+      let squashH = 1;
+      if (state === 'dying' && i === deadIdx) {
+        if (deadKind === 'squash') squashH = Math.max(0.12, deathTimer / 34);   // flatten
+        else if (deadKind === 'drown') lift = -(1 - deathTimer / 34) * 0.85;     // sink
+      }
+      const cx = colX(x), baseY = rowY(z) - lift * HH;
+
+      // grounding shadow
+      if (lift >= 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath(); ctx.ellipse(cx, rowY(z) + 3, 17, 6, 0, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // ---- body + belly ----
+      const bodyH = 0.95 * squashH, bodyHalf = 0.78 * TW / 2;
+      const bStand = baseY, bTop = bStand - bodyH * HH;
+      drawBox(x, z, 0.78, bodyH, lift, p.body, p.dark, 0.5);
+      ctx.fillStyle = p.belly;
+      ctx.fillRect(cx - bodyHalf * 0.46, bTop + (bStand - bTop) * 0.34, bodyHalf * 0.92, (bStand - bTop) * 0.6);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
+      ctx.strokeRect(cx - bodyHalf, bTop, bodyHalf * 2, bStand - bTop);
+
+      // ---- head ----
+      const headLift = lift + bodyH, headH = 0.74 * squashH, headHalf = 0.64 * TW / 2;
+      const hStand = rowY(z) - headLift * HH, hTop = hStand - headH * HH;
+      const headTopY = hTop - TD * 0.45;        // crown of the head
+      drawBox(x, z, 0.64, headH, headLift, p.body, p.dark, 0.45);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
+      ctx.strokeRect(cx - headHalf, hTop, headHalf * 2, hStand - hTop);
+
+      // ---- ears / crown ----
+      if (pl.pet === 'kitty') {
+        ctx.fillStyle = p.body;
+        tri(cx - 17, headTopY + 6, cx - 5, headTopY + 6, cx - 13, headTopY - 12);
+        tri(cx + 5, headTopY + 6, cx + 17, headTopY + 6, cx + 13, headTopY - 12);
+        ctx.fillStyle = '#ff9bb0';
+        tri(cx - 14, headTopY + 4, cx - 8, headTopY + 4, cx - 12, headTopY - 4);
+        tri(cx + 8, headTopY + 4, cx + 14, headTopY + 4, cx + 12, headTopY - 4);
+      } else if (pl.pet === 'pup') {
+        ctx.fillStyle = p.dark;
+        ctx.fillRect(cx - headHalf - 4, hTop + 1, 8, 18);
+        ctx.fillRect(cx + headHalf - 4, hTop + 1, 8, 18);
+      } else if (pl.pet === 'chick') {
+        ctx.fillStyle = p.dark;
+        ctx.fillRect(cx - 2, headTopY - 7, 4, 9);
+      }
+
+      // ---- eyes ----
+      const eyeY = hTop + (hStand - hTop) * 0.24;
+      if (pl.pet === 'frog') {
+        const ey = headTopY - 1;
+        ctx.fillStyle = p.body;
+        ctx.beginPath(); ctx.arc(cx - 9, ey, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 9, ey, 8, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.fillRect(cx - 11, eyeY - 4, 8, 8); ctx.fillRect(cx + 3, eyeY - 4, 8, 8);
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(cx - 8, eyeY - 1, 4, 4); ctx.fillRect(cx + 6, eyeY - 1, 4, 4);
+        ctx.beginPath(); ctx.arc(cx - 9, ey, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 9, ey, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#15172b';
+        ctx.beginPath(); ctx.arc(cx - 9, ey, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 9, ey, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#1f4a16'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx - 12, eyeY + 9); ctx.lineTo(cx + 12, eyeY + 9); ctx.stroke();
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(cx - 13, eyeY, 9, 10); ctx.fillRect(cx + 4, eyeY, 9, 10);
+        ctx.fillStyle = '#15172b';
+        ctx.fillRect(cx - 10, eyeY + 3, 4, 5); ctx.fillRect(cx + 7, eyeY + 3, 4, 5);
+      }
+
+      // ---- nose / beak / whiskers ----
+      if (pl.pet === 'chick') {
+        ctx.fillStyle = p.feat;
+        tri(cx - 6, eyeY + 13, cx + 6, eyeY + 13, cx, eyeY + 21);
+      } else if (pl.pet === 'pup') {
+        ctx.fillStyle = '#2a1c12'; ctx.fillRect(cx - 4, eyeY + 12, 8, 6);
+      } else if (pl.pet === 'kitty') {
+        ctx.fillStyle = '#ff9bb0'; tri(cx - 4, eyeY + 12, cx + 4, eyeY + 12, cx, eyeY + 17);
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - 5, eyeY + 15); ctx.lineTo(cx - 18, eyeY + 13);
+        ctx.moveTo(cx + 5, eyeY + 15); ctx.lineTo(cx + 18, eyeY + 13);
+        ctx.stroke();
       }
     }
 
     function drawEagle() {
-      if (!eagle) return;
-      const cx = colX(player.x), y = eagle.y;
+      if (!eagle || deadIdx < 0 || !players[deadIdx]) return;
+      const cx = colX(players[deadIdx].x), y = eagle.y;
       ctx.fillStyle = '#5a4632';
       ctx.fillRect(cx - 10, y, 20, 16);          // body
       ctx.fillStyle = '#6e5740';
@@ -685,15 +825,24 @@
     }
 
     function drawHUD() {
-      ctx.fillStyle = '#fff';
-      ctx.font = "800 34px 'Nunito', sans-serif";
-      ctx.textAlign = 'left';
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 5;
-      ctx.strokeText(String(score), 18, 44); ctx.fillText(String(score), 18, 44);
-      ctx.font = "800 16px 'Nunito', sans-serif";
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#cfd6ea';
-      ctx.fillText('Best ' + best, W - 16, 30);
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      if (numPlayers === 1) {
+        const sc = players[0] ? players[0].score : 0;
+        ctx.font = "800 34px 'Nunito', sans-serif"; ctx.textAlign = 'left';
+        ctx.fillStyle = '#fff';
+        ctx.strokeText(String(sc), 18, 44); ctx.fillText(String(sc), 18, 44);
+        ctx.font = "800 16px 'Nunito', sans-serif"; ctx.textAlign = 'right';
+        ctx.fillStyle = '#cfd6ea';
+        ctx.fillText('Best ' + loadBest(players[0] ? players[0].pet : p1pet), W - 16, 30);
+      } else {
+        ctx.font = "800 26px 'Nunito', sans-serif";
+        ctx.textAlign = 'left';
+        ctx.fillStyle = PETS[players[0].pet].body;
+        ctx.strokeText('P1  ' + players[0].score, 16, 36); ctx.fillText('P1  ' + players[0].score, 16, 36);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = PETS[players[1].pet].body;
+        ctx.strokeText('P2  ' + players[1].score, W - 16, 36); ctx.fillText('P2  ' + players[1].score, W - 16, 36);
+      }
       ctx.textAlign = 'left';
     }
 
@@ -703,21 +852,41 @@
       ctx.fillRect(0, 0, W, H);
 
       const lo = Math.floor(camZ) - VIS_BACK, hi = Math.ceil(camZ) + VIS_FWD;
-      const petZ = player ? Math.round(player.z) : -999;
+      const showPets = (state === 'playing' || state === 'dying');
       // painter's: far rows first (high z), near last (low z)
       for (let z = hi; z >= lo; z--) {
         const row = rows[z]; if (!row) continue;
         drawLaneBand(row);
         drawRowObjects(row);
-        if (state !== 'select' && player && z === petZ && state !== 'over') drawPet();
+        if (showPets) {
+          for (let i = 0; i < players.length; i++) {
+            if (Math.round(players[i].z) === z) drawPet(players[i], i);
+          }
+        }
+      }
+      // 1P looming-eagle warning: a growing shadow over the pet as the idle timer runs out
+      if (numPlayers === 1 && state === 'playing' && players[0] && idleMs > IDLE_MS - IDLE_WARN_MS) {
+        const k = (idleMs - (IDLE_MS - IDLE_WARN_MS)) / IDLE_WARN_MS;   // 0 → 1
+        const cx = colX(players[0].x), cy = rowY(players[0].z);
+        ctx.fillStyle = 'rgba(0,0,0,' + (0.12 + k * 0.32).toFixed(3) + ')';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 13 + k * 22, 6 + k * 11, 0, 0, Math.PI * 2);
+        ctx.fill();
       }
       if (eagle) drawEagle();
       if (state !== 'select') drawHUD();
     }
 
     // ---------- main loop ----------
-    function loop() { update(); draw(); requestAnimationFrame(loop); }
-    loop();
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      dtMs = Math.min(Math.max(ts - lastTs, 1), 100);  // clamp tab-switch gaps; refresh-rate independent
+      lastTs = ts;
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
   })();
   </script>
 
