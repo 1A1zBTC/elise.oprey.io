@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Flappy Dog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .back {
+      color: #a0a8c0;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+    .title {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .layout {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      justify-content: center;
+      width: 100%;
+      max-width: 740px;
+    }
+
+    .game-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .stage {
+      position: relative;
+      height: min(600px, 78vh);
+      max-width: 100%;
+      aspect-ratio: 400 / 600;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+      border: 2px solid #0f3460;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hint {
+      margin-top: 14px;
+      color: #a0a8c0;
+      font-size: 0.85rem;
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .shop {
+      flex: 1 1 260px;
+      max-width: 300px;
+      align-self: stretch;
+      max-height: min(600px, 78vh);
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .players-toggle {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .seg {
+      flex: 1;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 0.82rem;
+      color: #cfd6ea;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 8px 10px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .seg.active {
+      border-color: #e94560;
+      color: #fff;
+      background: #1f2b50;
+      box-shadow: 0 0 12px rgba(233, 69, 96, 0.3);
+    }
+
+    @media (max-width: 720px) {
+      html, body { overflow: auto; }
+      body { justify-content: flex-start; }
+      .layout { flex-direction: column; align-items: center; gap: 14px; }
+      .stage { height: auto; width: 100%; max-width: 400px; }
+      .shop { width: 100%; max-width: 400px; max-height: none; overflow: visible; flex: none; }
+    }
+
+    .bones-bar {
+      text-align: center;
+      color: #ffe8b0;
+      font-weight: 800;
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+    }
+
+    .shop-section {
+      margin-bottom: 12px;
+    }
+
+    .shop-label {
+      color: #a0a8c0;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .shop-label b { color: #ffe8b0; }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .chip {
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 0.78rem;
+      color: #cfd6ea;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 6px 11px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .chip:hover:not(:disabled) {
+      border-color: #e94560;
+      color: #fff;
+    }
+
+    .chip.active {
+      border-color: #e94560;
+      color: #fff;
+      background: #1f2b50;
+      box-shadow: 0 0 12px rgba(233, 69, 96, 0.3);
+    }
+
+    /* affordable purchase — green nudge */
+    .chip.buy {
+      color: #bdf0c0;
+      border-color: #2f7d46;
+    }
+
+    .chip.buy:hover:not(:disabled) {
+      border-color: #46c46a;
+      color: #fff;
+      background: #1c3526;
+    }
+
+    .chip:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Flappy Dog</span>
+    <span style="width:64px"></span>
+  </div>
+
+  <div class="layout">
+    <div class="game-col">
+      <div class="stage">
+        <canvas id="game" width="400" height="600"></canvas>
+      </div>
+      <p class="hint">P1: Space / ↑ / tap bottom&nbsp;&nbsp;·&nbsp;&nbsp;P2: Right Ctrl / tap top</p>
+    </div>
+
+    <aside class="shop">
+      <div class="players-toggle">
+        <button id="onePlayer" class="seg" type="button">1 Player</button>
+        <button id="twoPlayer" class="seg" type="button">2 Players</button>
+      </div>
+
+      <div class="bones-bar">🦴 <span id="boneCount">0</span> bones — spend or save up</div>
+
+      <div class="shop-section">
+        <div class="shop-label">Breeds · <b>10🦴</b></div>
+        <div id="breeds" class="chips"></div>
+      </div>
+
+      <div class="shop-section">
+        <div class="shop-label">Costumes · <b>5🦴</b></div>
+        <div id="costumes" class="chips"></div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;   // logical width
+    const H = canvas.height;  // logical height
+
+    // ---- Tunables ----
+    const GROUND_H = 90;
+    const DOG_X = 110;
+    const DOG_R = 22;          // collision radius-ish
+    const PIPE_W = 64;
+    const PIPE_MIN_TOP = 60;
+
+    // Difficulty ramps from very easy to hard over RAMP_FRAMES of *play time*
+    // (not score), so a quick death doesn't keep things stuck on hard. It
+    // starts really floaty & slow, then gradually speeds up the longer you last.
+    const RAMP_FRAMES = 60 * 80;   // ~80s at 60fps to reach full difficulty (slow ramp)
+    const GRAVITY_MIN = 0.085, GRAVITY_MAX = 0.16;  // drop speed halved
+    const FLAP_MIN = -3.4,    FLAP_MAX = -4.7;   // trimmed to keep the same ~68px hop height
+    const MAX_FALL = 4;
+    const SPEED_MIN = 0.9,    SPEED_MAX = 2.3;   // pipes stay slow, never get frantic
+    const GAP_MIN = 205,      GAP_MAX = 260;     // gaps stay generous even at full difficulty
+    const PIPE_SPACING = 320;  // lots of horizontal space between pipe pairs = more reaction time
+
+    // Live difficulty values, recomputed each frame from elapsed play time.
+    let GRAVITY = GRAVITY_MIN;
+    let FLAP = FLAP_MIN;
+    let PIPE_SPEED = SPEED_MIN;
+    let GAP = GAP_MAX;
+    let playFrames = 0;  // frames spent in 'playing' state, drives the ramp
+
+    function applyDifficulty() {
+      // ease-in (t²) so the early game stays easy longer before ramping up
+      const lin = Math.min(playFrames / RAMP_FRAMES, 1);  // 0 → 1
+      const t = lin * lin;
+      GRAVITY = GRAVITY_MIN + (GRAVITY_MAX - GRAVITY_MIN) * t;
+      FLAP = FLAP_MIN + (FLAP_MAX - FLAP_MIN) * t;
+      PIPE_SPEED = SPEED_MIN + (SPEED_MAX - SPEED_MIN) * t;
+      GAP = GAP_MAX + (GAP_MIN - GAP_MAX) * t;
+    }
+
+    const BEST_KEY = 'flappydog.best';     // legacy single best (migrated to per-breed)
+    const BESTS_KEY = 'flappydog.bests';   // per-breed high scores
+    const TREATS_KEY = 'flappydog.treats';     // spendable bone balance
+    const OWNED_KEY = 'flappydog.owned';       // how many breeds are unlocked
+    const SKIN_KEY = 'flappydog.skin';         // currently equipped breed
+    const COSTUMES_KEY = 'flappydog.costumes'; // which costumes are owned
+    const COSTUME_KEY = 'flappydog.costume';   // currently equipped costume (-1 = none)
+
+    const BREED_COST = 10;     // bones to unlock a breed
+    const COSTUME_COST = 5;    // bones to unlock a costume
+
+    // Dog breeds (skins). Collect 10 treats to morph into the next one.
+    // Each defines a fur palette + shape traits drawDog() reads to build a
+    // recognizable silhouette:
+    //   ear   'pointy' | 'floppy'   earBig: tall upright ears   earLong: long hanging ears
+    //   build 'normal' | 'long' (low & stretched) | 'tall' (lean) | 'stocky' (broad)
+    //   snout 'med' | 'flat' (pushed-in) | 'short' | 'long' (extended muzzle)
+    //   coat  'smooth' | 'fluffy' (chest ruff + fluff) | 'curly' (poodle puffs)
+    //   tail  'plume' | 'curl' (curled over back) | 'thin' (whippy) | 'pom' (poodle)
+    const BREEDS = [
+      { name: 'Corgi',            body:'#ec9f4e', patch:'#ffe9c8', ear:'pointy', earBig:true,  build:'long',   snout:'med',   coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Golden Retriever', body:'#f1c46a', patch:'#e3ad4e', ear:'floppy', earLong:true, build:'normal', snout:'med',   coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'Dalmatian',        body:'#ffffff', patch:'#ffffff', ear:'floppy',               build:'normal', snout:'med',   coat:'smooth', tail:'thin',  spots:true,  mask:null },
+      { name: 'Husky',            body:'#cdd2d9', patch:'#ffffff', ear:'pointy',               build:'normal', snout:'med',   coat:'fluffy', tail:'curl',  spots:false, mask:'#6b7280' },
+      { name: 'Chocolate Lab',    body:'#6f4326', patch:'#6f4326', ear:'floppy',               build:'normal', snout:'med',   coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Shiba Inu',        body:'#e08a3c', patch:'#fbe9cf', ear:'pointy',               build:'normal', snout:'med',   coat:'fluffy', tail:'curl',  spots:false, mask:null },
+      { name: 'Black Lab',        body:'#33343a', patch:'#33343a', ear:'floppy',               build:'normal', snout:'med',   coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Beagle',           body:'#ffffff', patch:'#9c6428', ear:'floppy', earLong:true, build:'normal', snout:'med',   coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Poodle',           body:'#f3ead9', patch:'#f3ead9', ear:'floppy',               build:'normal', snout:'long',  coat:'curly',  tail:'pom',   spots:false, mask:null },
+      { name: 'Pug',              body:'#e6c78a', patch:'#e6c78a', ear:'floppy',               build:'stocky', snout:'flat',  coat:'smooth', tail:'curl',  spots:false, mask:'#3a3530' },
+      { name: 'Border Collie',    body:'#2f3036', patch:'#ffffff', ear:'floppy',               build:'normal', snout:'long',  coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'German Shepherd',  body:'#c0823f', patch:'#2c2620', ear:'pointy', earBig:true,  build:'normal', snout:'long',  coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Samoyed',          body:'#ffffff', patch:'#f3f6fb', ear:'pointy',               build:'normal', snout:'med',   coat:'fluffy', tail:'curl',  spots:false, mask:null },
+      { name: 'Rottweiler',       body:'#2c2d33', patch:'#8a5a2b', ear:'floppy',               build:'stocky', snout:'med',   coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Bernese',          body:'#2c2d33', patch:'#b07636', ear:'floppy',               build:'normal', snout:'med',   coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'Boxer',            body:'#cf8a44', patch:'#cf8a44', ear:'floppy',               build:'stocky', snout:'flat',  coat:'smooth', tail:'plume', spots:false, mask:'#3a2a20' },
+      { name: 'Saint Bernard',    body:'#ffffff', patch:'#a9682f', ear:'floppy',               build:'normal', snout:'med',   coat:'fluffy', tail:'plume', spots:false, mask:'#a9682f' },
+      { name: 'Pomeranian',       body:'#e8973f', patch:'#f4bd78', ear:'pointy',               build:'normal', snout:'short', coat:'fluffy', tail:'curl',  spots:false, mask:null },
+      { name: 'Yellow Lab',       body:'#ecd9a8', patch:'#ecd9a8', ear:'floppy',               build:'normal', snout:'med',   coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Dachshund',        body:'#5a3320', patch:'#5a3320', ear:'floppy', earLong:true, build:'long',   snout:'long',  coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Chihuahua',        body:'#e3c08a', patch:'#e3c08a', ear:'pointy', earBig:true,  build:'normal', snout:'short', coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Cocker Spaniel',   body:'#c8702f', patch:'#c8702f', ear:'floppy', earLong:true, build:'normal', snout:'med',   coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'Great Dane',       body:'#d6a45a', patch:'#d6a45a', ear:'floppy',               build:'tall',   snout:'med',   coat:'smooth', tail:'thin',  spots:false, mask:'#2e2620' },
+      { name: 'Bulldog',          body:'#d8b482', patch:'#ffffff', ear:'floppy',               build:'stocky', snout:'flat',  coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Akita',            body:'#e0a85a', patch:'#ffffff', ear:'pointy',               build:'normal', snout:'med',   coat:'fluffy', tail:'curl',  spots:false, mask:null },
+      { name: 'Doberman',         body:'#2a2b31', patch:'#8a5a2b', ear:'pointy', earBig:true,  build:'tall',   snout:'long',  coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Greyhound',        body:'#c8ccd2', patch:'#c8ccd2', ear:'floppy',               build:'tall',   snout:'long',  coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Maltese',          body:'#fbfbf8', patch:'#fbfbf8', ear:'floppy', earLong:true, build:'normal', snout:'short', coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'Vizsla',           body:'#c0692f', patch:'#c0692f', ear:'floppy',               build:'normal', snout:'long',  coat:'smooth', tail:'plume', spots:false, mask:null },
+      { name: 'Blue Heeler',      body:'#7a8290', patch:'#5a4030', ear:'pointy', earBig:true,  build:'normal', snout:'med',   coat:'smooth', tail:'plume', spots:true,  mask:null },
+      { name: 'French Bulldog',   body:'#c9a06a', patch:'#c9a06a', ear:'pointy', earBig:true,  build:'stocky', snout:'flat',  coat:'smooth', tail:'thin',  spots:false, mask:'#5b4a3a' },
+      { name: 'Basset Hound',     body:'#ffffff', patch:'#9c6428', ear:'floppy', earLong:true, build:'long',   snout:'long',  coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Weimaraner',       body:'#9b958c', patch:'#9b958c', ear:'floppy', earLong:true, build:'tall',   snout:'long',  coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Bichon Frise',     body:'#fdfdfb', patch:'#fdfdfb', ear:'floppy',               build:'normal', snout:'short', coat:'curly',  tail:'pom',   spots:false, mask:null },
+      { name: 'Newfoundland',     body:'#26272d', patch:'#26272d', ear:'floppy',               build:'stocky', snout:'med',   coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'Chow Chow',        body:'#b35e26', patch:'#b35e26', ear:'pointy',               build:'normal', snout:'med',   coat:'fluffy', tail:'curl',  spots:false, mask:'#7a4a2a' },
+      { name: 'Mastiff',          body:'#cfa362', patch:'#cfa362', ear:'floppy',               build:'stocky', snout:'short', coat:'smooth', tail:'plume', spots:false, mask:'#3a2e22' },
+      { name: 'Irish Setter',     body:'#9c3d1c', patch:'#9c3d1c', ear:'floppy', earLong:true, build:'normal', snout:'long',  coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'Jack Russell',     body:'#fbfbf8', patch:'#a06a34', ear:'floppy',               build:'normal', snout:'med',   coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Shih Tzu',         body:'#e7d4a6', patch:'#fbfbf8', ear:'floppy', earLong:true, build:'normal', snout:'short', coat:'fluffy', tail:'curl',  spots:false, mask:null },
+      { name: 'Aussie Shepherd',  body:'#9aa0a8', patch:'#ffffff', ear:'floppy',               build:'normal', snout:'med',   coat:'fluffy', tail:'plume', spots:true,  mask:null },
+      { name: 'Cavalier Spaniel', body:'#fbfbf8', patch:'#b5632a', ear:'floppy', earLong:true, build:'normal', snout:'short', coat:'fluffy', tail:'plume', spots:false, mask:null },
+      { name: 'Pit Bull',         body:'#c79a63', patch:'#c79a63', ear:'pointy',               build:'stocky', snout:'short', coat:'smooth', tail:'thin',  spots:false, mask:null },
+      { name: 'Rough Collie',     body:'#c8924a', patch:'#ffffff', ear:'pointy',               build:'normal', snout:'long',  coat:'fluffy', tail:'plume', spots:false, mask:null }
+    ];
+
+    // Costumes — accessories layered on top of whichever breed is equipped.
+    const COSTUMES = [
+      { name: 'Party Hat',   id: 'party' },
+      { name: 'Bandana',     id: 'bandana' },
+      { name: 'Sunglasses',  id: 'shades' },
+      { name: 'Top Hat',     id: 'tophat' },
+      { name: 'Crown',       id: 'crown' },
+      { name: 'Bow Tie',     id: 'bowtie' },
+      { name: 'Cowboy Hat',  id: 'cowboy' },
+      { name: 'Beanie',      id: 'beanie' },
+      { name: 'Wizard Hat',  id: 'wizard' },
+      { name: 'Headphones',  id: 'headphones' },
+      { name: 'Halo',        id: 'halo' },
+      { name: 'Scarf',       id: 'scarf' },
+      { name: 'Santa Hat',    id: 'santa' },
+      { name: 'Flower Crown', id: 'flowers' },
+      { name: 'Grad Cap',     id: 'grad' },
+      { name: 'Chef Hat',     id: 'chef' },
+      { name: 'Antlers',      id: 'antlers' },
+      { name: 'Bunny Ears',   id: 'bunny' },
+      { name: 'Devil Horns',  id: 'devil' },
+      { name: 'Glasses',      id: 'glasses' },
+      { name: 'Baseball Cap', id: 'cap' },
+      { name: 'Viking Helm',  id: 'viking' }
+    ];
+
+    // ---- State ----
+    const PLAYERS_KEY = 'flappydog.players';   // 1 or 2 player mode
+    let state = 'ready';       // 'ready' | 'playing' | 'gameover'
+    let pipes;
+    let frame = 0;
+    let groundX = 0;
+    let clouds;
+    let deathFrame = -999;     // frame the round ended (restart debounce)
+    let numPlayers = parseInt(localStorage.getItem(PLAYERS_KEY) || '1', 10) === 2 ? 2 : 1;
+
+    // One entry per dog in play. 1P uses players[0]; 2P adds players[1], flapped by
+    // the right-hand control. Both dogs share the same pipes and difficulty ramp.
+    let players = [];
+
+    function makePlayer(id, breedIndex, x, costume) {
+      return {
+        id: id, x: x, breedIndex: breedIndex, skin: BREEDS[breedIndex], costume: costume,
+        y: H * 0.42, v: 0, angle: 0, flapAnim: 0,
+        alive: true, score: 0, newRecord: false, deathFrame: -999
+      };
+    }
+
+    // P2 flies a different breed so the two dogs are easy to tell apart: the next
+    // breed you own, or — if you only own one — a contrasting pup as the challenger.
+    function p2BreedIndex() {
+      return owned > 1 ? (skinIndex + 1) % owned : (skinIndex + 5) % BREEDS.length;
+    }
+
+    function buildPlayers() {
+      const p1costume = (costumeIndex >= 0 && costumesOwned.has(costumeIndex)) ? COSTUMES[costumeIndex].id : null;
+      players = [ makePlayer(0, skinIndex, numPlayers === 2 ? 96 : DOG_X, p1costume) ];
+      if (numPlayers === 2) players.push(makePlayer(1, p2BreedIndex(), 132, null));
+    }
+
+    // Per-breed high scores (one entry per breed).
+    const bests = BREEDS.map(function () { return 0; });
+    (function loadBests() {
+      const raw = localStorage.getItem(BESTS_KEY);
+      if (raw) {
+        raw.split(',').forEach(function (v, i) {
+          const n = parseInt(v, 10);
+          if (i < bests.length && !isNaN(n)) bests[i] = n;
+        });
+      } else {
+        // migrate the old single best into the Corgi's slot
+        const legacy = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
+        if (legacy > 0) bests[0] = legacy;
+      }
+    })();
+    function saveBests() {
+      try { localStorage.setItem(BESTS_KEY, bests.join(',')); } catch (e) {}
+    }
+
+    // Bones are a SPENDABLE balance that simply accumulates — nothing is bought
+    // automatically. In the shop the player chooses to spend them on a breed
+    // (BREED_COST) or a costume (COSTUME_COST), or save up. Costs are deducted on
+    // purchase. Owned breeds/costumes + current selections all persist.
+    let treats = parseInt(localStorage.getItem(TREATS_KEY) || '0', 10) || 0;
+    let owned = parseInt(localStorage.getItem(OWNED_KEY) || '1', 10) || 1;
+    owned = Math.max(1, Math.min(BREEDS.length, owned));
+    let unlockName = null, unlockUntil = 0;  // for the "new unlock!" toast
+
+    // owned costumes stored as a comma list of indices
+    const costumesOwned = new Set(
+      (localStorage.getItem(COSTUMES_KEY) || '').split(',')
+        .map(function (s) { return parseInt(s, 10); })
+        .filter(function (n) { return !isNaN(n); })
+    );
+    let costumeIndex = parseInt(localStorage.getItem(COSTUME_KEY), 10);
+    if (isNaN(costumeIndex) || !costumesOwned.has(costumeIndex)) costumeIndex = -1;
+
+    let skinIndex = parseInt(localStorage.getItem(SKIN_KEY) || '0', 10) || 0;
+    if (skinIndex < 0 || skinIndex >= owned) skinIndex = owned - 1;
+    let skin = BREEDS[skinIndex];
+    let pendingSkin = null;  // breed to apply after the dog falls (set during play)
+
+    function saveBones() { try { localStorage.setItem(TREATS_KEY, String(treats)); } catch (e) {} }
+
+    function equipSkin(i) {
+      skinIndex = i;
+      skin = BREEDS[i];
+      try { localStorage.setItem(SKIN_KEY, String(i)); } catch (e) {}
+      if (players[0] && state !== 'playing') { players[0].breedIndex = i; players[0].skin = skin; }
+      refreshShop();
+    }
+
+    function selectSkin(i) {
+      if (i < 0 || i >= owned) return;        // can't pick a locked breed
+      if (state === 'playing') {              // you only become the new breed after you fall
+        pendingSkin = i;
+        return;
+      }
+      equipSkin(i);
+    }
+
+    function buyBreed() {
+      if (treats < BREED_COST || owned >= BREEDS.length) return;
+      treats -= BREED_COST;
+      const newIndex = owned;
+      owned++;
+      try { localStorage.setItem(OWNED_KEY, String(owned)); } catch (e) {}
+      saveBones();
+      selectSkin(newIndex);              // equip (deferred to the fall if mid-run)
+      unlockName = BREEDS[newIndex].name;
+      unlockUntil = frame + 160;
+      refreshShop();
+    }
+
+    function equipCostume(i) {
+      costumeIndex = i;
+      try { localStorage.setItem(COSTUME_KEY, String(i)); } catch (e) {}
+      if (players[0]) players[0].costume = (i >= 0 && costumesOwned.has(i)) ? COSTUMES[i].id : null;
+      refreshShop();
+    }
+
+    function buyOrEquipCostume(i) {
+      if (costumesOwned.has(i)) {
+        equipCostume(i === costumeIndex ? -1 : i);   // toggle on/off
+        return;
+      }
+      if (treats < COSTUME_COST) return;
+      treats -= COSTUME_COST;
+      costumesOwned.add(i);
+      try { localStorage.setItem(COSTUMES_KEY, Array.from(costumesOwned).join(',')); } catch (e) {}
+      saveBones();
+      equipCostume(i);
+      unlockName = COSTUMES[i].name;
+      unlockUntil = frame + 160;
+      refreshShop();
+    }
+
+    function collectTreat() {
+      treats++;                          // just bank it — the player decides how to spend
+      saveBones();
+      refreshShop();
+    }
+
+    // --- shop UI (HTML buttons under the canvas) ---
+    const boneCountEl = document.getElementById('boneCount');
+    const breedsEl = document.getElementById('breeds');
+    const costumesEl = document.getElementById('costumes');
+
+    const breedBtns = BREEDS.map(function (b, i) {
+      const btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.type = 'button';
+      btn.addEventListener('click', function () {
+        if (i < owned) selectSkin(i);
+        else if (i === owned) buyBreed();
+        btn.blur();
+      });
+      breedsEl.appendChild(btn);
+      return btn;
+    });
+
+    const noCostumeBtn = document.createElement('button');
+    noCostumeBtn.className = 'chip';
+    noCostumeBtn.type = 'button';
+    noCostumeBtn.textContent = 'None';
+    noCostumeBtn.addEventListener('click', function () { equipCostume(-1); noCostumeBtn.blur(); });
+    costumesEl.appendChild(noCostumeBtn);
+
+    const costumeBtns = COSTUMES.map(function (c, i) {
+      const btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.type = 'button';
+      btn.addEventListener('click', function () { buyOrEquipCostume(i); btn.blur(); });
+      costumesEl.appendChild(btn);
+      return btn;
+    });
+
+    function refreshBreeds() {
+      for (let i = 0; i < breedBtns.length; i++) {
+        const btn = breedBtns[i];
+        if (i < owned) {                       // owned → selectable (shows its best)
+          btn.disabled = false;
+          btn.textContent = BREEDS[i].name + (bests[i] > 0 ? ' · ' + bests[i] : '');
+          btn.classList.toggle('active', i === skinIndex);
+          btn.classList.remove('buy');
+        } else if (i === owned) {              // next in line → buyable
+          const afford = treats >= BREED_COST;
+          btn.disabled = !afford;
+          btn.textContent = '＋ ' + BREEDS[i].name + ' · ' + BREED_COST + '🦴';
+          btn.classList.remove('active');
+          btn.classList.toggle('buy', afford);
+        } else {                               // still locked
+          btn.disabled = true;
+          btn.textContent = '🔒 ' + BREEDS[i].name;
+          btn.classList.remove('active', 'buy');
+        }
+      }
+    }
+
+    function refreshCostumes() {
+      noCostumeBtn.classList.toggle('active', costumeIndex < 0);
+      for (let i = 0; i < costumeBtns.length; i++) {
+        const btn = costumeBtns[i];
+        if (costumesOwned.has(i)) {            // owned → toggle wear
+          btn.disabled = false;
+          btn.textContent = COSTUMES[i].name;
+          btn.classList.toggle('active', i === costumeIndex);
+          btn.classList.remove('buy');
+        } else {                               // buyable
+          const afford = treats >= COSTUME_COST;
+          btn.disabled = !afford;
+          btn.textContent = '＋ ' + COSTUMES[i].name + ' · ' + COSTUME_COST + '🦴';
+          btn.classList.remove('active');
+          btn.classList.toggle('buy', afford);
+        }
+      }
+    }
+
+    function refreshShop() {
+      if (boneCountEl) boneCountEl.textContent = treats;
+      refreshBreeds();
+      refreshCostumes();
+    }
+    refreshShop();
+
+    // --- 1P / 2P toggle ---
+    const onePBtn = document.getElementById('onePlayer');
+    const twoPBtn = document.getElementById('twoPlayer');
+    function refreshPlayersToggle() {
+      if (onePBtn) onePBtn.classList.toggle('active', numPlayers === 1);
+      if (twoPBtn) twoPBtn.classList.toggle('active', numPlayers === 2);
+    }
+    function setPlayers(n) {
+      if (n === numPlayers) return;
+      numPlayers = n;
+      try { localStorage.setItem(PLAYERS_KEY, String(n)); } catch (e) {}
+      reset();
+      state = 'ready';
+      refreshPlayersToggle();
+    }
+    if (onePBtn) onePBtn.addEventListener('click', function () { setPlayers(1); onePBtn.blur(); });
+    if (twoPBtn) twoPBtn.addEventListener('click', function () { setPlayers(2); twoPBtn.blur(); });
+    refreshPlayersToggle();
+
+    function reset() {
+      pipes = [];
+      playFrames = 0;
+      applyDifficulty();  // reset to easiest settings
+      buildPlayers();
+      // pre-seed pipes off to the right
+      let x = W + 120;
+      for (let i = 0; i < 4; i++) {
+        pipes.push(makePipe(x));
+        x += PIPE_SPACING;
+      }
+      clouds = [
+        { x: 80,  y: 90,  s: 1.0 },
+        { x: 240, y: 150, s: 0.7 },
+        { x: 340, y: 70,  s: 0.85 }
+      ];
+    }
+
+    function makePipe(x) {
+      const gap = GAP;  // snapshot the gap at creation so it can't pop mid-flight
+      const playable = H - GROUND_H - gap - PIPE_MIN_TOP * 2;
+      const top = PIPE_MIN_TOP + Math.random() * playable;
+      // ~28% of pipes carry a treat floating somewhere in the gap (spread out).
+      const treat = Math.random() < 0.28
+        ? { collected: false, offY: gap * (0.3 + Math.random() * 0.4) }
+        : null;
+      // passedBy tracks which dog has already scored this pipe (keyed by player id).
+      return { x: x, top: top, gap: gap, passedBy: {}, treat: treat };
+    }
+
+    // Flap a specific dog (idx 0 = P1, 1 = P2). On the game-over screen any input
+    // restarts the round (after a short debounce).
+    function flap(idx) {
+      if (state === 'gameover') {
+        if (frame - deathFrame > 18) { reset(); state = 'ready'; }
+        return;
+      }
+      if (state === 'ready') state = 'playing';
+      const p = players[idx];
+      if (p && p.alive) { p.v = FLAP; p.flapAnim = 10; }
+    }
+
+    // ---- Input ----
+    // Pointer: in 2P the screen splits bottom (P1) / top (P2); otherwise anywhere = P1.
+    function onPress(e) {
+      if (e) e.preventDefault();
+      if (state === 'playing' && numPlayers === 2) {
+        const rect = canvas.getBoundingClientRect();
+        const py = (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY) - rect.top;
+        flap(py < rect.height / 2 ? 1 : 0);   // top half → P2, bottom half → P1
+      } else {
+        flap(0);
+      }
+    }
+    canvas.addEventListener('mousedown', onPress);
+    canvas.addEventListener('touchstart', onPress, { passive: false });
+    window.addEventListener('keydown', function (e) {
+      if (e.repeat) return;   // ignore auto-repeat from a held key
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+        e.preventDefault();
+        flap(0);
+      } else if (e.code === 'ControlRight') {
+        e.preventDefault();
+        flap(numPlayers === 2 ? 1 : 0);
+      }
+    });
+
+    // ---- Update ----
+    function update() {
+      frame++;
+      groundX = (groundX - PIPE_SPEED) % 24;
+
+      // parallax clouds always drift
+      for (const c of clouds) {
+        c.x -= 0.25 * c.s;
+        if (c.x < -60) { c.x = W + 40; c.y = 50 + Math.random() * 130; }
+      }
+
+      for (const p of players) if (p.flapAnim > 0) p.flapAnim--;
+
+      if (state === 'ready') {
+        // gentle bob while waiting
+        for (const p of players) {
+          p.y = H * 0.42 + Math.sin(frame / 14) * 8;
+          p.angle = Math.sin(frame / 14) * 0.06;
+        }
+        return;
+      }
+
+      if (state === 'gameover') {
+        for (const p of players) settleDead(p);
+        return;
+      }
+
+      // playing
+      playFrames++;
+      applyDifficulty();  // ramp gravity/speed/gap with elapsed play time
+
+      // per-dog physics (dead dogs keep falling to the ground)
+      for (const p of players) {
+        if (!p.alive) { settleDead(p); continue; }
+        p.v = Math.min(p.v + GRAVITY, MAX_FALL);
+        p.y += p.v;
+        const target = p.v < 0 ? -0.45 : Math.min(p.v / 12, 1.2);
+        p.angle += (target - p.angle) * 0.18;
+      }
+
+      // move pipes once; score & collect treats for each living dog
+      for (const pipe of pipes) {
+        pipe.x -= PIPE_SPEED;
+        for (const p of players) {
+          if (p.alive && !pipe.passedBy[p.id] && pipe.x + PIPE_W < p.x) {
+            pipe.passedBy[p.id] = true;
+            p.score++;
+          }
+        }
+        if (pipe.treat && !pipe.treat.collected) {
+          const tx = pipe.x + PIPE_W / 2;
+          const ty = pipe.top + pipe.treat.offY;
+          for (const p of players) {
+            if (p.alive && Math.hypot(p.x - tx, p.y - ty) < 26) {
+              pipe.treat.collected = true;
+              collectTreat();
+              break;
+            }
+          }
+        }
+      }
+      // recycle
+      if (pipes.length && pipes[0].x + PIPE_W < -20) {
+        pipes.shift();
+        const lastX = pipes[pipes.length - 1].x;
+        pipes.push(makePipe(lastX + PIPE_SPACING));
+      }
+
+      // collisions per living dog
+      for (const p of players) {
+        if (!p.alive) continue;
+        if (p.y + DOG_R * 0.85 >= H - GROUND_H) { killPlayer(p); continue; }
+        if (p.y - DOG_R * 0.85 <= 0) { p.y = DOG_R * 0.85; p.v = 0; }
+        for (const pipe of pipes) {
+          if (hitsPipe(pipe, p)) { killPlayer(p); break; }
+        }
+      }
+
+      // round ends once every dog is down
+      if (players.every(function (p) { return !p.alive; })) endRound();
+    }
+
+    // Dead dog keeps dropping until it rests on the ground.
+    function settleDead(p) {
+      if (p.y < H - GROUND_H - DOG_R) {
+        p.v = Math.min(p.v + GRAVITY, MAX_FALL);
+        p.y += p.v;
+        p.angle = Math.min(p.angle + 0.06, 1.3);
+      } else {
+        p.y = H - GROUND_H - DOG_R;
+      }
+    }
+
+    function hitsPipe(pipe, p) {
+      // dog hitbox: shrink generously so near-misses don't kill you
+      const dl = p.x - DOG_R * 0.58;
+      const dr = p.x + DOG_R * 0.58;
+      const dt = p.y - DOG_R * 0.58;
+      const db = p.y + DOG_R * 0.58;
+      if (dr < pipe.x || dl > pipe.x + PIPE_W) return false;
+      if (dt < pipe.top || db > pipe.top + pipe.gap) return true;
+      return false;
+    }
+
+    // One dog crashed — bank its best for the breed it flew.
+    function killPlayer(p) {
+      if (!p.alive) return;
+      p.alive = false;
+      p.deathFrame = frame;
+      p.newRecord = p.score > bests[p.breedIndex];
+      if (p.newRecord && p.score > 0) {
+        bests[p.breedIndex] = p.score;
+        saveBests();
+      }
+    }
+
+    function endRound() {
+      state = 'gameover';
+      deathFrame = frame;
+      // apply any breed unlocked/selected during the run now that the dogs have fallen
+      if (pendingSkin !== null) { equipSkin(pendingSkin); pendingSkin = null; }
+      refreshShop();   // reflect updated bests on the chips
+    }
+
+    // ---- Rendering ----
+    function draw() {
+      // sky
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, '#5ec8f0');
+      sky.addColorStop(0.7, '#9fe0f5');
+      sky.addColorStop(1, '#d6f3ff');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, H);
+
+      // clouds
+      for (const c of clouds) drawCloud(c.x, c.y, c.s);
+
+      // pipes
+      for (const p of pipes) drawPipe(p);
+
+      // treats (floating in the gaps)
+      for (const p of pipes) {
+        if (p.treat && !p.treat.collected) {
+          const tx = p.x + PIPE_W / 2;
+          const ty = p.top + p.treat.offY + Math.sin(frame / 12 + p.x / 40) * 3;
+          drawTreat(tx, ty);
+        }
+      }
+
+      // ground
+      drawGround();
+
+      // dogs (P1 first so P2 layers on top in 2-player)
+      for (const p of players) drawDog(p);
+
+      // UI overlays
+      drawUI();
+    }
+
+    function drawCloud(x, y, s) {
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y, 18 * s, 0, Math.PI * 2);
+      ctx.arc(x + 20 * s, y + 4 * s, 22 * s, 0, Math.PI * 2);
+      ctx.arc(x + 44 * s, y, 16 * s, 0, Math.PI * 2);
+      ctx.arc(x + 22 * s, y - 10 * s, 16 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // A little bone treat with a soft glow.
+    function drawTreat(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-0.35);
+
+      // glow halo
+      ctx.fillStyle = 'rgba(255, 240, 180, 0.35)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      // bone: middle bar + two knobs on each end
+      ctx.fillStyle = '#f3e3c0';
+      ctx.strokeStyle = '#caa46a';
+      ctx.lineWidth = 1.6;
+      const L = 9, k = 4.2;
+      function knobs(cx) {
+        ctx.beginPath();
+        ctx.arc(cx, -k, k, 0, Math.PI * 2);
+        ctx.arc(cx, k, k, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      // shaft
+      ctx.beginPath();
+      ctx.fillRect(-L, -3, L * 2, 6);
+      ctx.fillRect(-L, -3, L * 2, 6);
+      knobs(-L);
+      knobs(L);
+      ctx.fillStyle = '#f3e3c0';
+      ctx.fillRect(-L, -3, L * 2, 6);
+      ctx.strokeRect(-L, -3, L * 2, 6);
+
+      // sparkle
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.arc(-3, -1, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawPipe(p) {
+      const gapTop = p.top;
+      const gapBottom = p.top + p.gap;
+      const x = p.x;
+
+      function segment(yTop, yBot, capAtBottom) {
+        // body gradient (bone-ish / green pipe) — go for a playful green
+        const g = ctx.createLinearGradient(x, 0, x + PIPE_W, 0);
+        g.addColorStop(0, '#69b34c');
+        g.addColorStop(0.4, '#8fd16a');
+        g.addColorStop(0.5, '#a7e07f');
+        g.addColorStop(0.6, '#8fd16a');
+        g.addColorStop(1, '#4f9437');
+        ctx.fillStyle = g;
+        ctx.fillRect(x, yTop, PIPE_W, yBot - yTop);
+        ctx.strokeStyle = '#3c7a2a';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x + 1.5, yTop, PIPE_W - 3, yBot - yTop);
+
+        // cap (lip)
+        const capH = 26;
+        const capW = PIPE_W + 12;
+        const capX = x - 6;
+        const capY = capAtBottom ? yTop : yBot - capH;
+        ctx.fillStyle = g;
+        ctx.fillRect(capX, capY, capW, capH);
+        ctx.strokeRect(capX + 1.5, capY + 1.5, capW - 3, capH - 3);
+        // highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.28)';
+        ctx.fillRect(x + 7, yTop, 7, yBot - yTop);
+      }
+
+      // top pipe (from 0 down to gapTop), cap at its bottom
+      segment(0, gapTop, false);
+      // bottom pipe (from gapBottom to ground), cap at its top
+      segment(gapBottom, H - GROUND_H, true);
+    }
+
+    function drawGround() {
+      const gy = H - GROUND_H;
+      // dirt
+      ctx.fillStyle = '#caa46a';
+      ctx.fillRect(0, gy, W, GROUND_H);
+      // grass strip
+      ctx.fillStyle = '#7ec850';
+      ctx.fillRect(0, gy, W, 16);
+      ctx.fillStyle = '#5fae38';
+      ctx.fillRect(0, gy + 14, W, 4);
+      // little grass tufts scrolling
+      ctx.fillStyle = '#9fd96a';
+      for (let x = groundX; x < W; x += 24) {
+        ctx.beginPath();
+        ctx.moveTo(x, gy + 16);
+        ctx.lineTo(x + 6, gy + 4);
+        ctx.lineTo(x + 12, gy + 16);
+        ctx.fill();
+      }
+      // dirt speckles
+      ctx.fillStyle = 'rgba(120,84,40,0.5)';
+      for (let x = groundX; x < W; x += 24) {
+        ctx.fillRect(x + 6, gy + 40, 4, 4);
+        ctx.fillRect(x + 16, gy + 60, 3, 3);
+      }
+    }
+
+    // Lighten a #rrggbb color toward white by amt (0..1).
+    function tint(hex, amt) {
+      const n = parseInt(hex.slice(1), 16);
+      const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+      const f = c => Math.round(c + (255 - c) * amt);
+      return 'rgb(' + f(r) + ',' + f(g) + ',' + f(b) + ')';
+    }
+
+    // Costume accessories, drawn in dog-local space (head centered near hx, hy).
+    function drawCostumeOverlay(id, hx, hy) {
+      ctx.save();
+      if (id === 'party') {
+        ctx.fillStyle = '#ff5d8f';
+        ctx.beginPath();
+        ctx.moveTo(hx - 11, hy - 9); ctx.lineTo(hx + 7, hy - 11); ctx.lineTo(hx - 3, hy - 32);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(hx - 7, hy - 16); ctx.lineTo(hx + 2, hy - 17);
+        ctx.moveTo(hx - 5, hy - 22); ctx.lineTo(hx + 1, hy - 23);
+        ctx.stroke();
+        ctx.fillStyle = '#ffe08a';
+        ctx.beginPath(); ctx.arc(hx - 3, hy - 32, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (id === 'tophat') {
+        ctx.fillStyle = '#26262e';
+        ctx.beginPath(); ctx.ellipse(hx - 1, hy - 11, 15, 4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(hx - 8, hy - 27, 15, 17);
+        ctx.beginPath(); ctx.ellipse(hx - 0.5, hy - 27, 7.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e94560';
+        ctx.fillRect(hx - 8, hy - 16, 15, 4);
+      } else if (id === 'crown') {
+        const by = hy - 11;
+        ctx.fillStyle = '#ffcf3f';
+        ctx.beginPath();
+        ctx.moveTo(hx - 11, by); ctx.lineTo(hx - 11, by - 6); ctx.lineTo(hx - 6, by - 1);
+        ctx.lineTo(hx - 1, by - 8); ctx.lineTo(hx + 4, by - 1); ctx.lineTo(hx + 8, by - 6);
+        ctx.lineTo(hx + 8, by); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e94560';
+        ctx.beginPath(); ctx.arc(hx - 1, by - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+      } else if (id === 'shades') {
+        ctx.fillStyle = '#1c1c22';
+        ctx.beginPath(); ctx.ellipse(hx + 5, hy - 2, 5.5, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx + 14, hy - 1, 4.5, 4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(hx + 9.5, hy - 2.5); ctx.lineTo(hx + 11, hy - 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(hx + 0.5, hy - 3); ctx.lineTo(hx - 6, hy - 5); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(hx + 3, hy - 4); ctx.lineTo(hx + 6, hy - 1); ctx.stroke();
+      } else if (id === 'bandana') {
+        ctx.fillStyle = '#e94560';
+        ctx.beginPath();
+        ctx.moveTo(hx - 10, hy + 7); ctx.lineTo(hx + 4, hy + 9); ctx.lineTo(hx - 5, hy + 20);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx + 2, hy + 9, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(hx - 5, hy + 11, 1.3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx - 1, hy + 14, 1.3, 0, Math.PI * 2); ctx.fill();
+      } else if (id === 'bowtie') {
+        const cxb = hx - 2, cyb = hy + 11;
+        ctx.fillStyle = '#5b8cff';
+        ctx.beginPath();
+        ctx.moveTo(cxb, cyb); ctx.lineTo(cxb - 9, cyb - 5); ctx.lineTo(cxb - 9, cyb + 5);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cxb, cyb); ctx.lineTo(cxb + 9, cyb - 5); ctx.lineTo(cxb + 9, cyb + 5);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#3f6bd6';
+        ctx.fillRect(cxb - 2, cyb - 3, 4, 6);
+      } else if (id === 'cowboy') {
+        ctx.fillStyle = '#9c6b34';
+        ctx.beginPath(); ctx.ellipse(hx - 1, hy - 10, 18, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(hx - 8, hy - 10);
+        ctx.quadraticCurveTo(hx - 8, hy - 22, hx - 1, hy - 22);
+        ctx.quadraticCurveTo(hx + 6, hy - 22, hx + 6, hy - 10);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#5c3720';
+        ctx.fillRect(hx - 8, hy - 14, 14, 3);
+      } else if (id === 'beanie') {
+        ctx.fillStyle = '#4a8fd6';
+        ctx.beginPath(); ctx.arc(hx - 1, hy - 8, 11, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e94560';
+        ctx.fillRect(hx - 12, hy - 9, 22, 4);
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(hx - 1, hy - 20, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (id === 'wizard') {
+        ctx.fillStyle = '#5b4b9e';
+        ctx.beginPath();
+        ctx.moveTo(hx - 12, hy - 9); ctx.lineTo(hx + 8, hy - 10); ctx.lineTo(hx - 6, hy - 34);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx - 2, hy - 9, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe08a';
+        ctx.beginPath(); ctx.arc(hx - 4, hy - 18, 1.6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx - 6, hy - 26, 1.3, 0, Math.PI * 2); ctx.fill();
+      } else if (id === 'headphones') {
+        ctx.strokeStyle = '#26262e'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(hx, hy, 17, Math.PI * 1.18, Math.PI * 1.82); ctx.stroke();
+        ctx.fillStyle = '#e94560';
+        ctx.beginPath(); ctx.ellipse(hx - 14, hy - 1, 3.5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx + 12, hy - 2, 3.5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+      } else if (id === 'halo') {
+        ctx.strokeStyle = 'rgba(255,240,140,0.5)'; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.ellipse(hx - 1, hy - 19, 9, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(hx - 1, hy - 19, 9, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
+      } else if (id === 'scarf') {
+        ctx.fillStyle = '#cf4f4f';
+        ctx.beginPath(); ctx.ellipse(hx - 6, hy + 10, 11, 5, -0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(hx - 3, hy + 10, 5, 14);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(hx - 3, hy + 19, 5, 2);
+        ctx.fillRect(hx - 3, hy + 22, 5, 2);
+      } else if (id === 'santa') {
+        ctx.fillStyle = '#e23b3b';
+        ctx.beginPath();
+        ctx.moveTo(hx - 11, hy - 9); ctx.lineTo(hx + 9, hy - 10); ctx.lineTo(hx - 7, hy - 30);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff';   // brim
+        ctx.beginPath(); ctx.ellipse(hx - 1, hy - 10, 13, 4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx - 7, hy - 30, 3.5, 0, Math.PI * 2); ctx.fill();  // pom
+      } else if (id === 'flowers') {
+        const fy = hy - 11, cols = ['#ff7aa8', '#ffd24a', '#9b7bff', '#74d6a0'];
+        for (let i = 0; i < 4; i++) {
+          const fx = hx - 11 + i * 7;
+          ctx.fillStyle = cols[i % cols.length];
+          for (let p = 0; p < 5; p++) {
+            const a = p / 5 * Math.PI * 2;
+            ctx.beginPath(); ctx.arc(fx + Math.cos(a) * 2.2, fy + Math.sin(a) * 2.2, 1.6, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.fillStyle = '#fff3b0';
+          ctx.beginPath(); ctx.arc(fx, fy, 1.3, 0, Math.PI * 2); ctx.fill();
+        }
+      } else if (id === 'grad') {
+        ctx.fillStyle = '#26262e';
+        ctx.fillRect(hx - 8, hy - 14, 16, 6);   // cap base
+        ctx.beginPath();                         // mortarboard
+        ctx.moveTo(hx - 1, hy - 20); ctx.lineTo(hx + 15, hy - 14);
+        ctx.lineTo(hx - 1, hy - 8); ctx.lineTo(hx - 17, hy - 14);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#ffcf3f'; ctx.lineWidth = 1.4;  // tassel
+        ctx.beginPath(); ctx.moveTo(hx - 1, hy - 14); ctx.lineTo(hx + 13, hy - 12); ctx.lineTo(hx + 13, hy - 4); ctx.stroke();
+        ctx.fillStyle = '#ffcf3f';
+        ctx.beginPath(); ctx.arc(hx - 1, hy - 14, 1.6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx + 13, hy - 3, 2, 0, Math.PI * 2); ctx.fill();
+      } else if (id === 'chef') {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(hx - 7, hy - 17, 5, 0, Math.PI * 2);
+        ctx.arc(hx + 1, hy - 21, 6, 0, Math.PI * 2);
+        ctx.arc(hx + 8, hy - 17, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(hx - 9, hy - 15, 18, 6);   // band
+        ctx.strokeStyle = '#e1e1e1'; ctx.lineWidth = 1; ctx.strokeRect(hx - 9, hy - 15, 18, 6);
+      } else if (id === 'antlers') {
+        ctx.strokeStyle = '#9c6b34'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        for (const dir of [-1, 1]) {
+          const bx = hx + dir * 5, by = hy - 10;
+          ctx.beginPath();
+          ctx.moveTo(bx, by); ctx.lineTo(bx + dir * 4, by - 13);
+          ctx.moveTo(bx + dir * 2, by - 6); ctx.lineTo(bx + dir * 7, by - 8);
+          ctx.moveTo(bx + dir * 3, by - 10); ctx.lineTo(bx + dir * 8, by - 13);
+          ctx.stroke();
+        }
+      } else if (id === 'bunny') {
+        for (const e of [[-5, -0.15], [5, 0.15]]) {
+          ctx.save();
+          ctx.translate(hx + e[0], hy - 12); ctx.rotate(e[1]);
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.ellipse(0, -6, 3.5, 11, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffb6c8';
+          ctx.beginPath(); ctx.ellipse(0, -6, 1.6, 8, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+      } else if (id === 'devil') {
+        ctx.fillStyle = '#d23b3b';
+        for (const dx of [-7, 7]) {
+          ctx.beginPath();
+          ctx.moveTo(hx + dx - 2.5, hy - 9);
+          ctx.quadraticCurveTo(hx + dx, hy - 19, hx + dx + 3, hy - 9);
+          ctx.closePath(); ctx.fill();
+        }
+      } else if (id === 'glasses') {
+        ctx.strokeStyle = '#3a2e22'; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.arc(hx + 5, hy - 2, 4.6, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(hx + 14, hy - 1, 4, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(hx + 9.5, hy - 2); ctx.lineTo(hx + 10.3, hy - 1.6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(hx + 0.6, hy - 3); ctx.lineTo(hx - 5, hy - 5); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(hx + 5, hy - 2, 4.6, Math.PI * 1.05, Math.PI * 1.5); ctx.stroke();
+      } else if (id === 'cap') {
+        ctx.fillStyle = '#3f6bd6';
+        ctx.beginPath(); ctx.arc(hx - 1, hy - 8, 11, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx + 12, hy - 8, 9, 3.2, 0, 0, Math.PI * 2); ctx.fill();  // brim
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(hx - 1, hy - 17, 1.8, 0, Math.PI * 2); ctx.fill();   // button
+      } else if (id === 'viking') {
+        ctx.fillStyle = '#9aa3b0';
+        ctx.beginPath(); ctx.arc(hx - 1, hy - 8, 11, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#7b8694'; ctx.fillRect(hx - 12, hy - 9, 22, 3);
+        ctx.fillStyle = '#f0e6cf';
+        for (const dir of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(hx + dir * 9, hy - 9);
+          ctx.quadraticCurveTo(hx + dir * 18, hy - 13, hx + dir * 15, hy - 22);
+          ctx.quadraticCurveTo(hx + dir * 12, hy - 15, hx + dir * 8, hy - 12);
+          ctx.closePath(); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // The dog, drawn procedurally from the current `skin`, centered on (cx, cy).
+    // Each breed's traits (build / snout / coat / ears / tail) reshape the same
+    // base pup into a recognizable silhouette.
+    function drawDog(p) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      const legSwing = p.flapAnim > 0 ? Math.sin((10 - p.flapAnim) / 10 * Math.PI) * 6 : 0;
+      const s = p.skin;
+      const build = s.build || 'normal';
+      const snoutT = s.snout || 'med';
+      const coat = s.coat || 'smooth';
+      const tailT = s.tail || 'plume';
+      const twoTone = s.patch !== s.body;   // does this breed carry a marking colour
+
+      // --- body proportions by build ---
+      let bodyRX = 26, bodyRY = 17, bodyCY = 4, legRY = 9, backLegY = 12, frontLegY = 14;
+      if (build === 'long') {            // dachshund / corgi: low & stretched
+        bodyRX = 31; bodyRY = 13; bodyCY = 7; legRY = 7; backLegY = 15; frontLegY = 16;
+      } else if (build === 'tall') {     // greyhound / dane / doberman: lean & leggy
+        bodyRX = 21; bodyRY = 18; bodyCY = 2; legRY = 14; backLegY = 12; frontLegY = 14;
+      } else if (build === 'stocky') {   // pug / bulldog / boxer: broad & low
+        bodyRX = 27; bodyRY = 19; bodyCY = 5; legRY = 7; backLegY = 15; frontLegY = 16;
+      }
+
+      // --- shadow under body ---
+      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      ctx.beginPath();
+      ctx.ellipse(0, 22, bodyRX, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // --- back legs ---
+      ctx.fillStyle = s.body;
+      stubLeg(-12, backLegY + legSwing, legRY);
+      stubLeg(10, backLegY - legSwing, legRY);
+
+      // --- body ---
+      ctx.fillStyle = s.body;
+      ctx.beginPath();
+      ctx.ellipse(-2, bodyCY, bodyRX, bodyRY, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // saddle / marking over the back (only when the breed has a 2nd colour)
+      if (twoTone) {
+        ctx.fillStyle = s.patch;
+        ctx.beginPath();
+        ctx.ellipse(-6, bodyCY - 8, bodyRX * 0.68, bodyRY * 0.6, 0, Math.PI * 1.02, Math.PI * 1.98);
+        ctx.fill();
+      }
+
+      // spots (dalmatian / blue heeler)
+      if (s.spots) {
+        const heeler = s.name === 'Blue Heeler';
+        ctx.fillStyle = heeler ? 'rgba(42,46,56,0.55)' : '#2b2b2b';
+        const r = heeler ? 1 : 1.25;   // dalmatian wears bigger, bolder spots
+        spot(-16, 2, 3.6 * r); spot(-4, 9, 3 * r); spot(8, -2, 3.2 * r);
+        spot(-9, -4, 2.6 * r); spot(-22, 6, 2.8 * r); spot(16, 6, 2.6 * r);
+      }
+
+      // --- tail (in front of the body so curls read clearly) ---
+      drawTail(tailT);
+
+      // --- front legs ---
+      ctx.fillStyle = s.body;
+      stubLeg(2, frontLegY - legSwing, legRY);
+      stubLeg(16, frontLegY + legSwing, legRY);
+
+      // fluffy chest ruff (samoyed / pomeranian / collie ...)
+      if (coat === 'fluffy') {
+        ctx.fillStyle = tint(s.body, 0.12);
+        puff(13, -3, 6); puff(16, 4, 6); puff(15, 11, 5); puff(9, 8, 5);
+      }
+      // curly poodle coat — scalloped puffs over body + leg poofs
+      if (coat === 'curly') {
+        ctx.fillStyle = tint(s.body, 0.06);
+        puff(-22, -5, 7); puff(-12, -9, 8); puff(0, -9, 8); puff(12, -6, 7);
+        puff(-17, 9, 6); puff(-3, 12, 6); puff(11, 9, 6);
+        ctx.fillStyle = s.body;
+        puff(-11, backLegY + 7, 5); puff(15, frontLegY + 7, 5);
+      }
+
+      // --- head ---
+      const hx = 22, hy = -8;
+      drawEars(hx, hy);
+
+      // head shape
+      ctx.fillStyle = s.body;
+      ctx.beginPath();
+      ctx.ellipse(hx, hy, 17, 15, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // marking over top of head (cap / blaze)
+      if (twoTone) {
+        ctx.fillStyle = s.patch;
+        ctx.beginPath();
+        ctx.ellipse(hx, hy - 4, 16, 10, 0, Math.PI * 1.05, Math.PI * 1.95);
+        ctx.fill();
+      }
+
+      // husky / boxer-style mask over the forehead / around the eye
+      if (s.mask) {
+        ctx.fillStyle = s.mask;
+        ctx.beginPath();
+        ctx.ellipse(hx, hy - 5, 14, 8, 0, Math.PI * 1.05, Math.PI * 1.95);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(hx + 4, hy - 1, 6, 6.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // curly topknot / fluffy face for the fluffiest breeds
+      if (coat === 'curly') {
+        ctx.fillStyle = tint(s.body, 0.06);
+        puff(hx - 6, hy - 11, 6); puff(hx + 4, hy - 13, 6); puff(hx + 12, hy - 8, 5);
+      } else if (coat === 'fluffy') {
+        ctx.fillStyle = tint(twoTone ? s.patch : s.body, 0.1);
+        puff(hx - 11, hy + 3, 5); puff(hx - 8, hy + 9, 4);
+      }
+
+      // --- snout geometry by type ---
+      let snX = hx + 13, snRX = 10, snRY = 8, snY = hy + 3, noseX = hx + 22, noseY = hy + 2;
+      if (snoutT === 'flat')       { snX = hx + 9;  snRX = 9;  snRY = 8.5; snY = hy + 4; noseX = hx + 15; noseY = hy + 3; }
+      else if (snoutT === 'short') { snX = hx + 11; snRX = 8;  snRY = 7;   snY = hy + 3; noseX = hx + 18; noseY = hy + 2; }
+      else if (snoutT === 'long')  { snX = hx + 17; snRX = 12; snRY = 6;   snY = hy + 3; noseX = hx + 28; noseY = hy + 2; }
+
+      // snout (lighter muzzle, jutting forward) — keeps dark breeds from being a blob
+      ctx.fillStyle = twoTone ? tint(s.patch, 0.5) : tint(s.body, 0.2);
+      ctx.beginPath();
+      ctx.ellipse(snX, snY, snRX, snRY, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // nose
+      ctx.fillStyle = '#2b2b2b';
+      ctx.beginPath();
+      ctx.ellipse(noseX, noseY, 4, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // nose shine
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(noseX - 1, noseY - 1, 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // tongue (little, while still alive)
+      if (p.alive) {
+        ctx.fillStyle = '#ff8aa0';
+        ctx.beginPath();
+        ctx.ellipse(noseX - 4, hy + 9, 3, 4.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // eye
+      ctx.fillStyle = '#2b2b2b';
+      if (!p.alive) {
+        // x_x eyes
+        ctx.strokeStyle = '#2b2b2b';
+        ctx.lineWidth = 2;
+        cross(hx + 4, hy - 2, 3);
+      } else {
+        ctx.beginPath();
+        ctx.arc(hx + 5, hy - 2, 3.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(hx + 6.2, hy - 3.2, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // cheek blush
+      ctx.fillStyle = 'rgba(255,150,160,0.35)';
+      ctx.beginPath();
+      ctx.arc(hx + 2, hy + 6, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // costume on top
+      if (p.costume) {
+        drawCostumeOverlay(p.costume, hx, hy);
+      }
+
+      ctx.restore();
+
+      // ---- nested helpers ----
+      function stubLeg(lx, ly, ry) {
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 6, ry || 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      function puff(px, py, r) {
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      function drawTail(type) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        if (type === 'thin') {                 // whippy greyhound/doberman tail
+          ctx.strokeStyle = s.body;
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(-22, 2);
+          ctx.quadraticCurveTo(-34, 2, -36, 12);
+          ctx.stroke();
+        } else if (type === 'curl') {          // curled over the back (spitz breeds)
+          ctx.strokeStyle = s.body;
+          ctx.lineWidth = 8;
+          ctx.beginPath();
+          ctx.arc(-25, -12, 8, Math.PI * 0.35, Math.PI * 2.0);
+          ctx.stroke();
+          ctx.fillStyle = twoTone ? tint(s.patch, 0.2) : tint(s.body, 0.12);
+          puff(-25, -20, 4.5);
+        } else if (type === 'pom') {           // poodle pom on a thin tail
+          ctx.strokeStyle = s.body; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(-22, 0); ctx.lineTo(-33, -7); ctx.stroke();
+          ctx.fillStyle = tint(s.body, 0.06);
+          puff(-35, -9, 6);
+        } else {                               // plume (default fluffy tail)
+          ctx.fillStyle = s.body;
+          ctx.beginPath();
+          ctx.ellipse(-26, -2, 9, 7, -0.4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = twoTone ? s.patch : tint(s.body, 0.15);
+          ctx.beginPath();
+          ctx.ellipse(-31, -5, 5, 4, -0.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      function drawEars(hx, hy) {
+        if (s.ear === 'pointy') {
+          const sc = s.earBig ? 1.4 : 1;
+          ctx.fillStyle = twoTone ? s.patch : s.body;
+          ear(hx - 4, hy - 12, -0.25, sc);
+          ear(hx + 10, hy - 13, 0.25, sc);
+          ctx.fillStyle = tint(twoTone ? s.patch : s.body, 0.4);  // inner ear
+          ear(hx - 4, hy - 9, -0.25, 0.55 * sc);
+          ear(hx + 10, hy - 10, 0.25, 0.55 * sc);
+        } else {
+          ctx.fillStyle = twoTone ? s.patch : s.body;
+          floppyEar(hx - 13, hy + 1, -0.5, s.earLong);
+          floppyEar(hx + 13, hy, 0.5, s.earLong);
+        }
+      }
+      function ear(ex, ey, tilt, scale) {
+        scale = scale || 1;
+        ctx.save();
+        ctx.translate(ex, ey);
+        ctx.rotate(tilt);
+        ctx.scale(scale, scale);
+        ctx.beginPath();
+        ctx.moveTo(0, 10);
+        ctx.quadraticCurveTo(-7, -4, 0, -14);
+        ctx.quadraticCurveTo(7, -4, 0, 10);
+        ctx.fill();
+        ctx.restore();
+      }
+      function floppyEar(ex, ey, tilt, long) {
+        ctx.save();
+        ctx.translate(ex, ey);
+        ctx.rotate(tilt);
+        ctx.beginPath();
+        if (long) ctx.ellipse(0, 12, 6.5, 17, 0, 0, Math.PI * 2);   // long hound ears
+        else ctx.ellipse(0, 7, 6.5, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      function spot(sx, sy, r) {
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, r, r * 0.85, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      function cross(x, y, r) {
+        ctx.beginPath();
+        ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+        ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+        ctx.stroke();
+      }
+    }
+
+    const P1_COLOR = '#ffe8b0';
+    const P2_COLOR = '#8fd0ff';
+
+    // A small colour-coded score readout (used for the two players in 2P).
+    function scoreTag(x, label, val, color) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.font = "800 13px 'Nunito', sans-serif";
+      ctx.fillStyle = color;
+      ctx.strokeText(label, x, 52); ctx.fillText(label, x, 52);
+      ctx.font = "800 40px 'Nunito', sans-serif";
+      ctx.fillStyle = '#fff';
+      ctx.strokeText(val, x, 92); ctx.fillText(val, x, 92);
+      ctx.restore();
+    }
+
+    function drawUI() {
+      ctx.textAlign = 'center';
+
+      if (state === 'playing' || state === 'gameover') {
+        // live score(s) at the top
+        if (state === 'playing') {
+          if (numPlayers === 2) {
+            scoreTag(W * 0.33, 'P1', players[0].score, P1_COLOR);
+            scoreTag(W * 0.67, 'P2', players[1].score, P2_COLOR);
+          } else {
+            ctx.font = "800 52px 'Nunito', sans-serif";
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+            ctx.fillStyle = '#fff';
+            ctx.strokeText(players[0].score, W / 2, 90);
+            ctx.fillText(players[0].score, W / 2, 90);
+          }
+        }
+
+        // shared treat counter (top-left)
+        ctx.save();
+        drawTreat(30, 34);
+        ctx.textAlign = 'left';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.font = "800 22px 'Nunito', sans-serif";
+        ctx.strokeText('×' + treats, 46, 42);
+        ctx.fillStyle = '#fff';
+        ctx.fillText('×' + treats, 46, 42);
+        ctx.restore();
+        ctx.textAlign = 'center';
+      }
+
+      // "new breed!" toast
+      if (unlockName && frame < unlockUntil) {
+        const a = Math.min(1, (unlockUntil - frame) / 30);  // fade out at the end
+        ctx.save();
+        ctx.globalAlpha = a;
+        const tw = 230, th = 50, ty = 120;
+        ctx.fillStyle = 'rgba(233, 69, 96, 0.94)';
+        roundRect(W / 2 - tw / 2, ty, tw, th, 16);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = "800 16px 'Nunito', sans-serif";
+        ctx.fillText('Unlocked!', W / 2, ty + 20);
+        ctx.fillStyle = '#ffe8b0';
+        ctx.font = "800 17px 'Nunito', sans-serif";
+        ctx.fillText('🐾 ' + unlockName, W / 2, ty + 40);
+        ctx.restore();
+      }
+
+      if (state === 'ready') {
+        panel(W / 2, H * 0.6, 300, 168, function () {
+          const cy0 = H * 0.6;
+          ctx.fillStyle = '#fff';
+          ctx.font = "800 26px 'Nunito', sans-serif";
+          ctx.fillText('Flappy Dog', W / 2, cy0 - 50);
+          ctx.fillStyle = '#ffe8b0';
+          ctx.font = "800 15px 'Nunito', sans-serif";
+          ctx.fillText(numPlayers === 2 ? '2 Players — race a friend!' : '1 Player', W / 2, cy0 - 24);
+          ctx.fillStyle = '#9fe0f5';
+          ctx.font = "700 14px 'Nunito', sans-serif";
+          if (numPlayers === 2) {
+            ctx.fillText('P1: Space / ↑ / tap bottom', W / 2, cy0 + 2);
+            ctx.fillText('P2: Right Ctrl / tap top', W / 2, cy0 + 22);
+            ctx.fillStyle = '#cfd6ea';
+            ctx.font = "700 13px 'Nunito', sans-serif";
+            ctx.fillText(players[0].skin.name + '  vs  ' + players[1].skin.name, W / 2, cy0 + 46);
+          } else {
+            ctx.fillText('Tap / Space / ↑ to flap', W / 2, cy0 + 2);
+            ctx.fillText('Collect bones → unlock breeds', W / 2, cy0 + 22);
+            ctx.fillStyle = '#cfd6ea';
+            ctx.font = "700 13px 'Nunito', sans-serif";
+            ctx.fillText("You're a " + skin.name + '  ·  Best: ' + bests[skinIndex], W / 2, cy0 + 46);
+          }
+        });
+      }
+
+      if (state === 'gameover' && numPlayers === 2) {
+        const a = players[0].score, b = players[1].score;
+        panel(W / 2, H * 0.45, 300, 200, function () {
+          const cy0 = H * 0.45;
+          ctx.fillStyle = '#fff';
+          ctx.font = "800 28px 'Nunito', sans-serif";
+          ctx.fillText('Game Over', W / 2, cy0 - 60);
+          ctx.font = "800 22px 'Nunito', sans-serif";
+          ctx.fillStyle = P1_COLOR; ctx.fillText('P1  ' + a, W / 2 - 58, cy0 - 22);
+          ctx.fillStyle = P2_COLOR; ctx.fillText('P2  ' + b, W / 2 + 58, cy0 - 22);
+          ctx.font = "800 22px 'Nunito', sans-serif";
+          ctx.fillStyle = '#ffd54f';
+          ctx.fillText(a === b ? "It's a tie!" : (a > b ? '🏆 Player 1 wins!' : '🏆 Player 2 wins!'), W / 2, cy0 + 14);
+          ctx.fillStyle = '#9fe0f5';
+          ctx.font = "700 13px 'Nunito', sans-serif";
+          ctx.fillText(players[0].skin.name + '  vs  ' + players[1].skin.name, W / 2, cy0 + 42);
+          ctx.fillStyle = '#9fe0f5';
+          ctx.font = "800 14px 'Nunito', sans-serif";
+          ctx.fillText('Tap to play again', W / 2, cy0 + 68);
+        });
+      }
+
+      if (state === 'gameover' && numPlayers === 1) {
+        const p = players[0];
+        panel(W / 2, H * 0.46, 290, 210, function () {
+          const cy0 = H * 0.46;
+          ctx.fillStyle = '#fff';
+          ctx.font = "800 30px 'Nunito', sans-serif";
+          ctx.fillText('Game Over', W / 2, cy0 - 66);
+
+          ctx.font = "800 20px 'Nunito', sans-serif";
+          ctx.fillStyle = '#ffe8b0';
+          ctx.fillText('Score', W / 2, cy0 - 30);
+          ctx.fillStyle = '#fff';
+          ctx.font = "800 34px 'Nunito', sans-serif";
+          ctx.fillText(p.score, W / 2, cy0 + 2);
+
+          if (p.newRecord && p.score > 0) {
+            ctx.fillStyle = '#ffd54f';
+            ctx.font = "800 15px 'Nunito', sans-serif";
+            ctx.fillText('🏆 New ' + BREEDS[p.breedIndex].name + ' best!', W / 2, cy0 + 28);
+          } else {
+            ctx.font = "700 15px 'Nunito', sans-serif";
+            ctx.fillStyle = '#cfd6ea';
+            ctx.fillText(BREEDS[p.breedIndex].name + ' best: ' + bests[p.breedIndex] + '   ·   🦴 ' + treats, W / 2, cy0 + 28);
+          }
+
+          ctx.fillStyle = '#9fe0f5';
+          ctx.font = "800 14px 'Nunito', sans-serif";
+          ctx.fillText("You're a " + skin.name, W / 2, cy0 + 52);
+
+          ctx.fillStyle = '#9fe0f5';
+          ctx.font = "700 15px 'Nunito', sans-serif";
+          ctx.fillText('Tap to play again', W / 2, cy0 + 80);
+        });
+      }
+    }
+
+    function panel(cx, cy, w, h, drawContent) {
+      const x = cx - w / 2, y = cy - h / 2;
+      ctx.save();
+      ctx.fillStyle = 'rgba(20, 24, 48, 0.78)';
+      roundRect(x, y, w, h, 18);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(233, 69, 96, 0.6)';
+      ctx.lineWidth = 2;
+      roundRect(x, y, w, h, 18);
+      ctx.stroke();
+      ctx.restore();
+      drawContent();
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    // ---- Main loop ----
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    reset();
+    loop();
+  })();
+  </script>
+</body>
+</html>

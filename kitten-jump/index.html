@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Kitten Jump</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .back {
+      color: #a0a8c0;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 6px 10px;
+      border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+    .title {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      max-width: 760px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+      border: 2px solid #0f3460;
+      aspect-ratio: 760 / 560;
+    }
+
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .hint {
+      margin-top: 12px;
+      color: #a0a8c0;
+      font-size: 0.82rem;
+      text-align: center;
+      max-width: 760px;
+      line-height: 1.5;
+    }
+    .hint b { color: #ffe8b0; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Kitten Jump</span>
+    <span style="width:64px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+  </div>
+
+  <p class="hint">
+    <b>P1:</b> Space &nbsp;·&nbsp; <b>P2:</b> Right Ctrl &nbsp;·&nbsp; stack each tile straight on the line &amp; outrun the water 🌊
+  </p>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;    // 760
+    const H = canvas.height;   // 560
+
+    // ---- Tunables ----
+    const DIVIDER = 8;                 // gap between the two panels
+    const PLAT_GAP = 30;               // vertical step between stacked platforms (= brick height)
+    const KIT_W = 30, KIT_H = 26;
+    const HOP_FRAMES = 16;             // length of a hop animation
+    const LAND_TOL = 4;                // extra forgiveness on landing (px each side)
+    const PERFECT_TOL = 14;            // tile centered within this of the column = a perfect (2pt) stack
+    const PLAT_SPEED_BASE = 1.9;       // incoming platform slide speed at the bottom
+    const PLAT_SPEED_PER = 0.045;      // slide-speed ramp per floor climbed
+    const PLAT_SPEED_MAX = 4.6;
+    const WATER_START_DELAY = 150;     // frames before water starts rising
+    const WATER_BASE = 0.085;          // px/frame water rise at start (tuned to the 30px stack step)
+    const WATER_RAMP = 0.000034;       // water acceleration per frame
+    const WATER_START_OFFSET = 210;    // px below floor 0 where the water begins
+    const CAM_EASE = 0.12;
+
+    const BEST_KEY = 'kittenjump.best';
+
+    // Two kitten color themes (P1 grey tabby, P2 orange).
+    const THEMES = [
+      { name: 'Player 1', body: '#9aa4b2', dark: '#6f7a8a', belly: '#e7ecf3', ear: '#7c8696', nose: '#3a3f4a' },
+      { name: 'Player 2', body: '#f0a64e', dark: '#d9842f', belly: '#fbe6cd', ear: '#e8954a', nose: '#7a4a20' }
+    ];
+
+    let state = 'select';   // 'select' | 'playing' | 'over'
+    let numPlayers = 1;
+    let frame = 0;
+    let best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
+    let winnerText = '';
+    let panels = [];
+
+    // ---------- Panel (one independent climb world) ----------
+    function makePanel(px, pw, themeIndex) {
+      const p = {
+        x: px, w: pw,            // screen rect of this panel (within canvas)
+        theme: THEMES[themeIndex],
+        cur: 0,                  // current floor / height
+        standing: null,          // { y, left, w } the static platform the kitten rests on
+        incoming: null,          // { y, left, w, vx } the single sliding platform
+        history: [],             // recent standing platforms, for the visual trail
+        colX: 0,                 // the FIXED column the kitten stacks under (no drift)
+        kitX: 0,                 // panel-local kitten center x (== colX)
+        kitLocalX: 0,            // mirror of kitX used by the renderer
+        kitWorldY: undefined,
+        perfectFlash: 0,         // brief "Perfect!" pulse for a well-aligned tile
+        hop: 0,                  // hop animation countdown
+        hopOK: false,            // does the active hop land (climb up)?
+        demoteTarget: null,      // platform to fall to on a miss (null = bounce in place)
+        hopFromY: 0, hopToY: 0,  // world Y endpoints for the active hop
+        camY: 0,                 // world Y shown at top of panel
+        waterWorldY: 0,          // world Y of the water surface (rises = decreases)
+        score: 0,
+        alive: true,
+        diedAt: -1               // frame index when this kitten drowned
+      };
+      initPanel(p);
+      return p;
+    }
+
+    // World coordinate convention: y increases downward. Floor i sits at
+    // worldY = -i * PLAT_GAP. The kitten climbs to more-negative y.
+    function floorWorldY(i) { return -i * PLAT_GAP; }
+
+    function platSpeed(level) {
+      return Math.min(PLAT_SPEED_MAX, PLAT_SPEED_BASE + level * PLAT_SPEED_PER);
+    }
+    function platWidth(p, level) {
+      return Math.max(60, p.w * 0.36 - level * 1.2);   // platforms shrink as you climb
+    }
+
+    // Spawn the ONE sliding platform for the next floor, entering from a random side.
+    function spawnIncoming(p) {
+      const level = p.cur + 1;
+      const w = platWidth(p, level);
+      const speed = platSpeed(level);
+      const fromLeft = Math.random() < 0.5;
+      p.incoming = {
+        y: floorWorldY(level),
+        w: w,
+        left: fromLeft ? -w : p.w,
+        vx: fromLeft ? speed : -speed
+      };
+    }
+
+    function initPanel(p) {
+      p.cur = 0;
+      p.colX = p.w / 2;                                  // fixed stacking column
+      const w0 = platWidth(p, 0);
+      p.standing = { y: floorWorldY(0), left: p.colX - w0 / 2, w: w0 };
+      p.kitX = p.colX;
+      p.kitLocalX = p.kitX;
+      p.perfectFlash = 0;
+      p.demoteTarget = null;
+      p.history = [];
+      p.hop = 0; p.hopOK = false;
+      p.score = 0; p.alive = true; p.diedAt = -1;
+      p.kitWorldY = floorWorldY(0) - KIT_H * 0.5;
+      // camera: put the starting floor in the lower third
+      p.camY = floorWorldY(0) - H * 0.66;
+      // water starts well below floor 0
+      p.waterWorldY = floorWorldY(0) + WATER_START_OFFSET;
+      spawnIncoming(p);
+    }
+
+    // ---------- Input ----------
+    function hopRequest(idx) {
+      if (state === 'select') return;
+      if (state === 'over') { startSelect(); return; }
+      const p = panels[idx];
+      if (!p || !p.alive || p.hop > 0) return;
+
+      // land only if the sliding platform is under the kitten right now
+      const inc = p.incoming;
+      const within = p.kitX >= inc.left - LAND_TOL && p.kitX <= inc.left + inc.w + LAND_TOL;
+
+      p.hop = HOP_FRAMES;
+      p.hopFromY = p.standing.y;
+      if (within) {
+        p.hopOK = true;
+        p.demoteTarget = null;
+        p.hopToY = inc.y;                                  // hop up onto it
+      } else {
+        p.hopOK = false;
+        if (p.cur > 0 && p.history.length > 0) {
+          p.demoteTarget = p.history[p.history.length - 1]; // miss → fall one level
+          p.hopToY = p.demoteTarget.y;
+        } else {
+          p.demoteTarget = null;                            // on the ground → just bounce
+          p.hopToY = p.standing.y;
+        }
+      }
+    }
+
+    window.addEventListener('keydown', function (e) {
+      if (e.repeat) return;             // ignore auto-repeat
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (state === 'select') { startGame(1); return; }
+        if (state === 'over') { startSelect(); return; }
+        hopRequest(0);
+      } else if (e.code === 'ControlRight') {
+        e.preventDefault();
+        if (state === 'select') { startGame(2); return; }
+        hopRequest(1);
+      } else if (e.code === 'Digit1' || e.code === 'Numpad1') {
+        if (state !== 'playing') startGame(1);
+      } else if (e.code === 'Digit2' || e.code === 'Numpad2') {
+        if (state !== 'playing') startGame(2);
+      }
+    });
+
+    // touch / click fallback: tap a panel's half to hop that player
+    function pointerToPanel(clientX) {
+      const rect = canvas.getBoundingClientRect();
+      const cx = (clientX - rect.left) / rect.width * W;
+      if (numPlayers === 1) return 0;
+      return cx < W / 2 ? 0 : 1;
+    }
+    function onPointer(e) {
+      const t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      if (e.cancelable) e.preventDefault();
+      if (state === 'select') {
+        const rect = canvas.getBoundingClientRect();
+        const cx = (t.clientX - rect.left) / rect.width * W;
+        startGame(cx < W / 2 ? 1 : 2);
+        return;
+      }
+      if (state === 'over') { startSelect(); return; }
+      hopRequest(pointerToPanel(t.clientX));
+    }
+    canvas.addEventListener('mousedown', onPointer);
+    canvas.addEventListener('touchstart', onPointer, { passive: false });
+
+    // ---------- State transitions ----------
+    function startSelect() { state = 'select'; }
+
+    function startGame(n) {
+      numPlayers = n;
+      frame = 0;
+      winnerText = '';
+      if (n === 1) {
+        const pad = W * 0.22;
+        panels = [ makePanel(pad, W - pad * 2, 0) ];
+      } else {
+        const half = (W - DIVIDER) / 2;
+        panels = [ makePanel(0, half, 0), makePanel(half + DIVIDER, half, 1) ];
+      }
+      state = 'playing';
+    }
+
+    // ---------- Update ----------
+    function update() {
+      frame++;
+      if (state !== 'playing') return;
+
+      let anyAlive = false;
+      for (const p of panels) {
+        if (!p.alive) continue;
+        if (p.perfectFlash > 0) p.perfectFlash--;
+
+        // resolve a completed hop
+        if (p.hop > 0) {
+          p.hop--;
+          if (p.hop === 0) {
+            if (p.hopOK) {
+              // place the caught tile where it landed; the kitten stays in its fixed
+              // column, so the goal is to stack each tile straight under it.
+              const inc = p.incoming;
+              p.history.push({ y: p.standing.y, left: p.standing.left, w: p.standing.w });
+              if (p.history.length > 22) p.history.shift();
+              p.cur += 1;
+              p.standing = { y: inc.y, left: inc.left, w: inc.w };
+              // a straight (well-centered) stack is worth 2 points, otherwise 1
+              const aligned = Math.abs((inc.left + inc.w / 2) - p.colX) <= PERFECT_TOL;
+              p.score += aligned ? 2 : 1;
+              if (aligned) p.perfectFlash = 40;
+              spawnIncoming(p);
+            } else if (p.demoteTarget) {
+              // miss: the top tile crumbles and the kitten drops one level (stays in column)
+              p.standing = p.history.pop();
+              p.cur -= 1;
+              p.demoteTarget = null;
+              spawnIncoming(p);
+            }
+          }
+        }
+
+        // slide the single incoming platform; if it exits the panel it's gone and
+        // a fresh one slides in (no penalty). Keep it while committed to a good hop.
+        const committed = (p.hop > 0 && p.hopOK);
+        const inc = p.incoming;
+        inc.left += inc.vx;
+        if (!committed &&
+            ((inc.vx > 0 && inc.left > p.w) || (inc.vx < 0 && inc.left + inc.w < 0))) {
+          spawnIncoming(p);
+        }
+
+        // water rises (after a grace period), accelerating over time
+        if (frame > WATER_START_DELAY) {
+          p.waterWorldY -= (WATER_BASE + (frame - WATER_START_DELAY) * WATER_RAMP);
+        }
+
+        // kitten world position (x tracks the destination platform during a hop)
+        let kitWorldY = p.standing.y - KIT_H * 0.5;
+        if (p.hop > 0) {
+          const tnorm = 1 - p.hop / HOP_FRAMES;
+          if (p.hopOK) {
+            const arc = Math.sin(tnorm * Math.PI) * 10;
+            kitWorldY = (p.hopFromY + (p.hopToY - p.hopFromY) * tnorm) - KIT_H * 0.5 - arc;
+          } else if (p.demoteTarget) {
+            // miss: arc straight down to the tile one level below (no sideways drift)
+            const arc = Math.sin(tnorm * Math.PI) * 7;
+            kitWorldY = (p.hopFromY + (p.hopToY - p.hopFromY) * tnorm) - KIT_H * 0.5 - arc;
+          } else {
+            // miss on the ground floor: just a frustrated little bounce
+            kitWorldY = p.standing.y - KIT_H * 0.5 - Math.sin(tnorm * Math.PI) * 22;
+          }
+        }
+        p.kitWorldY = kitWorldY;
+        p.kitLocalX = p.kitX;
+
+        // camera eases so the kitten sits ~lower third of the panel
+        const targetCam = kitWorldY - H * 0.62;
+        p.camY += (targetCam - p.camY) * CAM_EASE;
+
+        // drown check: water surface reached the standing platform
+        if (p.waterWorldY <= p.standing.y + 2) {
+          p.alive = false;
+          p.diedAt = frame;
+        } else {
+          anyAlive = true;
+        }
+      }
+
+      if (!anyAlive) endGame();
+    }
+
+    function endGame() {
+      state = 'over';
+      if (numPlayers === 1) {
+        const sc = panels[0].score;
+        if (sc > best) { best = sc; try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {} }
+        winnerText = '';
+      } else {
+        const a = panels[0], b = panels[1];
+        // last dry wins: later diedAt wins; tie-break on height
+        let winner;
+        if (a.diedAt !== b.diedAt) winner = (a.diedAt > b.diedAt) ? 0 : 1;
+        else if (a.score !== b.score) winner = (a.score > b.score) ? 0 : 1;
+        else winner = -1;
+        winnerText = winner < 0 ? "It's a tie!" : ('Player ' + (winner + 1) + ' wins! 🏆');
+      }
+    }
+
+    // ---------- Render ----------
+    function draw() {
+      // backdrop
+      ctx.fillStyle = '#0c1226';
+      ctx.fillRect(0, 0, W, H);
+
+      if (state === 'select') { drawSelect(); return; }
+
+      for (const p of panels) drawPanel(p);
+
+      // divider between panels (2P)
+      if (numPlayers === 2) {
+        ctx.fillStyle = '#0c1226';
+        ctx.fillRect(W / 2 - DIVIDER / 2, 0, DIVIDER, H);
+      }
+
+      if (state === 'over') drawOver();
+    }
+
+    function drawPanel(p) {
+      ctx.save();
+      // clip to panel rect
+      ctx.beginPath();
+      ctx.rect(p.x, 0, p.w, H);
+      ctx.clip();
+
+      // sky gradient per panel
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, '#1b3b6f');
+      sky.addColorStop(1, '#2a6f97');
+      ctx.fillStyle = sky;
+      ctx.fillRect(p.x, 0, p.w, H);
+
+      // helper: world Y -> screen Y for this panel
+      const sy = function (worldY) { return worldY - p.camY; };
+
+      // faint guide line for the fixed stacking column — aim each tile here
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 8]);
+      ctx.beginPath();
+      ctx.moveTo(p.x + p.colX, 0);
+      ctx.lineTo(p.x + p.colX, H);
+      ctx.stroke();
+      ctx.restore();
+
+      // platforms stacked into a tower: trail + the static standing one + the
+      // sliding incoming. Each brick fills its slot so they sit on each other,
+      // offset wherever the player landed them (a lean/ragged stack).
+      const plats = p.history.concat([p.standing, p.incoming]);
+      for (let pi = 0; pi < plats.length; pi++) {
+        const f = plats[pi];
+        if (!f) continue;
+        const topY = sy(f.y);                       // f.y is the brick's TOP surface
+        if (topY < -PLAT_GAP - 20 || topY > H + 40) continue;
+        const bx = p.x + f.left;
+        const isIncoming = (f === p.incoming);
+        const h = PLAT_GAP + 1;                      // +1 to hide seams in the stack
+        // overhang shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        roundRect(bx + 3, topY + 5, f.w, h, 6); ctx.fill();
+        // brick body — the incoming one glows brighter to draw the eye
+        const g = ctx.createLinearGradient(0, topY, 0, topY + h);
+        g.addColorStop(0, isIncoming ? '#f3c578' : '#d2954f');
+        g.addColorStop(1, isIncoming ? '#bf833d' : '#8f5b2c');
+        ctx.fillStyle = g;
+        roundRect(bx, topY, f.w, h, 6); ctx.fill();
+        ctx.strokeStyle = isIncoming ? '#ffe08a' : '#74471f';
+        ctx.lineWidth = isIncoming ? 2.5 : 2;
+        roundRect(bx, topY, f.w, h, 6); ctx.stroke();
+        // top surface highlight (the bit the kitten stands on)
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        roundRect(bx + 4, topY + 2, f.w - 8, 4, 2); ctx.fill();
+      }
+
+      // kitten
+      if (p.kitWorldY !== undefined) {
+        const ky = sy(p.kitWorldY);
+        const kx = p.x + p.kitLocalX;
+        const squash = p.hop > 0 ? Math.sin((1 - p.hop / HOP_FRAMES) * Math.PI) * 0.18 : 0;
+        const scared = p.alive && (p.waterWorldY - p.standing.y) < 150;
+        drawKitten(kx, ky, p.theme, squash, scared, !p.alive);
+        // "Perfect!" pulse for a straight placement
+        if (p.perfectFlash > 0) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, p.perfectFlash / 25);
+          ctx.fillStyle = '#7be39a';
+          ctx.font = "800 16px 'Nunito', sans-serif";
+          ctx.textAlign = 'center';
+          ctx.fillText('Perfect! +2', kx, ky - KIT_H - 10);
+          ctx.restore();
+        }
+      }
+
+      // water (rises from bottom)
+      const wy = sy(p.waterWorldY);
+      if (wy < H) {
+        const top = Math.max(0, wy);
+        // wavy surface
+        ctx.fillStyle = 'rgba(40,150,200,0.55)';
+        ctx.beginPath();
+        ctx.moveTo(p.x, top);
+        for (let xx = 0; xx <= p.w; xx += 12) {
+          const wave = Math.sin((xx * 0.06) + frame * 0.12) * 3;
+          ctx.lineTo(p.x + xx, top + wave);
+        }
+        ctx.lineTo(p.x + p.w, H);
+        ctx.lineTo(p.x, H);
+        ctx.closePath();
+        ctx.fill();
+        // surface line
+        ctx.strokeStyle = 'rgba(180,235,255,0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let xx = 0; xx <= p.w; xx += 12) {
+          const wave = Math.sin((xx * 0.06) + frame * 0.12) * 3;
+          if (xx === 0) ctx.moveTo(p.x + xx, top + wave);
+          else ctx.lineTo(p.x + xx, top + wave);
+        }
+        ctx.stroke();
+      }
+
+      // score (per panel, top)
+      ctx.textAlign = 'center';
+      ctx.font = "800 30px 'Nunito', sans-serif";
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.strokeText(p.score, p.x + p.w / 2, 40);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(p.score, p.x + p.w / 2, 40);
+      ctx.font = "800 11px 'Nunito', sans-serif";
+      ctx.fillStyle = '#cfe7ff';
+      ctx.fillText(p.theme.name, p.x + p.w / 2, 56);
+
+      if (!p.alive) {
+        ctx.fillStyle = 'rgba(8,14,30,0.5)';
+        ctx.fillRect(p.x, 0, p.w, H);
+        ctx.fillStyle = '#ff8aa0';
+        ctx.font = "800 22px 'Nunito', sans-serif";
+        ctx.fillText('Drowned!', p.x + p.w / 2, H * 0.45);
+        ctx.fillStyle = '#cfd6ea';
+        ctx.font = "800 15px 'Nunito', sans-serif";
+        ctx.fillText(p.score + ' pts', p.x + p.w / 2, H * 0.45 + 24);
+      }
+
+      ctx.restore();
+    }
+
+    // A cute kitten centered on (cx, cy bottom-ish). cy is the feet line.
+    function drawKitten(cx, cy, t, squash, scared, dead) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      const sx = 1 + squash * 0.6;
+      const syc = 1 - squash;
+      ctx.scale(sx, syc);
+
+      const bodyTop = -KIT_H;     // body drawn above the feet line
+      // tail
+      ctx.strokeStyle = t.dark;
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-KIT_W * 0.32, bodyTop + KIT_H * 0.7);
+      ctx.quadraticCurveTo(-KIT_W * 0.62, bodyTop + KIT_H * 0.4, -KIT_W * 0.5, bodyTop + KIT_H * 0.1);
+      ctx.stroke();
+
+      // body
+      ctx.fillStyle = t.body;
+      roundRect(-KIT_W / 2, bodyTop + 6, KIT_W, KIT_H - 2, 10); ctx.fill();
+      // belly
+      ctx.fillStyle = t.belly;
+      roundRect(-KIT_W * 0.28, bodyTop + KIT_H * 0.45, KIT_W * 0.56, KIT_H * 0.5, 8); ctx.fill();
+
+      // head
+      const hy = bodyTop + 2;
+      ctx.fillStyle = t.body;
+      ctx.beginPath();
+      ctx.arc(0, hy, KIT_W * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      // ears
+      ctx.fillStyle = t.ear;
+      triangle(-KIT_W * 0.30, hy - KIT_W * 0.22, -KIT_W * 0.10, hy - KIT_W * 0.5, -KIT_W * 0.02, hy - KIT_W * 0.2);
+      triangle(KIT_W * 0.30, hy - KIT_W * 0.22, KIT_W * 0.10, hy - KIT_W * 0.5, KIT_W * 0.02, hy - KIT_W * 0.2);
+      // inner ear
+      ctx.fillStyle = 'rgba(255,180,190,0.8)';
+      triangle(-KIT_W * 0.22, hy - KIT_W * 0.26, -KIT_W * 0.12, hy - KIT_W * 0.42, -KIT_W * 0.07, hy - KIT_W * 0.24);
+      triangle(KIT_W * 0.22, hy - KIT_W * 0.26, KIT_W * 0.12, hy - KIT_W * 0.42, KIT_W * 0.07, hy - KIT_W * 0.24);
+
+      // eyes
+      ctx.fillStyle = '#22262e';
+      if (dead) {
+        ctx.strokeStyle = '#22262e'; ctx.lineWidth = 2;
+        xeye(-KIT_W * 0.16, hy - 1, 3); xeye(KIT_W * 0.16, hy - 1, 3);
+      } else {
+        const eo = scared ? 4 : 3.2;
+        ctx.beginPath(); ctx.arc(-KIT_W * 0.16, hy - 1, eo, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(KIT_W * 0.16, hy - 1, eo, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(-KIT_W * 0.16 + 1, hy - 2, 1.1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(KIT_W * 0.16 + 1, hy - 2, 1.1, 0, Math.PI * 2); ctx.fill();
+      }
+      // nose
+      ctx.fillStyle = t.nose;
+      triangle(-2.4, hy + 3, 2.4, hy + 3, 0, hy + 6);
+      // whiskers
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(KIT_W * 0.12, hy + 4); ctx.lineTo(KIT_W * 0.42, hy + 2);
+      ctx.moveTo(KIT_W * 0.12, hy + 5); ctx.lineTo(KIT_W * 0.42, hy + 6);
+      ctx.moveTo(-KIT_W * 0.12, hy + 4); ctx.lineTo(-KIT_W * 0.42, hy + 2);
+      ctx.moveTo(-KIT_W * 0.12, hy + 5); ctx.lineTo(-KIT_W * 0.42, hy + 6);
+      ctx.stroke();
+
+      ctx.restore();
+
+      function triangle(x1, y1, x2, y2, x3, y3) {
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.closePath(); ctx.fill();
+      }
+      function xeye(x, y, r) {
+        ctx.beginPath();
+        ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+        ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+        ctx.stroke();
+      }
+    }
+
+    function drawSelect() {
+      // soft backdrop
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#1b3b6f');
+      g.addColorStop(1, '#2a6f97');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      // two demo kittens
+      drawKitten(W * 0.30, H * 0.5, THEMES[0], 0, false, false);
+      drawKitten(W * 0.70, H * 0.5, THEMES[1], 0, false, false);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.font = "800 40px 'Nunito', sans-serif";
+      ctx.fillText('Kitten Jump', W / 2, H * 0.2);
+      ctx.font = "800 16px 'Nunito', sans-serif";
+      ctx.fillStyle = '#ffe8b0';
+      ctx.fillText('Hop the sliding bars and outrun the rising water', W / 2, H * 0.2 + 28);
+
+      // buttons
+      btn(W / 2 - 150, H * 0.66, 140, 56, '1 Player', '#46c46a');
+      btn(W / 2 + 10, H * 0.66, 140, 56, '2 Players', '#e94560');
+
+      ctx.fillStyle = '#cfe7ff';
+      ctx.font = "700 13px 'Nunito', sans-serif";
+      ctx.fillText('Keys: P1 = Space    ·    P2 = Right Ctrl   (or tap a side)', W / 2, H * 0.66 + 86);
+      if (best > 0) {
+        ctx.fillStyle = '#9fe0f5';
+        ctx.font = "800 14px 'Nunito', sans-serif";
+        ctx.fillText('1-player best: ' + best, W / 2, H * 0.66 + 108);
+      }
+    }
+
+    function btn(x, y, w, h, label, color) {
+      ctx.fillStyle = color;
+      roundRect(x, y, w, h, 16); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = "800 19px 'Nunito', sans-serif";
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + w / 2, y + h / 2);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    function drawOver() {
+      ctx.fillStyle = 'rgba(8,14,30,0.55)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.font = "800 34px 'Nunito', sans-serif";
+
+      if (numPlayers === 1) {
+        ctx.fillText('Game Over', W / 2, H * 0.4);
+        ctx.font = "800 20px 'Nunito', sans-serif";
+        ctx.fillStyle = '#ffe8b0';
+        ctx.fillText(panels[0].score + ' points', W / 2, H * 0.4 + 34);
+        ctx.fillStyle = '#cfd6ea';
+        ctx.font = "700 16px 'Nunito', sans-serif";
+        ctx.fillText('Best ' + best, W / 2, H * 0.4 + 60);
+      } else {
+        ctx.fillText(winnerText, W / 2, H * 0.4);
+        ctx.font = "800 16px 'Nunito', sans-serif";
+        ctx.fillStyle = '#cfd6ea';
+        ctx.fillText('P1 ' + panels[0].score + ' pts   ·   P2 ' + panels[1].score + ' pts', W / 2, H * 0.4 + 32);
+      }
+      ctx.fillStyle = '#9fe0f5';
+      ctx.font = "800 16px 'Nunito', sans-serif";
+      ctx.fillText('Press Space or tap to play again', W / 2, H * 0.4 + 92);
+    }
+
+    function roundRect(x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    // ---------- Loop ----------
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+  })();
+  </script>
+</body>
+</html>

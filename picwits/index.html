@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PicWits</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .back {
+      color: #a0a8c0;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 6px 10px;
+      border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+    .title {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+
+    .scorebar {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 6px 0 14px;
+    }
+
+    .stat {
+      flex: 1;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .stat .label { color: #a0a8c0; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat .value { color: #fff; font-size: 1.3rem; font-weight: 800; }
+
+    .caption {
+      width: 100%;
+      max-width: 440px;
+      background: #fff;
+      color: #1a1a2e;
+      border-radius: 18px;
+      padding: 20px 22px;
+      font-size: 1.25rem;
+      font-weight: 800;
+      line-height: 1.3;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      margin-bottom: 8px;
+    }
+    .caption::after {
+      content: '';
+      position: absolute;
+      bottom: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 14px solid transparent;
+      border-right: 14px solid transparent;
+      border-top: 14px solid #fff;
+    }
+
+    .prompt {
+      color: #ffe8b0;
+      font-weight: 800;
+      font-size: 0.9rem;
+      margin: 16px 0 12px;
+      text-align: center;
+    }
+
+    .cards {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      position: relative;
+      height: 230px;
+      background: #0f1830;
+      border: 3px solid #0f3460;
+      border-radius: 18px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+    }
+    .card:hover:not(.locked) {
+      border-color: #e94560;
+      transform: translateY(-2px);
+      box-shadow: 0 0 22px rgba(233, 69, 96, 0.25);
+    }
+    .card:active:not(.locked) { transform: scale(0.98); }
+
+    .card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .card img.loaded { opacity: 1; }
+
+    .card .spinner {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      color: #3d4466;
+      background: linear-gradient(100deg, #14203c 30%, #1b2a4a 50%, #14203c 70%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s linear infinite;
+    }
+    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+    .card.locked { cursor: default; }
+    .card.correct {
+      border-color: #46c46a;
+      box-shadow: 0 0 26px rgba(70, 196, 106, 0.5);
+    }
+    .card.wrong {
+      border-color: #e94560;
+      box-shadow: 0 0 22px rgba(233, 69, 96, 0.4);
+    }
+    .card.dim { opacity: 0.4; }
+
+    .badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: #fff;
+      padding: 3px 9px;
+      border-radius: 12px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .card.correct .badge { opacity: 1; background: #46c46a; }
+    .card.wrong .badge { opacity: 1; background: #e94560; }
+
+    .feedback {
+      min-height: 28px;
+      margin-top: 16px;
+      font-size: 1.1rem;
+      font-weight: 800;
+      text-align: center;
+      color: #cfd6ea;
+    }
+    .feedback.good { color: #7be39a; }
+    .feedback.bad { color: #ff8aa0; }
+
+    .next-btn {
+      margin-top: 14px;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1.05rem;
+      color: #fff;
+      background: #e94560;
+      border: none;
+      border-radius: 16px;
+      padding: 14px 34px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b22a44;
+      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.2s ease;
+    }
+    .next-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+    .next-btn[hidden] { display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">PicWits</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="scorebar">
+    <div class="stat"><div class="label">Score</div><div class="value" id="score">0</div></div>
+    <div class="stat"><div class="label">Round</div><div class="value" id="round">1</div></div>
+    <div class="stat"><div class="label">Streak</div><div class="value" id="streak">0</div></div>
+  </div>
+
+  <div class="caption" id="caption">…</div>
+
+  <div class="prompt">Pick the picture that fits best 👇</div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="feedback" id="feedback"></div>
+
+  <button class="next-btn" id="next" hidden>Next ›</button>
+
+  <script>
+  (function () {
+    // The caption hints a cute subject; the BEST picture is a real photo of that
+    // subject. The two distractors are photos of OTHER cute animals from the pool.
+    // Photos come from LoremFlickr (royalty-free Creative Commons stock images).
+    const ROUNDS = [
+      { caption: "Certified goodest boy 🐾",                       best: "puppy" },
+      { caption: "Tiny tiger who runs the entire household",      best: "kitten" },
+      { caption: "Hop champion of the whole meadow",              best: "rabbit" },
+      { caption: "Smol fluffy chaos goblin",                      best: "hamster" },
+      { caption: "Pond royalty, reporting for quack duty",        best: "duckling" },
+      { caption: "Professional mud enthusiast",                   best: "piglet" },
+      { caption: "A walking, woolly little cloud",                best: "lamb" },
+      { caption: "Suspiciously cute and clearly up to no good",   best: "fox" },
+      { caption: "World's slowest, snuggliest tree hugger",       best: "sloth" },
+      { caption: "Wears a tuxedo, can't fly, still iconic",       best: "penguin" },
+      { caption: "Floating river cutie cracking snacks",          best: "otter" },
+      { caption: "Bouncy little mountain climber",                best: "goat" },
+      { caption: "Fresh out of the egg and adorable",             best: "chick" },
+      { caption: "Short legs, big personality, royal floof",      best: "corgi" },
+      { caption: "A tiny spiky ball of cuteness",                 best: "hedgehog" },
+      { caption: "Bamboo-munching black-and-white sweetheart",    best: "panda" },
+      { caption: "Eucalyptus enjoyer, professional napper",       best: "koala" },
+      { caption: "Big ears, tiny trunk, the biggest heart",       best: "elephant" },
+      { caption: "Wobbly-legged, spotty woodland sweetheart",     best: "deer" },
+      { caption: "The fluffiest little orange floofball",         best: "pomeranian" },
+      { caption: "Talkative feathered show-off",                  best: "parrot" },
+      { caption: "Tiny masked midnight snack bandit",             best: "raccoon" },
+      { caption: "Hyperactive park acorn collector",              best: "squirrel" },
+      { caption: "Fluffy-necked, judgmental spitting champion",   best: "alpaca" }
+    ];
+
+    // Distractor pool — every cute subject we might show as a "wrong" option.
+    const SUBJECTS = ROUNDS.map(function (r) { return r.best; });
+
+    const captionEl = document.getElementById('caption');
+    const cardsEl = document.getElementById('cards');
+    const feedbackEl = document.getElementById('feedback');
+    const nextBtn = document.getElementById('next');
+    const scoreEl = document.getElementById('score');
+    const roundEl = document.getElementById('round');
+    const streakEl = document.getElementById('streak');
+
+    let score = 0, roundNum = 0, streak = 0;
+    let queue = [];
+    let current = null;
+    let locked = false;
+
+    function shuffle(a) {
+      const arr = a.slice();
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+      return arr;
+    }
+
+    function imageUrl(tag, seed) {
+      // LoremFlickr: /<w>/<h>/<keyword>?lock=<seed> returns a stable CC photo per seed.
+      return 'https://loremflickr.com/500/500/' + encodeURIComponent(tag) + '?lock=' + seed;
+    }
+
+    function randSeed() { return Math.floor(Math.random() * 1e6); }
+
+    function nextRoundData() {
+      if (queue.length === 0) queue = shuffle(ROUNDS.map(function (_, i) { return i; }));
+      const entry = ROUNDS[queue.pop()];
+      const distractors = shuffle(SUBJECTS.filter(function (s) { return s !== entry.best; })).slice(0, 2);
+      const options = shuffle(
+        [{ tag: entry.best, best: true }].concat(
+          distractors.map(function (s) { return { tag: s, best: false }; })
+        )
+      );
+      return { caption: entry.caption, options: options };
+    }
+
+    function makeCard(opt) {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const badge = document.createElement('div');
+      badge.className = 'badge';
+
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      spinner.textContent = '🐾';
+
+      const img = document.createElement('img');
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      let tries = 0;
+      function load() {
+        img.src = imageUrl(opt.tag, randSeed());
+      }
+      img.addEventListener('load', function () {
+        img.classList.add('loaded');
+        spinner.style.display = 'none';
+      });
+      img.addEventListener('error', function () {
+        tries++;
+        if (tries < 4) load();              // retry with a fresh photo
+        else spinner.textContent = '🐾';    // give up gracefully, keep the paw
+      });
+      load();
+
+      card.appendChild(img);
+      card.appendChild(spinner);
+      card.appendChild(badge);
+      card.addEventListener('click', function () { pick(card, badge, opt); });
+      return card;
+    }
+
+    function render() {
+      current = nextRoundData();
+      locked = false;
+      roundNum++;
+      roundEl.textContent = roundNum;
+      captionEl.textContent = current.caption;
+      feedbackEl.textContent = '';
+      feedbackEl.className = 'feedback';
+      nextBtn.hidden = true;
+
+      cardsEl.innerHTML = '';
+      current.options.forEach(function (opt) {
+        cardsEl.appendChild(makeCard(opt));
+      });
+    }
+
+    function pick(card, badge, opt) {
+      if (locked) return;
+      locked = true;
+      const cards = cardsEl.querySelectorAll('.card');
+
+      cards.forEach(function (c, idx) {
+        c.classList.add('locked');
+        const isBest = current.options[idx].best;
+        const cBadge = c.querySelector('.badge');
+        if (isBest) { c.classList.add('correct'); cBadge.textContent = '✓ Best'; }
+        else if (c === card) { c.classList.add('wrong'); cBadge.textContent = '✕'; }
+        else c.classList.add('dim');
+      });
+
+      if (opt.best) {
+        score++;
+        streak++;
+        const cheers = ['Nice pick! +1 🎉', 'You get it! +1 🌟', 'Perfect match! +1 ✨', 'Spot on! +1 🏆'];
+        feedbackEl.textContent = cheers[Math.floor(Math.random() * cheers.length)];
+        feedbackEl.className = 'feedback good';
+      } else {
+        streak = 0;
+        feedbackEl.textContent = 'Nope — the green one was the best match!';
+        feedbackEl.className = 'feedback bad';
+      }
+
+      scoreEl.textContent = score;
+      streakEl.textContent = streak;
+      nextBtn.hidden = false;
+    }
+
+    nextBtn.addEventListener('click', render);
+
+    render();
+  })();
+  </script>
+</body>
+</html>
