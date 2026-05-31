@@ -67,6 +67,7 @@
 <div class="controls">
   <div id="ship-select" class="ship-list"></div>
   <button id="rotate-btn" onclick="toggleOrientation()">Horizontal</button>
+  <button id="random-btn" onclick="randomPlace()">🎲 Random</button>
   <button id="ready-btn" class="hidden" onclick="finishPlacement()">Ready</button>
   <button id="bomb-btn" class="bomb-btn hidden" onclick="toggleBomb()">💣 Special Bomb</button>
   <button id="missile-btn" class="missile-btn hidden" onclick="toggleMissile()">🚀 Missile</button>
@@ -152,6 +153,7 @@ function startGame() {
   updateSpecialButtons();
   setStatus("Player 1: Place your ships");
   document.getElementById('rotate-btn').classList.remove('hidden');
+  document.getElementById('random-btn').classList.remove('hidden');
   document.getElementById('bomb-btn').classList.add('hidden');
   document.getElementById('missile-btn').classList.add('hidden');
   document.getElementById('missile-dir-btn').classList.add('hidden');
@@ -483,6 +485,34 @@ function placementClick(r, c) {
   renderBoards();
 }
 
+function randomPlace() {
+  if (phase !== 'placing') return;
+  const p = players[currentPlayer];
+  p.ships.forEach(ship => {
+    if (ship.placed) return;
+    let attempts = 0;
+    while (attempts < 1000) {
+      attempts++;
+      const dir = Math.random() < 0.5 ? 'h' : 'v';
+      const r = Math.floor(Math.random() * SIZE);
+      const c = Math.floor(Math.random() * SIZE);
+      if (!canPlace(p.grid, r, c, ship.size, dir)) continue;
+      ship.cells = [];
+      for (let i = 0; i < ship.size; i++) {
+        const nr = dir === 'v' ? r + i : r;
+        const nc = dir === 'h' ? c + i : c;
+        p.grid[nr][nc].ship = ship;
+        ship.cells.push([nr, nc]);
+      }
+      ship.placed = true;
+      break;
+    }
+  });
+  selectedShip = null;
+  renderShipSelect();
+  renderBoards();
+}
+
 function finishPlacement() {
   if (currentPlayer === 0) {
     currentPlayer = 1;
@@ -498,6 +528,7 @@ function finishPlacement() {
     document.getElementById('ship-select').innerHTML = '';
     document.getElementById('ready-btn').classList.add('hidden');
     document.getElementById('rotate-btn').classList.add('hidden');
+    document.getElementById('random-btn').classList.add('hidden');
     updateSpecialButtons();
     renderBoards();
     setStatus("Player 1: Fire a shot!");
