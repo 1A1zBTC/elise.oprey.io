@@ -4,209 +4,297 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Elise's Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #1a1a2e;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    h1 {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
       color: #fff;
-      font-size: 2rem;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      margin-bottom: 8px;
-      text-align: center;
+      min-height: 100vh;
     }
 
-    .subtitle {
-      color: #a0a8c0;
-      font-size: 0.95rem;
-      margin-bottom: 40px;
-      text-align: center;
-    }
+    /* ---------- Shell ---------- */
+    .shell { display: flex; height: 100vh; }
 
-    .games {
+    .sidebar {
+      width: 300px;
+      flex-shrink: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: #141d35;
+      border-right: 2px solid #0f3460;
+      padding: 22px 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      width: 100%;
-      max-width: 360px;
+      gap: 14px;
+    }
+
+    .brand {
+      font-family: 'Pacifico', cursive;
+      font-size: 1.7rem;
+      color: #fff;
+      text-align: center;
+    }
+    .brand-sub {
+      color: #a0a8c0;
+      font-size: 0.8rem;
+      text-align: center;
+      margin-bottom: 4px;
     }
 
     .game-card {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       background: #16213e;
       border: 2px solid #0f3460;
-      border-radius: 20px;
-      padding: 20px;
+      border-radius: 18px;
+      padding: 14px;
       text-decoration: none;
       color: inherit;
-      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     }
-
-    .game-card:active {
-      transform: scale(0.97);
-    }
-
     .game-card:hover {
       border-color: #e94560;
-      box-shadow: 0 0 24px rgba(233, 69, 96, 0.25);
+      box-shadow: 0 0 20px rgba(233, 69, 96, 0.22);
       transform: translateY(-2px);
+    }
+    .game-card:active { transform: scale(0.98); }
+    .game-card.active {
+      border-color: #e94560;
+      background: #1c2c50;
+      box-shadow: 0 0 20px rgba(233, 69, 96, 0.32);
     }
 
     .game-icon {
-      font-size: 3rem;
+      font-size: 2.2rem;
       line-height: 1;
       flex-shrink: 0;
-      width: 64px;
-      height: 64px;
+      width: 52px;
+      height: 52px;
       background: #0f3460;
-      border-radius: 16px;
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-
-    .game-info {
-      flex: 1;
-    }
-
-    .game-title {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 4px;
-    }
-
-    .game-meta {
-      font-size: 0.8rem;
-      color: #a0a8c0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
+    .game-info { flex: 1; min-width: 0; }
+    .game-title { font-size: 1.05rem; font-weight: 800; color: #fff; margin-bottom: 3px; }
+    .game-meta { font-size: 0.72rem; color: #a0a8c0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .players-badge {
       background: #0f3460;
       color: #e94560;
-      font-weight: 700;
-      font-size: 0.75rem;
-      padding: 2px 8px;
+      font-weight: 800;
+      font-size: 0.68rem;
+      padding: 2px 7px;
       border-radius: 20px;
       white-space: nowrap;
     }
 
-    .arrow {
-      color: #a0a8c0;
-      font-size: 1.2rem;
-      flex-shrink: 0;
+    /* ---------- Content pane ---------- */
+    .content {
+      flex: 1;
+      position: relative;
+      height: 100vh;
+      background: #0f1830;
     }
+    .content iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+    .welcome {
+      position: absolute;
+      inset: 0;
+      background: #0f1830;   /* opaque: never let iframe content show through behind it */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+    .welcome[hidden] { display: none; }
+    .welcome .big { font-family: 'Pacifico', cursive; font-size: 2.8rem; color: #fff; margin-bottom: 12px; }
+    .welcome .hint { color: #a0a8c0; font-size: 1.1rem; font-weight: 700; }
+    .welcome .paw { font-size: 3rem; margin-bottom: 14px; }
 
-    .footer {
-      margin-top: 48px;
-      color: #3d4466;
-      font-size: 0.8rem;
+    /* ---------- Mobile: collapse to the classic full-width list ---------- */
+    @media (max-width: 759px) {
+      .shell { display: block; height: auto; }
+      .sidebar {
+        width: 100%;
+        max-width: 420px;
+        margin: 0 auto;
+        height: auto;
+        overflow: visible;
+        border-right: none;
+        padding: 24px 16px 40px;
+      }
+      .brand { font-size: 2rem; margin-top: 8px; }
+      .brand-sub { margin-bottom: 12px; }
+      .game-card { padding: 18px; border-radius: 20px; }
+      .game-icon { width: 60px; height: 60px; font-size: 2.6rem; }
+      .game-title { font-size: 1.15rem; }
+      .content { display: none; }
     }
   </style>
 </head>
 <body>
 
-  <h1>Elise's Games</h1>
-  <p class="subtitle">Pick a game &amp; play with friends</p>
+  <div class="shell">
+    <nav class="sidebar">
+      <div class="brand">Elise's Games</div>
+      <div class="brand-sub">Pick a game &amp; play with friends</div>
 
-  <div class="games">
-
-    <a href="battleships/index.html" class="game-card">
-      <div class="game-icon">🚢</div>
-      <div class="game-info">
-        <div class="game-title">Battleships</div>
-        <div class="game-meta">
-          <span class="players-badge">2 players</span>
-          <span>Strategy · Turn based</span>
+      <a href="battleships/index.html" class="game-card">
+        <div class="game-icon">🚢</div>
+        <div class="game-info">
+          <div class="game-title">Battleships</div>
+          <div class="game-meta">
+            <span class="players-badge">2 players</span>
+            <span>Strategy · Turn based</span>
+          </div>
         </div>
-      </div>
-      <span class="arrow">›</span>
-    </a>
+      </a>
 
-    <a href="snakes-and-ladders/index.html" class="game-card">
-      <div class="game-icon">🎲</div>
-      <div class="game-info">
-        <div class="game-title">Snakes &amp; Ladders</div>
-        <div class="game-meta">
-          <span class="players-badge">1 – 4 players</span>
-          <span>Classic · Family</span>
+      <a href="snakes-and-ladders/index.html" class="game-card">
+        <div class="game-icon">🎲</div>
+        <div class="game-info">
+          <div class="game-title">Snakes &amp; Ladders</div>
+          <div class="game-meta">
+            <span class="players-badge">1 – 4 players</span>
+            <span>Classic · Family</span>
+          </div>
         </div>
-      </div>
-      <span class="arrow">›</span>
-    </a>
+      </a>
 
-    <a href="flappy-dog/index.html" class="game-card">
-      <div class="game-icon">🐕</div>
-      <div class="game-info">
-        <div class="game-title">Flappy Dog</div>
-        <div class="game-meta">
-          <span class="players-badge">1 player</span>
-          <span>Arcade · Reflex</span>
+      <a href="flappy-dog/index.html" class="game-card">
+        <div class="game-icon">🐕</div>
+        <div class="game-info">
+          <div class="game-title">Flappy Dog</div>
+          <div class="game-meta">
+            <span class="players-badge">1 – 2 players</span>
+            <span>Arcade · Reflex</span>
+          </div>
         </div>
-      </div>
-      <span class="arrow">›</span>
-    </a>
+      </a>
 
-    <a href="picwits/index.html" class="game-card">
-      <div class="game-icon">🖼️</div>
-      <div class="game-info">
-        <div class="game-title">PicWits</div>
-        <div class="game-meta">
-          <span class="players-badge">1 player</span>
-          <span>Party · Picture pick</span>
+      <a href="picwits/index.html" class="game-card">
+        <div class="game-icon">🖼️</div>
+        <div class="game-info">
+          <div class="game-title">PicWits</div>
+          <div class="game-meta">
+            <span class="players-badge">1 player</span>
+            <span>Party · Picture pick</span>
+          </div>
         </div>
-      </div>
-      <span class="arrow">›</span>
-    </a>
+      </a>
 
-    <a href="match-it/index.html" class="game-card">
-      <div class="game-icon">🐾</div>
-      <div class="game-info">
-        <div class="game-title">Match It</div>
-        <div class="game-meta">
-          <span class="players-badge">2 – 4 players</span>
-          <span>Memory · Turn based</span>
+      <a href="match-it/index.html" class="game-card">
+        <div class="game-icon">🐾</div>
+        <div class="game-info">
+          <div class="game-title">Match It</div>
+          <div class="game-meta">
+            <span class="players-badge">2 – 4 players</span>
+            <span>Memory · Turn based</span>
+          </div>
         </div>
-      </div>
-      <span class="arrow">›</span>
-    </a>
+      </a>
 
-    <a href="kitten-jump/index.html" class="game-card">
-      <div class="game-icon">🐱</div>
-      <div class="game-info">
-        <div class="game-title">Kitten Jump</div>
-        <div class="game-meta">
-          <span class="players-badge">1 – 2 players</span>
-          <span>Arcade · Race</span>
+      <a href="kitten-jump/index.html" class="game-card">
+        <div class="game-icon">🐱</div>
+        <div class="game-info">
+          <div class="game-title">Kitten Jump</div>
+          <div class="game-meta">
+            <span class="players-badge">1 – 2 players</span>
+            <span>Arcade · Race</span>
+          </div>
         </div>
-      </div>
-      <span class="arrow">›</span>
-    </a>
+      </a>
+    </nav>
 
+    <main class="content">
+      <iframe id="stage" title="game"></iframe>
+      <div class="welcome" id="welcome">
+        <div class="paw">🎮</div>
+        <div class="big">Elise's Games</div>
+        <div class="hint">← Pick a game to play!</div>
+      </div>
+    </main>
   </div>
 
-  <p class="footer">Pass &amp; play on one device</p>
+  <script>
+    (function () {
+      var stage = document.getElementById('stage');
+      var welcome = document.getElementById('welcome');
+      var cards = document.querySelectorAll('.game-card');
+
+      // Only take over on desktop; on mobile the links navigate to the full-page game.
+      function isDesktop() { return window.matchMedia('(min-width: 760px)').matches; }
+
+      cards.forEach(function (card) {
+        card.addEventListener('click', function (e) {
+          if (!isDesktop()) return;          // mobile → let the <a> navigate
+          e.preventDefault();
+          stage.src = card.getAttribute('href');
+          welcome.hidden = true;
+          cards.forEach(function (c) { c.classList.remove('active'); });
+          card.classList.add('active');
+        });
+      });
+
+      // The games are standalone pages with their own "‹ Games" topbar. When shown in
+      // this pane it's redundant (the sidebar is the nav) and its back link would load
+      // the homepage inside the pane — so hide it from here. Same-origin only; if the
+      // browser blocks cross-origin access (e.g. local file://) the topbar just stays.
+      stage.addEventListener('load', function () {
+        // What is actually showing in the pane? On refresh the browser restores the
+        // subframe's last game from its own history without setting our src attribute,
+        // so read the live location (same-origin) and fall back to src cross-origin.
+        var loc;
+        try { loc = stage.contentWindow.location.href; } catch (e) { loc = stage.src || ''; }
+        var hasGame = loc && loc !== 'about:blank';
+        var clicked = Array.prototype.some.call(cards, function (c) { return c.classList.contains('active'); });
+
+        // Restored-on-refresh: a game is loaded but the user didn't pick it this session,
+        // so the sidebar shows no active card and the transparent welcome overlay would
+        // sit on top of the game. Reset to a clean picker instead.
+        if (hasGame && !clicked) {
+          stage.src = 'about:blank';
+          welcome.hidden = false;
+          return;
+        }
+
+        if (!hasGame) return;   // blank pane — nothing to do
+
+        // The games are standalone pages with their own "‹ Games" topbar. In this pane
+        // it's redundant (the sidebar is the nav) and its back link would load the
+        // homepage inside the pane — so hide it. Same-origin only.
+        try {
+          var doc = stage.contentDocument;
+          var t = doc && doc.querySelector('.topbar');
+          if (t) t.style.display = 'none';
+        } catch (e) { /* cross-origin — leave the game's own topbar visible */ }
+
+        // Move keyboard focus into the game so its key handlers (Space, Right Ctrl, etc.)
+        // fire immediately — otherwise the keys would scroll/ignore on this parent page
+        // until the user first clicks inside the iframe.
+        stage.focus();
+        try { stage.contentWindow.focus(); } catch (e) { /* ignore */ }
+      });
+    })();
+  </script>
 
 </body>
 </html>

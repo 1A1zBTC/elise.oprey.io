@@ -222,6 +222,80 @@
       opacity: 0.4;
       cursor: default;
     }
+
+    /* ---------- start dialog (shared format) ---------- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 14, 28, 0.86);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 20;
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: 100%;
+      max-width: 380px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 24px;
+      padding: 26px 22px;
+      text-align: center;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    }
+    .panel h2 {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.7rem;
+      font-weight: 400;
+      margin-bottom: 6px;
+    }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 18px; }
+    .panel .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 16px 0 8px; }
+    .choices { display: flex; gap: 10px; justify-content: center; }
+    .choice {
+      flex: 1;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      color: #cfd6ea;
+      background: #0f1830;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 14px 6px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    }
+    .choice .big { display: block; font-size: 1.5rem; line-height: 1.2; color: #fff; }
+    .choice .small { display: block; font-size: 0.68rem; color: #8b93b0; font-weight: 700; margin-top: 2px; }
+    .choice:hover { border-color: #6f86c4; }
+    .choice:active { transform: scale(0.96); }
+    .choice.selected {
+      border-color: #e94560;
+      background: rgba(233, 69, 96, 0.12);
+      color: #fff;
+      box-shadow: 0 0 18px rgba(233, 69, 96, 0.25);
+    }
+    .choice.selected .small { color: #ffb3c2; }
+    .start-btn {
+      margin-top: 22px;
+      width: 100%;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #fff;
+      background: #e94560;
+      border: none;
+      border-radius: 16px;
+      padding: 15px 20px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b22a44;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
   </style>
 </head>
 <body>
@@ -258,6 +332,22 @@
         <div id="costumes" class="chips"></div>
       </div>
     </aside>
+  </div>
+
+  <!-- Setup overlay -->
+  <div class="overlay" id="setup">
+    <div class="panel">
+      <h2>Flappy Dog</h2>
+      <div class="sub">Tap to flap through the gaps and collect bones to unlock breeds! 🦴</div>
+
+      <div class="group-label">Players</div>
+      <div class="choices" id="player-choices">
+        <button class="choice" data-players="1"><span class="big">1</span><span class="small">player</span></button>
+        <button class="choice" data-players="2"><span class="big">2</span><span class="small">players</span></button>
+      </div>
+
+      <button class="start-btn" id="start-btn">Start Game</button>
+    </div>
   </div>
 
   <script>
@@ -631,6 +721,29 @@
     if (onePBtn) onePBtn.addEventListener('click', function () { setPlayers(1); onePBtn.blur(); });
     if (twoPBtn) twoPBtn.addEventListener('click', function () { setPlayers(2); twoPBtn.blur(); });
     refreshPlayersToggle();
+
+    // ---- Start dialog (shown at launch only; replay flow is unchanged) ----
+    const setupEl = document.getElementById('setup');
+    const playerChoices = document.getElementById('player-choices');
+    let chosenPlayers = numPlayers;
+    function selectDialogChoice(el) {
+      playerChoices.querySelectorAll('.choice').forEach(function (c) { c.classList.remove('selected'); });
+      el.classList.add('selected');
+    }
+    playerChoices.addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      chosenPlayers = parseInt(btn.dataset.players, 10);
+      selectDialogChoice(btn);
+    });
+    document.getElementById('start-btn').addEventListener('click', function () {
+      setPlayers(chosenPlayers);   // rebuilds the run if the count changed
+      numPlayers = chosenPlayers;  // ensure applied even when unchanged
+      refreshPlayersToggle();
+      state = 'ready';
+      setupEl.hidden = true;
+    });
+    selectDialogChoice(playerChoices.querySelector('[data-players="' + (numPlayers === 2 ? 2 : 1) + '"]'));
 
     function reset() {
       pipes = [];
@@ -1681,6 +1794,15 @@
     reset();
     loop();
   })();
+  </script>
+
+  <script>
+    // On desktop the homepage loads this game in a pane. Hide only the "‹ Games" back link
+    // (it would reload the homepage inside the pane) while keeping the Pacifico game title
+    // visible. Standalone/mobile (top-level) pages keep the full topbar.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
   </script>
 </body>
 </html>

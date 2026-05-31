@@ -27,6 +27,10 @@
       -webkit-user-select: none;
     }
 
+    @media (min-width: 768px) {
+      body { justify-content: center; }
+    }
+
     .topbar {
       width: 100%;
       max-width: 440px;
@@ -399,6 +403,15 @@
 
     render();
   })();
+  </script>
+
+  <script>
+    // On desktop the homepage loads this game in a pane. Hide only the "‹ Games" back link
+    // (it would reload the homepage inside the pane) while keeping the Pacifico game title
+    // visible. Standalone/mobile (top-level) pages keep the full topbar.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
   </script>
 </body>
 </html>

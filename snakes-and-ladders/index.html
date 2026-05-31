@@ -12,7 +12,7 @@
   body {
     font-family: 'Nunito', sans-serif;
     font-weight: 700;
-    background: linear-gradient(160deg, #005f80 0%, #0090b0 45%, #00b89a 100%);
+    background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
     background-attachment: fixed;
     min-height: 100vh;
     display: flex;
@@ -22,43 +22,93 @@
     text-shadow: 1px 2px 4px rgba(0,0,0,0.35);
   }
 
+  @media (min-width: 768px) {
+    body { justify-content: center; }
+  }
+
   h1 {
     margin: 18px 0 10px;
     font-family: 'Pacifico', cursive;
     font-size: 34px;
-    color: #fff5c0;
-    letter-spacing: 1px;
-    text-shadow: 2px 3px 0 #c03060, 4px 6px 10px rgba(0,0,0,0.3);
+    color: #fff;
+    font-weight: 400;
   }
 
-  /* ---------- setup screen ---------- */
-  #setup {
-    background: rgba(255,255,255,0.15);
-    border: 2px solid rgba(255,255,255,0.4);
-    border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-    padding: 30px 40px;
-    margin-top: 60px;
-    text-align: center;
+  /* ---------- start dialog (shared format) ---------- */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 14, 28, 0.86);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 20;
   }
-  #setup h2 { font-size: 18px; margin-bottom: 22px; color: #fff5c0; }
-  #setup button {
+  .panel {
+    width: 100%;
+    max-width: 380px;
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 24px;
+    padding: 26px 22px;
+    text-align: center;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    text-shadow: none;
+  }
+  .panel h2 {
+    font-family: 'Pacifico', cursive;
+    color: #fff;
+    font-size: 1.7rem;
+    font-weight: 400;
+    margin-bottom: 6px;
+  }
+  .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 18px; }
+  .panel .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 16px 0 8px; }
+  .choices { display: flex; gap: 10px; justify-content: center; }
+  .choice {
+    flex: 1;
     font-family: 'Nunito', sans-serif;
     font-weight: 800;
-    font-size: 15px;
-    padding: 12px 28px;
-    margin: 6px;
+    font-size: 1rem;
+    color: #cfd6ea;
+    background: #0f1830;
+    border: 2px solid #0f3460;
+    border-radius: 14px;
+    padding: 14px 6px;
     cursor: pointer;
-    background: #e83c6a;
-    color: #fff;
-    border: none;
-    border-radius: 50px;
-    box-shadow: 0 4px 0 #a02045, 0 6px 14px rgba(0,0,0,0.3);
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.25);
-    transition: transform .1s, box-shadow .1s;
+    text-shadow: none;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.1s ease;
   }
-  #setup button:hover { background: #ff5080; transform: translateY(-2px); box-shadow: 0 6px 0 #a02045, 0 8px 18px rgba(0,0,0,0.3); }
-  #setup button:active { transform: translateY(2px); box-shadow: 0 2px 0 #a02045; }
+  .choice .big { display: block; font-size: 1.5rem; line-height: 1.2; color: #fff; }
+  .choice .small { display: block; font-size: 0.68rem; color: #8b93b0; font-weight: 700; margin-top: 2px; }
+  .choice:hover { border-color: #6f86c4; }
+  .choice:active { transform: scale(0.96); }
+  .choice.selected {
+    border-color: #e94560;
+    background: rgba(233, 69, 96, 0.12);
+    color: #fff;
+    box-shadow: 0 0 18px rgba(233, 69, 96, 0.25);
+  }
+  .choice.selected .small { color: #ffb3c2; }
+  .start-btn {
+    margin-top: 22px;
+    width: 100%;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: #fff;
+    background: #e94560;
+    border: none;
+    border-radius: 16px;
+    padding: 15px 20px;
+    cursor: pointer;
+    text-shadow: none;
+    box-shadow: 0 6px 0 #b22a44;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
 
   /* ---------- game area ---------- */
   #game { display: none; flex-direction: column; align-items: center; }
@@ -160,14 +210,23 @@
 </head>
 <body>
 
-<h1>SNAKES &amp; LADDERS</h1>
+<h1>Snakes &amp; Ladders</h1>
 
 <!-- Setup screen -->
-<div id="setup">
-  <h2>How many players?</h2>
-  <button onclick="startGame(2)">2 Players</button>
-  <button onclick="startGame(3)">3 Players</button>
-  <button onclick="startGame(4)">4 Players</button>
+<div class="overlay" id="setup">
+  <div class="panel">
+    <h2>Snakes &amp; Ladders</h2>
+    <div class="sub">Roll the dice, ride the ladders, dodge the snakes — first to the top wins! 🎲</div>
+
+    <div class="group-label">Players</div>
+    <div class="choices" id="player-choices">
+      <button class="choice" data-players="2"><span class="big">2</span><span class="small">players</span></button>
+      <button class="choice" data-players="3"><span class="big">3</span><span class="small">players</span></button>
+      <button class="choice" data-players="4"><span class="big">4</span><span class="small">players</span></button>
+    </div>
+
+    <button class="start-btn" id="start-btn">Start Game</button>
+  </div>
 </div>
 
 <!-- Game screen -->
@@ -941,6 +1000,25 @@ document.addEventListener('keydown', e => {
     rollDice();
   }
 });
+
+/* ---- Start dialog wiring ---- */
+(function () {
+  let chosenPlayers = 2;
+  const playerChoices = document.getElementById('player-choices');
+  function selectChoice(el) {
+    playerChoices.querySelectorAll('.choice').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+  playerChoices.addEventListener('click', e => {
+    const btn = e.target.closest('.choice');
+    if (!btn) return;
+    chosenPlayers = parseInt(btn.dataset.players, 10);
+    selectChoice(btn);
+  });
+  document.getElementById('start-btn').addEventListener('click', () => startGame(chosenPlayers));
+  // default selection
+  selectChoice(playerChoices.querySelector('[data-players="2"]'));
+})();
 </script>
 </body>
 </html>

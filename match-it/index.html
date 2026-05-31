@@ -28,6 +28,10 @@
       touch-action: manipulation;
     }
 
+    @media (min-width: 768px) {
+      body { justify-content: center; }
+    }
+
     .topbar {
       width: 100%;
       max-width: 560px;
@@ -330,28 +334,28 @@
       { q: 'baby,panda,face',      lock: 530981 },
       { q: 'corgi,face',           lock: 434439 },
       { q: 'baby,raccoon,face',    lock: 772336 },
-      { q: 'baby,puppy,face',      lock: 820607 },
-      { q: 'baby,kitten,face',     lock: 641214 },
+      { q: 'baby,puppy,face',      lock: 811735 },
+      { q: 'baby,kitten,face',     lock: 257503 },
       { q: 'otter,face',           lock: 930840 },
       { q: 'baby,kitten,face',     lock: 185886 },
       { q: 'baby,kitten,face',     lock: 413550 },
       { q: 'baby,kitten,face',     lock: 958222 },
-      { q: 'baby,puppy,face',      lock: 909951 },
+      { q: 'baby,puppy,face',      lock: 716516 },
       { q: 'baby,lion,face',       lock: 917149 },
       { q: 'baby,puppy,face',      lock: 48271 },
       { q: 'hamster,face',         lock: 241355 },
       { q: 'baby,penguin,face',    lock: 337897 },
       { q: 'baby,sloth,face',      lock: 868878 },
       { q: 'baby,squirrel,face',   lock: 627523 },
-      { q: 'baby,tiger,face',      lock: 965420 },
+      { q: 'baby,tiger,face',      lock: 613902 },
       { q: 'baby,goat,face',       lock: 110233 },
       { q: 'pomeranian,face',      lock: 448130 },
-      { q: 'dachshund,puppy,face', lock: 399859 },
+      { q: 'dachshund,puppy,face', lock: 778406 },
       { q: 'beagle,puppy,face',    lock: 351588 },
       { q: 'labrador,puppy,face',  lock: 303317 },
       { q: 'husky,puppy,face',     lock: 255046 },
       { q: 'pony,face',            lock: 206775 },
-      { q: 'baby,kangaroo,face',   lock: 496401 },
+      { q: 'baby,kangaroo,face',   lock: 538721 },
       { q: 'baby,monkey,face',     lock: 544672 },
       { q: 'baby,seal,face',       lock: 592943 },
       { q: 'baby,rabbit,face',     lock: 786027 },
@@ -373,7 +377,7 @@
       { q: 'baby,monkey,face',     lock: 730558 },
       { q: 'otter,face',           lock: 164997 },
       { q: 'beagle,puppy,face',    lock: 130417 },
-      { q: 'dachshund,puppy,face', lock: 178688 },
+      { q: 'dachshund,puppy,face', lock: 959608 },
       { q: 'pomeranian,face',      lock: 226959 },
       { q: 'baby,puppy,face',      lock: 420043 },
       { q: 'corgi,face',           lock: 806211 },
@@ -622,6 +626,15 @@
     selectChoice(playerChoices, playerChoices.querySelector('[data-players="2"]'));
     selectChoice(diffChoices, diffChoices.querySelector('[data-pairs="6"]'));
   })();
+  </script>
+
+  <script>
+    // On desktop the homepage loads this game in a pane. Hide only the "‹ Games" back link
+    // (it would reload the homepage inside the pane) while keeping the Pacifico game title
+    // visible. Standalone/mobile (top-level) pages keep the full topbar.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
   </script>
 </body>
 </html>

@@ -4,10 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Battleship</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', sans-serif; background: #0a1628; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-  h1 { font-size: 2rem; margin-bottom: 10px; color: #4fc3f7; letter-spacing: 2px; }
+  body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  @media (min-width: 768px) { body { justify-content: center; } }
+  h1 { font-family: 'Pacifico', cursive; font-size: 2.2rem; margin-bottom: 10px; color: #fff; font-weight: 400; }
   #status { font-size: 1.1rem; margin-bottom: 16px; min-height: 1.4em; color: #ffd54f; }
   .boards { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; }
   .board-container { text-align: center; padding: 12px; border-radius: 8px; border: 3px solid transparent; transition: border-color 0.3s, box-shadow 0.3s; }
@@ -21,27 +25,37 @@
   .ship { background: #37474f; }
   .hit { background: #c62828; color: #fff; }
   .miss { background: #1a3a5c; color: #64b5f6; }
+  .miss.near { background: #234a6b; color: #ffd54f; }   /* discovery: a ship sits next door */
   .sunk { background: #8b0000; color: #fff; }
+  .revealed { background: #0e6b5e; color: #aef5e8; }     /* sonar-revealed ship (not yet hit) */
   .preview-valid { background: #2e7d32; }
   .preview-invalid { background: #b71c1c; }
-  .bomb-preview { background: #e65100; opacity: 0.7; }
   .clickable { cursor: crosshair; }
-  .bomb-btn { background: #e65100; }
-  .bomb-btn:hover { background: #f57c00; }
-  .bomb-btn.selected { background: #ff3d00; box-shadow: 0 0 12px rgba(255,61,0,0.6); }
-  .bomb-btn:disabled { background: #555; color: #888; cursor: default; box-shadow: none; }
-  .missile-btn { background: #6a1b9a; }
-  .missile-btn:hover { background: #8e24aa; }
-  .missile-btn.selected { background: #aa00ff; box-shadow: 0 0 12px rgba(170,0,255,0.6); }
-  .missile-btn:disabled { background: #555; color: #888; cursor: default; box-shadow: none; }
-  .missile-preview { background: #7b1fa2; opacity: 0.7; }
-  .missile-toggle { background: #4a148c; font-size: 0.8rem; padding: 6px 12px; }
-  .missile-toggle:hover { background: #6a1b9a; }
   .surviving { background: #1b5e20; }
+
+  /* weapon-aim previews (hover) */
+  .wp-bomb { background: #e65100; opacity: 0.7; }
+  .wp-missile { background: #7b1fa2; opacity: 0.7; }
+  .wp-sonar { background: #00897b; opacity: 0.7; }
+  .wp-triple { background: #e64a19; opacity: 0.7; }
+
   .controls { margin: 16px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
   button { padding: 8px 18px; border: none; border-radius: 4px; font-size: 0.95rem; cursor: pointer; background: #1565c0; color: #fff; transition: background 0.2s; }
   button:hover { background: #1e88e5; }
   button:disabled { background: #333; cursor: default; }
+
+  /* weapon bar (rendered above AND below the boards during battle) */
+  .weapons { margin: 12px 0; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .weapon-btn { padding: 8px 14px; font-size: 0.9rem; border-radius: 6px; }
+  .weapon-btn.selected { outline: 2px solid #fff; box-shadow: 0 0 12px rgba(255,255,255,0.5); }
+  .weapon-btn:disabled { background: #555; color: #999; box-shadow: none; outline: none; cursor: default; }
+  .w-bomb { background: #e65100; }       .w-bomb:hover:not(:disabled) { background: #f57c00; }
+  .w-missile { background: #6a1b9a; }     .w-missile:hover:not(:disabled) { background: #8e24aa; }
+  .w-sonar { background: #00695c; }       .w-sonar:hover:not(:disabled) { background: #00897b; }
+  .w-triple { background: #bf360c; }      .w-triple:hover:not(:disabled) { background: #e64a19; }
+  .w-discovery { background: #1565c0; }   .w-discovery:hover:not(:disabled) { background: #1e88e5; }
+  .w-dir { background: #37474f; font-size: 0.82rem; padding: 8px 12px; } .w-dir:hover { background: #455a64; }
+
   .ship-list { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 8px; }
   .ship-btn { padding: 6px 12px; font-size: 0.85rem; }
   .ship-btn.selected { background: #e65100; }
@@ -61,7 +75,7 @@
 </head>
 <body>
 
-<h1>BATTLESHIP</h1>
+<h1>Battleships</h1>
 <div id="status">Player 1: Place your ships</div>
 
 <div class="controls">
@@ -69,10 +83,9 @@
   <button id="rotate-btn" onclick="toggleOrientation()">Horizontal</button>
   <button id="random-btn" onclick="randomPlace()">🎲 Random</button>
   <button id="ready-btn" class="hidden" onclick="finishPlacement()">Ready</button>
-  <button id="bomb-btn" class="bomb-btn hidden" onclick="toggleBomb()">💣 Special Bomb</button>
-  <button id="missile-btn" class="missile-btn hidden" onclick="toggleMissile()">🚀 Missile</button>
-  <button id="missile-dir-btn" class="missile-toggle hidden" onclick="toggleMissileDir()">Row</button>
 </div>
+
+<div id="weapons-top" class="weapons hidden"></div>
 
 <div class="boards">
   <div class="board-container" id="p1-container">
@@ -87,7 +100,9 @@
   </div>
 </div>
 
-<div id="overlay">
+<div id="weapons-bottom" class="weapons hidden"></div>
+
+<div id="overlay" class="hidden">
   <div class="msg">
     <h2 id="overlay-title">Battleship</h2>
     <p id="overlay-text">Two players take turns placing ships and firing shots. Sink all enemy ships to win!</p>
@@ -104,25 +119,37 @@ const SHIPS = [
   { name: 'Destroyer', size: 2 },
 ];
 
+// Each player gets one of each weapon per game. Order here is the order shown in the bar.
+const WEAPONS = [
+  { id: 'bomb',      icon: '💣', name: 'Special Bomb', cls: 'w-bomb' },
+  { id: 'missile',   icon: '🚀', name: 'Missile',      cls: 'w-missile' },
+  { id: 'sonar',     icon: '📡', name: 'Sonar',        cls: 'w-sonar' },
+  { id: 'triple',    icon: '🎯', name: 'Triple Bomb',  cls: 'w-triple' },
+  { id: 'discovery', icon: '🔍', name: 'Discovery',    cls: 'w-discovery' },
+];
+function freshAmmo() { return { bomb: 1, missile: 1, sonar: 1, triple: 1, discovery: 1 }; }
+
 const SIZE = 10;
+const COLS = 'ABCDEFGHIJ';
 let players = [null, null];
 let currentPlayer = 0;
 let phase = 'init'; // init, placing, battle, gameover
 let selectedShip = null;
 let orientation = 'h';
-let bombMode = false;
-let specialBombs = [1, 1]; // one per player
-let missileMode = false;
-let missileDir = 'row'; // 'row' or 'col'
-let specialMissiles = [1, 1]; // one per player
 let waiting = false; // lock clicks during turn-switch delay
+
+// --- weapon state ---
+let ammo = [freshAmmo(), freshAmmo()];
+let activeWeapon = null;     // weapon id currently aimed, or null for a normal shot
+let missileDir = 'row';      // 'row' or 'col' for the missile
+let tripleTriesLeft = 0;     // misses remaining in the current triple-bomb run (0 = no run)
 
 function makeEmptyGrid() {
   const g = [];
   for (let r = 0; r < SIZE; r++) {
     g[r] = [];
     for (let c = 0; c < SIZE; c++) {
-      g[r][c] = { ship: null, hit: false };
+      g[r][c] = { ship: null, hit: false, revealed: false, near: false };
     }
   }
   return g;
@@ -141,27 +168,38 @@ function startGame() {
   phase = 'placing';
   selectedShip = null;
   orientation = 'h';
-  bombMode = false;
-  missileMode = false;
-  missileDir = 'row';
-  specialBombs = [1, 1];
-  specialMissiles = [1, 1];
   waiting = false;
+  ammo = [freshAmmo(), freshAmmo()];
+  activeWeapon = null;
+  missileDir = 'row';
+  tripleTriesLeft = 0;
   hideOverlay();
   renderShipSelect();
   renderBoards();
-  updateSpecialButtons();
   setStatus("Player 1: Place your ships");
   document.getElementById('rotate-btn').classList.remove('hidden');
   document.getElementById('random-btn').classList.remove('hidden');
-  document.getElementById('bomb-btn').classList.add('hidden');
-  document.getElementById('missile-btn').classList.add('hidden');
-  document.getElementById('missile-dir-btn').classList.add('hidden');
 }
 
 /* ---- Rendering ---- */
 
 function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+// Base appearance of a cell (no preview / no click class). Used by both the full
+// render and the hover-preview cleanup so sonar reveals & discovery marks survive.
+function baseCellClass(cell, showShips) {
+  if (cell.hit && cell.ship) return cell.ship.sunk ? 'sunk' : 'hit';
+  if (cell.hit) return cell.near ? 'miss near' : 'miss';
+  if (cell.revealed && cell.ship) return 'revealed';
+  if (showShips && cell.ship) return phase === 'gameover' ? 'surviving' : 'ship';
+  return 'water';
+}
+function baseCellText(cell) {
+  if (cell.hit && cell.ship) return cell.ship.sunk ? 'X' : '💥';
+  if (cell.hit) return cell.near ? '🔍' : '•';
+  if (cell.revealed && cell.ship) return '📡';
+  return '';
+}
 
 function renderFleet(playerIdx) {
   const container = document.getElementById(`fleet-${playerIdx}`);
@@ -204,10 +242,9 @@ function isValidPreview(grid, cells) {
 function renderBoard(tableId, grid, clickHandler, showShips, hoverHandler) {
   const table = document.getElementById(tableId);
   table.innerHTML = '';
-  const cols = 'ABCDEFGHIJ';
   const hr = document.createElement('tr');
   hr.innerHTML = '<td class="header"></td>';
-  for (let c = 0; c < SIZE; c++) hr.innerHTML += `<td class="header">${cols[c]}</td>`;
+  for (let c = 0; c < SIZE; c++) hr.innerHTML += `<td class="header">${COLS[c]}</td>`;
   table.appendChild(hr);
 
   for (let r = 0; r < SIZE; r++) {
@@ -218,18 +255,8 @@ function renderBoard(tableId, grid, clickHandler, showShips, hoverHandler) {
       const td = document.createElement('td');
       td.dataset.r = r;
       td.dataset.c = c;
-      if (cell.hit && cell.ship) {
-        const ship = cell.ship;
-        td.className = ship.sunk ? 'sunk' : 'hit';
-        td.textContent = ship.sunk ? 'X' : '💥';
-      } else if (cell.hit) {
-        td.className = 'miss';
-        td.textContent = '•';
-      } else if (showShips && cell.ship) {
-        td.className = phase === 'gameover' ? 'surviving' : 'ship';
-      } else {
-        td.className = 'water';
-      }
+      td.className = baseCellClass(cell, showShips);
+      td.textContent = baseCellText(cell);
       if (clickHandler) {
         td.classList.add('clickable');
         td.addEventListener('click', () => clickHandler(r, c));
@@ -238,7 +265,7 @@ function renderBoard(tableId, grid, clickHandler, showShips, hoverHandler) {
         td.addEventListener('mouseenter', () => hoverHandler(tableId, grid, r, c));
         td.addEventListener('mouseleave', () => {
           clearPreview(tableId, grid);
-          clearBombPreview(tableId, grid);
+          clearWeaponPreview(tableId, grid);
         });
       }
       tr.appendChild(td);
@@ -282,18 +309,10 @@ function updateHighlight() {
   p2.classList.remove('active');
 
   if (phase === 'placing') {
-    // Highlight the board being placed on
     document.getElementById(currentPlayer === 0 ? 'p1-container' : 'p2-container').classList.add('active');
   } else if (phase === 'battle') {
-    // Highlight the enemy board (the one to bomb)
     document.getElementById(currentPlayer === 0 ? 'p2-container' : 'p1-container').classList.add('active');
   }
-}
-
-function getSpecialHover() {
-  if (bombMode) return showBombPreview;
-  if (missileMode) return showMissilePreview;
-  return null;
 }
 
 function renderBoards() {
@@ -303,11 +322,10 @@ function renderBoards() {
     renderBoard(placingBoard, players[currentPlayer].grid, placementClick, true, showPreview);
     renderBoard(otherBoard, players[1 - currentPlayer].grid, null, false, null);
   } else if (phase === 'battle') {
-    const hover = getSpecialHover();
+    const hover = activeWeapon ? showWeaponPreview : null;
     renderBoard('board-0', players[0].grid, currentPlayer === 1 ? fireShot : null, false, currentPlayer === 1 ? hover : null);
     renderBoard('board-1', players[1].grid, currentPlayer === 0 ? fireShot : null, false, currentPlayer === 0 ? hover : null);
   } else if (phase === 'gameover') {
-    // Show winner's remaining ships on their board
     const winnerIdx = currentPlayer;
     const loserIdx = 1 - currentPlayer;
     renderBoard(`board-${winnerIdx}`, players[winnerIdx].grid, null, true, null);
@@ -318,57 +336,61 @@ function renderBoards() {
   renderFleet(0);
   renderFleet(1);
   updateHighlight();
-  updateSpecialButtons();
+  renderWeapons();
 }
 
-function toggleBomb() {
-  if (specialBombs[currentPlayer] <= 0) return;
-  bombMode = !bombMode;
-  if (bombMode) missileMode = false;
-  updateSpecialButtons();
-  renderBoards();
+/* ---- Weapons UI ---- */
+
+// Rebuild both weapon bars (above + below the boards) from the current player's ammo.
+function renderWeapons() {
+  ['weapons-top', 'weapons-bottom'].forEach(barId => {
+    const bar = document.getElementById(barId);
+    bar.innerHTML = '';
+    if (phase !== 'battle') { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+
+    WEAPONS.forEach(w => {
+      const left = ammo[currentPlayer][w.id];
+      const btn = document.createElement('button');
+      btn.className = 'weapon-btn ' + w.cls + (activeWeapon === w.id ? ' selected' : '');
+      // mid triple-bomb run: lock everything except the triple button
+      btn.disabled = left <= 0 || (tripleTriesLeft > 0 && activeWeapon !== w.id);
+      if (left <= 0) {
+        btn.textContent = w.icon + ' Used';
+      } else if (w.id === 'triple' && activeWeapon === 'triple' && tripleTriesLeft > 0) {
+        btn.textContent = w.icon + ' ' + tripleTriesLeft + ' tr' + (tripleTriesLeft === 1 ? 'y' : 'ies') + ' left';
+      } else {
+        btn.textContent = w.icon + ' ' + w.name;
+      }
+      btn.addEventListener('click', () => selectWeapon(w.id));
+      bar.appendChild(btn);
+
+      // missile direction toggle sits right after the missile button while it's aimed
+      if (w.id === 'missile' && activeWeapon === 'missile') {
+        const dir = document.createElement('button');
+        dir.className = 'weapon-btn w-dir';
+        dir.textContent = missileDir === 'row' ? '↔ Row' : '↕ Column';
+        dir.addEventListener('click', toggleMissileDir);
+        bar.appendChild(dir);
+      }
+    });
+  });
 }
 
-function toggleMissile() {
-  if (specialMissiles[currentPlayer] <= 0) return;
-  missileMode = !missileMode;
-  if (missileMode) bombMode = false;
-  updateSpecialButtons();
+function selectWeapon(id) {
+  if (phase !== 'battle' || waiting) return;
+  if (tripleTriesLeft > 0) return;             // can't switch mid triple-bomb run
+  if (ammo[currentPlayer][id] <= 0) return;
+  activeWeapon = (activeWeapon === id) ? null : id;
   renderBoards();
 }
 
 function toggleMissileDir() {
   missileDir = missileDir === 'row' ? 'col' : 'row';
-  document.getElementById('missile-dir-btn').textContent = missileDir === 'row' ? 'Row' : 'Column';
   renderBoards();
 }
 
-function updateSpecialButtons() {
-  const bombBtn = document.getElementById('bomb-btn');
-  const missileBtn = document.getElementById('missile-btn');
-  const missileDirBtn = document.getElementById('missile-dir-btn');
-  if (phase === 'battle') {
-    bombBtn.classList.remove('hidden');
-    bombBtn.disabled = specialBombs[currentPlayer] <= 0;
-    bombBtn.classList.toggle('selected', bombMode);
-    bombBtn.textContent = specialBombs[currentPlayer] > 0 ? '💣 Special Bomb' : '💣 Used';
-
-    missileBtn.classList.remove('hidden');
-    missileBtn.disabled = specialMissiles[currentPlayer] <= 0;
-    missileBtn.classList.toggle('selected', missileMode);
-    missileBtn.textContent = specialMissiles[currentPlayer] > 0 ? '🚀 Missile' : '🚀 Used';
-
-    if (missileMode) {
-      missileDirBtn.classList.remove('hidden');
-    } else {
-      missileDirBtn.classList.add('hidden');
-    }
-  } else {
-    bombBtn.classList.add('hidden');
-    missileBtn.classList.add('hidden');
-    missileDirBtn.classList.add('hidden');
-  }
-}
+/* ---- Weapon footprints + hover preview ---- */
 
 function getBombCells(r, c) {
   const cells = [];
@@ -381,31 +403,6 @@ function getBombCells(r, c) {
   return cells;
 }
 
-function showBombPreview(tableId, grid, r, c) {
-  if (!bombMode) return;
-  const cells = getBombCells(r, c);
-  const table = document.getElementById(tableId);
-  cells.forEach(([pr, pc]) => {
-    const td = table.rows[pr + 1]?.cells[pc + 1];
-    if (td && !grid[pr][pc].hit) {
-      td.className = 'bomb-preview clickable';
-    }
-  });
-}
-
-function clearBombPreview(tableId, grid) {
-  const table = document.getElementById(tableId);
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      const td = table.rows[r + 1]?.cells[c + 1];
-      if (!td) continue;
-      if (td.classList.contains('bomb-preview') || td.classList.contains('missile-preview')) {
-        td.className = 'water clickable';
-      }
-    }
-  }
-}
-
 function getMissileCells(r, c) {
   const cells = [];
   if (missileDir === 'row') {
@@ -416,16 +413,47 @@ function getMissileCells(r, c) {
   return cells;
 }
 
-function showMissilePreview(tableId, grid, r, c) {
-  if (!missileMode) return;
-  const cells = getMissileCells(r, c);
+function getColumnCells(c) {
+  const cells = [];
+  for (let i = 0; i < SIZE; i++) cells.push([i, c]);
+  return cells;
+}
+
+function weaponFootprint(r, c) {
+  switch (activeWeapon) {
+    case 'bomb':
+    case 'discovery': return getBombCells(r, c);
+    case 'missile':   return getMissileCells(r, c);
+    case 'sonar':     return getColumnCells(c);
+    case 'triple':    return [[r, c]];
+    default:          return [];
+  }
+}
+
+function showWeaponPreview(tableId, grid, r, c) {
+  if (!activeWeapon) return;
+  const type = (activeWeapon === 'discovery') ? 'bomb' : activeWeapon;  // reuse bomb tint
+  const cls = 'wp-' + type;
   const table = document.getElementById(tableId);
-  cells.forEach(([pr, pc]) => {
+  weaponFootprint(r, c).forEach(([pr, pc]) => {
+    if (pr < 0 || pr >= SIZE || pc < 0 || pc >= SIZE) return;
     const td = table.rows[pr + 1]?.cells[pc + 1];
-    if (td && !grid[pr][pc].hit) {
-      td.className = 'missile-preview clickable';
-    }
+    if (td && !grid[pr][pc].hit) td.className = cls + ' clickable';
   });
+}
+
+function clearWeaponPreview(tableId, grid) {
+  const table = document.getElementById(tableId);
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const td = table.rows[r + 1]?.cells[c + 1];
+      if (!td) continue;
+      if (td.className.indexOf('wp-') !== -1) {
+        td.className = baseCellClass(grid[r][c], false) + ' clickable';
+        td.textContent = baseCellText(grid[r][c]);
+      }
+    }
+  }
 }
 
 function renderShipSelect() {
@@ -523,13 +551,12 @@ function finishPlacement() {
   } else {
     currentPlayer = 0;
     phase = 'battle';
-    bombMode = false;
-    missileMode = false;
+    activeWeapon = null;
+    tripleTriesLeft = 0;
     document.getElementById('ship-select').innerHTML = '';
     document.getElementById('ready-btn').classList.add('hidden');
     document.getElementById('rotate-btn').classList.add('hidden');
     document.getElementById('random-btn').classList.add('hidden');
-    updateSpecialButtons();
     renderBoards();
     setStatus("Player 1: Fire a shot!");
   }
@@ -537,139 +564,107 @@ function finishPlacement() {
 
 /* ---- Battle ---- */
 
+// Pass the turn after a short pause so the player sees the result first.
+function switchTurnDelayed(delay) {
+  waiting = true;
+  setTimeout(() => {
+    waiting = false;
+    currentPlayer = 1 - currentPlayer;
+    activeWeapon = null;
+    tripleTriesLeft = 0;
+    renderBoards();
+    setStatus(`Player ${currentPlayer + 1}: Fire a shot!`);
+  }, delay || 900);
+}
+
+// Returns true (and ends the game) if every enemy ship is sunk.
+function checkWin(enemyIdx) {
+  if (players[enemyIdx].ships.every(s => s.sunk)) {
+    phase = 'gameover';
+    renderBoards();
+    showOverlay('Game Over!', `Player ${currentPlayer + 1} wins!`, 'Play Again');
+    return true;
+  }
+  return false;
+}
+
+// Mark a ship sunk if all of its cells are now hit.
+function maybeSink(grid, ship) {
+  if (ship.cells.every(([sr, sc]) => grid[sr][sc].hit)) ship.sunk = true;
+}
+
 function fireShot(r, c) {
   if (phase !== 'battle' || waiting) return;
+  if (activeWeapon === 'bomb')      return fireSpecialBomb(r, c);
+  if (activeWeapon === 'missile')   return fireSpecialMissile(r, c);
+  if (activeWeapon === 'sonar')     return fireSonar(r, c);
+  if (activeWeapon === 'triple')    return fireTriple(r, c);
+  if (activeWeapon === 'discovery') return fireDiscovery(r, c);
+
+  // normal single shot: hit = go again, miss = pass the turn
   const enemyIdx = 1 - currentPlayer;
-
-  if (bombMode) {
-    fireSpecialBomb(r, c);
-    return;
-  }
-  if (missileMode) {
-    fireSpecialMissile(r, c);
-    return;
-  }
-
   const cell = players[enemyIdx].grid[r][c];
   if (cell.hit) return;
-
   cell.hit = true;
 
   if (cell.ship) {
-    const ship = cell.ship;
-    if (ship.cells.every(([sr, sc]) => players[enemyIdx].grid[sr][sc].hit)) {
-      ship.sunk = true;
-    }
-    if (players[enemyIdx].ships.every(s => s.sunk)) {
-      phase = 'gameover';
-      renderBoards();
-      showOverlay('Game Over!', `Player ${currentPlayer + 1} wins!`, 'Play Again');
-      return;
-    }
-    setStatus(`Player ${currentPlayer + 1}: Hit!${ship.sunk ? ' ' + ship.name + ' sunk!' : ''}`);
+    maybeSink(players[enemyIdx].grid, cell.ship);
+    if (checkWin(enemyIdx)) return;
+    setStatus(`Player ${currentPlayer + 1}: Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''}`);
     renderBoards();
   } else {
     setStatus(`Player ${currentPlayer + 1}: Miss!`);
     renderBoards();
-    waiting = true;
-    setTimeout(() => {
-      waiting = false;
-      currentPlayer = 1 - currentPlayer;
-      bombMode = false;
-      missileMode = false;
-      updateSpecialButtons();
-      renderBoards();
-      setStatus(`Player ${currentPlayer + 1}: Fire a shot!`);
-    }, 800);
+    switchTurnDelayed(800);
   }
 }
 
+// Special Bomb: the clicked cell + all 8 around it. Any ship touched is destroyed outright.
 function fireSpecialBomb(r, c) {
   const enemyIdx = 1 - currentPlayer;
   const grid = players[enemyIdx].grid;
-  specialBombs[currentPlayer] = 0;
-  bombMode = false;
+  ammo[currentPlayer].bomb = 0;
+  activeWeapon = null;
 
-  const cells = getBombCells(r, c);
   const shipsHit = new Set();
-
-  // Mark all cells in blast radius as hit
-  cells.forEach(([br, bc]) => {
+  getBombCells(r, c).forEach(([br, bc]) => {
     const cell = grid[br][bc];
     cell.hit = true;
     if (cell.ship) shipsHit.add(cell.ship);
   });
-
-  // Any ship touched by the blast sinks entirely
   shipsHit.forEach(ship => {
     ship.sunk = true;
     ship.cells.forEach(([sr, sc]) => { grid[sr][sc].hit = true; });
   });
 
-  updateSpecialButtons();
-
-  if (players[enemyIdx].ships.every(s => s.sunk)) {
-    phase = 'gameover';
-    renderBoards();
-    showOverlay('Game Over!', `Player ${currentPlayer + 1} wins!`, 'Play Again');
-    return;
-  }
-
-  const sunkNames = [...shipsHit].map(s => s.name).join(', ');
-  if (shipsHit.size > 0) {
-    setStatus(`Player ${currentPlayer + 1}: 💣 BOOM! Sunk: ${sunkNames}!`);
-  } else {
-    setStatus(`Player ${currentPlayer + 1}: 💣 BOOM! No ships hit.`);
-  }
+  if (checkWin(enemyIdx)) return;
+  const names = [...shipsHit].map(s => s.name).join(', ');
+  setStatus(shipsHit.size > 0
+    ? `Player ${currentPlayer + 1}: 💣 BOOM! Sunk: ${names}!`
+    : `Player ${currentPlayer + 1}: 💣 BOOM! No ships hit.`);
   renderBoards();
-
-  // Always switch turns after bomb
-  waiting = true;
-  setTimeout(() => {
-    waiting = false;
-    currentPlayer = 1 - currentPlayer;
-    bombMode = false;
-    missileMode = false;
-    updateSpecialButtons();
-    renderBoards();
-    setStatus(`Player ${currentPlayer + 1}: Fire a shot!`);
-  }, 1200);
+  switchTurnDelayed(1200);
 }
 
+// Missile: every cell in the chosen row or column. Ships sink only if fully hit.
 function fireSpecialMissile(r, c) {
   const enemyIdx = 1 - currentPlayer;
   const grid = players[enemyIdx].grid;
-  specialMissiles[currentPlayer] = 0;
-  missileMode = false;
+  ammo[currentPlayer].missile = 0;
+  activeWeapon = null;
 
-  const cells = getMissileCells(r, c);
   const shipsHit = new Set();
-
-  cells.forEach(([mr, mc]) => {
+  getMissileCells(r, c).forEach(([mr, mc]) => {
     const cell = grid[mr][mc];
     cell.hit = true;
     if (cell.ship) shipsHit.add(cell.ship);
   });
+  shipsHit.forEach(ship => maybeSink(grid, ship));
 
-  // Check normal sinking (not auto-sink like bomb — missile just hits the row/col)
-  shipsHit.forEach(ship => {
-    if (ship.cells.every(([sr, sc]) => grid[sr][sc].hit)) {
-      ship.sunk = true;
-    }
-  });
-
-  updateSpecialButtons();
-
-  if (players[enemyIdx].ships.every(s => s.sunk)) {
-    phase = 'gameover';
-    renderBoards();
-    showOverlay('Game Over!', `Player ${currentPlayer + 1} wins!`, 'Play Again');
-    return;
-  }
-
-  const hitCount = [...shipsHit].length;
+  if (checkWin(enemyIdx)) return;
+  const hitCount = shipsHit.size;
   const sunkShips = [...shipsHit].filter(s => s.sunk);
-  const label = missileDir === 'row' ? `row ${r + 1}` : `column ${'ABCDEFGHIJ'[c]}`;
+  const label = missileDir === 'row' ? `row ${r + 1}` : `column ${COLS[c]}`;
   let msg = `Player ${currentPlayer + 1}: 🚀 Missile across ${label}! `;
   if (hitCount > 0) {
     msg += `Hit ${hitCount} ship${hitCount > 1 ? 's' : ''}!`;
@@ -679,17 +674,88 @@ function fireSpecialMissile(r, c) {
   }
   setStatus(msg);
   renderBoards();
+  switchTurnDelayed(1200);
+}
 
-  waiting = true;
-  setTimeout(() => {
-    waiting = false;
-    currentPlayer = 1 - currentPlayer;
-    bombMode = false;
-    missileMode = false;
-    updateSpecialButtons();
+// Sonar: reveals (without hitting) every ship in the clicked column — on BOTH boards.
+function fireSonar(r, c) {
+  ammo[currentPlayer].sonar = 0;
+  activeWeapon = null;
+
+  let found = 0;
+  for (let i = 0; i < SIZE; i++) {
+    [0, 1].forEach(pi => {
+      const cell = players[pi].grid[i][c];
+      if (cell.ship && !cell.revealed) { cell.revealed = true; found++; }
+    });
+  }
+  setStatus(`Player ${currentPlayer + 1}: 📡 Sonar on column ${COLS[c]} — ${found} ship cell${found === 1 ? '' : 's'} revealed (both fleets)!`);
+  renderBoards();
+  switchTurnDelayed(1300);
+}
+
+// Triple Bomb: single-cell shots, but you get THREE misses before your turn ends.
+// Hits are free (they don't burn a try), same as a normal hit you keep firing.
+function fireTriple(r, c) {
+  const enemyIdx = 1 - currentPlayer;
+  const grid = players[enemyIdx].grid;
+  if (tripleTriesLeft === 0) {           // first shot of the run — consume the weapon
+    ammo[currentPlayer].triple = 0;
+    tripleTriesLeft = 3;
+  }
+  const cell = grid[r][c];
+  if (cell.hit) return;                   // ignore already-shot cells (no try lost)
+  cell.hit = true;
+
+  if (cell.ship) {
+    maybeSink(grid, cell.ship);
+    if (checkWin(enemyIdx)) return;
+    setStatus(`Player ${currentPlayer + 1}: 🎯 Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''} (${tripleTriesLeft} ${tripleTriesLeft === 1 ? 'try' : 'tries'} left)`);
+    renderBoards();                        // free hit — keep firing, tries unchanged
+  } else {
+    tripleTriesLeft--;
+    if (tripleTriesLeft > 0) {
+      setStatus(`Player ${currentPlayer + 1}: 🎯 Miss! ${tripleTriesLeft} ${tripleTriesLeft === 1 ? 'try' : 'tries'} left.`);
+      renderBoards();
+    } else {
+      setStatus(`Player ${currentPlayer + 1}: 🎯 Miss! Triple bomb spent.`);
+      renderBoards();
+      switchTurnDelayed(900);
+    }
+  }
+}
+
+// Discovery: shoot one cell. Land on a ship → it's just a normal hit and the weapon is
+// handed back (use it again). Miss → it's spent, but it tells you whether any of the 8
+// neighbours hides a ship.
+function fireDiscovery(r, c) {
+  const enemyIdx = 1 - currentPlayer;
+  const grid = players[enemyIdx].grid;
+  const cell = grid[r][c];
+  if (cell.hit) return;
+
+  if (cell.ship) {
+    // Direct hit — discovery wasted, so don't consume it. Normal hit = fire again.
+    cell.hit = true;
+    activeWeapon = null;
+    maybeSink(grid, cell.ship);
+    if (checkWin(enemyIdx)) return;
+    setStatus(`Player ${currentPlayer + 1}: 🔍 Hit!${cell.ship.sunk ? ' ' + cell.ship.name + ' sunk!' : ''} (Discovery saved — still yours)`);
     renderBoards();
-    setStatus(`Player ${currentPlayer + 1}: Fire a shot!`);
-  }, 1200);
+    return;
+  }
+
+  // Miss — spend the discovery and report adjacency, then pass the turn.
+  ammo[currentPlayer].discovery = 0;
+  activeWeapon = null;
+  cell.hit = true;
+  const near = getBombCells(r, c).some(([nr, nc]) => grid[nr][nc].ship);
+  cell.near = near;
+  setStatus(near
+    ? `Player ${currentPlayer + 1}: 🔍 Miss — but a ship is hiding right next to it!`
+    : `Player ${currentPlayer + 1}: 🔍 Miss — all clear nearby.`);
+  renderBoards();
+  switchTurnDelayed(1100);
 }
 
 /* ---- Overlay ---- */
@@ -716,6 +782,9 @@ function showOverlay(title, text, btnText) {
 function hideOverlay() {
   document.getElementById('overlay').classList.add('hidden');
 }
+
+// Skip the intro splash — drop straight into ship placement on load.
+startGame();
 </script>
 </body>
 </html>
