@@ -209,6 +209,7 @@
     const IDLE_MS = 10000;     // 1P: real milliseconds idle (no forward progress) before the eagle swoops
     const IDLE_WARN_MS = 3000; // ms before that to start the looming-shadow warning
     const LEAD_LIMIT = 6;      // 2P: if the leader gets this many rows ahead, the laggard dies
+    const BACK_LIMIT = 3;      // 1P: backing up this many rows below your furthest summons the eagle
 
     const BEST_PREFIX = 'crossypets.best.';   // per-pet best score, keyed by pet id
     function loadBest(p) { try { return parseInt(localStorage.getItem(BEST_PREFIX + p) || '0', 10) || 0; } catch (e) { return 0; } }
@@ -234,7 +235,8 @@
     let players = [];            // 1 or 2 active players
     let deathTimer = 0, deadKind = '', deadIdx = -1, winnerIdx = -1;
     let idleMs = 0;              // 1P only: real ms since last forward progress (drives the eagle)
-    let lastTs = 0, dtMs = 16.7; // frame delta in ms — keeps the eagle timer refresh-rate independent
+    let lastTs = 0, dtMs = 16.7; // frame delta in ms — keeps timing refresh-rate independent
+    let dtf = 1;                 // dtMs / (1000/60): 1.0 at 60fps, 0.5 at 120fps. Scales all motion.
     let eagle = null;
     const PET_ORDER = ['chick', 'pup', 'kitty', 'frog'];
     function secondPet(p) { return PET_ORDER.find(function (q) { return q !== p; }) || 'pup'; }
@@ -254,7 +256,7 @@
     const CAR_COLORS = ['#e94560', '#3ec8be', '#ffd23f', '#7a5cff', '#ff8a3c', '#46c46a', '#ff5da2'];
 
     // ---------- row generation ----------
-    function laneSpeed() { return 0.011 + Math.min(camZ, 60) * 0.0005 + rnd(0, 0.007); }
+    function laneSpeed() { return 0.018 + Math.min(camZ, 60) * 0.0006 + rnd(0, 0.010); }
 
     function spawnMovers(lenMin, lenMax, gapMin, gapMax, dir, speed) {
       const items = [];
@@ -266,6 +268,25 @@
       }
       // tag direction/speed on each
       items.forEach(it => { it.dir = dir; it.speed = speed; });
+      return items;
+    }
+
+    // Vehicle types — each road lane runs one type (some have a fixed colour).
+    const VEHICLE_TYPES = [
+      { type: 'car', len: 1 }, { type: 'car', len: 1 }, { type: 'car', len: 1 },  // common
+      { type: 'truck', len: 2 },
+      { type: 'taxi', len: 1, color: '#ffcf33' },
+      { type: 'police', len: 1, color: '#2b3a8c' },
+      { type: 'icecream', len: 2, color: '#fff4fb' }
+    ];
+    function spawnVehicles(dir, speed) {
+      const t = pick(VEHICLE_TYPES);
+      const items = [];
+      let x = rnd(-3, 0);
+      while (x < COLS + 3) {
+        items.push({ x: x, len: t.len, type: t.type, color: t.color || pick(CAR_COLORS), dir: dir, speed: speed });
+        x += t.len + ri(4, 9);
+      }
       return items;
     }
 
@@ -301,7 +322,7 @@
       } else if (type === 'road') {
         const dir = chance(0.5) ? 1 : -1;
         const speed = laneSpeed();
-        row.cars = spawnMovers(1, chance(0.3) ? 2 : 1, 4, 9, dir, speed);
+        row.cars = spawnVehicles(dir, speed);
       } else if (type === 'river') {
         const dir = chance(0.5) ? 1 : -1;
         const speed = laneSpeed() * 0.85;
@@ -315,7 +336,7 @@
         row.water = (z % 2 === 0) ? '#2a6fdb' : '#2766cf';
       } else { // rail
         row.phase = 'idle';
-        row.timer = ri(80, 220);
+        row.timer = ri(260, 560);
         row.dir = chance(0.5) ? 1 : -1;
         row.train = null;
       }
@@ -513,8 +534,8 @@
     // ---------- update ----------
     function update() {
       if (state === 'dying') {
-        if (eagle) eagle.y += 7;
-        deathTimer--; if (deathTimer <= 0) finishDeath();
+        if (eagle) eagle.y += 7 * dtf;
+        deathTimer -= dtf; if (deathTimer <= 0) finishDeath();
         return;
       }
       if (state !== 'playing') return;
@@ -524,9 +545,9 @@
       const zs = players.map(function (p) { return p.z; });
       const rearZ = Math.min.apply(null, zs);
       const leadZ = Math.max.apply(null, zs);
-      camZ += (rearZ - camZ) * 0.08;
+      camZ += (rearZ - camZ) * 0.08 * dtf;
       creep = (numPlayers === 1) ? (0.0045 + Math.min(players[0].score, 80) * 0.00018) : 0;
-      camZ += creep;
+      camZ += creep * dtf;
       ensureRows(Math.ceil(camZ) + VIS_FWD + 2);
 
       // move vehicles / logs / trains across visible rows
@@ -536,7 +557,7 @@
         if (row.type === 'road') moveItems(row.cars);
         else if (row.type === 'river') {
           moveItems(row.logs);
-          row.logs.forEach(function (l) { if (l.gator) { l.subT = (l.subT + 1) % 200; l.submerged = l.subT > 150; } });
+          row.logs.forEach(function (l) { if (l.gator) { l.subT = (l.subT + dtf) % 200; l.submerged = l.subT > 150; } });
         } else if (row.type === 'rail') updateRail(row);
       }
 
@@ -544,6 +565,8 @@
       if (numPlayers === 1) {
         idleMs += dtMs;
         if (idleMs > IDLE_MS) { die(0, 'eagle'); return; }
+        // backing up too far below your furthest row also summons the eagle
+        if (players[0].score - Math.round(players[0].z) > BACK_LIMIT) { die(0, 'eagle'); return; }
       }
 
       // 2P leash: if the leader pulls too far ahead, the rear player is left behind & dies
@@ -557,7 +580,7 @@
       for (let i = 0; i < players.length; i++) {
         const pl = players[i];
         if (pl.hopping) {
-          pl.hopT++;
+          pl.hopT += dtf;
           const t = pl.hopT / HOP_FRAMES;
           pl.x = pl.fromX + (pl.toX - pl.fromX) * t;
           pl.z = pl.fromZ + (pl.toZ - pl.fromZ) * t;
@@ -573,7 +596,9 @@
             if (pl.x > l.x - 0.55 && pl.x < l.x + l.len - 0.45) { onLog = l; break; }
           }
           if (!onLog) { die(i, 'drown'); return; }
-          pl.x += onLog.dir * onLog.speed; pl.ride = onLog;
+          // Ride with the log at the SAME rate it moves (moveItems uses *dtf too) — without
+          // this the rider drifts off the log on any non-60fps display (120/144Hz) and drowns.
+          pl.x += onLog.dir * onLog.speed * dtf; pl.ride = onLog;
           if (pl.x < -0.5 || pl.x > COLS - 0.5) { die(i, 'drown'); return; }
         } else if (row.type === 'road') {
           for (const c of row.cars) {
@@ -591,16 +616,16 @@
     function moveItems(items) {
       if (!items) return;
       for (const it of items) {
-        it.x += it.dir * it.speed;
+        it.x += it.dir * it.speed * dtf;
         if (it.dir > 0 && it.x > COLS + 2.5) it.x = -it.len - 2.5;
         else if (it.dir < 0 && it.x < -it.len - 2.5) it.x = COLS + 2.5;
       }
     }
 
     function updateRail(row) {
-      row.timer--;
+      row.timer -= dtf;
       if (row.phase === 'idle') {
-        if (row.timer <= 0) { row.phase = 'warn'; row.timer = 75; }
+        if (row.timer <= 0) { row.phase = 'warn'; row.timer = 110; }
       } else if (row.phase === 'warn') {
         if (row.timer <= 0) {
           row.phase = 'pass';
@@ -610,9 +635,9 @@
         }
       } else if (row.phase === 'pass') {
         const tr = row.train;
-        tr.x += row.dir * 0.16;
+        tr.x += row.dir * 0.22 * dtf;
         if ((row.dir > 0 && tr.x > COLS + 1) || (row.dir < 0 && tr.x < -tr.len - 1)) {
-          row.phase = 'idle'; row.timer = ri(120, 260); row.train = null;
+          row.phase = 'idle'; row.timer = ri(420, 780); row.train = null;
         }
       }
     }
@@ -630,6 +655,26 @@
     }
 
     // ---------- drawing ----------
+    // Railroad crossing signal: a white crossbuck + two red lights that flash
+    // alternately while a train is warning/passing (dim when the track is clear).
+    function drawCrossingSignal(cx, yc, active, blink) {
+      ctx.fillStyle = '#2a2f3a';
+      ctx.fillRect(cx - 2, yc - 2, 4, 16);                 // post
+      ctx.strokeStyle = '#f2f2f2'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, yc - 20); ctx.lineTo(cx + 8, yc - 6);   // crossbuck X
+      ctx.moveTo(cx + 8, yc - 20); ctx.lineTo(cx - 8, yc - 6);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      function light(lx, on) {
+        if (on) { ctx.fillStyle = 'rgba(255,70,70,0.55)'; ctx.beginPath(); ctx.arc(lx, yc + 13, 7, 0, Math.PI * 2); ctx.fill(); }
+        ctx.fillStyle = on ? '#ff2b2b' : '#5a1a1a';
+        ctx.beginPath(); ctx.arc(lx, yc + 13, 4, 0, Math.PI * 2); ctx.fill();
+      }
+      light(cx - 7, active && blink);
+      light(cx + 7, active && !blink);
+    }
+
     function drawLaneBand(row) {
       const yc = rowY(row.z), y0 = yc - TD / 2;
       if (row.type === 'grass') {
@@ -645,10 +690,11 @@
       } else { // rail
         ctx.fillStyle = '#6b5b4a'; ctx.fillRect(0, y0, W, TD);
         ctx.fillStyle = '#9aa0aa'; ctx.fillRect(0, yc - 10, W, 3); ctx.fillRect(0, yc + 7, W, 3);
-        if (row.phase === 'warn' && Math.floor(frame / 8) % 2 === 0) {
-          ctx.fillStyle = '#ff3b3b'; ctx.fillRect(W - 26, yc - 18, 12, 12);
-          ctx.fillStyle = '#ff3b3b'; ctx.fillRect(14, yc - 18, 12, 12);
-        }
+        // crossing signals flash while a train is warning or passing
+        const active = (row.phase === 'warn' || row.phase === 'pass');
+        const blink = Math.floor(frame / 8) % 2 === 0;
+        drawCrossingSignal(22, yc, active, blink);
+        drawCrossingSignal(W - 22, yc, active, blink);
       }
     }
 
@@ -674,10 +720,45 @@
 
     function drawVehicle(c, z) {
       const center = c.x + c.len / 2 - 0.5;
-      // body
-      drawBox(center, z, c.len * 0.92, 1, 0, c.color, shade(c.color), 0.5);
-      // cabin / windows
-      drawBox(center, z, c.len * 0.5, 1, 1, '#cfe8ff', '#9bbfe0', 0.4);
+      const cx = colX(center);
+
+      if (c.type === 'truck' || c.type === 'icecream') {
+        const ice = c.type === 'icecream';
+        const body = ice ? '#fff4fb' : c.color;
+        const side = ice ? '#e7c4da' : shade(c.color);
+        const box = drawBox(center, z, c.len * 0.94, 1.1, 0, body, side, 0.5);
+        // cabin at the leading end
+        const cabX = c.dir > 0 ? c.x + c.len - 1 : c.x;
+        drawBox(cabX, z, 0.6, 1.05, 0, ice ? '#ffd9ec' : '#e3eaf3', ice ? '#e7a9cd' : '#aeb9c8', 0.46);
+        drawBox(cabX, z, 0.42, 0.5, 0.55, '#cfe8ff', '#9bbfe0', 0.4);
+        if (ice) {
+          // serving window + a cone-with-scoop topper
+          ctx.fillStyle = 'rgba(60,40,55,0.85)';
+          const sx = c.dir > 0 ? cx - 16 : cx + 4;
+          ctx.fillRect(sx, rowY(z) - 16, 12, 10);
+          ctx.fillStyle = '#f3c98b'; tri(cx - 5, box.top - 3, cx + 5, box.top - 3, cx, box.top + 7);
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, box.top - 6, 6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffb3d1'; ctx.beginPath(); ctx.arc(cx, box.top - 9, 3.5, 0, Math.PI * 2); ctx.fill();
+        }
+        return;
+      }
+
+      // single-tile vehicles: car / taxi / police
+      const box = drawBox(center, z, 0.92, 1, 0, c.color, shade(c.color), 0.5);
+      drawBox(center, z, 0.5, 0.6, 0.62, '#cfe8ff', '#9bbfe0', 0.4);   // windshield
+
+      if (c.type === 'police') {
+        const on = Math.floor(frame / 6) % 2 === 0;
+        ctx.fillStyle = on ? '#ff2b2b' : '#3b6bff';
+        ctx.fillRect(cx - 10, box.top - 6, 9, 6);
+        ctx.fillStyle = on ? '#3b6bff' : '#ff2b2b';
+        ctx.fillRect(cx + 1, box.top - 6, 9, 6);
+      } else if (c.type === 'taxi') {
+        ctx.fillStyle = '#1a1a2e'; ctx.fillRect(cx - 11, box.top - 7, 22, 7);
+        ctx.fillStyle = '#ffd23f';
+        ctx.font = "800 7px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText('TAXI', cx, box.top - 1.5); ctx.textAlign = 'left';
+      }
     }
 
     function drawLog(l, z) {
@@ -767,23 +848,35 @@
       // ---- eyes ----
       const eyeY = hTop + (hStand - hTop) * 0.24;
       if (pl.pet === 'frog') {
-        const ey = headTopY - 1;
-        ctx.fillStyle = p.body;
-        ctx.beginPath(); ctx.arc(cx - 9, ey, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + 9, ey, 8, 0, Math.PI * 2); ctx.fill();
+        const ey = headTopY + 1;
+        ctx.fillStyle = p.body;                                  // rounded eye bumps
+        ctx.beginPath(); ctx.arc(cx - 8, ey, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 8, ey, 7, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(cx - 9, ey, 6, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + 9, ey, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx - 8, ey + 0.5, 4.4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 8, ey + 0.5, 4.4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#15172b';
-        ctx.beginPath(); ctx.arc(cx - 9, ey, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + 9, ey, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#1f4a16'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(cx - 12, eyeY + 9); ctx.lineTo(cx + 12, eyeY + 9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx - 6.5, ey + 1, 2.3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 9.5, ey + 1, 2.3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(cx - 7.5, ey, 1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 8.5, ey, 1, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#1f4a16'; ctx.lineWidth = 2; ctx.lineCap = 'round';   // gentle smile
+        ctx.beginPath(); ctx.arc(cx, eyeY + 5, 7, 0.18 * Math.PI, 0.82 * Math.PI); ctx.stroke(); ctx.lineCap = 'butt';
       } else {
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(cx - 13, eyeY, 9, 10); ctx.fillRect(cx + 4, eyeY, 9, 10);
-        ctx.fillStyle = '#15172b';
-        ctx.fillRect(cx - 10, eyeY + 3, 4, 5); ctx.fillRect(cx + 7, eyeY + 3, 4, 5);
+        const ey = eyeY + 4;
+        for (const s of [-1, 1]) {
+          const ex = cx + s * 6.5;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#15172b';
+          ctx.beginPath(); ctx.arc(ex + s * 0.6, ey + 0.5, 2.3, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(ex - 1, ey - 1, 1.1, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(255,140,150,0.45)';   // rosy cheeks
+        ctx.beginPath(); ctx.arc(cx - 12, ey + 6, 2.6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 12, ey + 6, 2.6, 0, Math.PI * 2); ctx.fill();
       }
 
       // ---- nose / beak / whiskers ----
@@ -881,6 +974,7 @@
     function loop(ts) {
       if (ts == null) ts = lastTs + 16.7;
       dtMs = Math.min(Math.max(ts - lastTs, 1), 100);  // clamp tab-switch gaps; refresh-rate independent
+      dtf = dtMs / 16.6667;
       lastTs = ts;
       update();
       draw();
