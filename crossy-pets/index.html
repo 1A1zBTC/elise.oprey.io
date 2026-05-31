@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Crossy Pets</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .back {
+      color: #a0a8c0;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 6px 10px;
+      border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      max-width: 560px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+      border: 2px solid #0f3460;
+      aspect-ratio: 760 / 560;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    .hint {
+      margin-top: 12px;
+      color: #a0a8c0;
+      font-size: 0.82rem;
+      text-align: center;
+      max-width: 560px;
+      line-height: 1.5;
+    }
+    .hint b { color: #ffe8b0; }
+
+    /* ---------- shared start / over dialog ---------- */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 14, 28, 0.86);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 20;
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: 100%;
+      max-width: 380px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 24px;
+      padding: 24px 20px;
+      text-align: center;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.4; }
+    .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 8px; }
+    .choices { display: flex; gap: 8px; justify-content: center; }
+    .choice {
+      flex: 1;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      color: #cfd6ea;
+      background: #0f1830;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 12px 4px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    }
+    .choice .big { display: block; font-size: 1.7rem; line-height: 1.3; }
+    .choice .small { display: block; font-size: 0.66rem; color: #8b93b0; font-weight: 700; margin-top: 2px; }
+    .choice:hover { border-color: #6f86c4; }
+    .choice:active { transform: scale(0.96); }
+    .choice.selected {
+      border-color: #e94560;
+      background: rgba(233, 69, 96, 0.12);
+      color: #fff;
+      box-shadow: 0 0 18px rgba(233, 69, 96, 0.25);
+    }
+    .choice.selected .small { color: #ffb3c2; }
+
+    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
+    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
+    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .start-btn {
+      margin-top: 18px;
+      width: 100%;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #fff;
+      background: #e94560;
+      border: none;
+      border-radius: 16px;
+      padding: 15px 20px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b22a44;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Crossy Pets</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <!-- Start / character select -->
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Crossy Pets</h2>
+        <div class="sub">Hop across roads, rivers &amp; railways — how far can you go? 🐔</div>
+        <div class="group-label">Pick your pet</div>
+        <div class="choices" id="pet-choices">
+          <button class="choice" data-pet="chick"><span class="big">🐤</span><span class="small">Chick</span></button>
+          <button class="choice" data-pet="pup"><span class="big">🐶</span><span class="small">Pup</span></button>
+          <button class="choice" data-pet="kitty"><span class="big">🐱</span><span class="small">Kitty</span></button>
+          <button class="choice" data-pet="frog"><span class="big">🐸</span><span class="small">Froggy</span></button>
+        </div>
+        <button class="start-btn" id="start-btn">Start Game</button>
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">Game Over</h2>
+        <div class="sub" id="over-sub">Squashed!</div>
+        <div class="scoreline"><span class="lbl">Score</span><span class="big" id="over-score">0</span></div>
+        <div class="scoreline"><span class="lbl">Best</span><span class="big" id="over-best">0</span></div>
+        <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>Arrows / WASD</b> to hop &nbsp;·&nbsp; <b>Click</b> = forward &nbsp;·&nbsp; <b>Swipe</b> to steer &nbsp;·&nbsp; don't get squashed, drowned, or caught by the eagle! 🦅
+  </p>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;    // 760
+    const H = canvas.height;   // 560
+
+    // ---------- world / projection constants ----------
+    const COLS = 9;            // playable columns 0..8
+    const TW = 72;             // screen px per column
+    const TD = 56;             // screen px per row (vertical recede)
+    const HH = 24;             // screen px lift per height unit / block thickness
+    const LEFT_X = (W - COLS * TW) / 2;
+    const ORIGIN_Y = 430;      // screen y of the row sitting at camZ
+    const VIS_BACK = 4;        // rows visible behind camZ
+    const VIS_FWD = 8;         // rows visible ahead of camZ
+    const HOP_FRAMES = 9;
+    const EAGLE_BEHIND = 4.2;  // if player.z falls this far below camZ → eagle
+
+    const BEST_KEY = 'crossypets.best';
+
+    // ---------- pets ----------
+    const PETS = {
+      chick: { body: '#ffd23f', dark: '#e3b21f', belly: '#fff0b0', feat: '#ff8a3c', kind: 'beak' },
+      pup:   { body: '#c98a4b', dark: '#a86d33', belly: '#f0d8b8', feat: '#5a3a1c', kind: 'ears' },
+      kitty: { body: '#9aa4b2', dark: '#727d8c', belly: '#e7ecf3', feat: '#5a626f', kind: 'ears' },
+      frog:  { body: '#5fae3a', dark: '#46892a', belly: '#cdeFb0', feat: '#2f6a1c', kind: 'eyesbig' }
+    };
+
+    // ---------- state ----------
+    let state = 'select';        // 'select' | 'playing' | 'dying' | 'over'
+    let pet = 'chick';
+    let rows = {};               // z -> row descriptor
+    let maxGen = -1;             // furthest generated row
+    let camZ = 0;                // camera row (float)
+    let creep = 0;               // forward camera creep per frame
+    let score = 0, best = 0;
+    let frame = 0;
+    let deathTimer = 0, deadKind = '';
+    let eagle = null;
+    let player = null;
+    try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) {}
+
+    const setupEl = document.getElementById('setup');
+    const overEl = document.getElementById('over');
+
+    // ---------- small RNG helpers ----------
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function ri(a, b) { return Math.floor(rnd(a, b + 1)); }
+    function chance(p) { return Math.random() < p; }
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+    const CAR_COLORS = ['#e94560', '#3ec8be', '#ffd23f', '#7a5cff', '#ff8a3c', '#46c46a', '#ff5da2'];
+
+    // ---------- row generation ----------
+    function laneSpeed() { return 0.018 + Math.min(score, 60) * 0.0009 + rnd(0, 0.012); }
+
+    function spawnMovers(lenMin, lenMax, gapMin, gapMax, dir, speed) {
+      const items = [];
+      let x = rnd(-3, 0);
+      while (x < COLS + 3) {
+        const len = ri(lenMin, lenMax);
+        items.push({ x: x, len: len, color: pick(CAR_COLORS) });
+        x += len + ri(gapMin, gapMax);
+      }
+      // tag direction/speed on each
+      items.forEach(it => { it.dir = dir; it.speed = speed; });
+      return items;
+    }
+
+    function genRow(z) {
+      let type;
+      if (z <= 3) { type = 'grass'; }
+      else {
+        // avoid 3+ rivers / rails in a row
+        const prev = rows[z - 1] ? rows[z - 1].type : 'grass';
+        const prev2 = rows[z - 2] ? rows[z - 2].type : 'grass';
+        const r = Math.random();
+        if (r < 0.30) type = 'grass';
+        else if (r < 0.66) type = 'road';
+        else if (r < 0.88) type = 'river';
+        else type = 'rail';
+        if (type === 'river' && prev === 'river' && prev2 === 'river') type = 'grass';
+        if (type === 'rail' && prev === 'rail') type = 'road';
+      }
+
+      const row = { type: type, z: z };
+      if (type === 'grass') {
+        row.shade = (z % 2 === 0) ? '#5fae3a' : '#57a334';
+        row.obstacles = {};
+        if (z > 3) {
+          let blocked = 0;
+          for (let c = 0; c < COLS; c++) {
+            if (chance(0.16) && blocked < 5) {
+              row.obstacles[c] = chance(0.7) ? { kind: 'tree', h: ri(2, 3) } : { kind: 'rock', h: 1 };
+              blocked++;
+            }
+          }
+        }
+      } else if (type === 'road') {
+        const dir = chance(0.5) ? 1 : -1;
+        const speed = laneSpeed();
+        row.cars = spawnMovers(1, chance(0.3) ? 2 : 1, 2, 5, dir, speed);
+      } else if (type === 'river') {
+        const dir = chance(0.5) ? 1 : -1;
+        const speed = laneSpeed() * 0.85;
+        row.logs = spawnMovers(2, 3, 1, 3, dir, speed);
+        // chance a log becomes a gator (rideable only when surfaced)
+        if (chance(0.28) && row.logs.length) {
+          const g = pick(row.logs);
+          g.gator = true;
+          g.subT = ri(0, 200);
+        }
+        row.water = (z % 2 === 0) ? '#2a6fdb' : '#2766cf';
+      } else { // rail
+        row.phase = 'idle';
+        row.timer = ri(80, 220);
+        row.dir = chance(0.5) ? 1 : -1;
+        row.train = null;
+      }
+      rows[z] = row;
+      return row;
+    }
+
+    function ensureRows(upto) {
+      while (maxGen < upto) { maxGen++; genRow(maxGen); }
+    }
+
+    // ---------- projection ----------
+    function colX(xt) { return LEFT_X + xt * TW + TW / 2; }
+    function rowY(z) { return ORIGIN_Y - (z - camZ) * TD; }
+
+    // a block sitting on a lane: centre tile xt, width wt tiles, height h units, lifted by `lift`
+    function drawBox(xt, z, wt, h, lift, top, side, depthFrac) {
+      depthFrac = depthFrac == null ? 0.5 : depthFrac;
+      const cx = colX(xt), halfW = wt * TW / 2;
+      const standY = rowY(z) - lift * HH;
+      const blockTop = standY - h * HH;
+      const lid = TD * depthFrac;
+      // front face
+      ctx.fillStyle = side;
+      ctx.fillRect(cx - halfW, blockTop, wt * TW, standY - blockTop);
+      // top lid
+      ctx.fillStyle = top;
+      ctx.fillRect(cx - halfW, blockTop - lid, wt * TW, lid);
+      return { cx: cx, top: blockTop - lid, halfW: halfW };
+    }
+
+    // ---------- input ----------
+    function selectedPet() {
+      const el = document.querySelector('#pet-choices .choice.selected');
+      return el ? el.dataset.pet : 'chick';
+    }
+
+    function hop(dx, dz) {
+      if (state !== 'playing' || !player || player.hopping) return;
+      let nx = Math.round(player.x) + dx;
+      let nz = Math.round(player.z) + dz;
+      if (nx < 0 || nx > COLS - 1) return;          // walled by edges
+      if (nz < 0) nz = 0;
+      ensureRows(nz + VIS_FWD);
+      const dest = rows[nz];
+      if (dest && dest.type === 'grass' && dest.obstacles[nx]) return;  // blocked by tree/rock
+      player.hopping = true; player.hopT = 0;
+      player.fromX = player.x; player.fromZ = player.z;
+      player.toX = nx; player.toZ = nz;
+      player.face = dx < 0 ? -1 : (dx > 0 ? 1 : player.face);
+      if (nz > score) { score = nz; }
+    }
+
+    window.addEventListener('keydown', function (e) {
+      if (e.repeat) return;
+      const k = e.code;
+      if (state === 'select') {
+        if (k === 'Space' || k === 'Enter') { e.preventDefault(); beginGame(); }
+        return;
+      }
+      if (state === 'over') {
+        if (k === 'Space' || k === 'Enter') { e.preventDefault(); showSelect(); }
+        return;
+      }
+      if (k === 'ArrowUp' || k === 'KeyW' || k === 'Space') { e.preventDefault(); hop(0, 1); }
+      else if (k === 'ArrowDown' || k === 'KeyS') { e.preventDefault(); hop(0, -1); }
+      else if (k === 'ArrowLeft' || k === 'KeyA') { e.preventDefault(); hop(-1, 0); }
+      else if (k === 'ArrowRight' || k === 'KeyD') { e.preventDefault(); hop(1, 0); }
+    });
+
+    // tap = forward, swipe = direction
+    let touchSX = 0, touchSY = 0, touchMoved = false;
+    function pointerDown(e) {
+      if (state === 'select' || state === 'over') return;
+      const t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      touchSX = t.clientX; touchSY = t.clientY; touchMoved = false;
+    }
+    function pointerUp(e) {
+      if (state === 'select') { beginGame(); return; }
+      if (state === 'over') { showSelect(); return; }
+      if (state !== 'playing') return;
+      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : e;
+      const dx = t.clientX - touchSX, dy = t.clientY - touchSY;
+      const TH = 24;
+      if (Math.abs(dx) < TH && Math.abs(dy) < TH) { hop(0, 1); return; }   // tap → forward
+      if (Math.abs(dx) > Math.abs(dy)) hop(dx > 0 ? 1 : -1, 0);
+      else hop(0, dy < 0 ? 1 : -1);                                         // swipe up → forward
+    }
+    canvas.addEventListener('mousedown', pointerDown);
+    canvas.addEventListener('mouseup', pointerUp);
+    canvas.addEventListener('touchstart', pointerDown, { passive: true });
+    canvas.addEventListener('touchend', function (e) { if (e.cancelable) e.preventDefault(); pointerUp(e); }, { passive: false });
+
+    // ---------- dialog wiring ----------
+    document.getElementById('pet-choices').addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      document.querySelectorAll('#pet-choices .choice').forEach(c => c.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    document.querySelector('#pet-choices .choice').classList.add('selected');
+    document.getElementById('start-btn').addEventListener('click', beginGame);
+    document.getElementById('again-btn').addEventListener('click', showSelect);
+
+    function showSelect() { state = 'select'; overEl.hidden = true; setupEl.hidden = false; }
+
+    function beginGame() {
+      pet = selectedPet();
+      rows = {}; maxGen = -1;
+      ensureRows(VIS_FWD + 6);
+      score = 0; frame = 0; creep = 0;
+      deathTimer = 0; deadKind = ''; eagle = null;
+      player = { x: 4, z: 2, face: 1, hopping: false, hopT: 0, fromX: 4, fromZ: 2, toX: 4, toZ: 2, ride: null };
+      camZ = player.z - 1.5;
+      setupEl.hidden = true; overEl.hidden = true;
+      state = 'playing';
+    }
+
+    function die(kind) {
+      if (state !== 'playing') return;
+      state = 'dying';
+      deadKind = kind;
+      deathTimer = (kind === 'eagle') ? 46 : 34;
+      if (kind === 'eagle') eagle = { y: -120, grabbed: false };
+    }
+
+    function finishDeath() {
+      state = 'over';
+      if (score > best) { best = score; try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {} }
+      document.getElementById('over-score').textContent = score;
+      document.getElementById('over-best').textContent = best;
+      document.getElementById('over-sub').textContent =
+        deadKind === 'squash' ? 'Squashed flat! 🚗' :
+        deadKind === 'drown' ? 'Glug glug… 🌊' :
+        deadKind === 'train' ? 'Hit by a train! 🚆' :
+        deadKind === 'eagle' ? 'The eagle got you! 🦅' : 'Game Over';
+      overEl.hidden = false;
+    }
+
+    // ---------- update ----------
+    function update() {
+      if (state === 'dying') {
+        if (eagle) { eagle.y += 7; if (eagle.y > rowY(player.z) - 40) eagle.grabbed = true; }
+        deathTimer--; if (deathTimer <= 0) finishDeath();
+        return;
+      }
+      if (state !== 'playing') return;
+      frame++;
+
+      // camera: follow + creep
+      const follow = player.z;
+      camZ += (follow - camZ) * 0.08;
+      creep = 0.0045 + Math.min(score, 80) * 0.00018;
+      camZ += creep;
+      ensureRows(Math.ceil(camZ) + VIS_FWD + 2);
+
+      // move vehicles / logs / trains across visible rows
+      const lo = Math.floor(camZ) - VIS_BACK - 2, hi = Math.ceil(camZ) + VIS_FWD + 2;
+      for (let z = lo; z <= hi; z++) {
+        const row = rows[z]; if (!row) continue;
+        if (row.type === 'road') moveItems(row.cars);
+        else if (row.type === 'river') {
+          moveItems(row.logs);
+          row.logs.forEach(l => { if (l.gator) { l.subT = (l.subT + 1) % 200; l.submerged = l.subT > 150; } });
+        } else if (row.type === 'rail') updateRail(row);
+      }
+
+      // player hop animation
+      if (player.hopping) {
+        player.hopT++;
+        const t = player.hopT / HOP_FRAMES;
+        player.x = player.fromX + (player.toX - player.fromX) * t;
+        player.z = player.fromZ + (player.toZ - player.fromZ) * t;
+        if (player.hopT >= HOP_FRAMES) {
+          player.hopping = false;
+          player.x = player.toX; player.z = player.toZ;
+          player.ride = null;
+        }
+        return; // no hazards mid-hop
+      }
+
+      // settled — evaluate the tile the pet stands on
+      const rz = Math.round(player.z);
+      const row = rows[rz];
+      if (row) {
+        if (row.type === 'river') {
+          // must be on a (surfaced) log/gator, else drown; ride its drift
+          let onLog = null;
+          for (const l of row.logs) {
+            if (l.submerged) continue;
+            if (player.x > l.x - 0.55 && player.x < l.x + l.len - 0.45) { onLog = l; break; }
+          }
+          if (!onLog) { die('drown'); return; }
+          player.x += onLog.dir * onLog.speed;
+          player.ride = onLog;
+          if (player.x < -0.5 || player.x > COLS - 0.5) { die('drown'); return; }
+        } else if (row.type === 'road') {
+          for (const c of row.cars) {
+            if (player.x > c.x - 0.6 && player.x < c.x + c.len - 0.4) { die('squash'); return; }
+          }
+        } else if (row.type === 'rail') {
+          if (row.phase === 'pass' && row.train) {
+            const tr = row.train;
+            if (player.x > tr.x - 0.5 && player.x < tr.x + tr.len - 0.5) { die('train'); return; }
+          }
+        }
+      }
+
+      // eagle: fell too far behind the creeping camera
+      if (player.z < camZ - EAGLE_BEHIND) die('eagle');
+    }
+
+    function moveItems(items) {
+      if (!items) return;
+      for (const it of items) {
+        it.x += it.dir * it.speed;
+        if (it.dir > 0 && it.x > COLS + 2.5) it.x = -it.len - 2.5;
+        else if (it.dir < 0 && it.x < -it.len - 2.5) it.x = COLS + 2.5;
+      }
+    }
+
+    function updateRail(row) {
+      row.timer--;
+      if (row.phase === 'idle') {
+        if (row.timer <= 0) { row.phase = 'warn'; row.timer = 55; }
+      } else if (row.phase === 'warn') {
+        if (row.timer <= 0) {
+          row.phase = 'pass';
+          const len = COLS + 6;
+          row.train = { len: len, x: row.dir > 0 ? -len - 1 : COLS + 1 };
+          beep();
+        }
+      } else if (row.phase === 'pass') {
+        const tr = row.train;
+        tr.x += row.dir * 0.42;
+        if ((row.dir > 0 && tr.x > COLS + 1) || (row.dir < 0 && tr.x < -tr.len - 1)) {
+          row.phase = 'idle'; row.timer = ri(120, 260); row.train = null;
+        }
+      }
+    }
+
+    // ---------- tiny audio (train warning) ----------
+    let actx = null;
+    function beep() {
+      try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'square'; o.frequency.value = 520;
+        g.gain.value = 0.04; o.connect(g); g.connect(actx.destination);
+        o.start(); o.stop(actx.currentTime + 0.12);
+      } catch (e) {}
+    }
+
+    // ---------- drawing ----------
+    function drawLaneBand(row) {
+      const yc = rowY(row.z), y0 = yc - TD / 2;
+      if (row.type === 'grass') {
+        ctx.fillStyle = row.shade; ctx.fillRect(0, y0, W, TD);
+      } else if (row.type === 'road') {
+        ctx.fillStyle = '#3a3f4a'; ctx.fillRect(0, y0, W, TD);
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        for (let x = 16; x < W; x += 48) ctx.fillRect(x, yc - 2, 26, 4);
+      } else if (row.type === 'river') {
+        ctx.fillStyle = row.water; ctx.fillRect(0, y0, W, TD);
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        for (let x = (frame * 0.3) % 60 - 60; x < W; x += 60) ctx.fillRect(x, yc + 6, 30, 3);
+      } else { // rail
+        ctx.fillStyle = '#6b5b4a'; ctx.fillRect(0, y0, W, TD);
+        ctx.fillStyle = '#9aa0aa'; ctx.fillRect(0, yc - 10, W, 3); ctx.fillRect(0, yc + 7, W, 3);
+        if (row.phase === 'warn' && Math.floor(frame / 8) % 2 === 0) {
+          ctx.fillStyle = '#ff3b3b'; ctx.fillRect(W - 26, yc - 18, 12, 12);
+          ctx.fillStyle = '#ff3b3b'; ctx.fillRect(14, yc - 18, 12, 12);
+        }
+      }
+    }
+
+    function drawRowObjects(row) {
+      if (row.type === 'grass') {
+        for (const c in row.obstacles) {
+          const o = row.obstacles[c], x = +c;
+          if (o.kind === 'tree') {
+            drawBox(x, row.z, 0.34, 1, 0, '#7a4a2a', '#5e3920', 0.4);          // trunk
+            drawBox(x, row.z, 0.92, o.h, 1, '#3aa340', '#2c7d32', 0.55);        // foliage
+          } else {
+            drawBox(x, row.z, 0.78, 1, 0, '#9aa0aa', '#727884', 0.5);          // rock
+          }
+        }
+      } else if (row.type === 'road') {
+        for (const c of row.cars) drawVehicle(c, row.z);
+      } else if (row.type === 'river') {
+        for (const l of row.logs) drawLog(l, row.z);
+      } else if (row.type === 'rail') {
+        if (row.phase === 'pass' && row.train) drawTrain(row.train, row.z);
+      }
+    }
+
+    function drawVehicle(c, z) {
+      const center = c.x + c.len / 2 - 0.5;
+      // body
+      drawBox(center, z, c.len * 0.92, 1, 0, c.color, shade(c.color), 0.5);
+      // cabin / windows
+      drawBox(center, z, c.len * 0.5, 1, 1, '#cfe8ff', '#9bbfe0', 0.4);
+    }
+
+    function drawLog(l, z) {
+      const center = l.x + l.len / 2 - 0.5;
+      if (l.gator) {
+        if (l.submerged) {
+          ctx.fillStyle = 'rgba(20,60,30,0.5)';
+          const cx = colX(center), w = l.len * TW * 0.9;
+          ctx.fillRect(cx - w / 2, rowY(z) - 4, w, 8);
+          return;
+        }
+        drawBox(center, z, l.len * 0.92, 0.7, 0, '#3f7d3a', '#2c5e2a', 0.5);
+        // eyes bump at the head (front of travel)
+        const headX = l.dir > 0 ? l.x + l.len - 0.7 : l.x + 0.2;
+        drawBox(headX, z, 0.5, 1, 0.7, '#356b32', '#244c22', 0.4);
+      } else {
+        drawBox(center, z, l.len * 0.96, 0.7, 0, '#8a5a30', '#6b4423', 0.5);
+      }
+    }
+
+    function drawTrain(tr, z) {
+      const center = tr.x + tr.len / 2 - 0.5;
+      drawBox(center, z, tr.len, 1.6, 0, '#d23b3b', '#9c2626', 0.55);
+      drawBox(center, z, tr.len * 0.96, 1.6, 0, 'rgba(255,255,255,0.0)', 'rgba(0,0,0,0)', 0); // noop spacing
+      // windows stripe
+      ctx.fillStyle = '#ffe08a';
+      const cx = colX(center), y = rowY(z) - 1.6 * HH - TD * 0.55 + 6;
+      ctx.fillRect(cx - tr.len * TW / 2 + 8, y, tr.len * TW - 16, 8);
+    }
+
+    function drawPet() {
+      const p = PETS[pet] || PETS.chick;
+      let lift = 0;
+      if (player.hopping) lift = Math.sin((player.hopT / HOP_FRAMES) * Math.PI) * 0.65;
+      const x = player.x, z = player.z;
+      let squashH = 1, bodyH = 1;
+      if (state === 'dying' && deadKind === 'squash') { squashH = Math.max(0.12, 1 - (1 - deathTimer / 34)); }
+      // body
+      drawBox(x, z, 0.74, bodyH * squashH, lift, p.body, p.dark, 0.5);
+      // head (on top)
+      const headLift = lift + bodyH * squashH;
+      drawBox(x, z, 0.6, 0.7 * squashH, headLift, p.body, p.dark, 0.45);
+      // face feature
+      const fb = drawBox(x, z, 0.6, 0.0001, headLift + 0.7 * squashH, p.body, p.body, 0.45);
+      const cx = colX(x), eyeY = rowY(z) - (headLift + 0.35) * HH;
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(cx - 8, eyeY, 4, 4); ctx.fillRect(cx + 4, eyeY, 4, 4);
+      if (p.kind === 'beak') { ctx.fillStyle = p.feat; ctx.fillRect(cx - 3, eyeY + 6, 6, 4); }
+      else if (p.kind === 'ears') {
+        ctx.fillStyle = p.feat;
+        const topY = rowY(z) - (headLift + 0.7 * squashH) * HH - TD * 0.45;
+        ctx.fillRect(cx - 14, topY - 6, 8, 8); ctx.fillRect(cx + 6, topY - 6, 8, 8);
+      } else if (p.kind === 'eyesbig') {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(cx - 11, eyeY - 4, 8, 8); ctx.fillRect(cx + 3, eyeY - 4, 8, 8);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(cx - 8, eyeY - 1, 4, 4); ctx.fillRect(cx + 6, eyeY - 1, 4, 4);
+      }
+    }
+
+    function drawEagle() {
+      if (!eagle) return;
+      const cx = colX(player.x), y = eagle.y;
+      ctx.fillStyle = '#5a4632';
+      ctx.fillRect(cx - 10, y, 20, 16);          // body
+      ctx.fillStyle = '#6e5740';
+      ctx.fillRect(cx - 34, y + 2, 24, 8);       // wing L
+      ctx.fillRect(cx + 10, y + 2, 24, 8);       // wing R
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(cx - 8, y - 6, 16, 8);        // head
+      ctx.fillStyle = '#ffb52e';
+      ctx.fillRect(cx - 3, y - 2, 6, 4);         // beak
+    }
+
+    function shade(hex) {
+      // darken a #rrggbb by ~28%
+      const n = parseInt(hex.slice(1), 16);
+      let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+      r = Math.floor(r * 0.72); g = Math.floor(g * 0.72); b = Math.floor(b * 0.72);
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+
+    function drawHUD() {
+      ctx.fillStyle = '#fff';
+      ctx.font = "800 34px 'Nunito', sans-serif";
+      ctx.textAlign = 'left';
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 5;
+      ctx.strokeText(String(score), 18, 44); ctx.fillText(String(score), 18, 44);
+      ctx.font = "800 16px 'Nunito', sans-serif";
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#cfd6ea';
+      ctx.fillText('Best ' + best, W - 16, 30);
+      ctx.textAlign = 'left';
+    }
+
+    function draw() {
+      // sky / backdrop
+      ctx.fillStyle = '#1a2440';
+      ctx.fillRect(0, 0, W, H);
+
+      const lo = Math.floor(camZ) - VIS_BACK, hi = Math.ceil(camZ) + VIS_FWD;
+      const petZ = player ? Math.round(player.z) : -999;
+      // painter's: far rows first (high z), near last (low z)
+      for (let z = hi; z >= lo; z--) {
+        const row = rows[z]; if (!row) continue;
+        drawLaneBand(row);
+        drawRowObjects(row);
+        if (state !== 'select' && player && z === petZ && state !== 'over') drawPet();
+      }
+      if (eagle) drawEagle();
+      if (state !== 'select') drawHUD();
+    }
+
+    // ---------- main loop ----------
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    loop();
+  })();
+  </script>
+
+  <script>
+    // On desktop the homepage loads this game in a pane. Hide only the "‹ Games" back link
+    // (it would reload the homepage inside the pane) while keeping the Pacifico game title
+    // visible. Standalone/mobile (top-level) pages keep the full topbar.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
+  </script>
+</body>
+</html>
