@@ -367,6 +367,13 @@
   (function () {
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
+
+    // Player names set centrally on the homepage (shared localStorage). Blank = default.
+    function playerName(i, fallback) {
+      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+      catch (e) { return fallback; }
+    }
+
     const W = canvas.width;   // logical width
     const H = canvas.height;  // logical height
 
@@ -393,7 +400,10 @@
     let FLAP = FLAP_MIN;
     let PIPE_SPEED = SPEED_MIN;
     let GAP = GAP_MAX;
-    let playFrames = 0;  // frames spent in 'playing' state, drives the ramp
+    let playFrames = 0;  // play-time accumulator (real-time, drives the ramp & mechanics)
+    let dtf = 1;         // frame delta ÷ (1000/60): 1.0 @60fps — scales all motion for uniform speed
+    let lastTs = 0;
+    const PACE = 1.15;   // global pace multiplier — a touch faster (uniform across devices)
 
     function applyDifficulty() {
       // ease-in (t²) so the early game stays easy longer before ramping up.
@@ -403,13 +413,13 @@
       const t = lin * lin;
       GRAVITY = GRAVITY_MIN + (GRAVITY_MAX - GRAVITY_MIN) * t;
       FLAP = FLAP_MIN + (FLAP_MAX - FLAP_MIN) * t;
-      PIPE_SPEED = L.speedMin + (L.speedMax - L.speedMin) * t;
+      PIPE_SPEED = (L.speedMin + (L.speedMax - L.speedMin) * t) * PACE;
       GAP = L.gapMax + (L.gapMin - L.gapMax) * t;
 
       // Outer Space — low gravity: softer pull + gentler flap so the dog floats.
       if (L.mechanic === 'lowgrav') { GRAVITY *= 0.55; FLAP *= 0.8; }
       // Candy Land — sugar rush: the whole world periodically speeds up.
-      if (L.mechanic === 'rush') PIPE_SPEED *= rushMult(frame);
+      if (L.mechanic === 'rush') PIPE_SPEED *= rushMult(playFrames);
     }
 
     const BEST_KEY = 'flappydog.best';     // legacy single best (migrated to per-breed)
@@ -871,8 +881,8 @@
     function refreshDressToggle() {
       if (dressToggle) dressToggle.hidden = numPlayers !== 2;
       if (numPlayers !== 2) editSlot = 0;
-      if (dressP1) dressP1.classList.toggle('active', editSlot === 0);
-      if (dressP2) dressP2.classList.toggle('active', editSlot === 1);
+      if (dressP1) { dressP1.textContent = playerName(0, 'Player 1'); dressP1.classList.toggle('active', editSlot === 0); }
+      if (dressP2) { dressP2.textContent = playerName(1, 'Player 2'); dressP2.classList.toggle('active', editSlot === 1); }
     }
     function setEditSlot(s) {
       editSlot = s;
@@ -1001,24 +1011,24 @@
     // ---- Update ----
     function update() {
       frame++;
-      groundX = (groundX - PIPE_SPEED) % 24;
+      groundX = (groundX - PIPE_SPEED * dtf) % 24;
 
       // backdrop drifters move by kind: clouds/bubbles slide left, snow falls, stars barely drift
       const drift = LEVELS[level].drifter;
       for (const c of clouds) {
         if (drift === 'snow') {
-          c.y += c.vy; c.x += Math.sin((frame + c.phase * 40) / 40) * 0.3;
+          c.y += c.vy * dtf; c.x += Math.sin((frame + c.phase * 40) / 40) * 0.3 * dtf;
           if (c.y > H + 6) { c.y = -6; c.x = Math.random() * W; }
         } else if (drift === 'star') {
-          c.x -= 0.08 * c.s;                 // slow parallax; keep y so the field stays even
+          c.x -= 0.08 * c.s * dtf;           // slow parallax; keep y so the field stays even
           if (c.x < -6) c.x = W + 6;
         } else {
-          c.x -= 0.25 * c.s;
+          c.x -= 0.25 * c.s * dtf;
           if (c.x < -60) { c.x = W + 40; c.y = 50 + Math.random() * 130; }
         }
       }
 
-      for (const p of players) if (p.flapAnim > 0) p.flapAnim--;
+      for (const p of players) if (p.flapAnim > 0) p.flapAnim = Math.max(0, p.flapAnim - dtf);
 
       if (state === 'ready') {
         // gentle bob while waiting
@@ -1035,24 +1045,24 @@
       }
 
       // playing
-      playFrames++;
+      playFrames += dtf;
       applyDifficulty();  // ramp gravity/speed/gap with elapsed play time
 
       // Snowy Peaks — vertical wind gusts nudge each living dog.
-      const wind = LEVELS[level].mechanic === 'wind' ? windAt(frame) : 0;
+      const wind = LEVELS[level].mechanic === 'wind' ? windAt(playFrames) : 0;
 
       // per-dog physics (dead dogs keep falling to the ground)
       for (const p of players) {
         if (!p.alive) { settleDead(p); continue; }
-        p.v = Math.min(p.v + GRAVITY + wind, MAX_FALL);
-        p.y += p.v;
+        p.v = Math.min(p.v + (GRAVITY + wind) * dtf, MAX_FALL);
+        p.y += p.v * dtf;
         const target = p.v < 0 ? -0.45 : Math.min(p.v / 12, 1.2);
-        p.angle += (target - p.angle) * 0.18;
+        p.angle += (target - p.angle) * 0.18 * dtf;
       }
 
       // move pipes once; score & collect treats for each living dog
       for (const pipe of pipes) {
-        pipe.x -= PIPE_SPEED;
+        pipe.x -= PIPE_SPEED * dtf;
         for (const p of players) {
           if (p.alive && !pipe.passedBy[p.id] && pipe.x + PIPE_W < p.x) {
             pipe.passedBy[p.id] = true;
@@ -1086,7 +1096,7 @@
           const amp = Math.max(0, Math.min(Lm.amp, room));
           const lo = PIPE_MIN_TOP + amp, hi = H - GROUND_H - pipe.gap - PIPE_MIN_TOP - amp;
           const mid = Math.min(Math.max(pipe.baseTop, lo), hi);
-          pipe.top = mid + Math.sin(frame * Lm.motionFreq + pipe.phase) * amp;
+          pipe.top = mid + Math.sin(playFrames * Lm.motionFreq + pipe.phase) * amp;
         }
       }
 
@@ -1107,9 +1117,9 @@
     // Dead dog keeps dropping until it rests on the ground.
     function settleDead(p) {
       if (p.y < H - GROUND_H - DOG_R) {
-        p.v = Math.min(p.v + GRAVITY, MAX_FALL);
-        p.y += p.v;
-        p.angle = Math.min(p.angle + 0.06, 1.3);
+        p.v = Math.min(p.v + GRAVITY * dtf, MAX_FALL);
+        p.y += p.v * dtf;
+        p.angle = Math.min(p.angle + 0.06 * dtf, 1.3);
       } else {
         p.y = H - GROUND_H - DOG_R;
       }
@@ -1149,14 +1159,20 @@
     }
 
     // ---- Rendering ----
+    // The sky gradient only changes when the level changes — build it once and cache it
+    // instead of re-allocating a gradient every frame (a real cost on mobile).
+    let _skyGrad = null, _skyLevel = -1;
+    function skyGradient(L) {
+      if (_skyGrad && _skyLevel === level) return _skyGrad;
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, L.sky[0]); g.addColorStop(0.7, L.sky[1]); g.addColorStop(1, L.sky[2]);
+      _skyGrad = g; _skyLevel = level; return g;
+    }
+
     function draw() {
-      // sky (per level)
+      // sky (per level, cached)
       const L = LEVELS[level];
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
-      sky.addColorStop(0, L.sky[0]);
-      sky.addColorStop(0.7, L.sky[1]);
-      sky.addColorStop(1, L.sky[2]);
-      ctx.fillStyle = sky;
+      ctx.fillStyle = skyGradient(L);
       ctx.fillRect(0, 0, W, H);
 
       // backdrop drifters — clouds / bubbles / stars / snow, per level
@@ -2234,7 +2250,7 @@
           ctx.fillStyle = P2_COLOR; ctx.fillText('P2  ' + b, W / 2 + 58, cy0 - 22);
           ctx.font = "800 22px 'Nunito', sans-serif";
           ctx.fillStyle = '#ffd54f';
-          ctx.fillText(a === b ? "It's a tie!" : (a > b ? '🏆 Player 1 wins!' : '🏆 Player 2 wins!'), W / 2, cy0 + 14);
+          ctx.fillText(a === b ? "It's a tie!" : (a > b ? '🏆 ' + playerName(0, 'Player 1') + ' wins!' : '🏆 ' + playerName(1, 'Player 2') + ' wins!'), W / 2, cy0 + 14);
           ctx.fillStyle = '#9fe0f5';
           ctx.font = "700 13px 'Nunito', sans-serif";
           ctx.fillText(players[0].skin.name + '  vs  ' + players[1].skin.name, W / 2, cy0 + 42);
@@ -2305,7 +2321,10 @@
     }
 
     // ---- Main loop ----
-    function loop() {
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.6667;
+      dtf = Math.min(Math.max((ts - lastTs) / 16.6667, 0.25), 2.2);  // vs 60fps; clamp tab-switch/low-fps
+      lastTs = ts;
       update();
       draw();
       requestAnimationFrame(loop);
