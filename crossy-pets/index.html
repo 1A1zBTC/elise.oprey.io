@@ -68,7 +68,7 @@
 
     /* ---------- shared start / over dialog ---------- */
     .overlay {
-      position: absolute;
+      position: fixed;          /* full viewport, not clipped by the short canvas stage on mobile */
       inset: 0;
       background: rgba(10, 14, 28, 0.86);
       backdrop-filter: blur(4px);
@@ -76,6 +76,7 @@
       align-items: center;
       justify-content: center;
       padding: 16px;
+      overflow-y: auto;         /* scroll to reach Start on very short screens */
       z-index: 20;
     }
     .overlay[hidden] { display: none; }
