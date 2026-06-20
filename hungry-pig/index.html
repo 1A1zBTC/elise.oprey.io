@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Hungry Pig</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .back {
+      color: #a0a8c0;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+    .title {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .layout {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      justify-content: center;
+      width: 100%;
+      max-width: 800px;
+    }
+
+    .game-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .stage {
+      position: relative;
+      height: min(480px, 78vh);
+      max-width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+      border: 2px solid #0f3460;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hint {
+      margin-top: 14px;
+      color: #a0a8c0;
+      font-size: 0.85rem;
+      text-align: center;
+      max-width: 420px;
+    }
+
+    .shop {
+      flex: 1 1 260px;
+      max-width: 300px;
+      align-self: stretch;
+      max-height: min(480px, 78vh);
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .players-toggle {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .seg {
+      flex: 1;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 0.82rem;
+      color: #cfd6ea;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 8px 10px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .seg.active {
+      border-color: #e94560;
+      color: #fff;
+      background: #1f2b50;
+      box-shadow: 0 0 12px rgba(233, 69, 96, 0.3);
+    }
+
+    @media (max-width: 720px) {
+      html, body { overflow: auto; }
+      body { justify-content: flex-start; }
+      .layout { flex-direction: column; align-items: center; gap: 14px; }
+      .stage { height: auto; width: 100%; max-width: 440px; }
+      .shop { width: 100%; max-width: 440px; max-height: none; overflow: visible; flex: none; }
+    }
+
+    .truffle-bar {
+      text-align: center;
+      color: #ffe8b0;
+      font-weight: 800;
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+    }
+
+    .shop-section {
+      margin-bottom: 12px;
+    }
+
+    .shop-label {
+      color: #a0a8c0;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .shop-label b { color: #ffe8b0; }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .chip {
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 0.78rem;
+      color: #cfd6ea;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 6px 11px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .chip:hover:not(:disabled) {
+      border-color: #e94560;
+      color: #fff;
+    }
+
+    .chip.active {
+      border-color: #e94560;
+      color: #fff;
+      background: #1f2b50;
+      box-shadow: 0 0 12px rgba(233, 69, 96, 0.3);
+    }
+
+    /* affordable purchase — green nudge */
+    .chip.buy {
+      color: #bdf0c0;
+      border-color: #2f7d46;
+    }
+
+    .chip.buy:hover:not(:disabled) {
+      border-color: #46c46a;
+      color: #fff;
+      background: #1c3526;
+    }
+
+    .chip:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    /* ---------- start dialog (shared format) ---------- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 14, 28, 0.86);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 20;
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: 100%;
+      max-width: 380px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 24px;
+      padding: 26px 22px;
+      text-align: center;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    }
+    .panel h2 {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.7rem;
+      font-weight: 400;
+      margin-bottom: 6px;
+    }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 18px; }
+    .panel .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 16px 0 8px; }
+    .choices { display: flex; gap: 10px; justify-content: center; }
+    .choice {
+      flex: 1;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      color: #cfd6ea;
+      background: #0f1830;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 14px 6px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    }
+    .choice .big { display: block; font-size: 1.5rem; line-height: 1.2; color: #fff; }
+    .choice .small { display: block; font-size: 0.68rem; color: #8b93b0; font-weight: 700; margin-top: 2px; }
+    .choice:hover { border-color: #6f86c4; }
+    .choice:active { transform: scale(0.96); }
+    .choice.selected {
+      border-color: #e94560;
+      background: rgba(233, 69, 96, 0.12);
+      color: #fff;
+      box-shadow: 0 0 18px rgba(233, 69, 96, 0.25);
+    }
+    .choice.selected .small { color: #ffb3c2; }
+    .start-btn {
+      margin-top: 22px;
+      width: 100%;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #fff;
+      background: #e94560;
+      border: none;
+      border-radius: 16px;
+      padding: 15px 20px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b22a44;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Hungry Pig</span>
+    <span style="width:64px"></span>
+  </div>
+
+  <div class="layout">
+    <div class="game-col">
+      <div class="stage">
+        <canvas id="game" width="480" height="480"></canvas>
+      </div>
+      <p class="hint">P1: arrow keys / swipe&nbsp;&nbsp;·&nbsp;&nbsp;P2: W A S D / swipe top</p>
+    </div>
+
+    <aside class="shop">
+      <div class="players-toggle">
+        <button id="onePlayer" class="seg" type="button">1 Player</button>
+        <button id="twoPlayer" class="seg" type="button">2 Players</button>
+      </div>
+
+      <div class="truffle-bar">🍄 <span id="truffleCount">0</span> truffles — spend or save up</div>
+
+      <div class="shop-section" id="dressToggle" hidden>
+        <div class="shop-label">Customising</div>
+        <div class="players-toggle">
+          <button id="dressP1" class="seg" type="button">Player 1</button>
+          <button id="dressP2" class="seg" type="button">Player 2</button>
+        </div>
+      </div>
+
+      <div class="shop-section">
+        <div class="shop-label">Breeds · <b>15🍄</b></div>
+        <div id="breeds" class="chips"></div>
+      </div>
+
+      <div class="shop-section">
+        <div class="shop-label">Costumes · <b>8🍄</b></div>
+        <div id="costumes" class="chips"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Setup overlay -->
+  <div class="overlay" id="setup">
+    <div class="panel">
+      <h2>Hungry Pig</h2>
+      <div class="sub">Guide your pig to gobble truffles and grow a long line of piglets — don't hit the walls or any tail! 🍄</div>
+
+      <div class="group-label">Players</div>
+      <div class="choices" id="player-choices">
+        <button class="choice" data-players="1"><span class="big">1</span><span class="small">player</span></button>
+        <button class="choice" data-players="2"><span class="big">2</span><span class="small">players</span></button>
+      </div>
+
+      <button class="start-btn" id="start-btn">Start Game</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    // ---- Shared player names: edited in the launcher sidebar, read here via same-origin
+    // localStorage. Stored as a JSON array of up to 4 strings under 'elise.playerNames'.
+    function playerName(i, fallback) {
+      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+      catch (e) { return fallback; }
+    }
+
+    // ---- Board geometry ----
+    // A square play field framed by a top HUD band. Cells are square; the grid is
+    // centred horizontally with a small margin on each side.
+    const COLS = 20, ROWS = 20;
+    const HUD_H = 40;                          // reserved strip at the top for scores
+    const CELL = Math.floor((W - 40) / COLS);  // 22px cells
+    const GRID_W = CELL * COLS;
+    const GX0 = Math.round((W - GRID_W) / 2);  // left margin
+    const GY0 = HUD_H;                          // grid starts below the HUD band
+    function cx(gx) { return GX0 + gx * CELL + CELL / 2; }
+    function cy(gy) { return GY0 + gy * CELL + CELL / 2; }
+    function cellKey(c) { return c.x + ',' + c.y; }
+
+    // ---- Persistence keys ----
+    const TRUFFLES_KEY = 'hungrypig.truffles';   // spendable truffle balance
+    const OWNED_KEY = 'hungrypig.owned';         // how many breeds are unlocked (shared)
+    const COSTUMES_KEY = 'hungrypig.costumes';   // owned costume indices (shared pool)
+    const COSTUME_KEYS = ['hungrypig.costume', 'hungrypig.costume2']; // equipped per player
+    const SKIN_KEYS = ['hungrypig.skin', 'hungrypig.skin2'];          // equipped per player
+    const PLAYERS_KEY = 'hungrypig.players';     // last 1P/2P choice
+    const BEST_KEY = 'hungrypig.best';           // 1P high score
+
+    const BREED_COST = 15;
+    const COSTUME_COST = 8;
+
+    // Pig breeds (skins). Each is a fur palette + a couple of trait flags drawPig() reads.
+    // Collect 15 truffles to unlock the next one in line.
+    const BREEDS = [
+      { name: 'Pink',      body: '#f5a8bf', shade: '#e88aa4', snout: '#f6c2d2' },
+      { name: 'Black',     body: '#3b3842', shade: '#26242d', snout: '#b9949f', eye: '#f2ecdd' },
+      { name: 'Spotty',    body: '#f2b2c2', shade: '#d98aa0', snout: '#f8cdd9', spots: '#7d4a5a' },
+      { name: 'Ginger',    body: '#e0904c', shade: '#c4753a', snout: '#f0b277' },
+      { name: 'Hairy',     body: '#dccba6', shade: '#c7b389', snout: '#e9ddc2', fuzzy: true },
+      { name: 'Choco',     body: '#9a6242', shade: '#7d4e34', snout: '#b98562' },
+      { name: 'Golden',    body: '#f1c259', shade: '#dba83e', snout: '#f8d98a' },
+      { name: 'Inky',      body: '#5a5468', shade: '#46414f', snout: '#7b7488' },
+      { name: 'Minty',     body: '#9bd6b4', shade: '#79bd96', snout: '#c0ead2' },
+      { name: 'Berry',     body: '#b585d8', shade: '#9a6bbf', snout: '#d0b0e8' },
+      { name: 'Rosy',      body: '#f08c8c', shade: '#d66e6e', snout: '#f7b6b6', spots: '#8a3d3d' }
+    ];
+
+    // Head-worn costumes (shared pool, drawn upright on top of the head). 8 truffles each.
+    const COSTUMES = [
+      { id: 'party',   name: 'Party hat' },
+      { id: 'tophat',  name: 'Top hat' },
+      { id: 'crown',   name: 'Crown' },
+      { id: 'shades',  name: 'Shades' },
+      { id: 'bow',     name: 'Bow tie' },
+      { id: 'flower',  name: 'Flower' },
+      { id: 'halo',    name: 'Halo' },
+      { id: 'bandana', name: 'Bandana' },
+      { id: 'cap',     name: 'Cap' },
+      { id: 'chef',    name: 'Chef hat' }
+    ];
+
+    // ---- Saved economy / wardrobe ----
+    let truffles = parseInt(localStorage.getItem(TRUFFLES_KEY) || '0', 10) || 0;
+    // Pink (P1) and Black (P2) are both free from the start, so the two pigs look
+    // distinct out of the box; everything past index 1 is bought in the shop.
+    let owned = parseInt(localStorage.getItem(OWNED_KEY) || '2', 10) || 2;
+    owned = Math.max(2, Math.min(BREEDS.length, owned));
+    let best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
+
+    const costumesOwned = new Set(
+      (localStorage.getItem(COSTUMES_KEY) || '').split(',')
+        .map(function (s) { return parseInt(s, 10); })
+        .filter(function (n) { return !isNaN(n); })
+    );
+
+    function clampOwned(v, dflt) {
+      if (isNaN(v)) v = dflt;
+      return Math.max(0, Math.min(owned - 1, v));
+    }
+    // Per-player equipped breed. Slot 0 = P1, slot 1 = P2; both pick from the same owned pool.
+    let skins = [ clampOwned(parseInt(localStorage.getItem(SKIN_KEYS[0]) || '0', 10), 0), 0 ];
+    skins[1] = clampOwned(parseInt(localStorage.getItem(SKIN_KEYS[1]), 10),
+                          owned > 1 ? (skins[0] + 1) % owned : skins[0]);
+    function loadCostume(slot) {
+      const v = parseInt(localStorage.getItem(COSTUME_KEYS[slot]), 10);
+      return (!isNaN(v) && costumesOwned.has(v)) ? v : -1;
+    }
+    let costumes = [ loadCostume(0), loadCostume(1) ];
+    let editSlot = 0;   // which player the shop currently customises
+
+    let numPlayers = parseInt(localStorage.getItem(PLAYERS_KEY) || '1', 10) === 2 ? 2 : 1;
+
+    function saveTruffles() { try { localStorage.setItem(TRUFFLES_KEY, String(truffles)); } catch (e) {} }
+
+    let unlockName = null, unlockUntil = 0;   // "new unlock!" toast
+
+    // ---- Game state ----
+    let state = 'ready';        // 'ready' | 'playing' | 'gameover'
+    let pigs = [];
+    let trufflesField = [];     // collectible cells on the board
+    let stepMs = 150;           // current step interval (shrinks as the lead pig grows)
+    let resultText = '';        // line shown on the game-over screen
+    let tick = 0;               // animation frame counter (for wobble)
+
+    function skinFor(slot) { return BREEDS[Math.min(skins[slot], owned - 1)]; }
+    function costumeFor(slot) {
+      const i = costumes[slot];
+      return (i >= 0 && costumesOwned.has(i)) ? COSTUMES[i].id : null;
+    }
+
+    // ---- Truffle spawning ----
+    function occupied() {
+      const s = new Set();
+      for (const p of pigs) if (p.alive) for (const c of p.body) s.add(cellKey(c));
+      for (const t of trufflesField) s.add(cellKey(t));
+      return s;
+    }
+    function freeCell() {
+      const taken = occupied();
+      let tries = 0, c;
+      do {
+        c = { x: (Math.random() * COLS) | 0, y: (Math.random() * ROWS) | 0 };
+        tries++;
+      } while (taken.has(cellKey(c)) && tries < 400);
+      return c;
+    }
+    function truffleAt(cell) {
+      for (let i = 0; i < trufflesField.length; i++) {
+        if (trufflesField[i].x === cell.x && trufflesField[i].y === cell.y) return i;
+      }
+      return -1;
+    }
+    function respawnTruffle(i) { trufflesField[i] = freeCell(); }
+
+    function collectTruffle() {
+      truffles++;
+      saveTruffles();
+      refreshShop();
+    }
+
+    // ---- Build a fresh round ----
+    function reset() {
+      pigs = [];
+      // P1 enters from the left on the upper third, heading right.
+      pigs.push(makePig(0, 5, 6, { x: 1, y: 0 }));
+      if (numPlayers === 2) {
+        // P2 enters from the right on the lower third, heading left.
+        pigs.push(makePig(1, COLS - 6, ROWS - 7, { x: -1, y: 0 }));
+      }
+      const count = numPlayers === 2 ? 3 : 1;
+      trufflesField = [];
+      for (let i = 0; i < count; i++) trufflesField.push(freeCell());
+      stepMs = 150;
+      tick = 0;
+      resultText = '';
+    }
+
+    function makePig(slot, hx, hy, dir) {
+      const body = [];
+      for (let i = 0; i < 3; i++) body.push({ x: hx - dir.x * i, y: hy - dir.y * i });
+      return { slot: slot, alive: true, dead: false, dir: dir, pending: null, body: body, score: 0,
+               skin: skinFor(slot), costume: costumeFor(slot) };
+    }
+
+    function leadScore() {
+      let m = 0;
+      for (const p of pigs) if (p.score > m) m = p.score;
+      return m;
+    }
+
+    // ---- One simultaneous step of every living pig ----
+    function step() {
+      const live = pigs.filter(function (p) { return p.alive; });
+
+      // commit each pig's queued turn (never a direct 180° reversal)
+      for (const p of live) {
+        if (p.pending && !(p.pending.x === -p.dir.x && p.pending.y === -p.dir.y)) p.dir = p.pending;
+        p.pending = null;
+        p.newHead = { x: p.body[0].x + p.dir.x, y: p.body[0].y + p.dir.y };
+      }
+
+      // cells that will still be solid after this step (a tail vacates unless its pig eats)
+      const blocked = new Set();
+      for (const p of live) {
+        const grows = truffleAt(p.newHead) >= 0;
+        const last = p.body.length - 1;
+        for (let i = 0; i < p.body.length; i++) {
+          if (i === last && !grows) continue;   // tail moves out of the way
+          blocked.add(cellKey(p.body[i]));
+        }
+      }
+
+      // wall + body collisions
+      for (const p of live) {
+        const h = p.newHead;
+        if (h.x < 0 || h.y < 0 || h.x >= COLS || h.y >= ROWS) p.dead = true;
+        else if (blocked.has(cellKey(h))) p.dead = true;
+      }
+      // head-on: two pigs lunging at the same cell both lose
+      for (let i = 0; i < live.length; i++) {
+        for (let j = i + 1; j < live.length; j++) {
+          if (live[i].newHead.x === live[j].newHead.x && live[i].newHead.y === live[j].newHead.y) {
+            live[i].dead = true; live[j].dead = true;
+          }
+        }
+      }
+
+      // advance the survivors
+      for (const p of live) {
+        if (p.dead) { p.alive = false; continue; }
+        p.body.unshift(p.newHead);
+        const ti = truffleAt(p.newHead);
+        if (ti >= 0) { p.score++; collectTruffle(); respawnTruffle(ti); }  // eat → grow (no pop)
+        else p.body.pop();
+      }
+
+      // pace quickens with the leader's length
+      stepMs = Math.max(70, 150 - leadScore() * 4);
+
+      // end conditions
+      if (numPlayers === 1) {
+        if (!pigs[0].alive) endGame();
+      } else if (pigs.filter(function (p) { return p.alive; }).length < 2) {
+        endGame();
+      }
+    }
+
+    function endGame() {
+      state = 'gameover';
+      if (numPlayers === 1) {
+        const s = pigs[0].score;
+        if (s > best) { best = s; try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {} }
+        resultText = s + (s === 1 ? ' truffle' : ' truffles') + ' · best ' + best;
+      } else {
+        const a = pigs[0], b = pigs[1];
+        if (a.alive && !b.alive) resultText = '🏆 ' + playerName(0, 'Player 1') + ' wins!';
+        else if (b.alive && !a.alive) resultText = '🏆 ' + playerName(1, 'Player 2') + ' wins!';
+        else if (a.score === b.score) resultText = "It's a tie!";
+        else resultText = '🏆 ' + (a.score > b.score ? playerName(0, 'Player 1') : playerName(1, 'Player 2')) + ' wins!';
+      }
+    }
+
+    // =====================================================================
+    //  Drawing
+    // =====================================================================
+    function draw() {
+      // checkerboard grass field
+      ctx.fillStyle = '#16213e';
+      ctx.fillRect(0, 0, W, H);
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          ctx.fillStyle = (x + y) % 2 === 0 ? '#6ab150' : '#63a949';
+          ctx.fillRect(GX0 + x * CELL, GY0 + y * CELL, CELL, CELL);
+        }
+      }
+      drawFence();
+
+      for (const t of trufflesField) drawTruffle(t);
+      // draw the trailing piglets first so heads sit on top
+      for (const p of pigs) drawBody(p);
+      for (const p of pigs) drawHead(p);
+
+      drawHud();
+
+      if (state === 'ready') drawCenterCard(numPlayers === 2 ? 'Ready?' : 'Hungry Pig',
+        numPlayers === 2 ? 'Arrows vs W A S D — eat the most!' : 'Arrow keys or swipe to start');
+      else if (state === 'gameover') drawCenterCard('Game Over', resultText, true);
+
+      if (unlockName && tick < unlockUntil) drawUnlockToast();
+    }
+
+    function drawFence() {
+      ctx.strokeStyle = '#caa472';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(GX0 + 2, GY0 + 2, GRID_W - 4, CELL * ROWS - 4);
+    }
+
+    function drawTruffle(t) {
+      const px = cx(t.x), py = cy(t.y), r = CELL * 0.32;
+      const bob = Math.sin((tick + (t.x + t.y) * 7) / 14) * 1.4;
+      // stem
+      ctx.fillStyle = '#f3e6cf';
+      ctx.fillRect(px - r * 0.4, py - 1 + bob, r * 0.8, r * 0.9);
+      // cap
+      ctx.fillStyle = '#e2503f';
+      ctx.beginPath();
+      ctx.ellipse(px, py - r * 0.5 + bob, r, r * 0.75, 0, Math.PI, 0);
+      ctx.fill();
+      // spots
+      ctx.fillStyle = '#ffe8d6';
+      ctx.beginPath(); ctx.arc(px - r * 0.4, py - r * 0.55 + bob, r * 0.16, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + r * 0.35, py - r * 0.45 + bob, r * 0.13, 0, 7); ctx.fill();
+    }
+
+    function drawBody(p) {
+      if (!p.alive && state !== 'gameover') return;
+      const s = p.skin;
+      const r = CELL * 0.40;
+      // segments after the head
+      for (let i = p.body.length - 1; i >= 1; i--) {
+        const c = p.body[i];
+        const px = cx(c.x), py = cy(c.y);
+        ctx.globalAlpha = p.alive ? 1 : 0.5;
+        roundedDot(px, py, r, s.body, s.shade);
+        if (s.spots) {
+          ctx.fillStyle = s.spots;
+          ctx.beginPath(); ctx.arc(px + r * 0.25, py - r * 0.2, r * 0.28, 0, 7); ctx.fill();
+        }
+        // little curly tail on the very last piglet
+        if (i === p.body.length - 1) {
+          ctx.strokeStyle = s.shade; ctx.lineWidth = 3; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.arc(px - CELL * 0.3, py, r * 0.4, -1.2, 2.2); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function roundedDot(px, py, r, fill, stroke) {
+      ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = stroke;
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    function drawHead(p) {
+      if (!p.alive && state !== 'gameover') return;
+      const c = p.body[0];
+      const px = cx(c.x), py = cy(c.y);
+      const s = p.skin, r = CELL * 0.46;
+      const dx = p.dir.x, dy = p.dir.y;   // facing — snout & eyes lean this way
+      ctx.globalAlpha = p.alive ? 1 : 0.5;
+
+      // ears (two little triangles at the top)
+      ctx.fillStyle = s.shade;
+      triangle(px - r * 0.55, py - r * 0.5, r * 0.4);
+      triangle(px + r * 0.55, py - r * 0.5, r * 0.4);
+
+      // face
+      roundedDot(px, py, r, s.body, s.shade);
+      if (s.fuzzy) {                       // hairy breed — fuzzy halo
+        ctx.strokeStyle = s.shade; ctx.lineWidth = 1.5;
+        for (let a = 0; a < 12; a++) {
+          const ang = a / 12 * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(px + Math.cos(ang) * r, py + Math.sin(ang) * r);
+          ctx.lineTo(px + Math.cos(ang) * (r + 3), py + Math.sin(ang) * (r + 3));
+          ctx.stroke();
+        }
+      }
+      if (s.spots) {
+        ctx.fillStyle = s.spots;
+        ctx.beginPath(); ctx.arc(px - r * 0.5, py + r * 0.1, r * 0.22, 0, 7); ctx.fill();
+      }
+
+      // snout (leans toward travel direction)
+      const sx = px + dx * r * 0.42, sy = py + dy * r * 0.42;
+      ctx.fillStyle = s.snout;
+      ctx.beginPath(); ctx.ellipse(sx, sy, r * 0.42, r * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = s.shade;
+      ctx.beginPath(); ctx.arc(sx - r * 0.14, sy, r * 0.07, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + r * 0.14, sy, r * 0.07, 0, 7); ctx.fill();
+
+      // eyes (just behind the snout, offset sideways)
+      const ex = px + dx * r * 0.05, ey = py + dy * r * 0.05;
+      const perpX = -dy, perpY = dx;
+      ctx.fillStyle = s.eye || '#2a2233';   // dark pupils, or a light eye for dark breeds
+      ctx.beginPath(); ctx.arc(ex + perpX * r * 0.42 - dx * r * 0.1, ey + perpY * r * 0.42 - dy * r * 0.1, r * 0.12, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex - perpX * r * 0.42 - dx * r * 0.1, ey - perpY * r * 0.42 - dy * r * 0.1, r * 0.12, 0, 7); ctx.fill();
+
+      if (p.costume) drawCostume(p.costume, px, py, r);
+      ctx.globalAlpha = 1;
+    }
+
+    function triangle(tx, ty, size) {
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - size);
+      ctx.lineTo(tx - size * 0.8, ty + size * 0.5);
+      ctx.lineTo(tx + size * 0.8, ty + size * 0.5);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // Costumes always sit upright on the north of the head, so hats stay sensible
+    // whichever way the pig is travelling.
+    function drawCostume(id, px, py, r) {
+      const topY = py - r * 0.95;
+      ctx.save();
+      if (id === 'party') {
+        ctx.fillStyle = '#ff5fa2';
+        ctx.beginPath(); ctx.moveTo(px, topY - r * 0.9); ctx.lineTo(px - r * 0.55, topY + r * 0.2); ctx.lineTo(px + r * 0.55, topY + r * 0.2); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.arc(px, topY - r * 0.9, r * 0.16, 0, 7); ctx.fill();
+      } else if (id === 'tophat') {
+        ctx.fillStyle = '#23202c';
+        ctx.fillRect(px - r * 0.7, topY + r * 0.05, r * 1.4, r * 0.16);
+        ctx.fillRect(px - r * 0.42, topY - r * 0.75, r * 0.84, r * 0.85);
+        ctx.fillStyle = '#e94560'; ctx.fillRect(px - r * 0.42, topY - r * 0.1, r * 0.84, r * 0.14);
+      } else if (id === 'crown') {
+        ctx.fillStyle = '#ffd23f';
+        ctx.beginPath();
+        ctx.moveTo(px - r * 0.6, topY + r * 0.2); ctx.lineTo(px - r * 0.6, topY - r * 0.3);
+        ctx.lineTo(px - r * 0.3, topY); ctx.lineTo(px, topY - r * 0.45);
+        ctx.lineTo(px + r * 0.3, topY); ctx.lineTo(px + r * 0.6, topY - r * 0.3);
+        ctx.lineTo(px + r * 0.6, topY + r * 0.2); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e94560'; ctx.beginPath(); ctx.arc(px, topY - r * 0.05, r * 0.1, 0, 7); ctx.fill();
+      } else if (id === 'shades') {
+        ctx.fillStyle = '#23202c';
+        ctx.fillRect(px - r * 0.6, py - r * 0.05, r * 0.5, r * 0.32);
+        ctx.fillRect(px + r * 0.1, py - r * 0.05, r * 0.5, r * 0.32);
+        ctx.fillRect(px - r * 0.12, py + r * 0.05, r * 0.24, r * 0.06);
+      } else if (id === 'bow') {
+        ctx.fillStyle = '#e94560';
+        ctx.beginPath(); ctx.moveTo(px, py + r * 0.95); ctx.lineTo(px - r * 0.45, py + r * 0.7); ctx.lineTo(px - r * 0.45, py + r * 1.2); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(px, py + r * 0.95); ctx.lineTo(px + r * 0.45, py + r * 0.7); ctx.lineTo(px + r * 0.45, py + r * 1.2); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.arc(px, py + r * 0.95, r * 0.14, 0, 7); ctx.fill();
+      } else if (id === 'flower') {
+        const fx = px + r * 0.6, fy = topY + r * 0.1;
+        ctx.fillStyle = '#ff7ab0';
+        for (let a = 0; a < 5; a++) { const ang = a / 5 * Math.PI * 2; ctx.beginPath(); ctx.arc(fx + Math.cos(ang) * r * 0.22, fy + Math.sin(ang) * r * 0.22, r * 0.16, 0, 7); ctx.fill(); }
+        ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.arc(fx, fy, r * 0.14, 0, 7); ctx.fill();
+      } else if (id === 'halo') {
+        ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.ellipse(px, topY - r * 0.35, r * 0.5, r * 0.18, 0, 0, Math.PI * 2); ctx.stroke();
+      } else if (id === 'bandana') {
+        ctx.fillStyle = '#e94560';
+        ctx.beginPath(); ctx.moveTo(px - r * 0.85, py - r * 0.55); ctx.lineTo(px + r * 0.85, py - r * 0.55); ctx.lineTo(px + r * 0.7, py - r * 0.1); ctx.lineTo(px - r * 0.7, py - r * 0.1); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff'; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.arc(px + i * r * 0.3, py - r * 0.32, r * 0.05, 0, 7); ctx.fill(); }
+      } else if (id === 'cap') {
+        ctx.fillStyle = '#2f7de0';
+        ctx.beginPath(); ctx.ellipse(px, topY + r * 0.1, r * 0.6, r * 0.45, 0, Math.PI, 0); ctx.fill();
+        ctx.fillRect(px - r * 0.05, topY + r * 0.05, r * 0.7, r * 0.16);
+      } else if (id === 'chef') {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(px - r * 0.32, topY - r * 0.1, r * 0.28, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(px + r * 0.32, topY - r * 0.1, r * 0.28, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(px, topY - r * 0.3, r * 0.32, 0, 7); ctx.fill();
+        ctx.fillRect(px - r * 0.5, topY + r * 0.05, r * 1.0, r * 0.3);
+      }
+      ctx.restore();
+    }
+
+    function drawHud() {
+      ctx.fillStyle = '#16213e';
+      ctx.fillRect(0, 0, W, HUD_H);
+      ctx.textBaseline = 'middle';
+      if (numPlayers === 1) {
+        ctx.textAlign = 'left';
+        ctx.font = '800 16px Nunito, sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('🍄 ' + pigs[0].score, 14, HUD_H / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#ffe8b0';
+        ctx.fillText('Best ' + best, W - 14, HUD_H / 2);
+      } else {
+        ctx.font = '800 15px Nunito, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = pigs[0].alive ? skinFor(0).body : '#7d869e';
+        ctx.fillText(playerName(0, 'P1') + '  ' + pigs[0].score, 14, HUD_H / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = pigs[1].alive ? skinFor(1).body : '#7d869e';
+        ctx.fillText(pigs[1].score + '  ' + playerName(1, 'P2'), W - 14, HUD_H / 2);
+      }
+    }
+
+    function drawCenterCard(title, sub, replay) {
+      ctx.fillStyle = 'rgba(10, 14, 28, 0.72)';
+      ctx.fillRect(0, GY0, W, CELL * ROWS);
+      const midY = GY0 + CELL * ROWS / 2;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.font = '400 34px Pacifico, cursive';
+      ctx.fillText(title, W / 2, midY - 26);
+      ctx.font = '800 16px Nunito, sans-serif';
+      ctx.fillStyle = '#ffe8b0';
+      if (sub) ctx.fillText(sub, W / 2, midY + 12);
+      ctx.fillStyle = '#a0a8c0';
+      ctx.font = '700 13px Nunito, sans-serif';
+      ctx.fillText(replay ? 'Tap or press a key to play again' : '', W / 2, midY + 40);
+    }
+
+    function drawUnlockToast() {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e94560';
+      const tw = 200, th = 34, tyy = GY0 + 24;
+      ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2, tyy - th / 2, tw, th, 12); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 14px Nunito, sans-serif';
+      ctx.fillText('✨ ' + unlockName + ' unlocked!', W / 2, tyy);
+    }
+
+    // =====================================================================
+    //  Shop UI (mirrors Flappy Dog's buy / select / persist pattern)
+    // =====================================================================
+    const truffleCountEl = document.getElementById('truffleCount');
+    const breedsEl = document.getElementById('breeds');
+    const costumesEl = document.getElementById('costumes');
+
+    function equipSkin(slot, i) {
+      skins[slot] = i;
+      try { localStorage.setItem(SKIN_KEYS[slot], String(i)); } catch (e) {}
+      const pl = pigs[slot]; if (pl) pl.skin = BREEDS[i];   // applies live
+      refreshShop();
+    }
+    function selectSkin(i) {
+      if (i < 0 || i >= owned) return;
+      equipSkin(editSlot, i);
+    }
+    function buyBreed() {
+      if (truffles < BREED_COST || owned >= BREEDS.length) return;
+      truffles -= BREED_COST;
+      const newIndex = owned;
+      owned++;
+      try { localStorage.setItem(OWNED_KEY, String(owned)); } catch (e) {}
+      saveTruffles();
+      selectSkin(newIndex);
+      unlockName = BREEDS[newIndex].name; unlockUntil = tick + 160;
+      refreshShop();
+    }
+
+    function equipCostume(i) {
+      costumes[editSlot] = i;
+      try { localStorage.setItem(COSTUME_KEYS[editSlot], String(i)); } catch (e) {}
+      const pl = pigs[editSlot]; if (pl) pl.costume = (i >= 0 && costumesOwned.has(i)) ? COSTUMES[i].id : null;
+      refreshShop();
+    }
+    function buyOrEquipCostume(i) {
+      if (costumesOwned.has(i)) { equipCostume(i === costumes[editSlot] ? -1 : i); return; }  // toggle
+      if (truffles < COSTUME_COST) return;
+      truffles -= COSTUME_COST;
+      costumesOwned.add(i);
+      try { localStorage.setItem(COSTUMES_KEY, Array.from(costumesOwned).join(',')); } catch (e) {}
+      saveTruffles();
+      equipCostume(i);
+      unlockName = COSTUMES[i].name; unlockUntil = tick + 160;
+      refreshShop();
+    }
+
+    const breedBtns = BREEDS.map(function (b, i) {
+      const btn = document.createElement('button');
+      btn.className = 'chip'; btn.type = 'button';
+      btn.addEventListener('click', function () {
+        if (i < owned) selectSkin(i); else if (i === owned) buyBreed();
+        btn.blur();
+      });
+      breedsEl.appendChild(btn);
+      return btn;
+    });
+
+    const noCostumeBtn = document.createElement('button');
+    noCostumeBtn.className = 'chip'; noCostumeBtn.type = 'button'; noCostumeBtn.textContent = 'None';
+    noCostumeBtn.addEventListener('click', function () { equipCostume(-1); noCostumeBtn.blur(); });
+    costumesEl.appendChild(noCostumeBtn);
+
+    const costumeBtns = COSTUMES.map(function (c, i) {
+      const btn = document.createElement('button');
+      btn.className = 'chip'; btn.type = 'button';
+      btn.addEventListener('click', function () { buyOrEquipCostume(i); btn.blur(); });
+      costumesEl.appendChild(btn);
+      return btn;
+    });
+
+    function refreshBreeds() {
+      for (let i = 0; i < breedBtns.length; i++) {
+        const btn = breedBtns[i];
+        if (i < owned) {
+          btn.disabled = false;
+          btn.textContent = BREEDS[i].name;
+          btn.classList.toggle('active', i === skins[editSlot]);
+          btn.classList.remove('buy');
+        } else if (i === owned) {
+          const afford = truffles >= BREED_COST;
+          btn.disabled = !afford;
+          btn.textContent = '＋ ' + BREEDS[i].name + ' · ' + BREED_COST + '🍄';
+          btn.classList.remove('active');
+          btn.classList.toggle('buy', afford);
+        } else {
+          btn.disabled = true;
+          btn.textContent = '🔒 ' + BREEDS[i].name;
+          btn.classList.remove('active', 'buy');
+        }
+      }
+    }
+
+    function refreshCostumes() {
+      noCostumeBtn.classList.toggle('active', costumes[editSlot] < 0);
+      for (let i = 0; i < costumeBtns.length; i++) {
+        const btn = costumeBtns[i];
+        if (costumesOwned.has(i)) {
+          btn.disabled = false;
+          btn.textContent = COSTUMES[i].name;
+          btn.classList.toggle('active', i === costumes[editSlot]);
+          btn.classList.remove('buy');
+        } else {
+          const afford = truffles >= COSTUME_COST;
+          btn.disabled = !afford;
+          btn.textContent = '＋ ' + COSTUMES[i].name + ' · ' + COSTUME_COST + '🍄';
+          btn.classList.remove('active');
+          btn.classList.toggle('buy', afford);
+        }
+      }
+    }
+
+    function refreshShop() {
+      if (truffleCountEl) truffleCountEl.textContent = truffles;
+      refreshBreeds();
+      refreshCostumes();
+    }
+
+    // --- 1P / 2P toggle ---
+    const onePBtn = document.getElementById('onePlayer');
+    const twoPBtn = document.getElementById('twoPlayer');
+    function refreshPlayersToggle() {
+      if (onePBtn) onePBtn.classList.toggle('active', numPlayers === 1);
+      if (twoPBtn) twoPBtn.classList.toggle('active', numPlayers === 2);
+    }
+    function setPlayers(n) {
+      numPlayers = n;
+      try { localStorage.setItem(PLAYERS_KEY, String(n)); } catch (e) {}
+      reset();
+      state = 'ready';
+      refreshPlayersToggle();
+      setEditSlot(0);
+    }
+    if (onePBtn) onePBtn.addEventListener('click', function () { setPlayers(1); onePBtn.blur(); });
+    if (twoPBtn) twoPBtn.addEventListener('click', function () { setPlayers(2); twoPBtn.blur(); });
+
+    // --- "Customising P1 / P2" toggle (2P only) ---
+    const dressToggle = document.getElementById('dressToggle');
+    const dressP1 = document.getElementById('dressP1');
+    const dressP2 = document.getElementById('dressP2');
+    function refreshDressToggle() {
+      if (dressToggle) dressToggle.hidden = numPlayers !== 2;
+      if (numPlayers !== 2) editSlot = 0;
+      if (dressP1) { dressP1.textContent = playerName(0, 'Player 1'); dressP1.classList.toggle('active', editSlot === 0); }
+      if (dressP2) { dressP2.textContent = playerName(1, 'Player 2'); dressP2.classList.toggle('active', editSlot === 1); }
+    }
+    function setEditSlot(s) {
+      editSlot = s;
+      refreshDressToggle();
+      refreshShop();
+    }
+    if (dressP1) dressP1.addEventListener('click', function () { setEditSlot(0); dressP1.blur(); });
+    if (dressP2) dressP2.addEventListener('click', function () { setEditSlot(1); dressP2.blur(); });
+
+    // =====================================================================
+    //  Input — arrows (P1) / WASD (P2 in 2P, also P1 in 1P) + swipe
+    // =====================================================================
+    function steer(slot, dir) {
+      const p = pigs[slot];
+      if (!p || !p.alive) return;
+      if (state === 'ready') state = 'playing';                 // first nudge starts the round
+      if (dir.x === -p.dir.x && dir.y === -p.dir.y) return;     // no instant U-turn
+      p.pending = dir;
+    }
+    function restartOrStart() {
+      if (state === 'gameover') { reset(); state = 'ready'; }
+      else if (state === 'ready') state = 'playing';
+    }
+
+    window.addEventListener('keydown', function (e) {
+      const k = e.code;
+      const isArrow = k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown';
+      const isWASD = k === 'KeyA' || k === 'KeyD' || k === 'KeyW' || k === 'KeyS';
+      if (!isArrow && !isWASD && k !== 'Space' && k !== 'Enter') return;
+      e.preventDefault();
+      if (state === 'gameover') { restartOrStart(); return; }
+
+      if (isArrow) {
+        steer(0, k === 'ArrowLeft' ? { x: -1, y: 0 } : k === 'ArrowRight' ? { x: 1, y: 0 } : k === 'ArrowUp' ? { x: 0, y: -1 } : { x: 0, y: 1 });
+      } else if (isWASD) {
+        const slot = numPlayers === 2 ? 1 : 0;                  // WASD drives P2, or P1 in solo
+        steer(slot, k === 'KeyA' ? { x: -1, y: 0 } : k === 'KeyD' ? { x: 1, y: 0 } : k === 'KeyW' ? { x: 0, y: -1 } : { x: 0, y: 1 });
+      } else if (k === 'Space' || k === 'Enter') {
+        restartOrStart();
+      }
+    });
+
+    // Swipe: figure out which pig from where the touch began (2P splits top/bottom).
+    let touchStart = null;
+    function touchSlot(clientY) {
+      if (numPlayers !== 2) return 0;
+      const rect = canvas.getBoundingClientRect();
+      return (clientY - rect.top) < rect.height / 2 ? 1 : 0;    // top half → P2
+    }
+    canvas.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      touchStart = { x: t.clientX, y: t.clientY, slot: touchSlot(t.clientY) };
+    }, { passive: false });
+    canvas.addEventListener('touchend', function (e) {
+      e.preventDefault();
+      if (!touchStart) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
+      const slot = touchStart.slot;
+      touchStart = null;
+      if (state === 'gameover') { restartOrStart(); return; }
+      if (Math.abs(dx) < 14 && Math.abs(dy) < 14) { if (state === 'ready') state = 'playing'; return; }
+      if (Math.abs(dx) > Math.abs(dy)) steer(slot, { x: dx > 0 ? 1 : -1, y: 0 });
+      else steer(slot, { x: 0, y: dy > 0 ? 1 : -1 });
+    }, { passive: false });
+    // mouse click also restarts on the game-over screen (desktop convenience)
+    canvas.addEventListener('mousedown', function () { if (state === 'gameover') restartOrStart(); });
+
+    // =====================================================================
+    //  Start dialog + main loop
+    // =====================================================================
+    const setupEl = document.getElementById('setup');
+    const playerChoices = document.getElementById('player-choices');
+    let chosenPlayers = numPlayers;
+    function selectDialogChoice(el) {
+      playerChoices.querySelectorAll('.choice').forEach(function (c) { c.classList.remove('selected'); });
+      el.classList.add('selected');
+    }
+    playerChoices.addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      chosenPlayers = parseInt(btn.dataset.players, 10);
+      selectDialogChoice(btn);
+    });
+    document.getElementById('start-btn').addEventListener('click', function () {
+      setPlayers(chosenPlayers);
+      state = 'ready';
+      setupEl.hidden = true;
+    });
+    selectDialogChoice(playerChoices.querySelector('[data-players="' + (numPlayers === 2 ? 2 : 1) + '"]'));
+
+    // wire shop + first board
+    refreshPlayersToggle();
+    refreshDressToggle();
+    refreshShop();
+    reset();
+    state = 'ready';
+
+    // Frame-rate-independent stepping: accumulate real elapsed ms and take a snake
+    // step every `stepMs`, so the pace is identical on 60Hz, 120Hz or after a stall.
+    let lastTs = 0, acc = 0;
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      let dt = ts - lastTs; lastTs = ts;
+      if (dt > 200) dt = 200;            // clamp tab-switch jumps
+      tick++;
+      if (state === 'playing') {
+        acc += dt;
+        while (acc >= stepMs) { acc -= stepMs; step(); if (state !== 'playing') break; }
+      } else {
+        acc = 0;
+      }
+      draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // In the launcher's desktop iframe the in-page back link is redundant; hide it.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
+  })();
+  </script>
+
+</body>
+</html>
