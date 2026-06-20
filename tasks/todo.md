@@ -1,40 +1,41 @@
-# Task: Add a new game — Hungry Pig 🐷 (snake)
+# Task: Add a new game — Naughty Shelf 🐶 (drag-to-wrangle corgis)
 
-Add a 1–2 player game that fits the cute-pet arcade theme, with a pig main character.
-Chosen concept: a grid **snake** — a pig leads a growing line of piglets, eating truffles
-to grow. Full scope: polished game + an in-editor unlock shop (pig breeds + costumes
-bought with collected truffles), matching Flappy Dog's expansion pattern.
+A new single-player drag-and-drop game. A screen fills with more and more identical all-white
+corgis. When one **growls / pees / poops** it turns naughty — drag it **up** onto the naughty
+shelf. A shelved corgi slowly gets **sad and cries** — drag it **back down** before it breaks.
+Lose if (a) too many naughty corgis pile up on the floor, or (b) a shelf corgi gets too sad.
+Decisions: **core scope** (no shop), **one gentle escalating difficulty**, **1 player**.
 
 ## Plan (checklist)
-- [x] New self-contained `hungry-pig/index.html` reusing Flappy Dog's shell (head, topbar,
-      overlay, shop CSS), `playerName()` helper, currency/shop machinery, iframe back-link hide.
-- [x] Snake mechanics: 20×20 grid, simultaneous step on a wall-clock ms accumulator
-      (frame-rate independent), direction queue (no 180° flip), wall/self/other/head-on death,
-      speed ramps with the leader's length.
-- [x] 1P survival with persisted high score; 2P shared arena (3 truffles), last-alive wins,
-      tie on equal length.
-- [x] Input: P1 arrows, P2 WASD (WASD also drives P1 in solo); swipe to steer (split halves in 2P).
-- [x] `drawPig()` — pig head (snout/ears/eyes leaning toward travel dir) + piglet trail + curly
-      tail + upright costume overlay; 10 breeds, 10 costumes.
-- [x] Register card in root `index.html` (🐷, "1 – 2 players", "Arcade · Snake").
+- [x] New self-contained `naughty-shelf/index.html` reusing the Flappy Dog shell (head/CSS/topbar/
+      stage/overlay), `playerName()`, the iframe back-link hide, and Crossy Pets' `dtMs/dtf`
+      real-time loop.
+- [x] First click-and-drag mechanic in the set: `pointerdown/move/up` (mouse + touch) with
+      client→canvas mapping (kitten-jump pattern) and topmost-corgi hit-testing.
+- [x] Procedural side-view **white corgi** (`drawCorgi`) with states walk / naughty
+      (growl/pee/poop + floating bubble + floor mess) / held / shelf (sadness bar + crying tears).
+- [x] Gentle escalation: spawn rate, max corgis, naughty frequency and sadness speed all lerp
+      from calm→hectic over ~3 min.
+- [x] Shelf with 5 slots; full shelf snaps an extra drop back to the floor.
+- [x] Lose (a) chaos limit (5 naughty), lose (b) shelf sadness max; score = calm-downs + rescues;
+      `naughtyshelf.best` persisted.
+- [x] Registered launcher card (🐶, "1 player", "Arcade · Drag") in root `index.html`.
 
-## Review — DONE, verified headless (browse) at desktop + 390×844 mobile
-- Loads with **no console errors**; setup overlay + shop render.
-- **1P:** drove the pig onto a truffle — score 0→1, length 3→4, truffle count banked 0→1, truffle
-  respawned (read via a temporary `window.__hp` debug hook, since removed). Wall hit → **Game Over**
-  card ("Game Over", "0 truffles · best 1", restart hint); best score updated only on game over.
-- **2P:** two independent pigs (P1 arrows / P2 WASD), HUD "P1 0 / 0 P2", 3 truffles, "Customising
-  P1/P2" toggle appears.
-- **Shop:** bought Spotty breed (15) + Party hat (8) → balance 30→7, owned/equipped/costume keys
-  written; **persist across reload**; equipped Spotty coat + pink party hat render on the pig.
-  (Shop chips are covered by the full-screen setup overlay until Start Game — same as Flappy Dog.)
-- **Mobile:** setup overlay centered; gameplay layout stacks (canvas → toggles → shop).
-- **Launcher:** 🐷 Hungry Pig card present between Snakes & Ladders and Flappy Dog; on desktop it
-  loads in the iframe pane (`stage.src=hungry-pig/index.html`, welcome hidden); the in-iframe
-  back link hides via `window.self !== window.top` (file:// cross-origin blocks parent hide, same
-  as every other game).
-- Debug hook removed; `node --check` on the extracted script passes; final clean load = no errors.
+## Review — DONE, verified headless (browse), no console errors
+- Scene renders: wooden "NAUGHTY SHELF" plank, grass floor, HUD (🦴 score, chaos meter, best),
+  cute white corgis.
+- Natural pacing is gentle: 0 naughty over 6s from a fresh start.
+- **Calm-down:** dragging a naughty corgi onto a free slot → state `shelf`, naughty count −1,
+  score +1, mess cleared. Verified via the **real PointerEvent handlers** (not just a debug hook).
+- **Rescue:** dragging a shelf corgi down → state `walk`, score +1, sadness reset.
+- **Lose (a):** 5 naughty on floor → "Too much chaos! 🐾".
+- **Lose (b):** shelf sadness ≥ max → "A corgi got too sad 😢"; game-over card shows score + best.
+- **Shelf full:** 6th drop on a full shelf snaps back to the floor and stays naughty.
+- **Best persists** across reload. Mobile (390×844) stacks and the stage fills the width
+  (`touch-action:none` so drags don't scroll). Launcher card loads in the desktop iframe pane
+  (back link hidden via `window.self !== window.top`).
+- Temporary `window.__ns` debug hook removed; `node --check` passes; final load clean.
 
 ## Files
-- `hungry-pig/index.html` (new, single file)
+- `naughty-shelf/index.html` (new, single file)
 - `index.html` (one game card added)

@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Naughty Shelf</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .back {
+      color: #a0a8c0;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+    .title {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .game-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .stage {
+      position: relative;
+      height: min(600px, 78vh);
+      max-width: 100%;
+      aspect-ratio: 400 / 600;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+      border: 2px solid #0f3460;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;   /* let us own drag gestures, no page scroll */
+    }
+
+    .hint {
+      margin-top: 14px;
+      color: #a0a8c0;
+      font-size: 0.85rem;
+      text-align: center;
+      max-width: 400px;
+    }
+
+    /* ---------- dialogs (shared format) ---------- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 14, 28, 0.86);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 20;
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: 100%;
+      max-width: 380px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 24px;
+      padding: 26px 22px;
+      text-align: center;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    }
+    .panel h2 {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.7rem;
+      font-weight: 400;
+      margin-bottom: 6px;
+    }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 8px; line-height: 1.45; }
+    .panel .big-score { color: #ffe8b0; font-weight: 800; font-size: 1.1rem; margin: 10px 0 2px; }
+    .start-btn {
+      margin-top: 20px;
+      width: 100%;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: #fff;
+      background: #e94560;
+      border: none;
+      border-radius: 16px;
+      padding: 15px 20px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b22a44;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Naughty Shelf</span>
+    <span style="width:64px"></span>
+  </div>
+
+  <div class="game-col">
+    <div class="stage">
+      <canvas id="game" width="400" height="600"></canvas>
+    </div>
+    <p class="hint">Drag a grumpy corgi up to the shelf — then bring it back down before it cries!</p>
+  </div>
+
+  <!-- Setup overlay -->
+  <div class="overlay" id="setup">
+    <div class="panel">
+      <h2>Naughty Shelf</h2>
+      <div class="sub">More and more corgis wander in. When one <b>growls, pees or poops</b>, drag it
+        up to the naughty shelf. But a corgi left on the shelf gets sad and cries — drag it back down!</div>
+      <div class="sub">You lose if the floor gets too naughty, or a shelf corgi gets too sad. 🐶</div>
+      <button class="start-btn" id="start-btn">Start Game</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    // Shared player names (set in the launcher); used only for a friendly game-over line.
+    function playerName(i, fallback) {
+      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
+      catch (e) { return fallback; }
+    }
+
+    const BEST_KEY = 'naughtyshelf.best';
+    let best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
+
+    // ---- Scene geometry ----
+    const SHELF_Y = 150;          // top surface of the plank (corgis sit with feet here)
+    const SHELF_PLANK = 168;      // y where the wooden plank is drawn
+    const FLOOR_Y = 548;          // ground line corgis stand on
+    const SHELF_SLOTS = 5;
+    const slotX = [];             // x centre of each shelf slot
+    (function () {
+      const margin = 46, span = (W - margin * 2) / (SHELF_SLOTS - 1);
+      for (let i = 0; i < SHELF_SLOTS; i++) slotX.push(margin + span * i);
+    })();
+
+    // ---- Tunables ----
+    const CHAOS_LIMIT = 5;        // this many naughty-on-floor corgis → lose (a)
+    const RAMP_MS = 180000;       // ~3 min to reach near-max pressure
+    const CORGI_R = 30;           // hit-test radius
+
+    // gentle escalation helpers: lerp from calm (t=0) to hectic (t=1)
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function ramp() { return Math.min(elapsed / RAMP_MS, 1); }
+    function spawnInterval() { return lerp(9000, 3500, ramp()); }
+    function maxCorgis() { return Math.round(lerp(6, 14, ramp())); }
+    function actMean() { return lerp(12000, 5000, ramp()); }   // mean ms a calm corgi stays good
+    function sadMax() { return lerp(14000, 9000, ramp()); }    // ms on shelf before "too sad"
+
+    function newActTimer() { return actMean() * (0.6 + Math.random() * 0.8); }
+
+    // ---- State ----
+    let state = 'ready';          // 'ready' | 'playing' | 'over'
+    let corgis = [];
+    let elapsed = 0;              // ms survived
+    let spawnTimer = 0;
+    let score = 0;
+    let overReason = '';
+    let held = null;              // the corgi currently being dragged
+    let grabDX = 0, grabDY = 0;
+    let nextId = 1;
+
+    const KINDS = ['growl', 'pee', 'poop'];
+
+    function makeCorgi(x) {
+      return {
+        id: nextId++,
+        x: x != null ? x : 40 + Math.random() * (W - 80),
+        y: FLOOR_Y,
+        vx: (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.3),
+        facing: 1,
+        state: 'walk',
+        kind: null,               // naughty flavour
+        mess: null,               // {x, kind} decal on the floor
+        sadness: 0,
+        slot: -1,
+        actTimer: newActTimer(),
+        phase: Math.random() * 100,
+        wiggle: 0
+      };
+    }
+
+    function reset() {
+      corgis = [];
+      for (let i = 0; i < 3; i++) corgis.push(makeCorgi());
+      elapsed = 0; spawnTimer = 0; score = 0; overReason = ''; held = null;
+    }
+
+    function naughtyOnFloor() {
+      let n = 0;
+      for (const c of corgis) if (c.state === 'naughty') n++;
+      return n;
+    }
+    function freeSlot() {
+      const used = corgis.filter(function (c) { return c.state === 'shelf'; }).map(function (c) { return c.slot; });
+      for (let i = 0; i < SHELF_SLOTS; i++) if (used.indexOf(i) < 0) return i;
+      return -1;
+    }
+
+    // =====================================================================
+    //  Update
+    // =====================================================================
+    function update() {
+      if (state !== 'playing') { for (const c of corgis) c.phase += dtf; return; }
+      elapsed += dtMs;
+
+      // spawn more corgis over time
+      spawnTimer += dtMs;
+      if (spawnTimer >= spawnInterval() && corgis.length < maxCorgis()) {
+        spawnTimer = 0;
+        corgis.push(makeCorgi());
+      }
+
+      for (const c of corgis) {
+        c.phase += dtf;
+        if (c === held) continue;
+
+        if (c.state === 'walk') {
+          // wander along the floor, turn at the walls
+          c.x += c.vx * dtf;
+          c.facing = c.vx < 0 ? -1 : 1;
+          if (c.x < 34) { c.x = 34; c.vx = Math.abs(c.vx); }
+          if (c.x > W - 34) { c.x = W - 34; c.vx = -Math.abs(c.vx); }
+          if (Math.random() < 0.004 * dtf) c.vx *= -1;          // occasional turn
+          // tick toward acting up
+          c.actTimer -= dtMs;
+          if (c.actTimer <= 0) {
+            c.state = 'naughty';
+            c.kind = KINDS[(Math.random() * KINDS.length) | 0];
+            c.vx *= 0.25;                                        // mostly stops to misbehave
+            if (c.kind === 'pee' || c.kind === 'poop') c.mess = { x: c.x + c.facing * -14, kind: c.kind };
+          }
+        } else if (c.state === 'naughty') {
+          // shuffles slowly, keeps being naughty until shelved
+          c.x += c.vx * dtf;
+          if (c.x < 34) { c.x = 34; c.vx = Math.abs(c.vx); }
+          if (c.x > W - 34) { c.x = W - 34; c.vx = -Math.abs(c.vx); }
+        } else if (c.state === 'shelf') {
+          c.x = slotX[c.slot];
+          c.y = SHELF_Y;
+          c.sadness += dtMs;
+          if (c.sadness >= sadMax()) { gameOver('A corgi got too sad 😢'); return; }
+        }
+      }
+
+      if (naughtyOnFloor() >= CHAOS_LIMIT) { gameOver('Too much chaos! 🐾'); return; }
+    }
+
+    function gameOver(reason) {
+      state = 'over';
+      overReason = reason;
+      held = null;
+      if (score > best) { best = score; try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {} }
+    }
+
+    // =====================================================================
+    //  Drawing
+    // =====================================================================
+    function draw() {
+      // room
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#2b3566');
+      g.addColorStop(1, '#1b2347');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+      // floor
+      ctx.fillStyle = '#3a4a2f';
+      ctx.fillRect(0, FLOOR_Y + 14, W, H - (FLOOR_Y + 14));
+      ctx.fillStyle = '#46582f';
+      ctx.fillRect(0, FLOOR_Y + 14, W, 8);
+
+      // shelf brackets + plank
+      ctx.fillStyle = '#7a5a3a';
+      ctx.fillRect(26, SHELF_PLANK, 12, 26);
+      ctx.fillRect(W - 38, SHELF_PLANK, 12, 26);
+      ctx.fillStyle = '#a6794d';
+      roundRect(20, SHELF_PLANK - 16, W - 40, 18, 6); ctx.fill();
+      ctx.fillStyle = '#bb8a5c';
+      roundRect(20, SHELF_PLANK - 16, W - 40, 6, 4); ctx.fill();
+      // "naughty" label on the shelf
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      ctx.font = '800 13px Nunito, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('N A U G H T Y   S H E L F', W / 2, SHELF_PLANK - 28);
+
+      // floor messes first (under the dogs)
+      for (const c of corgis) if (c.mess && c.state === 'naughty') drawMess(c.mess);
+
+      // corgis: shelf ones, then floor ones, then the held one on top
+      const order = corgis.slice().sort(function (a, b) {
+        const ay = a === held ? 9999 : a.y, by = b === held ? 9999 : b.y;
+        return ay - by;
+      });
+      for (const c of order) drawCorgi(c);
+
+      drawHud();
+
+      if (state === 'ready') centerCard('Naughty Shelf', 'Tap Start to wrangle some corgis!');
+      else if (state === 'over') centerCard(overReason, 'Tap to play again', true);
+    }
+
+    function drawHud() {
+      // score (left) + best (right)
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.font = '800 18px Nunito, sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('🦴 ' + score, 14, 22);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ffe8b0';
+      ctx.font = '800 14px Nunito, sans-serif';
+      ctx.fillText('Best ' + best, W - 14, 22);
+
+      // chaos meter (centre): how full the floor is with naughty dogs
+      const n = naughtyOnFloor();
+      const bw = 150, bx = (W - bw) / 2, by = 14, bh = 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      roundRect(bx, by, bw, bh, 7); ctx.fill();
+      const frac = Math.min(n / CHAOS_LIMIT, 1);
+      ctx.fillStyle = frac < 0.6 ? '#7ed37e' : frac < 0.85 ? '#ffcf5a' : '#e94560';
+      roundRect(bx, by, Math.max(0, bw * frac), bh, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 11px Nunito, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('naughty ' + n + '/' + CHAOS_LIMIT, W / 2, by + bh / 2 + 1);
+    }
+
+    // A side-view white corgi built from canvas primitives.
+    function drawCorgi(c) {
+      const lift = c === held ? 1 : 0;
+      const f = c.facing;                       // 1 = facing right, -1 = facing left
+      let bx = c.x, by = c.y;
+      if (lift) { by -= 6; }
+      const onShelf = c.state === 'shelf';
+      const sitting = onShelf;                  // sit on the shelf
+      const sad = onShelf && c.sadness >= sadMax() * 0.55;
+      const sadFrac = onShelf ? Math.min(c.sadness / sadMax(), 1) : 0;
+
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.scale(f, 1);                          // flip so we can always draw facing right
+
+      // a tiny breathing / wiggle bob
+      const bob = Math.sin(c.phase * 0.18) * (c.state === 'walk' ? 1.2 : 0.6);
+      const wig = lift ? Math.sin(c.phase * 0.6) * 0.06 : 0;
+      ctx.rotate(wig);
+
+      const bodyY = sitting ? -16 : -18 + bob;
+
+      // legs
+      ctx.fillStyle = '#e9e9ef';
+      if (sitting || lift) {
+        // tucked / dangling
+        legSit(-12, -6); legSit(10, -6);
+      } else {
+        const sw = Math.sin(c.phase * 0.5) * 3;                 // walk swing
+        const moving = c.state === 'walk';
+        leg(-13, moving ? sw : 0); leg(-4, moving ? -sw : 0);
+        leg(7, moving ? sw : 0); leg(15, moving ? -sw : 0);
+      }
+
+      // tail (stubby, behind = left)
+      ctx.fillStyle = '#fafafa';
+      ctx.beginPath(); ctx.ellipse(-24, bodyY - 2, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+
+      // body — long, low corgi loaf
+      ctx.fillStyle = '#fdfdff';
+      roundRectPath(-24, bodyY - 13, 46, 26, 13);
+      ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#dcdce6'; ctx.stroke();
+
+      // head (front = right)
+      const hx = 20, hy = bodyY - 8;
+      ctx.fillStyle = '#fdfdff';
+      ctx.beginPath(); ctx.arc(hx, hy, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#dcdce6'; ctx.stroke();
+
+      // big upright corgi ears
+      ctx.fillStyle = '#fdfdff';
+      ear(hx - 6, hy - 12); ear(hx + 4, hy - 13);
+      ctx.fillStyle = '#f4b9c4';                                // inner ear
+      innerEar(hx - 6, hy - 11); innerEar(hx + 4, hy - 12);
+
+      // snout + nose
+      ctx.fillStyle = '#fdfdff';
+      ctx.beginPath(); ctx.ellipse(hx + 10, hy + 2, 7, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3a3340';
+      ctx.beginPath(); ctx.arc(hx + 15, hy + 1, 2.4, 0, Math.PI * 2); ctx.fill();
+
+      // cheek blush
+      ctx.fillStyle = 'rgba(244,150,170,0.5)';
+      ctx.beginPath(); ctx.arc(hx + 2, hy + 5, 3.2, 0, Math.PI * 2); ctx.fill();
+
+      // face by state
+      drawFace(c, hx, hy, sad, sadFrac);
+
+      ctx.restore();
+
+      // ---- world-space overlays (not mirrored) ----
+      // floor shadow for a held dog
+      if (lift) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath(); ctx.ellipse(c.x, FLOOR_Y + 6, 20, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      // naughty "!" marker + tears float above in screen space
+      if (c.state === 'naughty') drawNaughtyMark(c.x, by + bodyYOffset(c) - 34, c.kind);
+      if (sad) drawTears(c.x, c.y - 30, sadFrac);
+      // sadness bar above a shelf dog
+      if (onShelf) {
+        const bw = 30, bx2 = c.x - bw / 2, byy = c.y - 40;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; roundRect(bx2, byy, bw, 5, 2.5); ctx.fill();
+        ctx.fillStyle = sadFrac < 0.55 ? '#7ed37e' : sadFrac < 0.8 ? '#ffcf5a' : '#e94560';
+        roundRect(bx2, byy, bw * sadFrac, 5, 2.5); ctx.fill();
+      }
+
+      // legs helpers (closures over ctx)
+      function leg(lx, sw) {
+        ctx.save(); ctx.fillStyle = '#e9e9ef';
+        roundRectPath(lx, 1 + Math.max(0, sw), 6, 9 - Math.abs(sw) * 0.4, 3); ctx.fill();
+        ctx.restore();
+      }
+      function legSit(lx, off) {
+        ctx.fillStyle = '#e9e9ef';
+        roundRectPath(lx, lift ? 2 : -1, 6, lift ? 11 : 7, 3); ctx.fill();
+      }
+      function ear(ex, ey) {
+        ctx.beginPath();
+        ctx.moveTo(ex, ey + 6);
+        ctx.quadraticCurveTo(ex - 4, ey - 9, ex + 3, ey - 8);
+        ctx.quadraticCurveTo(ex + 7, ey - 2, ex + 5, ey + 6);
+        ctx.closePath(); ctx.fill();
+      }
+      function innerEar(ex, ey) {
+        ctx.beginPath(); ctx.ellipse(ex + 1, ey - 1, 2, 4, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    function bodyYOffset(c) { return c.state === 'shelf' ? -16 : -18; }
+
+    function drawFace(c, hx, hy, sad, sadFrac) {
+      const ex = hx + 4, ey = hy - 2;          // eye anchor (facing right)
+      if (c.state === 'naughty' && c.kind === 'growl') {
+        // angry eyes + brow + grumpy mouth
+        ctx.strokeStyle = '#3a3340'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(ex - 5, ey - 5); ctx.lineTo(ex + 1, ey - 2); ctx.stroke();   // brow
+        ctx.fillStyle = '#3a3340';
+        ctx.beginPath(); ctx.arc(ex, ey + 1, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(hx + 5, hy + 6); ctx.lineTo(hx + 13, hy + 6); ctx.stroke();  // flat mouth
+      } else if (sad) {
+        // teary sad eyes
+        ctx.fillStyle = '#3a3340';
+        ctx.beginPath(); ctx.arc(ex, ey + 1, 2.4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#3a3340'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(hx + 9, hy + 8, 3, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); // frown
+      } else {
+        // happy round eye + content smile
+        ctx.fillStyle = '#3a3340';
+        ctx.beginPath(); ctx.arc(ex, ey, 2.3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(ex + 0.8, ey - 0.8, 0.8, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#3a3340'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(hx + 10, hy + 4, 3, 0.1, Math.PI * 0.8); ctx.stroke();
+      }
+    }
+
+    function drawNaughtyMark(x, y, kind) {
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      // bouncing red bubble with an icon
+      const yy = y + Math.sin(elapsed / 160) * 2;
+      ctx.fillStyle = '#e94560';
+      ctx.beginPath(); ctx.arc(x, yy, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 14px Nunito, sans-serif';
+      const icon = kind === 'pee' ? '💧' : kind === 'poop' ? '💩' : '!';
+      ctx.fillText(icon, x, yy + 1);
+      ctx.restore();
+    }
+
+    function drawTears(x, y, frac) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(120,180,255,0.9)';
+      const n = 1 + Math.floor(frac * 2);
+      for (let i = 0; i < n; i++) {
+        const t = (elapsed / 600 + i * 0.4) % 1;
+        const ty = y + t * 16;
+        ctx.beginPath(); ctx.ellipse(x - 8 + i * 16, ty, 2, 3, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawMess(m) {
+      ctx.save();
+      if (m.kind === 'pee') {
+        ctx.fillStyle = 'rgba(240,210,90,0.8)';
+        ctx.beginPath(); ctx.ellipse(m.x, FLOOR_Y + 8, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#6b4a2a';
+        ctx.beginPath(); ctx.arc(m.x, FLOOR_Y + 6, 4, 0, Math.PI * 2);
+        ctx.arc(m.x + 4, FLOOR_Y + 4, 3.4, 0, Math.PI * 2);
+        ctx.arc(m.x - 4, FLOOR_Y + 5, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function centerCard(title, sub, replay) {
+      ctx.fillStyle = 'rgba(10, 14, 28, 0.72)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.font = '400 30px Pacifico, cursive';
+      ctx.fillText(title, W / 2, H / 2 - 30);
+      if (replay) {
+        ctx.fillStyle = '#ffe8b0';
+        ctx.font = '800 17px Nunito, sans-serif';
+        ctx.fillText('Score ' + score + '   ·   Best ' + best, W / 2, H / 2 + 4);
+      }
+      ctx.fillStyle = '#a0a8c0';
+      ctx.font = '700 14px Nunito, sans-serif';
+      ctx.fillText(sub, W / 2, H / 2 + (replay ? 34 : 6));
+    }
+
+    // rounded-rect helpers
+    function roundRectPath(x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function roundRect(x, y, w, h, r) { roundRectPath(x, y, w, h, r); }
+
+    // =====================================================================
+    //  Input — drag (mouse + touch), one active pointer
+    // =====================================================================
+    function clientToCanvas(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: (clientX - rect.left) / rect.width * W, y: (clientY - rect.top) / rect.height * H };
+    }
+    function corgiAt(px, py) {
+      // topmost first: held-priority then nearest within radius (prefer shelf/naughty for grabbing)
+      let pick = null, pickRank = -1;
+      for (const c of corgis) {
+        const cy = c === held ? c.y : c.y - 18;
+        const dx = px - c.x, dy = py - (c.state === 'shelf' ? c.y - 14 : cy);
+        if (dx * dx + dy * dy <= CORGI_R * CORGI_R) {
+          const rank = c.y;                 // lower on screen = drawn later = on top
+          if (rank > pickRank) { pick = c; pickRank = rank; }
+        }
+      }
+      return pick;
+    }
+
+    function onDown(clientX, clientY) {
+      if (state === 'over') { reset(); state = 'ready'; return; }
+      if (state === 'ready') return;        // press Start button to begin
+      const p = clientToCanvas(clientX, clientY);
+      const c = corgiAt(p.x, p.y);
+      if (!c) return;
+      held = c;
+      if (c.state === 'shelf') c.slot = -1;  // free its slot while carried
+      grabDX = p.x - c.x; grabDY = p.y - c.y;
+    }
+    function onMove(clientX, clientY) {
+      if (!held) return;
+      const p = clientToCanvas(clientX, clientY);
+      held.x = Math.max(20, Math.min(W - 20, p.x - grabDX));
+      held.y = Math.max(40, Math.min(FLOOR_Y, p.y - grabDY));
+    }
+    function onUp() {
+      if (!held) return;
+      const c = held; held = null;
+      const droppedHigh = c.y < SHELF_Y + 70;   // released in the shelf band
+      const wasNaughty = c.state === 'naughty';
+
+      if (droppedHigh) {
+        const slot = freeSlot();
+        if (slot >= 0) {
+          c.state = 'shelf'; c.slot = slot; c.x = slotX[slot]; c.y = SHELF_Y; c.sadness = 0;
+          if (wasNaughty) { score++; c.kind = null; c.mess = null; }   // calmed a naughty dog
+        } else {
+          dropToFloor(c, false);                // shelf full → back to floor
+        }
+      } else {
+        dropToFloor(c, true);
+      }
+    }
+    function dropToFloor(c, scored) {
+      const cameFromShelf = c.state === 'shelf';
+      c.y = FLOOR_Y;
+      if (c.state === 'naughty') {
+        // a naughty dog dropped on the floor stays naughty — must reach the shelf
+        c.slot = -1;
+        return;
+      }
+      // a shelf dog brought down (or a happy dog) becomes a content walker again
+      if (cameFromShelf && scored) score++;     // rescue before it cried too long
+      c.state = 'walk'; c.slot = -1; c.sadness = 0; c.kind = null; c.mess = null;
+      c.actTimer = newActTimer();
+      c.vx = (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.3);
+    }
+
+    // pointer events cover mouse + touch; fall back if unavailable
+    if (window.PointerEvent) {
+      canvas.addEventListener('pointerdown', function (e) { e.preventDefault(); onDown(e.clientX, e.clientY); });
+      canvas.addEventListener('pointermove', function (e) { if (held) { e.preventDefault(); onMove(e.clientX, e.clientY); } });
+      window.addEventListener('pointerup', function () { onUp(); });
+      canvas.addEventListener('pointercancel', function () { onUp(); });
+    } else {
+      canvas.addEventListener('mousedown', function (e) { onDown(e.clientX, e.clientY); });
+      window.addEventListener('mousemove', function (e) { if (held) onMove(e.clientX, e.clientY); });
+      window.addEventListener('mouseup', onUp);
+      canvas.addEventListener('touchstart', function (e) { e.preventDefault(); const t = e.changedTouches[0]; onDown(t.clientX, t.clientY); }, { passive: false });
+      canvas.addEventListener('touchmove', function (e) { if (held) { e.preventDefault(); const t = e.changedTouches[0]; onMove(t.clientX, t.clientY); } }, { passive: false });
+      window.addEventListener('touchend', function () { onUp(); });
+    }
+
+    // =====================================================================
+    //  Start dialog + main loop
+    // =====================================================================
+    const setupEl = document.getElementById('setup');
+    document.getElementById('start-btn').addEventListener('click', function () {
+      reset();
+      state = 'playing';
+      setupEl.hidden = true;
+    });
+
+    reset();
+
+    // Frame-rate-independent timing: dtMs in real ms, dtf normalised to 60fps.
+    let lastTs = 0, dtMs = 16.7, dtf = 1;
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      dtMs = Math.min(Math.max(ts - lastTs, 1), 100);
+      dtf = dtMs / 16.6667;
+      lastTs = ts;
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // In the launcher's desktop iframe the in-page back link is redundant; hide it.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
+  })();
+  </script>
+
+</body>
+</html>
