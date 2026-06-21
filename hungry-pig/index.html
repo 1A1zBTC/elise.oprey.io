@@ -423,7 +423,8 @@
       { id: 'halo',    name: 'Halo' },
       { id: 'bandana', name: 'Bandana' },
       { id: 'cap',     name: 'Cap' },
-      { id: 'chef',    name: 'Chef hat' }
+      { id: 'chef',    name: 'Chef hat' },
+      { id: 'knicks',  name: 'Knicks jersey' }
     ];
 
     // ---- Saved economy / wardrobe ----
@@ -800,6 +801,23 @@
         ctx.beginPath(); ctx.arc(px + r * 0.32, topY - r * 0.1, r * 0.28, 0, 7); ctx.fill();
         ctx.beginPath(); ctx.arc(px, topY - r * 0.3, r * 0.32, 0, 7); ctx.fill();
         ctx.fillRect(px - r * 0.5, topY + r * 0.05, r * 1.0, r * 0.3);
+      } else if (id === 'knicks') {
+        // a little New York Knicks jersey worn on the pig's front (south of the face)
+        const jy = py + r * 0.42, jw = r * 1.1, jh = r * 0.92;
+        ctx.fillStyle = '#006bb6';                 // Knicks blue
+        ctx.beginPath();
+        ctx.moveTo(px - jw / 2, jy);
+        ctx.lineTo(px + jw / 2, jy);
+        ctx.lineTo(px + jw / 2, jy + jh);
+        ctx.quadraticCurveTo(px, jy + jh + r * 0.2, px - jw / 2, jy + jh);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#f58426';                 // Knicks orange neckline + hem
+        ctx.fillRect(px - jw / 2, jy, jw, Math.max(1.5, r * 0.14));
+        ctx.fillRect(px - jw / 2, jy + jh - r * 0.14, jw, Math.max(1.5, r * 0.14));
+        ctx.fillStyle = '#fff';
+        ctx.font = '800 ' + Math.max(5, Math.round(r * 0.5)) + 'px Nunito, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('NY', px, jy + jh * 0.56);
       }
       ctx.restore();
     }

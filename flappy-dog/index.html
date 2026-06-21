@@ -514,7 +514,8 @@
       { name: 'Devil Horns',  id: 'devil' },
       { name: 'Glasses',      id: 'glasses' },
       { name: 'Baseball Cap', id: 'cap' },
-      { name: 'Viking Helm',  id: 'viking' }
+      { name: 'Viking Helm',  id: 'viking' },
+      { name: 'Knicks Jersey', id: 'knicks' }
     ];
 
     // Levels — each has its own backdrop, obstacle style, difficulty ramp, AND a unique
@@ -1838,6 +1839,25 @@
     // The dog, drawn procedurally from the current `skin`, centered on (cx, cy).
     // Each breed's traits (build / snout / coat / ears / tail) reshape the same
     // base pup into a recognizable silhouette.
+    // A New York Knicks jersey hugged to the dog's torso. Called from inside drawDog,
+    // so it draws in the dog's local (translated + rotated) frame.
+    function drawDogJersey(bodyCY, bodyRX, bodyRY) {
+      ctx.save();
+      // clip to the body ellipse so the jersey conforms to the torso like a tank top
+      ctx.beginPath(); ctx.ellipse(-2, bodyCY, bodyRX, bodyRY, 0, 0, Math.PI * 2); ctx.clip();
+      const top = bodyCY - bodyRY * 0.3;          // shoulders show above this
+      ctx.fillStyle = '#006bb6';                  // Knicks blue
+      ctx.fillRect(-2 - bodyRX, top, bodyRX * 2, bodyRY * 2);
+      ctx.fillStyle = '#f58426';                  // Knicks orange trim
+      ctx.fillRect(-2 - bodyRX, top, bodyRX * 2, Math.max(2, bodyRY * 0.16));               // neckline stripe
+      ctx.fillRect(-2 - bodyRX, bodyCY + bodyRY * 0.66, bodyRX * 2, Math.max(2, bodyRY * 0.16)); // hem
+      ctx.restore();
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 ' + Math.round(bodyRY * 0.85) + 'px Nunito, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('NY', -3, bodyCY + bodyRY * 0.18);
+    }
+
     function drawDog(p) {
       ctx.save();
       ctx.translate(p.x, p.y);
@@ -1906,6 +1926,9 @@
       ctx.fillStyle = s.body;
       stubLeg(2, frontLegY - legSwing, legRY);
       stubLeg(16, frontLegY + legSwing, legRY);
+
+      // Knicks jersey worn over the torso (drawn here where body proportions are known)
+      if (p.costume === 'knicks') drawDogJersey(bodyCY, bodyRX, bodyRY);
 
       // fluffy chest ruff (samoyed / pomeranian / collie ...)
       if (coat === 'fluffy') {

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Kit Clash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .topbar {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .back {
+      color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem;
+      display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 12px;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.5rem; line-height: 1; }
+
+    .wrap { width: 100%; max-width: 720px; flex: 1; display: flex; flex-direction: column; }
+
+    /* round + progress */
+    .roundbar { text-align: center; margin-bottom: 10px; }
+    .round { font-family: 'Pacifico', cursive; color: #ffe8b0; font-size: 1.35rem; line-height: 1.1; }
+    .progress-track { margin: 8px auto 0; width: 100%; max-width: 420px; height: 7px; background: #0f1830; border-radius: 6px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0; background: #e94560; border-radius: 6px; transition: width 0.3s ease; }
+    .progress-text { color: #8b93b0; font-size: 0.74rem; font-weight: 800; margin-top: 5px; }
+
+    /* match */
+    .match { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .card {
+      flex: 1 1 0; max-width: 320px; min-width: 0;
+      background: #16213e; border: 3px solid #0f3460; border-radius: 20px;
+      padding: 14px 12px 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+      transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .card:hover { border-color: #6f86c4; transform: translateY(-3px); }
+    .card:active { transform: scale(0.98); }
+    .card.win { border-color: #46c46a; box-shadow: 0 0 26px rgba(70,196,106,0.45); transform: scale(1.04); }
+    .card.lose { opacity: 0.35; filter: grayscale(0.6); }
+
+    .art {
+      position: relative; width: 100%; aspect-ratio: 1 / 1; max-height: 46vh;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 38%, #20305c 0%, #0f1830 78%);
+      border-radius: 14px; overflow: hidden;
+    }
+    .art .kit-svg { width: 86%; height: 86%; }
+    .art .photo {
+      position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px);
+      object-fit: contain; opacity: 0; transition: opacity 0.2s ease;
+    }
+    .art.has-photo .kit-svg { display: none; }
+    .art.has-photo .photo { opacity: 1; }
+
+    .flag { font-size: 2rem; line-height: 1; margin-top: 12px; }
+    .tname { font-weight: 800; font-size: 1.15rem; color: #fff; text-align: center; margin-top: 4px; }
+    .seed { color: #8b93b0; font-size: 0.7rem; font-weight: 800; margin-top: 2px; }
+
+    .vs {
+      font-family: 'Pacifico', cursive; color: #e94560; font-size: 1.5rem; flex: 0 0 auto;
+      text-shadow: 0 2px 10px rgba(233,69,96,0.4);
+    }
+    .hint { text-align: center; color: #a0a8c0; font-size: 0.82rem; margin-top: 10px; }
+
+    @media (max-width: 560px) {
+      .match { flex-direction: column; gap: 8px; }
+      .card { width: 100%; max-width: 360px; flex: 0 0 auto; padding: 10px 10px 12px; }
+      .art { max-height: 30vh; }
+      .vs { font-size: 1.2rem; }
+      .tname { font-size: 1.05rem; }
+    }
+
+    /* overlays */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(10,14,28,0.9); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20;
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: 100%; max-width: 400px; background: #16213e; border: 2px solid #0f3460;
+      border-radius: 24px; padding: 26px 22px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+    }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.9rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.92rem; margin-bottom: 8px; line-height: 1.5; }
+    .champ-art { width: 160px; height: 160px; margin: 6px auto 4px; position: relative;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 38%, #20305c 0%, #0f1830 78%); border-radius: 16px; overflow: hidden; }
+    .champ-art .kit-svg { width: 86%; height: 86%; }
+    .champ-art .photo { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; opacity: 0; }
+    .champ-art.has-photo .kit-svg { display: none; }
+    .champ-art.has-photo .photo { opacity: 1; }
+    .champ-flag { font-size: 2.2rem; }
+    .champ-name { font-weight: 800; font-size: 1.4rem; color: #fff; margin: 2px 0 2px; }
+    .start-btn {
+      margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem;
+      color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer;
+      box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Kit Clash</span>
+    <span style="width:64px"></span>
+  </div>
+
+  <div class="wrap">
+    <div class="roundbar">
+      <div class="round" id="round">Round of 48</div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text" id="progress-text">Match 1 / 47</div>
+    </div>
+
+    <div class="match" id="match">
+      <div class="card" id="cardL" data-side="0">
+        <div class="art"></div><div class="flag"></div><div class="tname"></div><div class="seed"></div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="card" id="cardR" data-side="1">
+        <div class="art"></div><div class="flag"></div><div class="tname"></div><div class="seed"></div>
+      </div>
+    </div>
+    <p class="hint">Tap the kit you like more — winner advances! &nbsp;·&nbsp; ← / → on a keyboard</p>
+  </div>
+
+  <!-- Intro -->
+  <div class="overlay" id="setup">
+    <div class="panel">
+      <h2>Kit Clash</h2>
+      <div class="sub">All <b>48</b> teams of the 2026 World Cup, head-to-head. Pick the <b>kit</b> you
+        prefer in each match — the winner moves on, the loser is out — until your favourite jersey is crowned. 👕</div>
+      <div class="sub" id="lastfav" style="color:#ffe8b0"></div>
+      <button class="start-btn" id="start-btn">Start</button>
+    </div>
+  </div>
+
+  <!-- Champion -->
+  <div class="overlay" id="champ" hidden>
+    <div class="panel">
+      <h2>🏆 Your favourite kit!</h2>
+      <div class="champ-art" id="champ-art"></div>
+      <div class="champ-flag" id="champ-flag"></div>
+      <div class="champ-name" id="champ-name"></div>
+      <div class="sub">Crowned over 47 matchups.</div>
+      <button class="start-btn" id="again-btn">Play again</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    // ---- Teams: name, ISO code (flag), seed rank (top 16 get a bye), kit pattern + colours
+    //      for the drawn fallback, and an official home-kit image url (Wikimedia / kit blogs). ----
+    const TEAMS = [
+      // UEFA
+      { name: 'England',        code: 'ENG', rank: 4,  pat: 'solid',   c1: '#ffffff', c2: '#e6ecf5', trim: '#13317a', url: 'https://upload.wikimedia.org/wikipedia/commons/8/85/Kit_body_eng26h.png' },
+      { name: 'France',         code: 'FR',  rank: 2,  pat: 'solid',   c1: '#1b2a5a', c2: '#1b2a5a', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/5/58/Kit_body_fra26h.png' },
+      { name: 'Spain',          code: 'ES',  rank: 3,  pat: 'solid',   c1: '#c60b1e', c2: '#c60b1e', trim: '#ffd700', url: 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Kit_body_esp26h.png' },
+      { name: 'Germany',        code: 'DE',  rank: 9,  pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#1a1a1a', url: 'https://upload.wikimedia.org/wikipedia/commons/7/7b/Kit_body_ger26hA.png' },
+      { name: 'Portugal',       code: 'PT',  rank: 6,  pat: 'solid',   c1: '#8c1414', c2: '#8c1414', trim: '#0a5a3c', url: 'https://upload.wikimedia.org/wikipedia/commons/c/c0/Kit_body_por26h.png' },
+      { name: 'Netherlands',    code: 'NL',  rank: 7,  pat: 'solid',   c1: '#ee7203', c2: '#ee7203', trim: '#0a2a6b', url: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Kit_body_ned26h.png' },
+      { name: 'Belgium',        code: 'BE',  rank: 8,  pat: 'solid',   c1: '#c8102e', c2: '#c8102e', trim: '#ffd700', url: 'https://upload.wikimedia.org/wikipedia/commons/1/12/Kit_body_bel26hA.png' },
+      { name: 'Croatia',        code: 'HR',  rank: 10, pat: 'checker', c1: '#ff2020', c2: '#ffffff', trim: '#13317a', url: 'https://upload.wikimedia.org/wikipedia/commons/f/f7/Kit_body_cro26h.png' },
+      { name: 'Switzerland',    code: 'CH',  rank: 16, pat: 'solid',   c1: '#d52b1e', c2: '#d52b1e', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/9/9e/Kit_body_sui26h.png' },
+      { name: 'Austria',        code: 'AT',  rank: 23, pat: 'solid',   c1: '#e32219', c2: '#e32219', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/9/95/Kit_body_aut26h.png' },
+      { name: 'Sweden',         code: 'SE',  rank: 24, pat: 'solid',   c1: '#ffcd00', c2: '#ffcd00', trim: '#0a4ea2', url: 'https://upload.wikimedia.org/wikipedia/commons/f/fc/Kit_body_swe26hA.png' },
+      { name: 'Norway',         code: 'NO',  rank: 27, pat: 'solid',   c1: '#ba0c2f', c2: '#ba0c2f', trim: '#00205b', url: 'https://upload.wikimedia.org/wikipedia/commons/1/18/Kit_body_nor26h.png' },
+      { name: 'Scotland',       code: 'SCT', rank: 35, pat: 'solid',   c1: '#0a2d6b', c2: '#0a2d6b', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/f/f7/Kit_body_sco26h.png' },
+      { name: 'Czechia',        code: 'CZ',  rank: 36, pat: 'solid',   c1: '#d7141a', c2: '#d7141a', trim: '#11457e', url: 'https://upload.wikimedia.org/wikipedia/commons/5/59/Kit_body_cze26h.png' },
+      { name: 'Türkiye',        code: 'TR',  rank: 37, pat: 'solid',   c1: '#e30a17', c2: '#e30a17', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Kit_body_tur24h.png' },
+      { name: 'Bosnia & Herz.', code: 'BA',  rank: 43, pat: 'solid',   c1: '#002395', c2: '#002395', trim: '#ffd200', url: 'https://upload.wikimedia.org/wikipedia/commons/d/d3/Kit_body_bih26h.png' },
+      // CONMEBOL
+      { name: 'Argentina',      code: 'AR',  rank: 1,  pat: 'stripes', c1: '#7cb3e8', c2: '#ffffff', trim: '#0a2a6b', url: 'https://upload.wikimedia.org/wikipedia/commons/d/d4/Kit_body_arg26hA_wc.png' },
+      { name: 'Brazil',         code: 'BR',  rank: 5,  pat: 'solid',   c1: '#ffd400', c2: '#ffd400', trim: '#009b3a', url: 'https://upload.wikimedia.org/wikipedia/commons/5/5b/Kit_body_bra26h.png' },
+      { name: 'Uruguay',        code: 'UY',  rank: 12, pat: 'solid',   c1: '#5aa7e0', c2: '#5aa7e0', trim: '#1a1a1a', url: 'https://upload.wikimedia.org/wikipedia/commons/9/93/Kit_body_uru26h.png' },
+      { name: 'Colombia',       code: 'CO',  rank: 13, pat: 'solid',   c1: '#fcd116', c2: '#fcd116', trim: '#003893', url: 'https://upload.wikimedia.org/wikipedia/commons/a/a7/Kit_body_col26hA.png' },
+      { name: 'Ecuador',        code: 'EC',  rank: 22, pat: 'solid',   c1: '#ffd100', c2: '#ffd100', trim: '#0a3b8c', url: 'https://upload.wikimedia.org/wikipedia/commons/1/16/Kit_body_ecu26h.png' },
+      { name: 'Paraguay',       code: 'PY',  rank: 32, pat: 'stripes', c1: '#d52b1e', c2: '#ffffff', trim: '#0038a8', url: 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Kit_body_par26h.png' },
+      // CONCACAF
+      { name: 'USA',            code: 'US',  rank: 15, pat: 'solid',   c1: '#ffffff', c2: '#e6ecf5', trim: '#0a2a6b', url: 'https://upload.wikimedia.org/wikipedia/commons/f/f5/Kit_body_usa26h.png' },
+      { name: 'Mexico',         code: 'MX',  rank: 17, pat: 'solid',   c1: '#006847', c2: '#006847', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Kit_body_mex26h.png' },
+      { name: 'Canada',         code: 'CA',  rank: 25, pat: 'solid',   c1: '#d52b1e', c2: '#d52b1e', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/3/33/Kit_body_can26h.png' },
+      { name: 'Panama',         code: 'PA',  rank: 28, pat: 'solid',   c1: '#d21034', c2: '#d21034', trim: '#005293', url: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Kit_body_pan26h.png' },
+      { name: 'Curaçao',        code: 'CW',  rank: 46, pat: 'solid',   c1: '#0038a8', c2: '#0038a8', trim: '#f9d616', url: 'https://upload.wikimedia.org/wikipedia/commons/4/4d/Kit_body_cur26hA.png' },
+      { name: 'Haiti',          code: 'HT',  rank: 47, pat: 'solid',   c1: '#00209f', c2: '#00209f', trim: '#d21034', url: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Kit_body_hai26H.png' },
+      // AFC
+      { name: 'Japan',          code: 'JP',  rank: 14, pat: 'solid',   c1: '#13206b', c2: '#13206b', trim: '#ffffff', url: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj0cjEA74P1KGDEoWgMVEN24JuQhAeDyT8LtAa79TXtxq7j8Dj03Om6GPfEuZWVkp_9h9Twx1P8bBp-CkIu1-ZLTPuCKu1gH38Z_tXunlCZ-YS1H7c08S84NfxwzuwP4UWvYQkEwP3dEI6_uYCVXzdpkvpFlMauPNnkn-YfFXidFuGPnBap8md3zwOz-8MX/s1600/adidas-2026-home-kit%20%285%29.jpg' },
+      { name: 'Iran',           code: 'IR',  rank: 19, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#239f40', url: 'https://upload.wikimedia.org/wikipedia/commons/0/0b/Kit_body_irn26h.png' },
+      { name: 'South Korea',    code: 'KR',  rank: 21, pat: 'solid',   c1: '#c8102e', c2: '#c8102e', trim: '#0a2a6b', url: 'https://upload.wikimedia.org/wikipedia/commons/e/eb/Kit_body_kor26h.png' },
+      { name: 'Australia',      code: 'AU',  rank: 20, pat: 'solid',   c1: '#fcd116', c2: '#fcd116', trim: '#00843d', url: 'https://upload.wikimedia.org/wikipedia/commons/d/d6/Kit_body_aus26h.png' },
+      { name: 'Saudi Arabia',   code: 'SA',  rank: 31, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#1a7a3c', url: 'https://upload.wikimedia.org/wikipedia/commons/c/c4/Kit_body_ksa26h.png' },
+      { name: 'Qatar',          code: 'QA',  rank: 30, pat: 'solid',   c1: '#8a1538', c2: '#8a1538', trim: '#ffffff', url: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjY6xxA1ikwNAmtokCMN66KbFMyXBcHBMwSmDZUM4Jr6ur8TqDtyuvSd1H5WGwy3q8EF0LSs_wpTu323_P2LkJSx36No87OpZbOOh8L9m-NYKtWk6Ef1PnzZMZEpwEuiOvU9iJo7tJYWnGdFWqrO7KepS18KqkKRN1AEroG1arH_Qs5gOeRaIcAzHrD4eI/s1600/adidas%202026%20kits%20%286%29.jpg' },
+      { name: 'Iraq',           code: 'IQ',  rank: 39, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#1a7a3c', url: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/Kit_body_iraq26h.png' },
+      { name: 'Jordan',         code: 'JO',  rank: 40, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#c8102e', url: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEikEeNf5hMtFRbL_7jPte01l5Wt67ryzY8gB2ne5ojdcrVN9f0edcuz3OOz3i2le-YoelylultjxINHZzcZtTp7QAuUjMC-fWR5-0BGWKZbvteoEyv0sxzA4kmiqNso3K9790RqCMS3Uqowm8vYthqSTDAuQyRBvQr_H5Ci04aSIJvAA2XWAR6JxcQ6SV0/s1600/jordan-2026-world-cup-home-away-third-kits%20%282%29.jpg' },
+      { name: 'Uzbekistan',     code: 'UZ',  rank: 38, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#1a7a3c', url: 'https://upload.wikimedia.org/wikipedia/commons/f/f3/Kit_body_uzb26h.png' },
+      // CAF
+      { name: 'Morocco',        code: 'MA',  rank: 11, pat: 'solid',   c1: '#c1272d', c2: '#c1272d', trim: '#0a6b3c', url: 'https://upload.wikimedia.org/wikipedia/commons/e/e7/Kit_body_mrc26h.png' },
+      { name: 'Senegal',        code: 'SN',  rank: 18, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#0a8a3c', url: 'https://upload.wikimedia.org/wikipedia/commons/8/88/Kit_body_sen26h.png' },
+      { name: 'Egypt',          code: 'EG',  rank: 26, pat: 'solid',   c1: '#ce1126', c2: '#ce1126', trim: '#ffffff', url: 'https://www.footballshirtculture.com/media/plg_jspeed/cache/images/egypt_2026_home_jersey.webp' },
+      { name: 'Ivory Coast',    code: 'CI',  rank: 29, pat: 'solid',   c1: '#ff7900', c2: '#ff7900', trim: '#0a7a3c', url: 'https://www.footballshirtculture.com/media/plg_jspeed/cache/images/ivory_coast_2026_home_jersey.webp' },
+      { name: 'Tunisia',        code: 'TN',  rank: 33, pat: 'solid',   c1: '#e70013', c2: '#e70013', trim: '#ffffff', url: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgLeLFhC7Qg6ql5Cqpk8IIwKrXUcLjuwQuNjuUu4TUEWUzPTlfwUIXG62kvmFHXEdedit1Qj7iGj39z5wsTnG0bIg2MR3u8SWVR_5Dn2umsSoAEVNidXpwxcmhHWKBPOlgwf3CcMyDmE_rSeyMSCAUFZYwA338Mh1_K5lenF1tuXPo289wLBXaFRj8T6Xc/s1600/tunisia-2026-kits%20%287%29.jpg' },
+      { name: 'Algeria',        code: 'DZ',  rank: 34, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#0a7a3c', url: 'https://upload.wikimedia.org/wikipedia/commons/7/7f/Kit_body_alg26hA.png' },
+      { name: 'Ghana',          code: 'GH',  rank: 41, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#0a7a3c', url: 'https://www.footballshirtculture.com/media/plg_jspeed/cache/images/ghana_2026_home_jersey.webp' },
+      { name: 'South Africa',   code: 'ZA',  rank: 42, pat: 'solid',   c1: '#ffb81c', c2: '#ffb81c', trim: '#007749', url: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjs_BdOJUG3xy1OxKoVjJr7SbqEXyPl5qLB7hL2KiAz_O3SIkZa9YyU2GJXWBbJ0pzg4LhAXS1whbK0Rx8az-jTofOsulZ4W1TybDWKawMk1ujdwNdESpcQmXqztSHnCiVnsLl4G9EJl062Baqs_GOgcABriox1lblMhT5DVrO8g7RyQbG5yljUjkVG2GyQ/s1600/south-africa-2026-home-kit%20%281%29.jpg' },
+      { name: 'DR Congo',       code: 'CD',  rank: 44, pat: 'solid',   c1: '#009ee0', c2: '#009ee0', trim: '#f7d518', url: 'https://www.footballshirtculture.com/media/plg_jspeed/cache/images/dr_congo_25_26_umbro_home_jersey.webp' },
+      { name: 'Cape Verde',     code: 'CV',  rank: 45, pat: 'solid',   c1: '#003893', c2: '#003893', trim: '#ffffff', url: 'https://upload.wikimedia.org/wikipedia/commons/0/00/Kit_body_cpv26h.png' },
+      // OFC
+      { name: 'New Zealand',    code: 'NZ',  rank: 48, pat: 'solid',   c1: '#ffffff', c2: '#e6e6e6', trim: '#1a1a1a', url: 'https://upload.wikimedia.org/wikipedia/commons/b/b4/Kit_body_nzl26h.png' }
+    ];
+
+    const FAV_KEY = 'kitclash.fav';
+
+    // ---- helpers ----
+    function flag(code) {
+      if (code === 'ENG') return '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}';
+      if (code === 'SCT') return '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}';
+      return code.replace(/./g, function (c) { return String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65); });
+    }
+    function shuffle(a) {
+      for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = a[i]; a[i] = a[j]; a[j] = t; }
+      return a;
+    }
+
+    // A simple shirt silhouette filled with the team's kit colours/pattern (fallback if no photo).
+    const SHIRT = 'M38,20 L24,15 L8,36 L23,49 L35,41 L35,113 Q35,119 41,119 L79,119 Q85,119 85,113 L85,41 L97,49 L112,36 L96,15 L82,20 Q60,33 38,20 Z';
+    function kitSVG(t) {
+      const id = 'pat-' + t.code;
+      let defs = '', fill = t.c1;
+      if (t.pat === 'stripes') {
+        defs = '<pattern id="' + id + '" width="20" height="12" patternUnits="userSpaceOnUse">' +
+               '<rect width="20" height="12" fill="' + t.c2 + '"/><rect width="10" height="12" fill="' + t.c1 + '"/></pattern>';
+        fill = 'url(#' + id + ')';
+      } else if (t.pat === 'checker') {
+        defs = '<pattern id="' + id + '" width="20" height="20" patternUnits="userSpaceOnUse">' +
+               '<rect width="20" height="20" fill="' + t.c2 + '"/><rect width="10" height="10" fill="' + t.c1 + '"/>' +
+               '<rect x="10" y="10" width="10" height="10" fill="' + t.c1 + '"/></pattern>';
+        fill = 'url(#' + id + ')';
+      }
+      return '<svg class="kit-svg" viewBox="0 0 120 130" xmlns="http://www.w3.org/2000/svg">' +
+             '<defs>' + defs + '</defs>' +
+             '<path d="' + SHIRT + '" fill="' + fill + '" stroke="' + t.trim + '" stroke-width="3.5" stroke-linejoin="round"/>' +
+             '<path d="M82,20 Q60,33 38,20" fill="none" stroke="' + t.trim + '" stroke-width="4.5"/></svg>';
+    }
+    // Fill an .art container with the kit (drawn fallback + optional photo on top).
+    function paintKit(art, t) {
+      art.classList.remove('has-photo');
+      art.innerHTML = kitSVG(t);
+      if (t.url) {
+        const img = new Image();
+        img.className = 'photo'; img.alt = t.name + ' home kit';
+        img.referrerPolicy = 'no-referrer';
+        img.onload = function () { art.classList.add('has-photo'); art.appendChild(img); };
+        img.onerror = function () { /* keep the drawn shirt */ };
+        img.src = t.url;
+      }
+    }
+
+    // ---- bracket ----
+    let bracket, champion, busy = false;
+    function buildBracket() {
+      const sorted = TEAMS.slice().sort(function (a, b) { return a.rank - b.rank; });
+      const byes = shuffle(sorted.slice(0, 16));            // top 16 seeds get a bye
+      const rest = shuffle(sorted.slice(16));               // other 32 play in
+      const prelim = [];
+      for (let i = 0; i < rest.length; i += 2) prelim.push([rest[i], rest[i + 1]]);
+      bracket = { byes: byes, queue: prelim, winners: [], stage: 'prelim', matchNo: 1 };
+      champion = null;
+    }
+    function roundLabel() {
+      if (bracket.stage === 'prelim') return 'Round of 48';
+      const teams = bracket.queue.length * 2;
+      if (teams >= 16) return 'Round of ' + teams;     // 32, 16
+      if (teams === 8) return 'Quarter-finals';
+      if (teams === 4) return 'Semi-finals';
+      if (teams === 2) return 'Final';
+      return 'Round of ' + teams;
+    }
+    function nextRound() {
+      const w = bracket.winners;
+      if (bracket.stage === 'prelim') {
+        const q = [];
+        for (let i = 0; i < 16; i++) q.push([bracket.byes[i], w[i]]);   // seed vs play-in winner
+        bracket.queue = q; bracket.winners = []; bracket.stage = 'r32';
+        return;
+      }
+      if (w.length === 1) { champion = w[0]; return; }
+      const q = [];
+      for (let i = 0; i < w.length; i += 2) q.push([w[i], w[i + 1]]);
+      bracket.queue = q; bracket.winners = []; bracket.stage = 'r' + (w.length);
+    }
+
+    // ---- view ----
+    const els = {
+      round: document.getElementById('round'),
+      pfill: document.getElementById('progress-fill'),
+      ptext: document.getElementById('progress-text'),
+      cardL: document.getElementById('cardL'),
+      cardR: document.getElementById('cardR'),
+      setup: document.getElementById('setup'),
+      champ: document.getElementById('champ')
+    };
+    function fillCard(card, t) {
+      paintKit(card.querySelector('.art'), t);
+      card.querySelector('.flag').textContent = flag(t.code);
+      card.querySelector('.tname').textContent = t.name;
+      card.querySelector('.seed').textContent = '#' + t.rank + ' seed';
+      card.classList.remove('win', 'lose');
+      card._team = t;
+    }
+    function renderMatch() {
+      const m = bracket.queue[0];
+      els.round.textContent = roundLabel();
+      els.pfill.style.width = ((bracket.matchNo - 1) / 47 * 100) + '%';
+      els.ptext.textContent = 'Match ' + bracket.matchNo + ' / 47';
+      fillCard(els.cardL, m[0]);
+      fillCard(els.cardR, m[1]);
+    }
+    function pick(side) {
+      if (busy) return;
+      const m = bracket.queue[0];
+      const winner = m[side], winCard = side === 0 ? els.cardL : els.cardR, loseCard = side === 0 ? els.cardR : els.cardL;
+      busy = true;
+      winCard.classList.add('win'); loseCard.classList.add('lose');
+      setTimeout(function () {
+        bracket.winners.push(winner);
+        bracket.queue.shift();
+        bracket.matchNo++;
+        if (bracket.queue.length === 0) nextRound();
+        busy = false;
+        if (champion) showChampion(); else renderMatch();
+      }, 360);
+    }
+    function showChampion() {
+      champion && paintKit(document.getElementById('champ-art'), champion);
+      document.getElementById('champ-flag').textContent = flag(champion.code);
+      document.getElementById('champ-name').textContent = champion.name;
+      try { localStorage.setItem(FAV_KEY, champion.name); } catch (e) {}
+      els.champ.hidden = false;
+    }
+
+    function startGame() {
+      buildBracket();
+      els.setup.hidden = true;
+      els.champ.hidden = true;
+      renderMatch();
+    }
+
+    els.cardL.addEventListener('click', function () { pick(0); });
+    els.cardR.addEventListener('click', function () { pick(1); });
+    window.addEventListener('keydown', function (e) {
+      if (els.setup.hidden === false || els.champ.hidden === false) return;
+      if (e.code === 'ArrowLeft') pick(0);
+      else if (e.code === 'ArrowRight') pick(1);
+    });
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('again-btn').addEventListener('click', startGame);
+
+    // intro: show last favourite
+    (function () {
+      let fav = null; try { fav = localStorage.getItem(FAV_KEY); } catch (e) {}
+      if (fav) document.getElementById('lastfav').textContent = 'Last time your favourite kit was ' + fav + '.';
+    })();
+
+    // In the launcher's desktop iframe the in-page back link is redundant; hide it.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
+  })();
+  </script>
+
+</body>
+</html>
