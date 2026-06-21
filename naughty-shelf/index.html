@@ -682,8 +682,10 @@
         c.slot = -1;
         return;
       }
-      // a shelf dog brought down (or a happy dog) becomes a content walker again
-      if (cameFromShelf && scored) score++;     // rescue before it cried too long
+      // a shelf dog brought down (or a happy dog) becomes a content walker again.
+      // Rescuing a naughty dog from its time-out earns a point; taking a well-behaved
+      // dog you needlessly shelved back off costs a point.
+      if (cameFromShelf) score = c.fromNaughty ? score + 1 : Math.max(0, score - 1);
       c.state = 'walk'; c.slot = -1; c.sadness = 0; c.shelfTime = 0; c.fromNaughty = false; c.sadRate = 1; c.kind = null; c.mess = null;
       c.actTimer = newActTimer();
       c.vx = (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.3);
