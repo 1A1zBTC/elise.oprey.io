@@ -202,6 +202,8 @@
     const CHAOS_LIMIT = 5;        // this many naughty-on-floor corgis → lose (a)
     const RAMP_MS = 180000;       // ~3 min to reach near-max pressure
     const CORGI_R = 30;           // hit-test radius
+    const MIN_DWELL = 5000;       // a naughty dog must serve ≥5s on the shelf before you can take it down
+    const GOOD_SAD_MULT = 2;      // a well-behaved dog put on the shelf gets sad twice as fast
 
     // gentle escalation helpers: lerp from calm (t=0) to hectic (t=1)
     function lerp(a, b, t) { return a + (b - a) * t; }
@@ -237,6 +239,9 @@
         kind: null,               // naughty flavour
         mess: null,               // {x, kind} decal on the floor
         sadness: 0,
+        sadRate: 1,               // sadness multiplier while on the shelf (2× if it wasn't naughty)
+        shelfTime: 0,             // ms served on the shelf this stint (for the min-dwell lock)
+        fromNaughty: false,       // was it naughty when shelved? (locks it for MIN_DWELL)
         slot: -1,
         actTimer: newActTimer(),
         phase: Math.random() * 100,
@@ -302,7 +307,8 @@
         } else if (c.state === 'shelf') {
           c.x = slotX[c.slot];
           c.y = SHELF_Y;
-          c.sadness += dtMs;
+          c.shelfTime += dtMs;
+          c.sadness += dtMs * c.sadRate;     // good dogs (sadRate 2) get sad twice as fast
           if (c.sadness >= sadMax()) { gameOver('A corgi got too sad 😢'); return; }
         }
       }
@@ -477,6 +483,15 @@
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; roundRect(bx2, byy, bw, 5, 2.5); ctx.fill();
         ctx.fillStyle = sadFrac < 0.55 ? '#7ed37e' : sadFrac < 0.8 ? '#ffcf5a' : '#e94560';
         roundRect(bx2, byy, bw * sadFrac, 5, 2.5); ctx.fill();
+        // locked: a naughty dog still serving its time can't be picked up — show a padlock + countdown
+        if (c.fromNaughty && c.shelfTime < MIN_DWELL) {
+          const lf = 1 - c.shelfTime / MIN_DWELL;          // fraction of lock time remaining
+          ctx.fillStyle = 'rgba(120,150,210,0.85)';
+          roundRect(bx2, byy - 7, bw * lf, 4, 2); ctx.fill();
+          ctx.font = '11px Nunito, sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('🔒', c.x, byy - 14);
+        }
       }
 
       // legs helpers (closures over ctx)
@@ -626,6 +641,8 @@
       const p = clientToCanvas(clientX, clientY);
       const c = corgiAt(p.x, p.y);
       if (!c) return;
+      // a naughty dog must serve its time — can't be taken down until MIN_DWELL has passed
+      if (c.state === 'shelf' && c.fromNaughty && c.shelfTime < MIN_DWELL) return;
       held = c;
       if (c.state === 'shelf') c.slot = -1;  // free its slot while carried
       grabDX = p.x - c.x; grabDY = p.y - c.y;
@@ -645,7 +662,10 @@
       if (droppedHigh) {
         const slot = freeSlot();
         if (slot >= 0) {
-          c.state = 'shelf'; c.slot = slot; c.x = slotX[slot]; c.y = SHELF_Y; c.sadness = 0;
+          c.state = 'shelf'; c.slot = slot; c.x = slotX[slot]; c.y = SHELF_Y;
+          c.sadness = 0; c.shelfTime = 0;
+          c.fromNaughty = wasNaughty;                 // naughty dogs are locked on the shelf for MIN_DWELL
+          c.sadRate = wasNaughty ? 1 : GOOD_SAD_MULT; // a well-behaved dog gets sad twice as fast
           if (wasNaughty) { score++; c.kind = null; c.mess = null; }   // calmed a naughty dog
         } else {
           dropToFloor(c, false);                // shelf full → back to floor
@@ -664,7 +684,7 @@
       }
       // a shelf dog brought down (or a happy dog) becomes a content walker again
       if (cameFromShelf && scored) score++;     // rescue before it cried too long
-      c.state = 'walk'; c.slot = -1; c.sadness = 0; c.kind = null; c.mess = null;
+      c.state = 'walk'; c.slot = -1; c.sadness = 0; c.shelfTime = 0; c.fromNaughty = false; c.sadRate = 1; c.kind = null; c.mess = null;
       c.actTimer = newActTimer();
       c.vx = (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.3);
     }
