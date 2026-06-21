@@ -29,17 +29,19 @@
     .hint b { color: #ffe8b0; }
 
     .ctl-btn {
-      position: absolute; z-index: 6;
-      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.68rem; color: #fff;
-      border: none; border-radius: 10px; padding: 6px 8px; cursor: pointer; min-width: 52px;
-      box-shadow: 0 3px 0 rgba(0,0,0,0.3); transition: transform 0.06s ease, box-shadow 0.06s ease;
+      position: absolute; z-index: 6; touch-action: none;
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.85rem; color: #fff;
+      border: none; border-radius: 14px; padding: 11px 13px; cursor: pointer; min-width: 60px;
+      box-shadow: 0 4px 0 rgba(0,0,0,0.32); transition: transform 0.06s ease, box-shadow 0.06s ease;
     }
-    .ctl-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.3); }
+    .ctl-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,0.32); }
     .ctl-btn[hidden] { display: none; }
     .ctl-btn.p1 { background: #3f6ea8; left: 10px; }
     .ctl-btn.p2 { background: #a84747; right: 10px; }
-    .ctl-btn.shoot { background: #c79321; }
-    .ctl-btn.b0 { bottom: 10px; } .ctl-btn.b1 { bottom: 44px; } .ctl-btn.b2 { bottom: 78px; } .ctl-btn.b3 { bottom: 112px; }
+    .ctl-btn.shoot { background: #c79321; font-size: 0.95rem; padding: 13px 15px; }
+    .ctl-btn.b0 { bottom: 12px; } .ctl-btn.b1 { bottom: 60px; } .ctl-btn.b2 { bottom: 108px; } .ctl-btn.b3 { bottom: 156px; }
+    /* single-player: action buttons go right so the left thumb works the joystick */
+    .stage.solo .ctl-btn.p1 { left: auto; right: 10px; }
 
     .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
     .overlay[hidden] { display: none; }
@@ -73,6 +75,87 @@
     .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
     .start-btn { margin-top: 16px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
     .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+
+    /* ---------- Ultimate Team ---------- */
+    .ut-entry { margin-top: 10px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1rem; color: #1a1a2e; background: linear-gradient(135deg, #ffe27a, #ffb300); border: none; border-radius: 16px; padding: 13px 20px; cursor: pointer; box-shadow: 0 6px 0 #c98f00; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .ut-entry:active { transform: translateY(4px); box-shadow: 0 2px 0 #c98f00; }
+    .ut-entry.collect { background: linear-gradient(135deg, #7ee0ff, #3aa0d0); color: #06283a; box-shadow: 0 6px 0 #1f6f93; }
+    .ut-entry.collect:active { box-shadow: 0 2px 0 #1f6f93; }
+    .ut-entry.career { background: linear-gradient(135deg, #9be79b, #46a05a); color: #06320f; box-shadow: 0 6px 0 #2c6e3a; }
+    .ut-entry.career:active { box-shadow: 0 2px 0 #2c6e3a; }
+
+    /* career / transfer market */
+    .money-chip { color: #7be39a; font-weight: 800; }
+    .market-list { max-height: 52vh; overflow-y: auto; padding-right: 2px; }
+    .mkt-row { display: flex; align-items: center; gap: 10px; background: #0f1830; border: 2px solid #0f3460; border-radius: 14px; padding: 8px; margin-bottom: 8px; }
+    .mkt-cardface.card-fc { width: 46px; height: 61px; aspect-ratio: auto; flex: 0 0 auto; box-shadow: none; padding: 3px; }
+    .mkt-cardface .em { font-size: 1.15rem; } .mkt-cardface .rt { font-size: 0.62rem; top: 2px; left: 3px; }
+    .mkt-cardface .pos { font-size: 0.4rem; top: 13px; left: 3px; } .mkt-cardface .nm, .mkt-cardface .rr { display: none; }
+    .mkt-info { flex: 1; text-align: left; min-width: 0; }
+    .mkt-nm { color: #fff; font-weight: 800; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mkt-meta { color: #8b93b0; font-size: 0.7rem; font-weight: 800; }
+    .mkt-buy { text-align: right; flex: 0 0 auto; }
+    .mkt-price { color: #7be39a; font-weight: 800; font-size: 0.8rem; margin-bottom: 3px; }
+    .mkt-btn { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.8rem; color: #fff; background: #46c46a; border: none; border-radius: 10px; padding: 7px 13px; cursor: pointer; }
+    .mkt-btn:active { transform: scale(0.95); }
+    .mkt-btn:disabled { background: #3a4358; color: #6f7799; cursor: default; transform: none; }
+    .ut-panel { max-width: 460px; }
+    .ut-stats { display: flex; gap: 8px; margin-bottom: 12px; }
+    .ut-stat { flex: 1; background: #0f1830; border: 2px solid #0f3460; border-radius: 14px; padding: 10px 4px; }
+    .ut-stat .v { color: #fff; font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
+    .ut-stat .k { color: #8b93b0; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ut-tier .pk { display: block; font-size: 0.6rem; color: #ffd23f; margin-top: 2px; }
+    .secondary-btn { margin-top: 10px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.92rem; color: #cfd6ea; background: #0f1830; border: 2px solid #0f3460; border-radius: 14px; padding: 11px 16px; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; }
+    .secondary-btn:hover { background: #16253f; }
+    .secondary-btn:active { transform: scale(0.98); }
+
+    .ut-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .ut-cards.binder { grid-template-columns: repeat(3, 1fr); gap: 8px; max-height: 56vh; overflow-y: auto; padding: 4px; }
+    .card-fc { position: relative; aspect-ratio: 3 / 4; border-radius: 14px; padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
+    .card-fc .em { font-size: 2.6rem; line-height: 1; }
+    .binder .card-fc .em { font-size: 1.7rem; }
+    .card-fc .rt { position: absolute; top: 6px; left: 8px; font-size: 1.3rem; font-weight: 800; line-height: 1; }
+    .binder .card-fc .rt { font-size: 1rem; }
+    .card-fc .pos { position: absolute; top: 25px; left: 9px; font-size: 0.55rem; font-weight: 800; opacity: 0.85; }
+    .binder .card-fc .pos { top: 19px; font-size: 0.48rem; }
+    .card-fc .nm { font-size: 0.7rem; font-weight: 800; text-align: center; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.1; }
+    .binder .card-fc .nm { font-size: 0.5rem; margin-top: 3px; }
+    .card-fc .rr { position: absolute; bottom: 5px; font-size: 0.5rem; font-weight: 800; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .r-base   { background: linear-gradient(160deg, #c7ccd6, #8b93a5); color: #23272f; }
+    .r-blue   { background: linear-gradient(160deg, #5b9bff, #2a5fd0); color: #fff; border: 3px solid #bfe0ff; box-shadow: 0 0 14px rgba(91,155,255,0.45); }
+    .r-red    { background: linear-gradient(160deg, #ff6a6a, #c01f1f); color: #fff; box-shadow: 0 0 16px rgba(255,90,90,0.5); }
+    .r-purple { background: linear-gradient(160deg, #b06bff, #6a1fc0); color: #fff; box-shadow: 0 0 18px rgba(176,107,255,0.55); }
+    .r-green  { background: linear-gradient(160deg, #4fd17a, #1f9e4d); color: #053018; box-shadow: 0 0 20px rgba(79,209,122,0.6); }
+    .r-black  { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.6); border: 3px solid transparent;
+      background-image: linear-gradient(#0a0a0a, #0a0a0a), linear-gradient(125deg, #ff5a5a, #ffd23f, #5ad15a, #6fa8ff, #c06fff, #ff5a5a);
+      background-origin: border-box; background-clip: padding-box, border-box; background-size: auto, 300% 300%;
+      animation: holo 3s linear infinite; box-shadow: 0 0 28px rgba(255,255,255,0.6); }
+    @keyframes holo { 0% { background-position: 0 0, 0% 50%; } 100% { background-position: 0 0, 300% 50%; } }
+
+    .card-flip { perspective: 800px; cursor: pointer; }
+    .card-flip .inner { position: relative; width: 100%; aspect-ratio: 3 / 4; transition: transform 0.5s ease; transform-style: preserve-3d; }
+    .card-flip.flipped .inner { transform: rotateY(180deg); }
+    .card-flip .face, .card-flip .back { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 14px; }
+    .card-flip .back { display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #16213e, #0f3460); border: 2px solid #ffd23f; font-size: 2rem; }
+    .card-flip .face { transform: rotateY(180deg); }
+    .card-flip .face .card-fc { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; }
+    .walkout { color: #ffd23f; font-weight: 800; font-size: 1.05rem; min-height: 1.4em; margin: 2px 0 10px; line-height: 1.2; }
+
+    /* squad builder */
+    .squad-pitch { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .squad-bench { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .slot { aspect-ratio: 3 / 4; border: 2px dashed #2a3a5e; border-radius: 12px; background: #0f1830; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: #8b93b0; overflow: hidden; transition: border-color 0.15s ease; }
+    .slot:hover { border-color: #e94560; }
+    .slot .ph { font-size: 1.3rem; opacity: 0.6; line-height: 1; }
+    .slot .lbl { font-size: 0.52rem; font-weight: 800; letter-spacing: 0.5px; margin-top: 3px; }
+    .slot.filled { border-style: solid; border-color: #0f3460; }
+    .slot .card-fc { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 10px; box-shadow: none; padding: 4px; }
+    .slot .card-fc .em { font-size: 1.35rem; }
+    .slot .card-fc .rt { font-size: 0.8rem; top: 4px; left: 5px; }
+    .slot .card-fc .pos { font-size: 0.42rem; top: 16px; left: 5px; }
+    .slot .card-fc .nm { font-size: 0.44rem; margin-top: 2px; }
+    .slot .card-fc .rr { display: none; }
+    .pick-cards .card-fc { cursor: pointer; }
   </style>
 </head>
 <body>
@@ -116,6 +199,9 @@
         </div>
         <div class="legend" id="legend"></div>
         <button class="start-btn" id="start-btn">Kick Off!</button>
+        <button class="ut-entry" id="ut-entry">🏆 Ultimate Team</button>
+        <button class="ut-entry collect" id="collect-entry">🃏 Collect Players</button>
+        <button class="ut-entry career" id="career-entry">💼 Career Mode</button>
       </div>
     </div>
 
@@ -125,13 +211,165 @@
         <div class="sub" id="over-sub">Great match!</div>
         <div class="scoreline"><span class="lbl" id="over-l1">Blue</span><span class="big" id="over-s1">0</span></div>
         <div class="scoreline"><span class="lbl" id="over-l2">Red</span><span class="big" id="over-s2">0</span></div>
+        <button class="start-btn" id="claim-packs" hidden>🎁 Open reward</button>
         <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+
+    <!-- Ultimate Team: home -->
+    <div class="overlay" id="ut" hidden>
+      <div class="panel ut-panel">
+        <h2>Ultimate Team</h2>
+        <div class="sub">Build a squad from your cards, then <b style="color:#ffd23f">win matches</b> to earn packs. Tougher difficulty = more packs! 🏆<br><span style="font-size:0.78rem">No cards yet? Grab some in <b>Collect Players</b> first.</span></div>
+        <div class="ut-stats">
+          <div class="ut-stat"><div class="v" id="ut-count">0</div><div class="k">Cards</div></div>
+          <div class="ut-stat"><div class="v" id="ut-club">&ndash;</div><div class="k">Club Rating</div></div>
+          <div class="ut-stat"><div class="v" id="ut-ooo">0</div><div class="k">1-of-1s</div></div>
+        </div>
+        <button class="start-btn" id="ut-squad-btn">⚽ Build Squad &amp; Play</button>
+        <button class="secondary-btn" id="ut-binder-btn">📒 View Collection</button>
+        <button class="secondary-btn" id="ut-close">‹ Back to game</button>
+      </div>
+    </div>
+
+    <!-- Ultimate Team: pack reveal -->
+    <div class="overlay" id="ut-open" hidden>
+      <div class="panel ut-panel">
+        <h2 id="ut-open-title">Pack 1</h2>
+        <div class="walkout" id="ut-walkout"></div>
+        <div class="ut-cards" id="ut-open-cards"></div>
+        <button class="start-btn" id="ut-reveal-all">Reveal All</button>
+        <button class="secondary-btn" id="ut-open-next">Next ›</button>
+      </div>
+    </div>
+
+    <!-- Ultimate Team: collection -->
+    <div class="overlay" id="ut-binder" hidden>
+      <div class="panel ut-panel">
+        <h2>Collection</h2>
+        <div class="sub" id="ut-binder-sub">Your mobs, sorted by rating.</div>
+        <div class="ut-cards binder" id="ut-binder-cards"></div>
+        <button class="secondary-btn" id="ut-binder-close">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Ultimate Team: squad builder -->
+    <div class="overlay" id="ut-squad" hidden>
+      <div class="panel ut-panel">
+        <h2>Your Squad</h2>
+        <div class="sub">Tap a slot to pick a player from your collection. Each card brings its own stats! ⚽</div>
+        <div class="group-label">Starting 5</div>
+        <div class="squad-pitch" id="squad-starters"></div>
+        <div class="group-label">Bench</div>
+        <div class="squad-bench" id="squad-bench"></div>
+        <div class="ut-stats" style="margin-top:12px">
+          <div class="ut-stat"><div class="v" id="squad-rating">–</div><div class="k">Squad Rating</div></div>
+        </div>
+        <div class="group-label" id="squad-hint">Pick a difficulty &amp; play to earn packs</div>
+        <div class="choices ut-tier" id="squad-diff">
+          <button class="choice" data-diff="beginner"><span>Beginner</span><span class="pk">win → 1 pack</span></button>
+          <button class="choice" data-diff="intermediate"><span>Intermediate</span><span class="pk">win → 2 packs</span></button>
+          <button class="choice" data-diff="pro"><span>Pro</span><span class="pk">win → 3 packs</span></button>
+        </div>
+        <button class="secondary-btn" id="squad-auto" style="margin-top:10px">⚡ Auto-fill best</button>
+        <button class="secondary-btn" id="squad-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Ultimate Team: card picker for a squad slot -->
+    <div class="overlay" id="ut-pick" hidden>
+      <div class="panel ut-panel">
+        <h2 id="pick-title">Pick a player</h2>
+        <div class="sub" id="pick-sub">Tap a card to add it. Tap the highlighted one to remove it.</div>
+        <div class="ut-cards binder pick-cards" id="pick-cards"></div>
+        <button class="secondary-btn" id="pick-cancel">‹ Cancel</button>
+      </div>
+    </div>
+
+    <!-- Collect Players: free pack simulator -->
+    <div class="overlay" id="ut-collect" hidden>
+      <div class="panel ut-panel">
+        <h2>Collect Players</h2>
+        <div class="sub">Free pack simulator — open cards <b>5 at a time</b> and grow your collection. Chase the holographic <b style="color:#ffd23f">1-of-1s</b>! 🌟</div>
+        <div class="ut-stats">
+          <div class="ut-stat"><div class="v" id="collect-count">0</div><div class="k">Cards</div></div>
+          <div class="ut-stat"><div class="v" id="collect-club">&ndash;</div><div class="k">Club Rating</div></div>
+          <div class="ut-stat"><div class="v" id="collect-ooo">0</div><div class="k">1-of-1s</div></div>
+        </div>
+        <button class="start-btn" id="collect-open">🃏 Open Pack (5 cards)</button>
+        <button class="secondary-btn" id="collect-binder">📒 View Collection</button>
+        <button class="secondary-btn" id="collect-close">‹ Back to game</button>
+      </div>
+    </div>
+
+    <!-- Career: manager home -->
+    <div class="overlay" id="career" hidden>
+      <div class="panel ut-panel">
+        <h2>Career Mode</h2>
+        <div class="sub">You're the manager! Sign the <b style="color:#ffd23f">best players in the world</b> in the transfer market — but they cost big money. Win matches to grow your transfer budget. 💼</div>
+        <div class="ut-stats">
+          <div class="ut-stat"><div class="v money-chip" id="career-money">£0</div><div class="k">Budget</div></div>
+          <div class="ut-stat"><div class="v" id="career-club">&ndash;</div><div class="k">Club Rating</div></div>
+          <div class="ut-stat"><div class="v" id="career-owned-count">0</div><div class="k">Players</div></div>
+        </div>
+        <button class="start-btn" id="career-market-btn">🛒 Transfer Market</button>
+        <button class="start-btn" id="career-squad-btn" style="margin-top:10px">👔 My Squad &amp; Play</button>
+        <button class="secondary-btn" id="career-close">‹ Back to game</button>
+      </div>
+    </div>
+
+    <!-- Career: transfer market -->
+    <div class="overlay" id="career-market" hidden>
+      <div class="panel ut-panel">
+        <h2>Transfer Market</h2>
+        <div class="sub">Budget: <span class="money-chip" id="market-money">£0</span> &nbsp;·&nbsp; tap <b>Buy</b> to sign a player.</div>
+        <div class="market-list" id="market-list"></div>
+        <button class="secondary-btn" id="market-refresh">🔄 Scout new players</button>
+        <button class="secondary-btn" id="market-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Career: squad / lineup + play -->
+    <div class="overlay" id="career-squad" hidden>
+      <div class="panel ut-panel">
+        <h2>My Squad</h2>
+        <div class="sub">Budget: <span class="money-chip" id="career-squad-money">£0</span> &nbsp;·&nbsp; tap a slot to pick from your signed players.</div>
+        <div class="group-label">Starting 5</div>
+        <div class="squad-pitch" id="career-starters"></div>
+        <div class="group-label">Bench</div>
+        <div class="squad-bench" id="career-bench"></div>
+        <div class="ut-stats" style="margin-top:12px">
+          <div class="ut-stat"><div class="v" id="career-rating">–</div><div class="k">Club Rating</div></div>
+        </div>
+        <div class="group-label" id="career-hint">Pick a difficulty &amp; play to earn money</div>
+        <div class="choices ut-tier" id="career-diff">
+          <button class="choice" data-diff="beginner"><span>Beginner</span><span class="pk">win → £5M</span></button>
+          <button class="choice" data-diff="intermediate"><span>Pro</span><span class="pk">win → £12M</span></button>
+          <button class="choice" data-diff="pro"><span>Legend</span><span class="pk">win → £25M</span></button>
+        </div>
+        <button class="secondary-btn" id="career-squad-back" style="margin-top:10px">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Career: player picker for a lineup slot -->
+    <div class="overlay" id="career-pick" hidden>
+      <div class="panel ut-panel">
+        <h2 id="career-pick-title">Pick a player</h2>
+        <div class="sub">Tap a player to slot them in. Tap the highlighted one to remove.</div>
+        <div class="ut-cards binder pick-cards" id="career-pick-cards"></div>
+        <button class="secondary-btn" id="career-pick-cancel">‹ Cancel</button>
       </div>
     </div>
   </div>
 
   <p class="hint">
-    <b>Move:</b> P1 = WASD, P2 = arrows (or drag). Get the ball to <b>dribble</b> it. <b>Pass:</b> P1 = R, P2 = 2 &nbsp;·&nbsp; <b>Shoot (hold for power/height):</b> P1 = F, P2 = 4 &nbsp;·&nbsp; <b>Switch:</b> Q / 1 &nbsp;·&nbsp; <b>Sub:</b> E / 0
+    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Sprint:</b> hold Shift (tires you out!) &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Shoot</b> (hold) / <b>Tackle</b> / <b>Header</b>: F / 4 &nbsp;·&nbsp; <b>Switch:</b> Q / 1 &nbsp;·&nbsp; <b>Sub:</b> E / 0
+  </p>
+  <p class="hint" style="margin-top:4px">
+    <b>On phone:</b> drag the pitch to steer the <b>joystick</b> 🕹️ &nbsp;·&nbsp; tap the buttons to <b>pass</b>, <b>shoot</b>, <b>switch</b> &amp; <b>sub</b>.
+  </p>
+  <p class="hint" style="margin-top:4px">
+    Ball out the <b>sides</b> = throw-in &nbsp;·&nbsp; out over a <b>goal line</b> = corner or goal kick, just like real life.
   </p>
 
   <script>
@@ -146,6 +384,8 @@
     const M = 100;
     const GOAL_H = 480;
     const GY0 = (WORLD_H - GOAL_H) / 2, GY1 = (WORLD_H + GOAL_H) / 2;
+    const CROSSBAR_H = 78;        // a ball higher than this when it crosses the line is over the bar
+    const POST = 24;              // post band at each side of the goal mouth
     const WIN = 5;
     const GRAV_Z = 0.55;          // ball loft gravity
     const SHOOT_MAX = 820;        // ms to full charge
@@ -165,7 +405,7 @@
     function playerName(i, fb) { try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fb; } catch (e) { return fb; } }
 
     const MOBS = {
-      sheep:   { name: 'Sheep',   emoji: '🐑', tag: 'Fast',      accel: 0.74, maxSpd: 4.7, mass: 1.0, r: 23, kick: 0.92, color: '#f3f3f3', dark: '#cdcdcd', face: '#e7c8a8' },
+      sheep:   { name: 'Sheep',   emoji: '🐑', tag: 'Light',     accel: 0.62, maxSpd: 4.2, mass: 1.0, r: 23, kick: 0.92, color: '#f3f3f3', dark: '#cdcdcd', face: '#e7c8a8' },
       pig:     { name: 'Pig',     emoji: '🐷', tag: 'Balanced',  accel: 0.60, maxSpd: 4.0, mass: 1.45, r: 26, kick: 1.0, color: '#f2a6c0', dark: '#d77fa0', face: '#ffc6dc' },
       creeper: { name: 'Creeper', emoji: '🟩', tag: 'Boom shot', accel: 0.64, maxSpd: 4.3, mass: 1.15, r: 26, kick: 1.4, color: '#5fc24f', dark: '#3f8f33', face: '#2a2a2a' },
       zombie:  { name: 'Zombie',  emoji: '🧟', tag: 'Strong',    accel: 0.46, maxSpd: 3.4, mass: 2.3, r: 31, kick: 1.12, color: '#6a9a55', dark: '#4a7038', face: '#3a5a2c' },
@@ -173,6 +413,7 @@
     const MOB_KEYS = ['sheep', 'pig', 'creeper', 'zombie'];
 
     let state = 'select';
+    let squadMode = false;     // true when playing with an Ultimate Team squad
     let numPlayers = 1;
     let pickL = 'pig', pickR = 'zombie';
     let teams = [], ball = null, score = [0, 0];
@@ -180,24 +421,33 @@
     let cam = { x: 0, y: 0 };
     let stuckTimer = 0, stuckCount = 0, lastCheckX = 0, lastCheckY = 0;
     let lastTs = 0, dtMs = 16.7, dtf = 1;
-    const shootHeld = [false, false], chargeT = [0, 0];
+    const shootHeld = [false, false], chargeT = [0, 0], sprintHeld = [false, false];
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
     const ctlEls = {};
     ['shoot1', 'pass1', 'sw1', 'sub1', 'shoot2', 'pass2', 'sw2', 'sub2'].forEach(function (id) { ctlEls[id] = document.getElementById(id); });
 
-    function mkPlayer(side, key, slot) {
-      const s = MOBS[key];
-      return { side: side, key: key, slot: slot, role: slot == null ? null : FORMATION[slot].role,
+    function mkPlayer(side, key, slot, stats) {
+      const s = stats || MOBS[key];
+      const p = { side: side, key: stats ? null : key, slot: slot, role: slot == null ? null : FORMATION[slot].role,
         x: 0, y: 0, vx: 0, vy: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
-        accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, kick: s.kick, stamina: 100, benched: slot == null, aiShootCD: 0 };
+        accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, kick: s.kick, stamina: 100, benched: slot == null, aiShootCD: 0, sprint: false };
+      if (stats) { p.emoji = stats.emoji; p.cardName = stats.name; p.rt = stats.rt; }
+      return p;
     }
     function buildTeam(side, key) {
       return { side: side, key: key,
         onPitch: FORMATION.map(function (f, i) { return mkPlayer(side, key, i); }),
         bench: [mkPlayer(side, key, null), mkPlayer(side, key, null), mkPlayer(side, key, null), mkPlayer(side, key, null)],
         active: 3, subCD: 0 };
+    }
+    // Build a team from an Ultimate Team squad: per-player stats come from the cards.
+    function buildSquadTeam(side, sq) {
+      const onPitch = FORMATION.map(function (f, i) { return mkPlayer(side, null, i, sq.starters[i]); });
+      const bench = [];
+      for (let j = 0; j < 4; j++) bench.push(mkPlayer(side, null, null, sq.bench[j] || sq.starters[j % 5]));
+      return { side: side, key: null, label: sq.label, emoji: sq.emoji, onPitch: onPitch, bench: bench, active: 3, subCD: 0 };
     }
     function activePlayer(t) { return t.onPitch[t.active]; }
     function isHumanTeam(side) { return side === 0 || (side === 1 && numPlayers === 2); }
@@ -209,7 +459,7 @@
     }
 
     function placeKickoff(towards) {
-      ball = { x: WORLD_W / 2, y: WORLD_H / 2, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, owner: null, freeCD: 0 };
+      ball = { x: WORLD_W / 2, y: WORLD_H / 2, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 14, owner: null, freeCD: 0, lastSide: towards === 0 ? 1 : 0 };
       ballHold = 0; possCD = 0;
       for (const t of teams) for (const p of t.onPitch) { const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.benched = false; }
       if (towards === 0) ball.vx = -2.5; else if (towards === 1) ball.vx = 2.5;
@@ -223,10 +473,12 @@
       const on2 = on1 && numPlayers === 2;
       ['shoot1', 'pass1', 'sw1', 'sub1'].forEach(function (id) { ctlEls[id].hidden = !on1; });
       ['shoot2', 'pass2', 'sw2', 'sub2'].forEach(function (id) { ctlEls[id].hidden = !on2; });
+      const stage = document.querySelector('.stage'); if (stage) stage.classList.toggle('solo', numPlayers === 1);
     }
 
     function beginGame() {
       numPlayers = selectedCount();
+      squadMode = false;
       teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
       score = [0, 0]; pops = []; freeze = 60;
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
@@ -234,6 +486,24 @@
       setupEl.hidden = true; overEl.hidden = true;
       state = 'playing'; setControls();
     }
+
+    // Kick off a match using a custom squad (Ultimate Team or Career — called from the UT module).
+    let squadOpts = null;
+    function startSquadMatch(home, away, opts) {
+      window.__utOpen = false;
+      numPlayers = 1; squadMode = true;
+      squadOpts = opts || {};
+      teams = [ buildSquadTeam(0, home), buildSquadTeam(1, away) ];
+      score = [0, 0]; pops = []; freeze = 60;
+      shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
+      placeKickoff(-1);
+      setupEl.hidden = true; overEl.hidden = true;
+      state = 'playing'; setControls();
+    }
+    window.__mobStartSquad = startSquadMatch;
+
+    function sideName(side) { if (squadMode) return teams[side].label; return side === 0 ? playerName(0, 'Blue') : (numPlayers === 2 ? playerName(1, 'Red') : 'Computer'); }
+    function sideEmoji(side) { if (squadMode && teams[side]) return teams[side].emoji; return MOBS[side === 0 ? pickL : pickR].emoji; }
 
     function goal(scorer) {
       score[scorer]++;
@@ -244,18 +514,21 @@
 
     function endGame() {
       state = 'over'; setControls();
-      const nL = playerName(0, 'Blue'), nR = numPlayers === 2 ? playerName(1, 'Red') : 'Computer';
+      const nL = sideName(0), nR = sideName(1);
       const winner = score[0] > score[1] ? 0 : 1;
       document.getElementById('over-title').textContent = (winner === 0 ? nL : nR) + ' wins! 🏆';
-      document.getElementById('over-sub').textContent = MOBS[winner === 0 ? pickL : pickR].emoji + ' ' + (score[0] > score[1] ? score[0] + '–' + score[1] : score[1] + '–' + score[0]) + ' final';
+      document.getElementById('over-sub').textContent = sideEmoji(winner) + ' ' + (score[0] > score[1] ? score[0] + '–' + score[1] : score[1] + '–' + score[0]) + ' final';
       document.getElementById('over-l1').textContent = nL;
       document.getElementById('over-l2').textContent = nR;
       document.getElementById('over-s1').textContent = score[0];
       document.getElementById('over-s2').textContent = score[1];
+      // Hand off to the UT module to pay out the reward (packs for UT, money for Career).
+      document.getElementById('claim-packs').hidden = true;
+      if (squadMode && window.__mobOnMatchEnd) window.__mobOnMatchEnd(score[0] > score[1], squadOpts);
       overEl.hidden = false;
     }
 
-    function showSelect() { state = 'select'; overEl.hidden = true; setupEl.hidden = false; setControls(); }
+    function showSelect() { state = 'select'; squadMode = false; overEl.hidden = true; setupEl.hidden = false; setControls(); }
 
     // ---------- switch & substitute ----------
     function switchPlayer(side) {
@@ -280,11 +553,11 @@
 
     // ---------- possession: pass & shoot ----------
     function setOwner(p) {
-      ball.owner = p; ball.vx = p.vx; ball.vy = p.vy; ball.z = 0; ball.vz = 0; ball.freeCD = 0; possCD = 10;
+      ball.owner = p; ball.lastSide = p.side; ball.vx = p.vx; ball.vy = p.vy; ball.z = 0; ball.vz = 0; ball.freeCD = 0; possCD = 10;
       if (isHumanTeam(p.side)) { const t = teams[p.side]; const idx = t.onPitch.indexOf(p); if (idx >= 0) t.active = idx; }
     }
     function kickBall(o, vx, vy, vz, freeFrames) {
-      ball.owner = null; ball.vx = vx; ball.vy = vy; ball.vz = vz || 0; ball.freeCD = freeFrames; possCD = 0;
+      ball.owner = null; ball.lastSide = o.side; ball.vx = vx; ball.vy = vy; ball.vz = vz || 0; ball.freeCD = freeFrames; possCD = 0;
       ball.x = clamp(o.x + o.fx * (o.r + ball.r + 2), M + ball.r, WORLD_W - M - ball.r);
       ball.y = clamp(o.y + o.fy * (o.r + ball.r + 2), M + ball.r, WORLD_H - M - ball.r);
     }
@@ -311,11 +584,42 @@
       const t = teams[side], o = activePlayer(t);
       if (ball.owner !== o) return;
       let fx = o.fx, fy = o.fy; const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
-      const speed = 9 + charge * 16, loft = charge * 15;
+      // stronger shots, scaled by the mob's kick power (Creeper booms hardest)
+      const speed = (13 + charge * 22) * (0.86 + o.kick * 0.16), loft = charge * 20;
       kickBall(o, fx * speed, fy * speed, loft, 12);
       pops.push({ x: o.x, y: o.y - o.r - 18, txt: charge > 0.7 ? 'SHOOT! 💥' : 'SHOOT!', color: '#ffe066', t: 0 });
     }
-    function shootDown(side) { if (!shootHeld[side]) { shootHeld[side] = true; chargeT[side] = 0; } }
+    function tackle(side) {
+      if (state !== 'playing') return;
+      const t = teams[side], p = activePlayer(t);
+      if (ball.owner === p) return;
+      // lunge toward the ball
+      let dx = ball.x - p.x, dy = ball.y - p.y, dl = Math.hypot(dx, dy) || 1;
+      p.vx += (dx / dl) * p.maxSpd * 1.7; p.vy += (dy / dl) * p.maxSpd * 1.7;
+      // steal from an opponent carrier, or pounce on a loose ground ball, if close enough
+      if (ball.owner && ball.owner.side !== side) {
+        const o = ball.owner;
+        if (Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 24) { setOwner(p); pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'TACKLE!', color: side ? '#ff7d7d' : '#6fa8ff', t: 0 }); }
+      } else if (!ball.owner && ball.z < 16 && Math.hypot(p.x - ball.x, p.y - ball.y) < p.r + ball.r + 26) {
+        setOwner(p);
+      }
+    }
+    // head a high, loose ball near you — same power formula as a shot
+    function headerBall(side) {
+      const p = activePlayer(teams[side]);
+      if (ball.owner || ball.z < 16 || Math.hypot(p.x - ball.x, p.y - ball.y) > p.r + ball.r + 34) return false;
+      let fx = p.fx, fy = p.fy; const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
+      const charge = 0.6;   // a header is a fixed-strength shot in the heading direction
+      const speed = (13 + charge * 22) * (0.86 + p.kick * 0.16), loft = charge * 20;
+      ball.owner = null; ball.lastSide = p.side; ball.vx = fx * speed; ball.vy = fy * speed; ball.vz = loft; ball.freeCD = 12; possCD = 0;
+      pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'HEADER!', color: '#ffe066', t: 0 });
+      return true;
+    }
+    // F / 4: shoot when you have the ball; header a high ball; else tackle
+    function shootDown(side) {
+      if (ball.owner === activePlayer(teams[side])) { if (!shootHeld[side]) { shootHeld[side] = true; chargeT[side] = 0; } }
+      else if (!headerBall(side)) tackle(side);
+    }
     function shootRelease(side) {
       if (!shootHeld[side]) return;
       const c = chargeT[side]; shootHeld[side] = false; chargeT[side] = 0;
@@ -326,9 +630,12 @@
     // ---------- input ----------
     function selectedCount() { const el = document.querySelector('#count-choices .choice.selected'); return el ? parseInt(el.dataset.players, 10) : 1; }
     const keys = [ { l: false, r: false, u: false, d: false }, { l: false, r: false, u: false, d: false } ];
-    const dragT = [ null, null ];
+    // On-screen joystick per side (canvas-pixel coords). bx/by = base where the touch began, tx/ty = current thumb.
+    const joy = [ { active: false, bx: 0, by: 0, tx: 0, ty: 0, id: null }, { active: false, bx: 0, by: 0, tx: 0, ty: 0, id: null } ];
+    const JOY_R = 64;   // max thumb travel in canvas pixels
 
     window.addEventListener('keydown', function (e) {
+      if (window.__utOpen) return;
       if (state === 'select') { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); beginGame(); } return; }
       if (state === 'over') { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); showSelect(); } return; }
       const as = numPlayers === 2 ? 1 : 0;
@@ -340,7 +647,7 @@
         case 'KeyQ': switchPlayer(0); e.preventDefault(); break;
         case 'KeyE': doSub(0); e.preventDefault(); break;
         case 'KeyR': passBall(0); e.preventDefault(); break;
-        case 'KeyF': shootDown(0); e.preventDefault(); break;
+        case 'KeyF': if (!e.repeat) shootDown(0); e.preventDefault(); break;
         case 'ArrowUp': keys[as].u = true; e.preventDefault(); break;
         case 'ArrowDown': keys[as].d = true; e.preventDefault(); break;
         case 'ArrowLeft': keys[as].l = true; e.preventDefault(); break;
@@ -348,10 +655,13 @@
         case 'Digit1': case 'Numpad1': if (numPlayers === 2) switchPlayer(1); e.preventDefault(); break;
         case 'Digit0': case 'Numpad0': if (numPlayers === 2) doSub(1); e.preventDefault(); break;
         case 'Digit2': case 'Numpad2': if (numPlayers === 2) passBall(1); e.preventDefault(); break;
-        case 'Digit4': case 'Numpad4': if (numPlayers === 2) shootDown(1); e.preventDefault(); break;
+        case 'Digit4': case 'Numpad4': if (numPlayers === 2 && !e.repeat) shootDown(1); e.preventDefault(); break;
+        case 'ShiftLeft': sprintHeld[0] = true; e.preventDefault(); break;
+        case 'ShiftRight': sprintHeld[as] = true; e.preventDefault(); break;
       }
     });
     window.addEventListener('keyup', function (e) {
+      if (window.__utOpen) return;
       const as = numPlayers === 2 ? 1 : 0;
       switch (e.code) {
         case 'KeyW': keys[0].u = false; break;
@@ -364,6 +674,8 @@
         case 'ArrowLeft': keys[as].l = false; break;
         case 'ArrowRight': keys[as].r = false; break;
         case 'Digit4': case 'Numpad4': if (numPlayers === 2) shootRelease(1); break;
+        case 'ShiftLeft': sprintHeld[0] = false; break;
+        case 'ShiftRight': sprintHeld[as] = false; break;
       }
     });
 
@@ -375,17 +687,23 @@
       if (state !== 'playing' && state !== 'goal') return;
       if (e.cancelable) e.preventDefault();
       const touches = e.changedTouches ? e.changedTouches : [e];
-      for (const t of touches) { const px = canvasX(t.clientX), py = canvasY(t.clientY); const side = sideForX(px); drags[t.identifier == null ? 'mouse' : t.identifier] = side; dragT[side] = { x: cam.x + px / ZOOM, y: cam.y + py / ZOOM }; }
+      for (const t of touches) {
+        const px = canvasX(t.clientX), py = canvasY(t.clientY), side = sideForX(px);
+        if (joy[side].active) continue;                       // one joystick per side
+        const id = t.identifier == null ? 'mouse' : t.identifier;
+        drags[id] = side;
+        joy[side].active = true; joy[side].id = id; joy[side].bx = px; joy[side].by = py; joy[side].tx = px; joy[side].ty = py;
+      }
     }
     function onMove(e) {
       if (state !== 'playing' && state !== 'goal') return;
       if (e.cancelable) e.preventDefault();
       const touches = e.changedTouches ? e.changedTouches : [e];
-      for (const t of touches) { const id = t.identifier == null ? 'mouse' : t.identifier; if (!(id in drags)) continue; dragT[drags[id]] = { x: cam.x + canvasX(t.clientX) / ZOOM, y: cam.y + canvasY(t.clientY) / ZOOM }; }
+      for (const t of touches) { const id = t.identifier == null ? 'mouse' : t.identifier; if (!(id in drags)) continue; const side = drags[id]; joy[side].tx = canvasX(t.clientX); joy[side].ty = canvasY(t.clientY); }
     }
     function onUp(e) {
       const touches = e.changedTouches ? e.changedTouches : [e];
-      for (const t of touches) { const id = t.identifier == null ? 'mouse' : t.identifier; if (id in drags) { dragT[drags[id]] = null; delete drags[id]; } }
+      for (const t of touches) { const id = t.identifier == null ? 'mouse' : t.identifier; if (id in drags) { const side = drags[id]; if (joy[side].id === id) joy[side].active = false; delete drags[id]; } }
     }
     canvas.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
@@ -395,12 +713,19 @@
     canvas.addEventListener('touchend', onUp, { passive: false });
     canvas.addEventListener('touchcancel', onUp, { passive: false });
 
-    ctlEls.sw1.addEventListener('click', function () { switchPlayer(0); });
-    ctlEls.sub1.addEventListener('click', function () { doSub(0); });
-    ctlEls.pass1.addEventListener('click', function () { passBall(0); });
-    ctlEls.sw2.addEventListener('click', function () { switchPlayer(1); });
-    ctlEls.sub2.addEventListener('click', function () { doSub(1); });
-    ctlEls.pass2.addEventListener('click', function () { passBall(1); });
+    // Tap buttons: bind BOTH click (desktop) and touchstart (mobile). preventDefault on
+    // touchstart suppresses the synthesized click so the action fires exactly once on phones,
+    // where a plain click is otherwise eaten by the page's touch-action:none / canvas handlers.
+    function tapBind(btn, fn) {
+      btn.addEventListener('click', fn);
+      btn.addEventListener('touchstart', function (e) { e.preventDefault(); fn(); }, { passive: false });
+    }
+    tapBind(ctlEls.sw1, function () { switchPlayer(0); });
+    tapBind(ctlEls.sub1, function () { doSub(0); });
+    tapBind(ctlEls.pass1, function () { passBall(0); });
+    tapBind(ctlEls.sw2, function () { switchPlayer(1); });
+    tapBind(ctlEls.sub2, function () { doSub(1); });
+    tapBind(ctlEls.pass2, function () { passBall(1); });
     function wireShoot(btn, side) {
       btn.addEventListener('mousedown', function (e) { e.preventDefault(); shootDown(side); });
       btn.addEventListener('mouseup', function () { shootRelease(side); });
@@ -456,10 +781,10 @@
       const k = keys[side];
       let ax = (k.r ? 1 : 0) - (k.l ? 1 : 0);
       let ay = (k.d ? 1 : 0) - (k.u ? 1 : 0);
-      if (ax === 0 && ay === 0 && dragT[side]) { const dx = dragT[side].x - m.x, dy = dragT[side].y - m.y, dl = Math.hypot(dx, dy); if (dl > 8) { ax = dx / dl; ay = dy / dl; } }
-      const l = Math.hypot(ax, ay) || 1, f = staminaFactor(m);
-      m.vx += (ax / l) * m.accel * 2.4 * f * dtf;
-      m.vy += (ay / l) * m.accel * 2.4 * f * dtf;
+      if (ax === 0 && ay === 0 && joy[side].active) { const dx = joy[side].tx - joy[side].bx, dy = joy[side].ty - joy[side].by, dl = Math.hypot(dx, dy); if (dl > 6) { ax = dx / dl; ay = dy / dl; } }
+      const l = Math.hypot(ax, ay) || 1, f = staminaFactor(m), boost = m.sprint ? 1.55 : 1;
+      m.vx += (ax / l) * m.accel * 2.4 * boost * f * dtf;
+      m.vy += (ay / l) * m.accel * 2.4 * boost * f * dtf;
     }
     function driveChase(p) { steer(p, ball.x, ball.y, 0.98); }
     function driveHold(p, side) {
@@ -496,7 +821,7 @@
 
     function moveMob(m) {
       m.vx *= Math.pow(0.84, dtf); m.vy *= Math.pow(0.84, dtf);
-      const cap = m.maxSpd * staminaFactor(m), sp = Math.hypot(m.vx, m.vy);
+      const cap = m.maxSpd * staminaFactor(m) * (m.sprint ? 1.5 : 1), sp = Math.hypot(m.vx, m.vy);
       if (sp > cap) { const k = cap / sp; m.vx *= k; m.vy *= k; }
       m.x += m.vx * dtf; m.y += m.vy * dtf;
       m.x = clamp(m.x, M + m.r, WORLD_W - M - m.r);
@@ -516,21 +841,62 @@
       }
     }
 
-    function ballOut(x, y) {
-      const inset = 160;
+    // restart at a dead ball: hand possession to the taker with a moment of space
+    function restart(kind, x, y, takerSide, label) {
       ball.owner = null;
-      ball.x = clamp(x, M + inset, WORLD_W - M - inset);
-      ball.y = clamp(y, M + inset, WORLD_H - M - inset);
-      ball.vx = 0; ball.vy = 0; ball.vz = 0; ball.z = 0; ball.spin = 0; ball.freeCD = 8;
-      ballHold = 24; stuckTimer = 0; stuckCount = 0; lastCheckX = ball.x; lastCheckY = ball.y;
-      pops.push({ x: ball.x, y: ball.y - 36, txt: 'OUT!', color: '#ffe066', t: 0 });
+      ball.x = clamp(x, M + ball.r, WORLD_W - M - ball.r);
+      ball.y = clamp(y, M + ball.r, WORLD_H - M - ball.r);
+      ball.vx = ball.vy = ball.vz = ball.z = ball.spin = 0;
+      const t = teams[takerSide];
+      let taker = null;
+      if (kind === 'goalkick') taker = t.onPitch.find(function (p) { return p.role === 'gk'; });
+      if (!taker) { let bd = Infinity; for (const p of t.onPitch) { if (kind !== 'goalkick' && p.role === 'gk') continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < bd) { bd = d; taker = p; } } }
+      if (!taker) taker = t.onPitch[1];
+      taker.x = clamp(ball.x - (takerSide === 0 ? 42 : -42), M + taker.r, WORLD_W - M - taker.r);
+      taker.y = clamp(ball.y, M + taker.r, WORLD_H - M - taker.r);
+      taker.vx = taker.vy = 0; taker.fx = takerSide === 0 ? 1 : -1; taker.fy = 0;
+      setOwner(taker); possCD = 45;           // space to play it in
+      stuckTimer = 0; stuckCount = 0; lastCheckX = ball.x; lastCheckY = ball.y;
+      pops.push({ x: ball.x, y: ball.y - 40, txt: label, color: '#ffe066', t: 0 });
+    }
+    // a shot reaches the goal line in the mouth: over the bar, off the post, or in
+    function tryGoal(goalSide, scorer) {
+      if (ball.z > CROSSBAR_H) {   // sailed over the bar → goal kick to the keeper
+        const gx = goalSide === 0 ? M + 180 : WORLD_W - M - 180;
+        restart('goalkick', gx, WORLD_H / 2, goalSide, 'OVER THE BAR!');
+        return;
+      }
+      if (ball.y < GY0 + POST || ball.y > GY1 - POST) {   // clanged off the post → rebounds in play
+        ball.owner = null;
+        ball.x = goalSide === 0 ? M + ball.r + 8 : WORLD_W - M - ball.r - 8;
+        ball.vx = -ball.vx * 0.5 - (goalSide === 0 ? -1 : 1) * 2;
+        ball.vy += (ball.y < WORLD_H / 2 ? 1 : -1) * 3.5;
+        ball.z = Math.min(ball.z, 8); ball.vz = 0; ball.freeCD = 6;
+        pops.push({ x: ball.x, y: ball.y - 30, txt: '🔩 POST!', color: '#fff', t: 0 });
+        return;
+      }
+      goal(scorer);
     }
     function outOrGoal() {
       const inGoalY = ball.y > GY0 && ball.y < GY1;
-      if (ball.y - ball.r < M) { ballOut(ball.x, M + ball.r); return true; }
-      if (ball.y + ball.r > WORLD_H - M) { ballOut(ball.x, WORLD_H - M - ball.r); return true; }
-      if (ball.x - ball.r < M) { if (inGoalY && ball.x < M + 8) { goal(1); return true; } ballOut(M + ball.r, ball.y); return true; }
-      if (ball.x + ball.r > WORLD_W - M) { if (inGoalY && ball.x > WORLD_W - M - 8) { goal(0); return true; } ballOut(WORLD_W - M - ball.r, ball.y); return true; }
+      const last = (ball.lastSide === 0 || ball.lastSide === 1) ? ball.lastSide : 0;
+      // side touchlines → throw-in to the team that didn't put it out
+      if (ball.y - ball.r < M) { restart('throwin', ball.x, M + 70, 1 - last, 'THROW-IN'); return true; }
+      if (ball.y + ball.r > WORLD_H - M) { restart('throwin', ball.x, WORLD_H - M - 70, 1 - last, 'THROW-IN'); return true; }
+      // left goal line (side 0's goal)
+      if (ball.x - ball.r < M) {
+        if (inGoalY && ball.x < M + 8) { tryGoal(0, 1); return true; }
+        if (last === 0) restart('corner', M + 70, ball.y < WORLD_H / 2 ? M + 70 : WORLD_H - M - 70, 1, 'CORNER!');   // defender out → corner for side 1
+        else restart('goalkick', M + 180, WORLD_H / 2, 0, 'GOAL KICK');                                              // attacker out → goal kick for side 0
+        return true;
+      }
+      // right goal line (side 1's goal)
+      if (ball.x + ball.r > WORLD_W - M) {
+        if (inGoalY && ball.x > WORLD_W - M - 8) { tryGoal(1, 0); return true; }
+        if (last === 1) restart('corner', WORLD_W - M - 70, ball.y < WORLD_H / 2 ? M + 70 : WORLD_H - M - 70, 0, 'CORNER!');
+        else restart('goalkick', WORLD_W - M - 180, WORLD_H / 2, 1, 'GOAL KICK');
+        return true;
+      }
       return false;
     }
 
@@ -552,7 +918,7 @@
       ball.vx *= Math.pow(0.99, dtf); ball.vy *= Math.pow(0.99, dtf);
       ball.x += ball.vx * dtf; ball.y += ball.vy * dtf; ball.spin += ball.vx * 0.02 * dtf;
       if (outOrGoal()) return;
-      if (ball.freeCD <= 0 && ball.z < 22) {
+      if (ball.freeCD <= 0 && ball.z < 12) {
         let best = null, bd = Infinity;
         for (const t of teams) for (const p of t.onPitch) { const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < p.r + ball.r + 20 && d < bd) { bd = d; best = p; } }
         if (best) setOwner(best);
@@ -562,7 +928,7 @@
     function updateStamina() {
       for (const t of teams) {
         if (t.subCD > 0) t.subCD -= dtf;
-        for (const p of t.onPitch) { const sp = Math.hypot(p.vx, p.vy); if (sp > 0.8) p.stamina -= (0.05 + (sp / p.maxSpd) * 0.10) * dtf; else p.stamina += 0.05 * dtf; p.stamina = clamp(p.stamina, 0, 100); }
+        for (const p of t.onPitch) { const sp = Math.hypot(p.vx, p.vy); if (sp > 0.8) p.stamina -= (0.05 + (sp / p.maxSpd) * 0.10) * (p.sprint ? 2.8 : 1) * dtf; else p.stamina += 0.05 * dtf; p.stamina = clamp(p.stamina, 0, 100); }
         for (const p of t.bench) p.stamina = clamp(p.stamina + 0.17 * dtf, 0, 100);
       }
     }
@@ -590,6 +956,7 @@
         for (let i = 0; i < t.onPitch.length; i++) { const p = t.onPitch[i]; if (p.role === 'gk') continue; if (human && i === t.active) continue; if (ball.owner === p) continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < cd) { cd = d; chaser = i; } }
         for (let i = 0; i < t.onPitch.length; i++) {
           const p = t.onPitch[i];
+          p.sprint = (human && i === t.active && sprintHeld[s] && p.stamina > 4);
           if (human && i === t.active) driveHuman(p, s);
           else if (ball.owner === p) { if (p.role === 'gk') driveGKClear(p, s); else driveAIOwner(p, s); }
           else if (p.role === 'gk') driveGK(p, s);
@@ -619,7 +986,6 @@
         }
       }
       updateCamera();
-      var ap=activePlayer(teams[0]); window.__p={owner: ball.owner? (ball.owner.side+':'+ball.owner.role):'none', z:Math.round(ball.z), bvx:Math.round(ball.vx), act:ap.role, actOwns: ball.owner===ap, sc:score.join('-')};
     }
 
     // ---------- drawing ----------
@@ -645,6 +1011,9 @@
       ctx.beginPath(); ctx.moveTo(x, GY0); ctx.lineTo(x + dir * depth, GY0); ctx.lineTo(x + dir * depth, GY1); ctx.lineTo(x, GY1); ctx.stroke();
       ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5;
       for (let gy = GY0 + 10; gy < GY1; gy += 16) { ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + dir * depth, gy); ctx.stroke(); }
+      // posts (white knobs you can clang it off)
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x, GY0, 9, 0, 6.28); ctx.arc(x, GY1, 9, 0, 6.28); ctx.fill();
     }
 
     function drawPlayer(p, isActiveHuman) {
@@ -658,6 +1027,12 @@
       else if (p.key === 'zombie') { ctx.fillStyle = '#1d2e16'; ctx.fillRect(x - 9, y - 6, 6, 5); ctx.fillRect(x + 3, y - 6, 6, 5); ctx.fillStyle = '#26401b'; ctx.fillRect(x - 7, y + 4, 14, 4); }
       else if (p.key === 'pig') { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(x - 8, y - 6, 4, 5); ctx.fillRect(x + 4, y - 6, 4, 5); ctx.fillStyle = s.face; roundRect(x - 7, y + 2, 14, 9, 3); ctx.fill(); ctx.fillStyle = '#c76b94'; ctx.fillRect(x - 4, y + 5, 3, 4); ctx.fillRect(x + 1, y + 5, 3, 4); }
       else { ctx.fillStyle = s.face; roundRect(x - 8, y - 4, 16, 14, 4); ctx.fill(); ctx.fillStyle = '#2a2a2a'; ctx.fillRect(x - 5, y - 1, 3, 4); ctx.fillRect(x + 2, y - 1, 3, 4); ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(x - b / 2, y - b / 2 + 4, 6, 0, 6.28); ctx.arc(x + b / 2, y - b / 2 + 4, 6, 0, 6.28); ctx.arc(x, y - b / 2, 7, 0, 6.28); ctx.fill(); }
+      drawBadges(p, b, isActiveHuman);
+    }
+
+    // Role label, stamina bar and the active-player arrow — shared by both renderers.
+    function drawBadges(p, b, isActiveHuman) {
+      const x = p.x, y = p.y;
       ctx.fillStyle = 'rgba(0,0,0,0.45)'; const rl = ROLE_LABEL[p.role] || '';
       ctx.font = "800 12px 'Nunito', sans-serif"; ctx.textAlign = 'center';
       const tw = ctx.measureText(rl).width + 8; roundRect(x - tw / 2, y + b / 2 + 3, tw, 14, 4); ctx.fill();
@@ -667,6 +1042,24 @@
       const st = p.stamina / 100; ctx.fillStyle = st > 0.5 ? '#5ad15a' : (st > 0.22 ? '#ffd23f' : '#e94560'); roundRect(bx, byy, bw * st, bh, 2); ctx.fill();
       if (isActiveHuman) { ctx.fillStyle = p.side === 0 ? '#6fa8ff' : '#ff7d7d'; ctx.beginPath(); ctx.moveTo(x, y - b / 2 - 19); ctx.lineTo(x - 8, y - b / 2 - 31); ctx.lineTo(x + 8, y - b / 2 - 31); ctx.closePath(); ctx.fill(); }
       ctx.textAlign = 'left';
+    }
+
+    // Squad players: a team-coloured card with the mob emoji and its rating.
+    function drawCardPlayer(p, isActiveHuman) {
+      const x = p.x, y = p.y, r = p.r;
+      ctx.fillStyle = p.side === 0 ? 'rgba(111,168,255,0.9)' : 'rgba(255,125,125,0.9)';
+      ctx.beginPath(); ctx.ellipse(x, y + r * 0.78, r * 0.95, r * 0.34, 0, 0, 6.28); ctx.fill();
+      const b = r * 1.6;
+      ctx.fillStyle = p.side === 0 ? '#dbe7ff' : '#ffdede'; roundRect(x - b / 2, y - b / 2, b, b, 7); ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = p.side === 0 ? '#6fa8ff' : '#ff7d7d'; roundRect(x - b / 2, y - b / 2, b, b, 7); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = Math.floor(b * 0.72) + "px 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
+      ctx.fillText(p.emoji || '⚽', x, y + 1);
+      // rating chip in the top-left corner
+      ctx.fillStyle = p.side === 0 ? '#0f3460' : '#7a1f1f'; roundRect(x - b / 2 + 2, y - b / 2 + 2, 19, 13, 4); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = "800 10px 'Nunito', sans-serif"; ctx.fillText(p.rt != null ? p.rt : '', x - b / 2 + 11, y - b / 2 + 9);
+      ctx.textBaseline = 'alphabetic';
+      drawBadges(p, b, isActiveHuman);
     }
 
     function drawBall() {
@@ -704,12 +1097,23 @@
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(12,20,40,0.82)'; roundRect(VW / 2 - 92, 8, 184, 38, 12); ctx.fill();
       ctx.font = "800 24px 'Nunito', sans-serif";
-      ctx.fillStyle = '#6fa8ff'; ctx.textAlign = 'right'; ctx.fillText(MOBS[pickL].emoji + ' ' + score[0], VW / 2 - 12, 35);
+      ctx.fillStyle = '#6fa8ff'; ctx.textAlign = 'right'; ctx.fillText(sideEmoji(0) + ' ' + score[0], VW / 2 - 12, 35);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('–', VW / 2, 35);
-      ctx.fillStyle = '#ff7d7d'; ctx.textAlign = 'left'; ctx.fillText(score[1] + ' ' + MOBS[pickR].emoji, VW / 2 + 12, 35);
+      ctx.fillStyle = '#ff7d7d'; ctx.textAlign = 'left'; ctx.fillText(score[1] + ' ' + sideEmoji(1), VW / 2 + 12, 35);
       ctx.textAlign = 'left';
       drawTeamHUD(0, 12);
       if (numPlayers === 2) drawTeamHUD(1, VW - 12 - (teams[1].onPitch.length * 31 - 3));
+    }
+
+    // The on-screen movement stick (drawn in screen space, after the world transform is restored).
+    function drawJoystick(j) {
+      ctx.save();
+      ctx.globalAlpha = 0.3; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(j.bx, j.by, JOY_R, 0, 6.28); ctx.fill();
+      ctx.globalAlpha = 0.55; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(j.bx, j.by, JOY_R, 0, 6.28); ctx.stroke();
+      let dx = j.tx - j.bx, dy = j.ty - j.by, dl = Math.hypot(dx, dy) || 1, cl = Math.min(dl, JOY_R);
+      const tx = j.bx + dx / dl * cl, ty = j.by + dy / dl * cl;
+      ctx.globalAlpha = 0.8; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(tx, ty, JOY_R * 0.46, 0, 6.28); ctx.fill();
+      ctx.restore();
     }
 
     function draw() {
@@ -717,13 +1121,14 @@
       ctx.clearRect(0, 0, VW, VH);
       ctx.save(); ctx.scale(ZOOM, ZOOM); ctx.translate(-cam.x, -cam.y);
       drawPitch(); drawBall();
-      for (let s = 0; s < 2; s++) { const t = teams[s], human = isHumanTeam(s); for (let i = 0; i < t.onPitch.length; i++) drawPlayer(t.onPitch[i], human && i === t.active); }
+      for (let s = 0; s < 2; s++) { const t = teams[s], human = isHumanTeam(s); for (let i = 0; i < t.onPitch.length; i++) { const pl = t.onPitch[i]; (pl.emoji ? drawCardPlayer : drawPlayer)(pl, human && i === t.active); } }
       for (let s = 0; s < 2; s++) { if (shootHeld[s] && ball.owner === activePlayer(teams[s])) drawChargeBar(activePlayer(teams[s]), s); }
       ctx.textAlign = 'center';
       for (const p of pops) { ctx.globalAlpha = Math.max(0, 1 - p.t / (p.big ? 80 : 45)); ctx.fillStyle = p.color; ctx.font = (p.big ? "800 90px 'Pacifico', cursive" : "800 34px 'Nunito', sans-serif"); ctx.fillText(p.txt, p.x, p.y); }
       ctx.globalAlpha = 1; ctx.textAlign = 'left';
       ctx.restore();
       if (state !== 'select') drawHUD();
+      if (state === 'playing' || state === 'goal') for (let s = 0; s < 2; s++) { if (joy[s].active && isHumanTeam(s)) drawJoystick(joy[s]); }
       if ((state === 'playing' || state === 'goal') && freeze > 0) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif"; ctx.fillText('Get ready…', VW / 2, VH / 2 + 80); ctx.textAlign = 'left'; }
     }
 
@@ -738,6 +1143,504 @@
     teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
     placeKickoff(-1);
     requestAnimationFrame(loop);
+  })();
+  </script>
+
+  <script>
+  // ===================== Ultimate Team =====================
+  (function () {
+    var LS_COL = 'mobsoccer.ut.collection', LS_OOO = 'mobsoccer.ut.claimed', LS_SQUAD = 'mobsoccer.ut.squad';
+
+    // Collectible mob footballers (name + emoji). Ratings come from rarity bands below.
+    var ROSTER = [
+      ['Shaun', '🐑'], ['Peppa', '🐷'], ['Boomer', '🟩'], ['Zed', '🧟'],
+      ['Sir Oinks', '🐗'], ['Cluck', '🐔'], ['Sir Quack', '🦆'], ['Moo', '🐮'],
+      ['Goatzo', '🐐'], ['Pingu', '🐧'], ['Rocky', '🦝'], ['Lenny', '🦥'],
+      ['Capy', '🦫'], ['Vixen', '🦊'], ['Shelly', '🐢'], ['Buzz', '🐝'],
+      ['Hopps', '🐸'], ['Snappy', '🐊'], ['Hammy', '🐹'], ['Splash', '🦦'],
+      ['Tusker', '🦭'], ['Spike', '🦔'], ['Coco', '🐵'], ['Frosty', '🐻‍❄️'],
+      ['Roary', '🦁'], ['Trunks', '🐘'], ['Stripes', '🦓'], ['Joey', '🦘']
+    ];
+
+    // The 1-of-1s: each can be pulled exactly ONCE, ever. Once claimed it never appears again.
+    var LEGENDS = [
+      { id: 'goldengoat',   name: 'Golden Goat',   em: '🐐', rt: 99 },
+      { id: 'cosmiccapy',   name: 'Cosmic Capy',   em: '🦫', rt: 98 },
+      { id: 'diamonddragon',name: 'Diamond Dragon',em: '🐉', rt: 99 },
+      { id: 'phantomfox',   name: 'Phantom Fox',   em: '🦊', rt: 97 },
+      { id: 'galaxygorilla',name: 'Galaxy Gorilla',em: '🦍', rt: 98 },
+      { id: 'magicunicorn', name: 'Magic Unicorn', em: '🦄', rt: 99 },
+      { id: 'royalrex',     name: 'Royal Rex',     em: '🦖', rt: 97 },
+      { id: 'titantiger',   name: 'Titan Tiger',   em: '🐯', rt: 98 }
+    ];
+
+    // Rarity → rating band. Higher rarity = better rating.
+    var RAR = {
+      base:   { lbl: 'Base',   min: 60, max: 72, css: 'r-base' },
+      blue:   { lbl: 'Blue',   min: 73, max: 80, css: 'r-blue' },
+      red:    { lbl: 'Red',    min: 81, max: 87, css: 'r-red' },
+      purple: { lbl: 'Purple', min: 88, max: 92, css: 'r-purple' },
+      green:  { lbl: 'Green',  min: 93, max: 96, css: 'r-green' },
+      black:  { lbl: '1 of 1', css: 'r-black' }   // black = unique legend, one in existence
+    };
+    var RANK = { base: 1, blue: 2, red: 3, purple: 4, green: 5, black: 6 };
+    // Real-life-style per-pack drop chances (independent rolls → streaks are possible, just unlikely).
+    var TIERS = [
+      { k: 'blue',   p: 1 / 2 },
+      { k: 'red',    p: 1 / 25 },
+      { k: 'purple', p: 1 / 200 },
+      { k: 'green',  p: 1 / 1400 },
+      { k: 'black',  p: 1 / 1372000 }
+    ];
+    var POS = ['GK', 'DEF', 'MID', 'ST'];
+    var PACK_SIZE = 4;   // base fills every pack; upgrades replace base slots
+
+    function load(k) { try { return JSON.parse(localStorage.getItem(k)) || []; } catch (e) { return []; } }
+    function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+    function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+    function rint(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+    function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+    function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+    function uid() { return 'c' + Math.floor(Math.random() * 1e9).toString(36) + Date.now().toString(36); }
+
+    var collection = load(LS_COL);
+    var claimed = load(LS_OOO);
+    // Backfill stable ids on cards saved before squads existed.
+    (function () { var d = false; collection.forEach(function (c) { if (!c.uid) { c.uid = uid(); d = true; } }); if (d) save(LS_COL, collection); })();
+
+    function makeCard(rarity) {
+      if (rarity === 'black') {
+        var left = LEGENDS.filter(function (l) { return claimed.indexOf(l.id) < 0; });
+        if (left.length) {
+          var l = pick(left);
+          claimed.push(l.id); save(LS_OOO, claimed);
+          return { uid: uid(), em: l.em, nm: l.name, rt: l.rt, rarity: 'black', pos: pick(POS), ooo: l.id };
+        }
+        rarity = 'green';   // every 1-of-1 already claimed → fall back to the next best
+      }
+      var def = RAR[rarity], m = pick(ROSTER);
+      return { uid: uid(), em: m[1], nm: m[0], rt: rint(def.min, def.max), rarity: rarity, pos: pick(POS) };
+    }
+
+    // Roll each tier independently at its per-pack chance, then fill the rest with base.
+    function generatePack(size) {
+      size = size || PACK_SIZE;
+      var cards = [];
+      TIERS.forEach(function (t) { if (Math.random() < t.p) cards.push(makeCard(t.k)); });
+      while (cards.length < size) cards.push(makeCard('base'));
+      return shuffle(cards);
+    }
+
+    function clubRating() {
+      if (!collection.length) return '–';
+      var r = collection.map(function (c) { return c.rt; }).sort(function (a, b) { return b - a; }).slice(0, 11);
+      return Math.round(r.reduce(function (a, b) { return a + b; }, 0) / r.length);
+    }
+
+    function cardFace(c) {
+      var d = document.createElement('div');
+      d.className = 'card-fc ' + RAR[c.rarity].css;
+      d.innerHTML = '<div class="rt">' + c.rt + '</div><div class="pos">' + c.pos + '</div>' +
+        '<div class="em">' + c.em + '</div><div class="nm">' + c.nm + '</div>' +
+        '<div class="rr">' + RAR[c.rarity].lbl + '</div>';
+      return d;
+    }
+
+    // ---- elements ----
+    var setupEl = document.getElementById('setup');
+    var utEl = document.getElementById('ut');
+    var openEl = document.getElementById('ut-open');
+    var binderEl = document.getElementById('ut-binder');
+    var collectEl = document.getElementById('ut-collect');
+    var walkoutEl = document.getElementById('ut-walkout');
+    var nextBtn = document.getElementById('ut-open-next');
+
+    function setOpen(b) { window.__utOpen = b; }
+
+    function setStats(prefix) {
+      document.getElementById(prefix + '-count').textContent = collection.length;
+      document.getElementById(prefix + '-ooo').textContent = collection.filter(function (c) { return c.ooo; }).length;
+      document.getElementById(prefix + '-club').textContent = clubRating();
+    }
+    function refreshStats() { setStats('ut'); }
+    function refreshCollectStats() { setStats('collect'); }
+
+    function openHome() { refreshStats(); openEl.hidden = true; binderEl.hidden = true; squadEl.hidden = true; pickEl.hidden = true; collectEl.hidden = true; utEl.hidden = false; setupEl.hidden = true; setOpen(true); }
+    function closeHome() { utEl.hidden = true; openEl.hidden = true; binderEl.hidden = true; squadEl.hidden = true; pickEl.hidden = true; setupEl.hidden = false; setOpen(false); }
+
+    // ---- pack reveal ----
+    var openQueue = [], openIdx = 0, bestShown = 0, openReturn = null;
+
+    function flipCard(c) {
+      var wrap = document.createElement('div'); wrap.className = 'card-flip'; wrap._card = c;
+      var inner = document.createElement('div'); inner.className = 'inner';
+      var back = document.createElement('div'); back.className = 'back'; back.textContent = '⚽';
+      var face = document.createElement('div'); face.className = 'face'; face.appendChild(cardFace(c));
+      inner.appendChild(back); inner.appendChild(face); wrap.appendChild(inner);
+      wrap.addEventListener('click', function () { reveal(wrap); });
+      return wrap;
+    }
+    function reveal(wrap) {
+      if (wrap.classList.contains('flipped')) return;
+      wrap.classList.add('flipped');
+      var c = wrap._card;
+      if (RANK[c.rarity] >= 3 && RANK[c.rarity] > bestShown) {
+        bestShown = RANK[c.rarity];
+        walkoutEl.textContent = c.rarity === 'black' ? '🖤🌈 1-OF-1 BLACK!! ' + c.nm + ' ' + c.rt + ' 🌈🖤'
+          : c.rarity === 'green' ? '💚 GREEN! ' + c.nm + ' ' + c.rt
+          : c.rarity === 'purple' ? '💜 PURPLE! ' + c.nm + ' ' + c.rt
+          : '❤️ RED! ' + c.nm + ' ' + c.rt;
+      }
+    }
+    function showPack() {
+      var pack = openQueue[openIdx]; bestShown = 0;
+      document.getElementById('ut-open-title').textContent = 'Pack ' + (openIdx + 1) + ' of ' + openQueue.length;
+      walkoutEl.textContent = '';
+      var box = document.getElementById('ut-open-cards'); box.innerHTML = '';
+      pack.forEach(function (c) { box.appendChild(flipCard(c)); });
+      nextBtn.textContent = openIdx < openQueue.length - 1 ? 'Next pack ›' : 'Done ✓';
+    }
+    function openPacks(n, size, onDone) {
+      if (n <= 0) { if (onDone) onDone(); return; }
+      openQueue = [];
+      for (var p = 0; p < n; p++) {
+        var pack = generatePack(size);
+        pack.forEach(function (c) { collection.push(c); });
+        openQueue.push(pack);
+      }
+      save(LS_COL, collection);
+      openIdx = 0; openReturn = onDone || null;
+      utEl.hidden = true; binderEl.hidden = true; squadEl.hidden = true; pickEl.hidden = true; collectEl.hidden = true;
+      openEl.hidden = false; showPack();
+    }
+    function returnToCollect() { refreshCollectStats(); collectEl.hidden = false; }
+    function rewardDone() { var cb = document.getElementById('claim-packs'); if (cb) cb.hidden = true; window.__mobReward = 0; setOpen(false); }
+
+    // ---- collection ----
+    var binderBack = utEl;
+    function showBinder(fromEl) {
+      binderBack = fromEl || utEl;
+      var box = document.getElementById('ut-binder-cards'); box.innerHTML = '';
+      var sorted = collection.slice().sort(function (a, b) { return b.rt - a.rt; });
+      if (!sorted.length) { box.innerHTML = '<div style="grid-column:1/-1;color:#8b93b0;padding:24px 8px">No cards yet — open a pack! 🃏</div>'; }
+      sorted.forEach(function (c) { box.appendChild(cardFace(c)); });
+      document.getElementById('ut-binder-sub').textContent = collection.length + ' cards · Club rating ' + clubRating();
+      utEl.hidden = true; collectEl.hidden = true; binderEl.hidden = false;
+    }
+
+    // ===== squad: stats + builder =====
+    // Fair, balanced sub-stats: a card's rating is its overall, position nudges the spread.
+    var POS_BIAS = {
+      GK:  { PAC: -8, SHO: -16, PHY: 8 },
+      DEF: { PAC: -4, SHO: -9,  PHY: 8 },
+      MID: { PAC: 2,  SHO: 2,   PHY: 0 },
+      ST:  { PAC: 6,  SHO: 8,   PHY: -5 }
+    };
+    function subStats(card) {
+      var b = POS_BIAS[card.pos] || POS_BIAS.MID, r = card.rt;
+      return { PAC: Math.round(clamp(r + b.PAC, 40, 99)), SHO: Math.round(clamp(r + b.SHO, 40, 99)), PHY: Math.round(clamp(r + b.PHY, 40, 99)) };
+    }
+    // Turn a card into the gameplay stats the match engine consumes (ranges mirror the base mobs).
+    function cardToStats(card) {
+      var s = subStats(card);
+      return {
+        emoji: card.em, name: card.nm, rt: card.rt, pos: card.pos,
+        accel: 0.44 + s.PAC / 99 * 0.22,   // 0.44–0.66
+        maxSpd: 3.2 + s.PAC / 99 * 1.6,    // 3.2–4.8
+        kick: 0.75 + s.SHO / 99 * 0.85,    // 0.75–1.6
+        mass: 1.0 + s.PHY / 99 * 1.3,      // 1.0–2.3
+        r: 22 + s.PHY / 99 * 9             // 22–31
+      };
+    }
+
+    var SLOT_POS = ['GK', 'DEF', 'MID', 'ST', 'ST'];
+    var squad = load(LS_SQUAD);
+    if (!Array.isArray(squad) || squad.length !== 9) squad = [null, null, null, null, null, null, null, null, null];
+
+    function cardByUid(u) { for (var i = 0; i < collection.length; i++) if (collection[i].uid === u) return collection[i]; return null; }
+    function placedSet() { var s = {}; squad.forEach(function (u) { if (u) s[u] = 1; }); return s; }
+    function squadRating() {
+      var rs = []; for (var i = 0; i < 5; i++) { var c = squad[i] && cardByUid(squad[i]); if (c) rs.push(c.rt); }
+      if (!rs.length) return '–';
+      return Math.round(rs.reduce(function (a, b) { return a + b; }, 0) / rs.length);
+    }
+
+    var squadEl = document.getElementById('ut-squad'), pickEl = document.getElementById('ut-pick'), pickSlot = -1;
+
+    function slotEl(i, label) {
+      var c = squad[i] && cardByUid(squad[i]);
+      var d = document.createElement('div');
+      d.className = 'slot' + (c ? ' filled' : '');
+      if (c) d.appendChild(cardFace(c));
+      else d.innerHTML = '<div class="ph">＋</div><div class="lbl">' + label + '</div>';
+      d.addEventListener('click', function () { openPicker(i, label); });
+      return d;
+    }
+    function renderSquad() {
+      var st = document.getElementById('squad-starters'); st.innerHTML = '';
+      for (var i = 0; i < 5; i++) st.appendChild(slotEl(i, SLOT_POS[i]));
+      var bn = document.getElementById('squad-bench'); bn.innerHTML = '';
+      for (var j = 5; j < 9; j++) bn.appendChild(slotEl(j, 'SUB'));
+      document.getElementById('squad-rating').textContent = squadRating();
+      var ready = true; for (var k = 0; k < 5; k++) if (!(squad[k] && cardByUid(squad[k]))) ready = false;
+      document.querySelectorAll('#squad-diff .choice').forEach(function (b) { b.disabled = !ready; b.style.opacity = ready ? 1 : 0.4; });
+      document.getElementById('squad-hint').textContent = ready ? 'Pick a difficulty & play to earn packs' : 'Fill your starting 5 to play';
+    }
+    function openPicker(i, label) {
+      pickSlot = i;
+      document.getElementById('pick-title').textContent = 'Pick: ' + (label === 'SUB' ? 'bench player' : label);
+      var box = document.getElementById('pick-cards'); box.innerHTML = '';
+      var placed = placedSet();
+      var avail = collection.filter(function (c) { return !placed[c.uid] || c.uid === squad[i]; }).sort(function (a, b) { return b.rt - a.rt; });
+      if (!avail.length) box.innerHTML = '<div style="grid-column:1/-1;color:#8b93b0;padding:22px 8px">No spare cards — open more packs! 🃏</div>';
+      avail.forEach(function (c) {
+        var f = cardFace(c);
+        if (c.uid === squad[i]) f.style.outline = '3px solid #ffd23f';
+        f.addEventListener('click', function () {
+          squad[i] = (c.uid === squad[i]) ? null : c.uid;   // tap the current pick to clear the slot
+          save(LS_SQUAD, squad); pickEl.hidden = true; squadEl.hidden = false; renderSquad();
+        });
+        box.appendChild(f);
+      });
+      squadEl.hidden = true; pickEl.hidden = false;
+    }
+    function autofill() {
+      squad = [null, null, null, null, null, null, null, null, null];
+      var pool = collection.slice().sort(function (a, b) { return b.rt - a.rt; }), used = {};
+      function take(predicate) { for (var k = 0; k < pool.length; k++) { if (!used[pool[k].uid] && predicate(pool[k])) { used[pool[k].uid] = 1; return pool[k].uid; } } return null; }
+      for (var i = 0; i < 5; i++) { var want = SLOT_POS[i]; squad[i] = take(function (c) { return c.pos === want; }) || take(function () { return true; }); }
+      for (var b = 5; b < 9; b++) squad[b] = take(function () { return true; });
+      save(LS_SQUAD, squad); renderSquad();
+    }
+
+    function randCpuCard(pos, target) { var m = pick(ROSTER); return { em: m[1], nm: m[0], rt: Math.round(clamp(target + rint(-4, 4), 60, 99)), pos: pos }; }
+    function cpuSquad(target, label) {
+      return {
+        label: label || 'CPU', emoji: '🤖',
+        starters: SLOT_POS.map(function (p) { return cardToStats(randCpuCard(p, target)); }),
+        bench: [0, 1, 2, 3].map(function (i) { return cardToStats(randCpuCard(['DEF', 'MID', 'ST'][i % 3], target)); })
+      };
+    }
+    // Difficulty sets how strong the CPU squad is AND how many packs a win earns.
+    var DIFFS = {
+      beginner:     { packs: 1, off: -10, label: 'Beginner CPU' },
+      intermediate: { packs: 2, off: 0,   label: 'Pro CPU' },
+      pro:          { packs: 3, off: 8,   label: 'Legend CPU' }
+    };
+    function playSquadAt(diff) {
+      var d = DIFFS[diff]; if (!d) return;
+      var starters = [];
+      for (var i = 0; i < 5; i++) { var c = cardByUid(squad[i]); if (!c) return; starters.push(cardToStats(c)); }
+      var bench = [];
+      for (var j = 5; j < 9; j++) { var bc = cardByUid(squad[j]); if (bc) bench.push(cardToStats(bc)); }
+      while (bench.length < 4) bench.push(starters[bench.length % 5]);
+      var avg = squadRating(); if (avg === '–') avg = 75;
+      var bestEm = starters[0].emoji, bestRt = -1;
+      starters.forEach(function (s) { if (s.rt > bestRt) { bestRt = s.rt; bestEm = s.emoji; } });
+      var home = { label: 'Your Squad', emoji: bestEm, starters: starters, bench: bench };
+      var away = cpuSquad(clamp(avg + d.off, 60, 99), d.label);
+      utEl.hidden = true; openEl.hidden = true; binderEl.hidden = true; squadEl.hidden = true; pickEl.hidden = true; collectEl.hidden = true;
+      setOpen(false);
+      if (window.__mobStartSquad) window.__mobStartSquad(home, away, { packs: d.packs });
+    }
+
+    // ===== Career (manager) mode =====
+    var LS_CAREER = 'mobsoccer.career';
+    var careerEl = document.getElementById('career'), careerMarketEl = document.getElementById('career-market'),
+        careerSquadEl = document.getElementById('career-squad'), careerPickEl = document.getElementById('career-pick');
+    var START_MONEY = 50000000;
+    // Punny "best players in the world" for the top of the market.
+    var STARS = [
+      ['Lionel Messheep', '🐑'], ['Crispy Ronaldo', '🐔'], ['Kylian Mbappug', '🐶'], ['Erling Haalhog', '🐗'],
+      ['Neymar Newt', '🦎'], ['De Bruyne Bull', '🐂'], ['Luka Modrabbit', '🐰'], ['Vini Jaguar', '🐆'],
+      ['Mo Salamander', '🦎'], ['Harry Crane', '🦢'], ['Jude Bellingfrog', '🐸'], ['Kanté Cat', '🐈']
+    ];
+
+    function money(n) {
+      n = Math.round(n);
+      if (n >= 1e6) { var m = n / 1e6; return '£' + (m >= 100 || m % 1 === 0 ? Math.round(m) : m.toFixed(1)) + 'M'; }
+      if (n >= 1e3) return '£' + Math.round(n / 1e3) + 'k';
+      return '£' + n;
+    }
+    function priceFor(rt) {
+      var p = 45000 * Math.pow(1.19, rt - 50);
+      return p >= 1e6 ? Math.round(p / 1e5) * 1e5 : Math.round(p / 1e4) * 1e4;   // tidy to 100k / 10k
+    }
+    function rarityFor(rt) { return rt >= 93 ? 'green' : rt >= 88 ? 'purple' : rt >= 81 ? 'red' : rt >= 73 ? 'blue' : 'base'; }
+    function mkMarketPlayer(rt, pos, fromStars) { var m = pick(fromStars ? STARS : ROSTER); return { uid: uid(), em: m[1], nm: m[0], rt: rt, pos: pos, price: priceFor(rt), rarity: rarityFor(rt) }; }
+    function generateMarket() {
+      var list = [], any = ['GK', 'DEF', 'MID', 'ST'];
+      for (var i = 0; i < 3; i++) list.push(mkMarketPlayer(rint(88, 99), pick(['DEF', 'MID', 'ST', 'ST']), true));   // world-class
+      for (var j = 0; j < 5; j++) list.push(mkMarketPlayer(rint(72, 87), pick(any), false));                          // solid
+      for (var k = 0; k < 4; k++) list.push(mkMarketPlayer(rint(60, 71), pick(any), false));                          // budget
+      return shuffle(list);
+    }
+    function academyPlayer(pos) { var m = pick(ROSTER), rt = rint(58, 66); return { uid: uid(), em: m[1], nm: m[0], rt: rt, pos: pos, price: priceFor(rt), rarity: rarityFor(rt) }; }
+
+    var career = (function () { try { var c = JSON.parse(localStorage.getItem(LS_CAREER)); if (c && c.owned) return c; } catch (e) {} return null; })();
+    function saveCareer() { try { localStorage.setItem(LS_CAREER, JSON.stringify(career)); } catch (e) {} }
+    function initCareer() {
+      var owned = [], slots = ['GK', 'DEF', 'MID', 'ST', 'ST', 'DEF', 'MID', 'ST', 'GK'];
+      slots.forEach(function (p) { owned.push(academyPlayer(p)); });
+      career = { money: START_MONEY, owned: owned, lineup: owned.map(function (p) { return p.uid; }), market: generateMarket() };
+      saveCareer();
+    }
+    function careerById(u) { for (var i = 0; i < career.owned.length; i++) if (career.owned[i].uid === u) return career.owned[i]; return null; }
+    function careerClub() {
+      var rs = []; for (var i = 0; i < 5; i++) { var c = career.lineup[i] && careerById(career.lineup[i]); if (c) rs.push(c.rt); }
+      return rs.length ? Math.round(rs.reduce(function (a, b) { return a + b; }, 0) / rs.length) : '–';
+    }
+    function hideCareerSub() { careerMarketEl.hidden = true; careerSquadEl.hidden = true; careerPickEl.hidden = true; }
+    function refreshCareerHome() {
+      document.getElementById('career-money').textContent = money(career.money);
+      document.getElementById('career-club').textContent = careerClub();
+      document.getElementById('career-owned-count').textContent = career.owned.length;
+    }
+    function openCareer() { if (!career) initCareer(); refreshCareerHome(); setupEl.hidden = true; hideCareerSub(); careerEl.hidden = false; setOpen(true); }
+
+    // ---- transfer market ----
+    function renderMarket() {
+      document.getElementById('market-money').textContent = money(career.money);
+      var box = document.getElementById('market-list'); box.innerHTML = '';
+      if (!career.market.length) box.innerHTML = '<div style="color:#8b93b0;padding:20px">All signed! Tap “Scout new players”. 🔭</div>';
+      career.market.forEach(function (p) {
+        var row = document.createElement('div'); row.className = 'mkt-row';
+        row.innerHTML = '<div class="mkt-card"></div>'
+          + '<div class="mkt-info"><div class="mkt-nm">' + p.em + ' ' + p.nm + '</div><div class="mkt-meta">' + p.pos + ' · OVR ' + p.rt + '</div></div>'
+          + '<div class="mkt-buy"><div class="mkt-price">' + money(p.price) + '</div><button class="mkt-btn"' + (career.money >= p.price ? '' : ' disabled') + '>Buy</button></div>';
+        var f = cardFace(p); f.classList.add('mkt-cardface'); row.querySelector('.mkt-card').appendChild(f);
+        row.querySelector('.mkt-btn').addEventListener('click', function () { buyPlayer(p); });
+        box.appendChild(row);
+      });
+    }
+    function buyPlayer(p) {
+      if (career.money < p.price) return;
+      career.money -= p.price;
+      career.owned.push(p);
+      for (var i = 0; i < 9; i++) { if (!career.lineup[i]) { career.lineup[i] = p.uid; break; } }   // auto-fill any empty slot
+      career.market = career.market.filter(function (x) { return x.uid !== p.uid; });
+      saveCareer(); renderMarket();
+    }
+
+    // ---- lineup builder ----
+    var careerPickSlot = -1;
+    function careerSlotEl(i, label) {
+      var c = career.lineup[i] && careerById(career.lineup[i]);
+      var d = document.createElement('div'); d.className = 'slot' + (c ? ' filled' : '');
+      if (c) d.appendChild(cardFace(c)); else d.innerHTML = '<div class="ph">＋</div><div class="lbl">' + label + '</div>';
+      d.addEventListener('click', function () { careerOpenPicker(i, label); });
+      return d;
+    }
+    function renderCareerSquad() {
+      document.getElementById('career-squad-money').textContent = money(career.money);
+      var st = document.getElementById('career-starters'); st.innerHTML = '';
+      for (var i = 0; i < 5; i++) st.appendChild(careerSlotEl(i, SLOT_POS[i]));
+      var bn = document.getElementById('career-bench'); bn.innerHTML = '';
+      for (var j = 5; j < 9; j++) bn.appendChild(careerSlotEl(j, 'SUB'));
+      document.getElementById('career-rating').textContent = careerClub();
+      var ready = true; for (var k = 0; k < 5; k++) if (!(career.lineup[k] && careerById(career.lineup[k]))) ready = false;
+      document.querySelectorAll('#career-diff .choice').forEach(function (b) { b.disabled = !ready; b.style.opacity = ready ? 1 : 0.4; });
+      document.getElementById('career-hint').textContent = ready ? 'Pick a difficulty & play to earn money' : 'Fill your starting 5 to play';
+    }
+    function careerOpenPicker(i, label) {
+      careerPickSlot = i;
+      document.getElementById('career-pick-title').textContent = 'Pick: ' + (label === 'SUB' ? 'bench player' : label);
+      var box = document.getElementById('career-pick-cards'); box.innerHTML = '';
+      var placed = {}; career.lineup.forEach(function (u) { if (u) placed[u] = 1; });
+      var avail = career.owned.filter(function (p) { return !placed[p.uid] || p.uid === career.lineup[i]; }).sort(function (a, b) { return b.rt - a.rt; });
+      if (!avail.length) box.innerHTML = '<div style="grid-column:1/-1;color:#8b93b0;padding:22px 8px">No spare players — sign some in the Transfer Market! 🛒</div>';
+      avail.forEach(function (p) {
+        var f = cardFace(p);
+        if (p.uid === career.lineup[i]) f.style.outline = '3px solid #ffd23f';
+        f.addEventListener('click', function () {
+          career.lineup[i] = (p.uid === career.lineup[i]) ? null : p.uid;
+          saveCareer(); careerPickEl.hidden = true; careerSquadEl.hidden = false; renderCareerSquad();
+        });
+        box.appendChild(f);
+      });
+      careerSquadEl.hidden = true; careerPickEl.hidden = false;
+    }
+    var CAREER_DIFFS = {
+      beginner:     { off: -10, win: 5000000,  loss: 1000000, label: 'Beginner CPU' },
+      intermediate: { off: 0,   win: 12000000, loss: 1500000, label: 'Pro CPU' },
+      pro:          { off: 8,   win: 25000000, loss: 2000000, label: 'Legend CPU' }
+    };
+    function careerPlayAt(diff) {
+      var d = CAREER_DIFFS[diff]; if (!d) return;
+      var starters = [];
+      for (var i = 0; i < 5; i++) { var c = careerById(career.lineup[i]); if (!c) return; starters.push(cardToStats(c)); }
+      var bench = [];
+      for (var j = 5; j < 9; j++) { var bc = career.lineup[j] && careerById(career.lineup[j]); if (bc) bench.push(cardToStats(bc)); }
+      while (bench.length < 4) bench.push(starters[bench.length % 5]);
+      var avg = careerClub(); if (avg === '–') avg = 70;
+      var bestEm = starters[0].emoji, bestRt = -1;
+      starters.forEach(function (s) { if (s.rt > bestRt) { bestRt = s.rt; bestEm = s.emoji; } });
+      var home = { label: 'Your Club', emoji: bestEm, starters: starters, bench: bench };
+      var away = cpuSquad(clamp(avg + d.off, 60, 99), d.label);
+      hideCareerSub(); careerEl.hidden = true; setOpen(false);
+      if (window.__mobStartSquad) window.__mobStartSquad(home, away, { mode: 'career', win: d.win, loss: d.loss });
+    }
+
+    // Match-end dispatcher: Career pays money, Ultimate Team offers reward packs.
+    window.__mobOnMatchEnd = function (won, opts) {
+      opts = opts || {};
+      if (opts.mode === 'career') {
+        if (!career) return;
+        var amt = won ? (opts.win || 0) : (opts.loss || 0);
+        career.money += amt; saveCareer();
+        document.getElementById('over-sub').textContent = (won ? '🏆 Win! ' : '') + 'Earned ' + money(amt) + ' · Budget ' + money(career.money);
+      } else {
+        var cb = document.getElementById('claim-packs');
+        if (won && opts.packs > 0) { window.__mobReward = opts.packs; cb.textContent = '🎁 Open ' + opts.packs + ' reward pack' + (opts.packs > 1 ? 's' : ''); cb.hidden = false; }
+        else { window.__mobReward = 0; cb.hidden = true; }
+      }
+    };
+
+    // ---- wiring ----
+    // Ultimate Team (squad + earn-by-playing)
+    document.getElementById('ut-entry').addEventListener('click', openHome);
+    document.getElementById('ut-close').addEventListener('click', closeHome);
+    document.getElementById('ut-binder-btn').addEventListener('click', function () { showBinder(utEl); });
+    document.getElementById('ut-binder-close').addEventListener('click', function () { binderEl.hidden = true; binderBack.hidden = false; });
+    document.getElementById('ut-squad-btn').addEventListener('click', function () { renderSquad(); utEl.hidden = true; squadEl.hidden = false; });
+    document.getElementById('squad-back').addEventListener('click', function () { squadEl.hidden = true; utEl.hidden = false; });
+    document.getElementById('squad-auto').addEventListener('click', autofill);
+    document.getElementById('squad-diff').addEventListener('click', function (e) {
+      var btn = e.target.closest('.choice'); if (!btn || btn.disabled) return;
+      playSquadAt(btn.dataset.diff);
+    });
+    document.getElementById('pick-cancel').addEventListener('click', function () { pickEl.hidden = true; squadEl.hidden = false; });
+    // Claim reward packs after winning a squad match
+    document.getElementById('claim-packs').addEventListener('click', function () {
+      if (!(window.__mobReward > 0)) return;
+      setOpen(true); openPacks(window.__mobReward, PACK_SIZE, rewardDone);
+    });
+
+    // Collect Players (free pack simulator, 5 at a time)
+    document.getElementById('collect-entry').addEventListener('click', function () { refreshCollectStats(); setupEl.hidden = true; collectEl.hidden = false; setOpen(true); });
+    document.getElementById('collect-close').addEventListener('click', function () { collectEl.hidden = true; setupEl.hidden = false; setOpen(false); });
+    document.getElementById('collect-open').addEventListener('click', function () { openPacks(1, 5, returnToCollect); });
+    document.getElementById('collect-binder').addEventListener('click', function () { showBinder(collectEl); });
+
+    // Career mode
+    document.getElementById('career-entry').addEventListener('click', openCareer);
+    document.getElementById('career-close').addEventListener('click', function () { careerEl.hidden = true; setupEl.hidden = false; setOpen(false); });
+    document.getElementById('career-market-btn').addEventListener('click', function () { renderMarket(); careerEl.hidden = true; careerMarketEl.hidden = false; });
+    document.getElementById('market-back').addEventListener('click', function () { careerMarketEl.hidden = true; refreshCareerHome(); careerEl.hidden = false; });
+    document.getElementById('market-refresh').addEventListener('click', function () { career.market = generateMarket(); saveCareer(); renderMarket(); });
+    document.getElementById('career-squad-btn').addEventListener('click', function () { renderCareerSquad(); careerEl.hidden = true; careerSquadEl.hidden = false; });
+    document.getElementById('career-squad-back').addEventListener('click', function () { careerSquadEl.hidden = true; refreshCareerHome(); careerEl.hidden = false; });
+    document.getElementById('career-diff').addEventListener('click', function (e) { var b = e.target.closest('.choice'); if (!b || b.disabled) return; careerPlayAt(b.dataset.diff); });
+    document.getElementById('career-pick-cancel').addEventListener('click', function () { careerPickEl.hidden = true; careerSquadEl.hidden = false; });
+
+    // Shared pack-reveal controls
+    document.getElementById('ut-reveal-all').addEventListener('click', function () {
+      document.querySelectorAll('#ut-open-cards .card-flip').forEach(function (w) { reveal(w); });
+    });
+    nextBtn.addEventListener('click', function () {
+      if (openIdx < openQueue.length - 1) { openIdx++; showPack(); }
+      else { openEl.hidden = true; if (openReturn) openReturn(); else openHome(); }
+    });
   })();
   </script>
 

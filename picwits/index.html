@@ -94,6 +94,17 @@
     .next-btn:active, .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
     .next-btn[hidden] { display: none; }
 
+    /* once-per-game hand reshuffle */
+    .swapwrap { width: 100%; max-width: 480px; display: flex; justify-content: center; }
+    .swapwrap:empty { display: none; }
+    .swap-btn {
+      margin-top: 14px; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.95rem;
+      color: #ffd23f; background: rgba(255,210,63,0.1); border: 2px solid #ffd23f; border-radius: 14px;
+      padding: 11px 22px; cursor: pointer; transition: transform 0.1s ease, background 0.15s ease;
+    }
+    .swap-btn:hover { background: rgba(255,210,63,0.2); }
+    .swap-btn:active { transform: scale(0.96); }
+
     /* ---------- overlays (setup + pass-the-device) ---------- */
     .overlay {
       position: fixed; inset: 0; background: rgba(10,14,28,0.92); backdrop-filter: blur(5px);
@@ -124,6 +135,7 @@
   <div class="caption" id="caption">…</div>
   <div class="turn-label" id="turn"></div>
   <div id="cards"></div>
+  <div class="swapwrap" id="swapwrap"></div>
   <div class="feedback" id="feedback"></div>
   <button class="next-btn" id="next" hidden>Next round ›</button>
 
@@ -227,6 +239,7 @@
     const cardsEl = document.getElementById('cards');
     const feedbackEl = document.getElementById('feedback');
     const nextBtn = document.getElementById('next');
+    const swapWrapEl = document.getElementById('swapwrap');
     const setupEl = document.getElementById('setup');
     const passEl = document.getElementById('pass');
     const passNameEl = document.getElementById('pass-name');
@@ -245,6 +258,7 @@
     let pickerTurn = 0;
     let capQueue = [];
     let pending = null;      // { player, phase } for the pass screen
+    let swapsUsed = [false, false, false];  // once-per-game full-hand reshuffle per player
 
     function shuffle(a) {
       const arr = a.slice();
@@ -303,6 +317,7 @@
     function startGame() {
       players = [ { name: 'Player 1', score: 0 }, { name: 'Player 2', score: 0 }, { name: 'Player 3', score: 0 } ];
       round = 0; capQueue = [];
+      swapsUsed = [false, false, false];
       newDeck();
       playerHands = [ dealHand(), dealHand(), dealHand() ];   // each player keeps their own hand
       setupEl.hidden = true;
@@ -327,6 +342,7 @@
       pending = { player: playerIdx, phase: nextPhase };
       renderScores();
       cardsEl.innerHTML = '';
+      swapWrapEl.innerHTML = '';
       turnEl.textContent = '';
       const judging = nextPhase === 'judge';
       passNameEl.textContent = playerName(playerIdx, 'Player ' + (playerIdx + 1));
@@ -353,11 +369,32 @@
       turnEl.textContent = playerName(playerIdx, 'Player ' + (playerIdx + 1)) + ', tap the funniest card 👇';
       cardsEl.className = 'hand';
       cardsEl.innerHTML = '';
+      renderHand(playerIdx);
+    }
+
+    function renderHand(playerIdx) {
+      cardsEl.innerHTML = '';
       playerHands[playerIdx].forEach(function (card) {
         const el = makeCard(card);
         el.addEventListener('click', function () { choose(card, playerIdx); });
         cardsEl.appendChild(el);
       });
+      renderSwap(playerIdx);
+    }
+
+    function renderSwap(playerIdx) {
+      swapWrapEl.innerHTML = '';
+      if (swapsUsed[playerIdx]) return;
+      const btn = document.createElement('button');
+      btn.className = 'swap-btn';
+      btn.textContent = '🔄 New cards (once per game)';
+      btn.addEventListener('click', function () {
+        if (phase !== 'pick' || swapsUsed[playerIdx]) return;
+        swapsUsed[playerIdx] = true;
+        playerHands[playerIdx] = dealHand();
+        renderHand(playerIdx);
+      });
+      swapWrapEl.appendChild(btn);
     }
 
     function choose(card, playerIdx) {

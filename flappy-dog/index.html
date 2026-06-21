@@ -416,6 +416,12 @@
       PIPE_SPEED = (L.speedMin + (L.speedMax - L.speedMin) * t) * PACE;
       GAP = L.gapMax + (L.gapMin - L.gapMax) * t;
 
+      // Progression: the further you actually get (by score) the faster the dog
+      // flies, so a skilled run keeps escalating instead of plateauing at speedMax.
+      // ~2.5% per pipe passed, capped at +75% so it never becomes unplayable.
+      const progress = players.length ? Math.max.apply(null, players.map(p => p.score)) : 0;
+      PIPE_SPEED *= 1 + Math.min(progress * 0.025, 0.75);
+
       // Outer Space — low gravity: softer pull + gentler flap so the dog floats.
       if (L.mechanic === 'lowgrav') { GRAVITY *= 0.55; FLAP *= 0.8; }
       // Candy Land — sugar rush: the whole world periodically speeds up.

@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Scroot Rooms</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: #070804; overflow: hidden;
+      touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    /* Full-bleed: the stage fills whatever space the page / iframe is given. */
+    .stage { position: fixed; inset: 0; overflow: hidden; background: #070804; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* Floating controls layered over the game (they don't steal screen space). */
+    .fab { position: absolute; z-index: 15; display: flex; gap: 8px; }
+    .fab.tl { top: 12px; left: 12px; }
+    .fab.tr { top: 12px; right: 12px; }
+    .fab a, .fab button {
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.9rem;
+      color: #e9dd6a; background: rgba(10,12,6,0.55); border: 1px solid rgba(233,221,106,0.35);
+      text-decoration: none; border-radius: 12px; padding: 7px 12px; cursor: pointer;
+      backdrop-filter: blur(3px); transition: background 0.15s ease, color 0.15s ease;
+    }
+    .fab a:hover, .fab button:hover { background: rgba(233,221,106,0.18); color: #fff; }
+    .fab.hidden-ui { display: none; }
+
+    .overlay { position: absolute; inset: 0; background: rgba(10,12,6,0.82); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+    .overlay[hidden] { display: none; }
+    .panel { width: 100%; max-width: 400px; background: #1c1d10; border: 2px solid #6b6320; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.6); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #e9dd6a; font-size: 1.8rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #b9b48a; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.45; }
+    .panel .sub b { color: #ffe8b0; }
+    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
+    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; color: #e9dd6a; }
+    .scoreline .lbl { color: #b9b48a; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #1c1d10; background: #e9dd6a; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #9c9226; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #9c9226; }
+  </style>
+</head>
+<body>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <div class="fab tl" id="fab-left">
+      <a href="../index.html" class="back topbar">‹ Games</a>
+    </div>
+    <div class="fab tr" id="fab-right">
+      <button id="mark-btn" title="Drop a marker (M)">✕ Mark</button>
+      <button id="full-btn" title="Fullscreen">⛶ Fullscreen</button>
+    </div>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Scroot Rooms</h2>
+        <div class="sub">You've no-clipped into the <b>Backrooms</b>. 🚪<br>
+          Find a glowing <b>door</b> and open it to drop into a different level &mdash; the yellow halls, the <b>poolrooms</b>, or somewhere <b>pitch black</b>. Or take a <b>slide</b> down. Two things hunt you: <b>Captain Clark</b> and the <b>Bacteria</b> &mdash; both <b>faster than you</b>, so break their line of sight around a corner. Leave <b>✕ marks</b> to track where you've been.<br><br>
+          <b style="color:#e0a0a0">Headphones on. They scream.</b><br><br>
+          <b>Move</b> drag / WASD &nbsp;·&nbsp; <b>Turn</b> drag / A&nbsp;D &nbsp;·&nbsp; <b>Mark</b> M or the ✕ button</div>
+        <button class="start-btn" id="start-btn">Enter the Backrooms</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">Captain Clark got you</h2>
+        <div class="sub" id="over-sub">He caught you.</div>
+        <div class="scoreline"><span class="lbl">Level reached</span><span class="big" id="over-level">1</span></div>
+        <div class="scoreline"><span class="lbl">Deepest ever</span><span class="big" id="over-best">1</span></div>
+        <button class="start-btn" id="again-btn">Try Again</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width, H = canvas.height;   // recomputed by resize() to fill the screen
+    // The textured 3D scene is rendered into a fixed-size offscreen buffer
+    // (walls + perspective floor/ceiling casting) then upscaled to fill the
+    // screen — keeps it smooth and gives a soft, atmospheric, "filmed" look.
+    const RW = 440;                  // internal render width (columns)
+    let RH = 280;                    // internal render height (set from aspect in resize)
+    const sceneCanvas = document.createElement('canvas');
+    const sceneCtx = sceneCanvas.getContext('2d');
+    let sceneImg = null, buf32 = null;
+    let zbuf = new Float32Array(RW);
+    let PLANE = 0.5;   // camera plane half-width, kept proportional to aspect (set in resize)
+
+    // Match the canvas backing store to whatever space we're given, so the
+    // raycaster fills the full screen at native resolution (capped for perf).
+    function resize() {
+      const r = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      let cw = Math.max(2, Math.round(r.width * dpr));
+      let ch = Math.max(2, Math.round(r.height * dpr));
+      const MAXW = 1280;                          // cap internal width so wide screens stay smooth
+      if (cw > MAXW) { ch = Math.round(ch * MAXW / cw); cw = MAXW; }
+      canvas.width = cw; canvas.height = ch;
+      W = cw; H = ch;
+      PLANE = 0.5 * (W / H);                       // keep squares square across any aspect ratio
+      // size the offscreen scene buffer to match the screen aspect
+      RH = Math.max(2, Math.round(RW * H / W));
+      sceneCanvas.width = RW; sceneCanvas.height = RH;
+      sceneImg = sceneCtx.createImageData(RW, RH);
+      buf32 = new Uint32Array(sceneImg.data.buffer);
+      ctx.imageSmoothingEnabled = true;
+      if (typeof updateCamera === 'function' && dirX !== undefined) updateCamera();
+    }
+    window.addEventListener('resize', resize);
+
+    const BEST_KEY = 'scrootgames.best';
+    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
+    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function rint(a, b) { return Math.floor(rnd(a, b + 1)); }
+    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+    // ---- raycaster / world ----
+    const MOVE_SPEED = 2.7;      // tiles / second
+    const TURN_SPEED = 2.7;      // radians / second
+    const PLAYER_R = 0.26;       // collision radius
+    const CATCH_DIST = 0.6;      // Captain Clark catches you within this range
+    const JUMP_LEN = 1.1;        // jumpscare duration (seconds) before game over
+
+    let state = 'setup';         // 'setup' | 'playing' | 'jumpscare' | 'over'
+    let map, mapW, mapH;         // tile grid: 0 floor, 1 wall
+    let px, py, dir;             // player x, y, facing angle
+    let dirX, dirY, planeX, planeY;
+    let entities, corpses;       // hunters (Captain Clark + the Bacteria), hazmat corpses
+    let doors, slides, marks, glitches;  // openable doors, slide chutes, your trail markers, phasing objects
+    let level, bestLevel, themeName, phasing;
+    let banner;                  // {text, sub, t} brief level intro
+    let darkness, blackout;      // per-level mood: 0 (lit) .. 1 (pitch black + flicker)
+    let jumpT = 0, jumpFace = 0; // jumpscare timer + which face (0 Clark, 1 Bacteria)
+    let slideT = 0;              // slide-down transition timer
+    let audio = null;            // WebAudio context (created on first start)
+    let music = null;            // running eerie-ambience nodes
+
+    // ---------- level generation ----------
+    // Recursive-backtracker maze, then knock out extra walls to open it into
+    // backrooms-style rooms. even/even intersections stay solid -> regular pillars.
+    const THEME_NAMES = { yellow: 'The Yellow Halls', pool: 'The Poolrooms', void: 'Pitch Black' };
+    function genLevel(lvl, theme) {
+      themeName = (theme && THEMES[theme]) ? theme : 'yellow';
+      curTheme = THEMES[themeName];
+
+      // bigger every level: the backrooms sprawl as you go deeper
+      const cells = clamp(8 + lvl * 2, 8, 26);
+      const cols = cells, rows = cells;
+      mapW = cols * 2 + 1; mapH = rows * 2 + 1;
+      map = [];
+      for (let y = 0; y < mapH; y++) map.push(new Array(mapW).fill(1));
+
+      const visited = [];
+      for (let y = 0; y < rows; y++) visited.push(new Array(cols).fill(false));
+      const stack = [[0, 0]];
+      visited[0][0] = true; map[1][1] = 0;
+      while (stack.length) {
+        const [cx, cy] = stack[stack.length - 1];
+        const nb = [];
+        if (cx > 0 && !visited[cy][cx - 1]) nb.push([cx - 1, cy]);
+        if (cx < cols - 1 && !visited[cy][cx + 1]) nb.push([cx + 1, cy]);
+        if (cy > 0 && !visited[cy - 1][cx]) nb.push([cx, cy - 1]);
+        if (cy < rows - 1 && !visited[cy + 1][cx]) nb.push([cx, cy + 1]);
+        if (!nb.length) { stack.pop(); continue; }
+        const [nx, ny] = nb[rint(0, nb.length - 1)];
+        map[cy * 2 + 1 + (ny - cy)][cx * 2 + 1 + (nx - cx)] = 0;
+        map[ny * 2 + 1][nx * 2 + 1] = 0;
+        visited[ny][nx] = true;
+        stack.push([nx, ny]);
+      }
+
+      // open it up + carve rooms (poolrooms are more open)
+      const openP = themeName === 'pool' ? 0.5 : 0.38;
+      for (let y = 1; y < mapH - 1; y++) {
+        for (let x = 1; x < mapW - 1; x++) {
+          if (map[y][x] !== 1) continue;
+          if (x % 2 === 0 && y % 2 === 0) continue;
+          if (Math.random() < openP) map[y][x] = 0;
+        }
+      }
+      const roomCount = clamp(2 + Math.floor(lvl / 1.5), 3, 9);
+      for (let i = 0; i < roomCount; i++) {
+        const rw = rint(3, 6), rh = rint(3, 6);
+        const rx = rint(1, mapW - rw - 2), ry = rint(1, mapH - rh - 2);
+        for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) {
+          if (x % 2 === 0 && y % 2 === 0) continue;
+          map[y][x] = 0;
+        }
+      }
+
+      px = 1.5; py = 1.5; dir = 0;
+
+      // BFS distances from spawn -> spread-out reachable cell centres
+      const dist = [];
+      for (let y = 0; y < mapH; y++) dist.push(new Array(mapW).fill(-1));
+      dist[1][1] = 0;
+      let q = [[1, 1]];
+      while (q.length) {
+        const nq = [];
+        for (const [cx, cy] of q) {
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const ax = cx + dx, ay = cy + dy;
+            if (ax < 0 || ay < 0 || ax >= mapW || ay >= mapH) continue;
+            if (map[ay][ax] !== 0 || dist[ay][ax] !== -1) continue;
+            dist[ay][ax] = dist[cy][cx] + 1; nq.push([ax, ay]);
+          }
+        }
+        q = nq;
+      }
+      const reach = [];
+      for (let cy = 1; cy < mapH; cy += 2) for (let cx = 1; cx < mapW; cx += 2)
+        if (dist[cy][cx] > 0) reach.push({ x: cx + 0.5, y: cy + 0.5, d: dist[cy][cx] });
+      reach.sort(function (a, b) { return b.d - a.d; });
+      const used = [];
+      function pickSpot(minD) {
+        for (const c of reach) {
+          if (c.d < minD) continue;
+          if (used.some(function (u) { return Math.hypot(u.x - c.x, u.y - c.y) < 3; })) continue;
+          used.push(c); return c;
+        }
+        const c = reach[used.length] || reach[0] || { x: px + 1, y: py };
+        used.push(c); return c;
+      }
+
+      // doors you can open -> each leads to a different kind of level
+      const destPool = ['pool', 'yellow', 'void', 'pool', 'yellow'];
+      doors = [];
+      const dCount = lvl >= 4 ? 3 : 2;
+      const far = reach.length ? reach[0].d : 1;
+      for (let i = 0; i < dCount; i++) {
+        const c = pickSpot(Math.min(far, 5));
+        let dest = destPool[(lvl + i) % destPool.length];
+        if (dest === themeName && dest !== 'yellow') dest = 'yellow';
+        doors.push({ x: c.x, y: c.y, theme: dest, open: 0 });
+      }
+      // a slide chute that drops you deeper
+      slides = [];
+      const sc = pickSpot(3); slides.push({ x: sc.x, y: sc.y });
+
+      // hunters: Captain Clark + (from level 2) the Bacteria
+      entities = [];
+      function spawnHunter(type, speed) {
+        for (let g = 0; g < 600; g++) {
+          const ex = rint(1, mapW - 2) + 0.5, ey = rint(1, mapH - 2) + 0.5;
+          if (map[Math.floor(ey)][Math.floor(ex)] !== 0) continue;
+          if (Math.hypot(ex - px, ey - py) < 6) continue;
+          entities.push({ type: type, x: ex, y: ey, ang: rnd(0, 6.28), state: 'wander', wT: 0, phase: rnd(0, 6.28), speed: speed });
+          return;
+        }
+      }
+      const clarks = clamp(1 + Math.floor((lvl - 1) / 3), 1, 3);
+      for (let i = 0; i < clarks; i++) spawnHunter('clark', 2.9 + lvl * 0.06);
+      if (lvl >= 2) spawnHunter('bacteria', 2.55 + lvl * 0.05);   // skittering blob
+
+      // dead people in yellow hazmat suits
+      corpses = [];
+      const wantC = 2 + Math.floor(lvl / 2);
+      for (let g = 0; g < 400 && corpses.length < wantC; g++) {
+        const bx = rint(1, mapW - 2) + 0.5, by = rint(1, mapH - 2) + 0.5;
+        if (map[Math.floor(by)][Math.floor(bx)] !== 0) continue;
+        if (Math.hypot(bx - px, by - py) < 2.5) continue;
+        corpses.push({ x: bx, y: by });
+      }
+
+      marks = [];   // fresh trail each level
+
+      // some rooms have stuff phasing through the walls (a glitch in the level)
+      glitches = [];
+      phasing = themeName !== 'pool' && lvl >= 2 && Math.random() < 0.55;
+      if (phasing) {
+        for (let g = 0, n = 0; g < 500 && n < 4 + (lvl % 3); g++) {
+          const ox = rint(1, mapW - 2), oy = rint(1, mapH - 2);
+          if (map[oy][ox] !== 0) continue;
+          // shove a chair/box partly into an adjacent wall
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          const wd = dirs[rint(0, 3)];
+          if (mapAt(ox + 0.5 + wd[0], oy + 0.5 + wd[1]) !== 1) continue;
+          if (Math.hypot(ox + 0.5 - px, oy + 0.5 - py) < 2) continue;
+          glitches.push({ x: ox + 0.5 + wd[0] * 0.55, y: oy + 0.5 + wd[1] * 0.55, kind: rint(0, 2), ph: rnd(0, 6.28) });
+          n++;
+        }
+      }
+
+      // lighting: per-theme base + depth ramp; void = pitch black, flicker levels
+      darkness = clamp(curTheme.base + 0.12 + (lvl - 1) * 0.05, 0, 0.92);
+      blackout = themeName === 'void' || (lvl >= 3 && lvl % 3 === 0);
+      if (themeName === 'void') darkness = 0.9;
+      else if (blackout) darkness = Math.max(darkness, 0.86);
+
+      updateCamera();
+      banner = { text: 'LEVEL ' + lvl, sub: THEME_NAMES[themeName] + (phasing ? ' · it\'s unstable here' : ''), t: 1.7 };
+    }
+
+    // move to a new level via a door (its theme) or a slide (deeper, random)
+    function goToLevel(theme) {
+      level++;
+      if (level - 1 > bestLevel) { bestLevel = level - 1; saveBest(bestLevel); }
+      genLevel(level, theme);
+    }
+
+    function updateCamera() {
+      dirX = Math.cos(dir); dirY = Math.sin(dir);
+      planeX = -dirY * PLANE; planeY = dirX * PLANE;
+    }
+
+    function mapAt(x, y) {
+      const ix = Math.floor(x), iy = Math.floor(y);
+      if (ix < 0 || iy < 0 || ix >= mapW || iy >= mapH) return 1;
+      return map[iy][ix];
+    }
+    // axis-separated movement with a collision radius (no corner clipping)
+    function tryMove(ox, oy, nx, ny, r) {
+      let rx = ox, ry = oy;
+      if (mapAt(nx - r, oy) === 0 && mapAt(nx + r, oy) === 0) rx = nx;
+      if (mapAt(rx, ny - r) === 0 && mapAt(rx, ny + r) === 0) ry = ny;
+      return [rx, ry];
+    }
+    // line-of-sight: walk the segment, blocked if it crosses a wall
+    function hasLOS(ax, ay, bx, by) {
+      const d = Math.hypot(bx - ax, by - ay);
+      const steps = Math.ceil(d / 0.12);
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        if (mapAt(ax + (bx - ax) * t, ay + (by - ay) * t) !== 0) return false;
+      }
+      return true;
+    }
+
+    // ---------- sprite art (drawn once into offscreen canvases) ----------
+    function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+    // ---------- procedural 64x64 textures (read into Uint8 RGBA for sampling) ----------
+    const TW = 64, TH = 64, TMASK = 63;
+    function texData(draw) {
+      const c = makeCanvas(TW, TH), g = c.getContext('2d');
+      draw(g);
+      return g.getImageData(0, 0, TW, TH).data;   // Uint8ClampedArray, length TW*TH*4
+    }
+    function nz(g, n, a) {                          // sprinkle grain
+      for (let i = 0; i < n; i++) {
+        g.fillStyle = 'rgba(0,0,0,' + (Math.random() * a) + ')';
+        g.fillRect((Math.random() * TW) | 0, (Math.random() * TH) | 0, 1, 1);
+      }
+    }
+    function speck(g, n, base, spread, a) {           // mottle a surface
+      for (let i = 0; i < n; i++) {
+        const s = Math.random();
+        g.fillStyle = 'rgba(' + (base[0] + s * spread | 0) + ',' + (base[1] + s * spread | 0) + ',' + (base[2] + s * spread | 0) + ',' + a + ')';
+        g.fillRect((Math.random() * TW) | 0, (Math.random() * TH) | 0, 1, 1);
+      }
+    }
+    // ---- yellow "backrooms" wallpaper / carpet / drop-ceiling ----
+    const T_YELLOW = {
+      wall: texData(function (g) {
+        const grd = g.createLinearGradient(0, 0, 0, TH);
+        grd.addColorStop(0, '#cdb955'); grd.addColorStop(0.5, '#bda646'); grd.addColorStop(1, '#a8923a');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.globalAlpha = 0.10; g.fillStyle = '#7a6620';
+        for (let y = 0; y < TH; y += 16) for (let x = 0; x < TW; x += 16) {
+          g.beginPath(); g.moveTo(x + 8, y); g.lineTo(x + 16, y + 8); g.lineTo(x + 8, y + 16); g.lineTo(x, y + 8); g.closePath(); g.fill();
+        }
+        g.globalAlpha = 1;
+        g.fillStyle = 'rgba(70,56,18,0.55)'; g.fillRect(0, 0, 2, TH); g.fillRect(TW - 1, 0, 2, TH);
+        g.fillStyle = 'rgba(150,134,70,0.4)'; g.fillRect(2, 0, 1, TH);
+        nz(g, 220, 0.18);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#46401f'; g.fillRect(0, 0, TW, TH); speck(g, 1100, [60, 56, 28], 46, 0.5);
+        g.strokeStyle = 'rgba(24,20,8,0.5)'; g.lineWidth = 2; g.strokeRect(0, 0, TW, TH); nz(g, 300, 0.3);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#cdc79a'; g.fillRect(0, 0, TW, TH); speck(g, 500, [210, 204, 160], 30, 0.35);
+        g.fillStyle = 'rgba(40,36,20,0.55)'; g.fillRect(0, 0, TW, 2); g.fillRect(0, 31, TW, 2); g.fillRect(0, 0, 2, TH); g.fillRect(31, 0, 2, TH);
+        g.fillStyle = '#e9e6c0'; g.fillRect(38, 6, 20, 20);
+        g.strokeStyle = 'rgba(50,44,24,0.5)'; g.strokeRect(38, 6, 20, 20); nz(g, 200, 0.16);
+      }),
+      base: 0, fogTint: null
+    };
+    // ---- poolrooms: white tiled walls, shimmering water floor, bright ceiling ----
+    function poolTile(base, grout) {
+      return texData(function (g) {
+        g.fillStyle = base; g.fillRect(0, 0, TW, TH); speck(g, 260, [236, 244, 245], 14, 0.25);
+        g.fillStyle = grout;                            // 16px tile grid
+        for (let k = 0; k <= TW; k += 16) { g.fillRect(k, 0, 2, TH); g.fillRect(0, k, TW, 2); }
+        nz(g, 120, 0.08);
+      });
+    }
+    const T_POOL = {
+      wall: poolTile('#dfeef0', 'rgba(120,160,170,0.55)'),
+      floor: texData(function (g) {                     // water
+        const grd = g.createLinearGradient(0, 0, TW, TH);
+        grd.addColorStop(0, '#2e7f95'); grd.addColorStop(0.5, '#3fa0b4'); grd.addColorStop(1, '#236a80');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.strokeStyle = 'rgba(220,245,250,0.22)'; g.lineWidth = 1;   // caustics
+        for (let i = 0; i < 10; i++) { g.beginPath(); g.moveTo(Math.random() * TW, 0); g.bezierCurveTo(Math.random() * TW, 22, Math.random() * TW, 42, Math.random() * TW, TH); g.stroke(); }
+        speck(g, 200, [120, 200, 220], 30, 0.2); nz(g, 120, 0.1);
+      }),
+      ceil: poolTile('#eef6f7', 'rgba(150,180,188,0.45)'),
+      base: -0.06, fogTint: null
+    };
+    // ---- pitch-black "void" rooms: barely-there dark surfaces ----
+    const T_VOID = {
+      wall: texData(function (g) { g.fillStyle = '#111319'; g.fillRect(0, 0, TW, TH); speck(g, 300, [22, 24, 30], 18, 0.5); nz(g, 200, 0.4); }),
+      floor: texData(function (g) { g.fillStyle = '#0a0b0e'; g.fillRect(0, 0, TW, TH); speck(g, 200, [16, 17, 22], 14, 0.5); }),
+      ceil: texData(function (g) { g.fillStyle = '#0c0d12'; g.fillRect(0, 0, TW, TH); speck(g, 150, [18, 19, 24], 12, 0.5); }),
+      base: 0.84, fogTint: null
+    };
+    const THEMES = { yellow: T_YELLOW, pool: T_POOL, void: T_VOID };
+    let curTheme = T_YELLOW;
+    // monochrome noise tile for drifting film grain
+    const grainCanvas = (function () {
+      const c = makeCanvas(128, 128), g = c.getContext('2d');
+      const id = g.createImageData(128, 128), d = id.data;
+      for (let i = 0; i < d.length; i += 4) { const v = (Math.random() * 255) | 0; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = (Math.random() * 60) | 0; }
+      g.putImageData(id, 0, 0); return c;
+    })();
+
+    // Captain Clark — the disfigured ~8ft "Still Life" in his pirate-mascot
+    // costume: feathered hat, beige vest over a stained teal shirt, an
+    // upward-stretched pale face with misaligned eyes, uneven long-fingered
+    // hands, and a table leg for one leg. (Original stylized rendition — built
+    // with gradient shading for a rounded 3D look, pre-rendered into a walk
+    // cycle so he lumbers toward you.)
+    const FW = 150, FH = 440;                 // body design frame
+    function P(v) { return v * FH / 440; }    // y scale helper
+    function Q(v) { return v * FW / 150; }    // x scale helper
+
+    function drawClarkBody(g, phase) {
+      const cx = FW / 2;
+      const legA = Math.sin(phase), armA = Math.sin(phase + Math.PI), bob = Math.abs(Math.sin(phase));
+      const headY = 96 - bob * 5;
+      const lean = legA * 3;
+      g.lineCap = 'round'; g.lineJoin = 'round';
+
+      // --- real leg: brown pants, white sock, brown boot (swings) ---
+      const rFoot = 60 + legA * 12;
+      let pg = g.createLinearGradient(Q(56), 0, Q(74), 0);
+      pg.addColorStop(0, '#34230f'); pg.addColorStop(0.5, '#5e3f22'); pg.addColorStop(1, '#2c1c0d');
+      g.strokeStyle = pg; g.lineWidth = Q(13);
+      g.beginPath(); g.moveTo(Q(64), P(298)); g.lineTo(Q(62 + legA * 4), P(360)); g.lineTo(Q(rFoot), P(394)); g.stroke();
+      g.strokeStyle = '#e7e2d2'; g.lineWidth = Q(11);   // white sock
+      g.beginPath(); g.moveTo(Q(rFoot), P(394)); g.lineTo(Q(rFoot), P(406)); g.stroke();
+      g.fillStyle = '#2f1f0d'; g.beginPath(); g.ellipse(Q(rFoot + 3), P(416), Q(13), P(9), 0, 0, 6.29); g.fill(); // brown boot
+
+      // --- peg leg (wood), narrowing to a point ---
+      const pegX = 86 - legA * 12;
+      let wg = g.createLinearGradient(Q(80), 0, Q(94), 0);
+      wg.addColorStop(0, '#3c2611'); wg.addColorStop(0.5, '#7a5128'); wg.addColorStop(1, '#33200f');
+      g.fillStyle = wg;
+      g.beginPath();
+      g.moveTo(Q(83), P(298)); g.lineTo(Q(91), P(298));
+      g.lineTo(Q(pegX + 3), P(360)); g.lineTo(Q(pegX), P(420)); g.lineTo(Q(pegX - 3), P(360)); g.closePath(); g.fill();
+
+      // --- bluish-green sleeves (arms), swing opposite the legs ---
+      let ag = g.createLinearGradient(Q(18), 0, Q(58), 0);
+      ag.addColorStop(0, '#164a44'); ag.addColorStop(0.5, '#2f8d7c'); ag.addColorStop(1, '#123e38');
+      g.strokeStyle = ag; g.lineWidth = Q(12);
+      const lh = 270 + armA * 12, rh = 276 - armA * 12;   // long arms reaching down
+      g.beginPath(); g.moveTo(Q(44), P(166)); g.lineTo(Q(28 - armA * 4), P(216)); g.lineTo(Q(28), P(lh)); g.stroke();
+      g.beginPath(); g.moveTo(Q(106), P(166)); g.lineTo(Q(122 + armA * 4), P(220)); g.lineTo(Q(122), P(rh)); g.stroke();
+      // dark (Black) hands + gangly fingers
+      g.fillStyle = '#28190f';
+      g.beginPath(); g.ellipse(Q(28), P(lh), Q(6), P(8), 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(122), P(rh), Q(6), P(8), 0, 0, 6.29); g.fill();
+      g.strokeStyle = '#3a2718'; g.lineWidth = Q(2.4);
+      for (const [hx, hy, sgn] of [[28, lh, -1], [122, rh, 1]]) {
+        for (let i = 0; i < 4; i++) {
+          g.beginPath(); g.moveTo(Q(hx + sgn * i * 2), P(hy));
+          g.lineTo(Q(hx + sgn * (i * 3 + 4)), P(hy + 14 + i * 5)); g.stroke();
+        }
+      }
+
+      // --- yellow raincoat (torso) ---
+      let cg = g.createLinearGradient(Q(32), 0, Q(118), 0);
+      cg.addColorStop(0, '#b08416'); cg.addColorStop(0.45, '#f0cf3c'); cg.addColorStop(0.6, '#f7da57'); cg.addColorStop(1, '#9c7814');
+      g.fillStyle = cg;
+      g.beginPath();
+      g.moveTo(Q(40 + lean), P(150)); g.lineTo(Q(110 + lean), P(150));
+      g.lineTo(Q(118), P(302)); g.lineTo(Q(32), P(302)); g.closePath(); g.fill();
+      // collar + centre seam
+      g.fillStyle = '#caa826';
+      g.beginPath(); g.moveTo(Q(52 + lean), P(150)); g.lineTo(Q(75), P(178)); g.lineTo(Q(98 + lean), P(150)); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(120,90,16,0.7)'; g.lineWidth = Q(2);
+      g.beginPath(); g.moveTo(Q(75 + lean / 2), P(178)); g.lineTo(Q(75), P(302)); g.stroke();
+
+      // --- dark belt + buckle at the waist ---
+      g.fillStyle = '#1f1610'; g.fillRect(Q(33), P(250), Q(84), P(14));
+      g.fillStyle = '#7a6128'; g.fillRect(Q(70), P(251), Q(12), P(12));
+
+      // --- purple cloth dangling from the belt (sways) ---
+      const sway = Math.sin(phase * 1.3) * 5;
+      let dg = g.createLinearGradient(0, P(258), 0, P(338));
+      dg.addColorStop(0, '#6a2f86'); dg.addColorStop(1, '#3a1850');
+      g.fillStyle = dg;
+      g.beginPath();
+      g.moveTo(Q(46), P(258)); g.lineTo(Q(66), P(258));
+      g.lineTo(Q(62 + sway), P(326)); g.lineTo(Q(54 + sway), P(338)); g.lineTo(Q(48 + sway), P(324)); g.closePath(); g.fill();
+
+      // --- blood splatters on the coat (slight) ---
+      g.fillStyle = 'rgba(120,12,8,0.82)';
+      g.beginPath(); g.ellipse(Q(94), P(214), Q(7), P(11), 0.3, 0, 6.29); g.fill();
+      g.beginPath(); g.arc(Q(102), P(232), Q(3), 0, 6.29); g.fill();
+      g.beginPath(); g.arc(Q(58), P(200), Q(2.5), 0, 6.29); g.fill();
+
+      // --- head: dark skin, uneven eyes, blood, hat ---
+      const fg = g.createRadialGradient(Q(64), P(headY - 16), P(6), Q(76), P(headY + 4), P(54));
+      fg.addColorStop(0, '#5c4836'); fg.addColorStop(0.5, '#392a1c'); fg.addColorStop(1, '#180f08');
+      g.fillStyle = fg;
+      g.beginPath(); g.ellipse(cx, P(headY), Q(24), P(46), 0, 0, 6.29); g.fill();
+      // uneven eyes (left set higher than right), pale sclera + dark pupil
+      g.fillStyle = '#d9d2bf';
+      g.beginPath(); g.ellipse(Q(64), P(headY - 12), Q(6.5), P(5), 0, 0, 6.29); g.fill();    // higher
+      g.beginPath(); g.ellipse(Q(89), P(headY + 3), Q(5.5), P(4.5), 0, 0, 6.29); g.fill();   // lower
+      g.fillStyle = '#0a0604';
+      g.beginPath(); g.arc(Q(64), P(headY - 12), Q(3), 0, 6.29); g.fill();
+      g.beginPath(); g.arc(Q(89), P(headY + 3), Q(2.6), 0, 6.29); g.fill();
+      // bloodshot + a drip
+      g.strokeStyle = 'rgba(150,20,12,0.7)'; g.lineWidth = Q(1.1);
+      g.beginPath(); g.moveTo(Q(58), P(headY - 11)); g.lineTo(Q(70), P(headY - 11)); g.stroke();
+      g.fillStyle = '#170a08'; g.beginPath(); g.ellipse(cx, P(headY + 26), Q(7), P(9), 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(130,14,8,0.85)';
+      g.beginPath(); g.moveTo(Q(73), P(headY + 32)); g.lineTo(Q(78), P(headY + 32)); g.lineTo(Q(75), P(headY + 48)); g.closePath(); g.fill();
+      // hat (dark brimmed)
+      let hg = g.createLinearGradient(0, P(28), 0, P(60));
+      hg.addColorStop(0, '#241b10'); hg.addColorStop(1, '#0c0905');
+      g.fillStyle = hg;
+      g.beginPath(); g.ellipse(cx, P(56), Q(31), P(10), 0, 0, 6.29); g.fill();   // brim
+      g.beginPath(); g.moveTo(Q(56), P(56)); g.lineTo(Q(60), P(26)); g.lineTo(Q(90), P(26)); g.lineTo(Q(94), P(56)); g.closePath(); g.fill();
+      g.fillStyle = '#3a2a14'; g.fillRect(Q(58), P(48), Q(34), P(5));   // band
+    }
+
+    // Pre-render the walk cycle once.
+    const CLARK_FRAMES = (function () {
+      const N = 12, arr = [];
+      for (let i = 0; i < N; i++) {
+        const c = makeCanvas(FW, FH), g = c.getContext('2d');
+        drawClarkBody(g, (i / N) * Math.PI * 2);
+        arr.push(c);
+      }
+      return arr;
+    })();
+
+    // Animated close-up of Clark's face, drawn live during the jumpscare so it
+    // lunges and screams. `open` 0..1 tears the mouth wide; `t` drives jitter.
+    function drawClarkFace(g, cx, cy, S, open, t) {
+      g.save(); g.translate(cx, cy); g.scale(S, S);
+      // elongated head, dark skin, volumetric shading
+      const skin = g.createRadialGradient(-46, -70, 24, 0, -10, 250);
+      skin.addColorStop(0, '#5f4b38'); skin.addColorStop(0.5, '#382a1c'); skin.addColorStop(1, '#130c06');
+      g.fillStyle = skin; g.beginPath(); g.ellipse(0, 0, 152, 212, 0, 0, 6.29); g.fill();
+      // gaunt cheek hollows
+      g.fillStyle = 'rgba(8,5,2,0.5)';
+      g.beginPath(); g.ellipse(-92, 70, 40, 78, 0.2, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(92, 70, 40, 78, -0.2, 0, 6.29); g.fill();
+      // blood smears
+      g.fillStyle = 'rgba(120,12,8,0.6)';
+      g.beginPath(); g.ellipse(40, -10, 22, 50, 0.3, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(140,16,10,0.55)';
+      g.beginPath(); g.moveTo(-70, 6); g.lineTo(-58, 6); g.lineTo(-62, 90); g.closePath(); g.fill();
+      // misaligned sunken eyes, widen slightly as he lunges
+      const ew = 1 + open * 0.25;
+      for (const [ex, ey, rx, ry] of [[-64, -54, 34, 44], [70, -24, 27, 36]]) {
+        const so = g.createRadialGradient(ex, ey, 4, ex, ey, rx * 1.6);
+        so.addColorStop(0, '#040301'); so.addColorStop(1, 'rgba(4,3,1,0)');
+        g.fillStyle = so; g.beginPath(); g.ellipse(ex, ey, rx * 1.5, ry * 1.5, 0, 0, 6.29); g.fill();
+        g.fillStyle = '#050402'; g.beginPath(); g.ellipse(ex, ey, rx, ry * ew, 0, 0, 6.29); g.fill();
+        // wet reflective pupil
+        g.fillStyle = '#6b5a22'; g.beginPath(); g.arc(ex + 4, ey + 4, rx * 0.28, 0, 6.29); g.fill();
+        g.fillStyle = 'rgba(240,235,200,0.85)'; g.beginPath(); g.arc(ex - rx * 0.25, ey - ry * 0.3, rx * 0.12, 0, 6.29); g.fill();
+      }
+      // nose
+      g.fillStyle = 'rgba(30,24,15,0.6)'; g.beginPath(); g.ellipse(2, 40, 14, 40, 0, 0, 6.29); g.fill();
+      // gaping screaming mouth (opens with `open`)
+      const mh = 30 + open * 130, my = 150;
+      const mg = g.createRadialGradient(0, my, 6, 0, my, mh);
+      mg.addColorStop(0, '#1a0606'); mg.addColorStop(0.6, '#0c0604'); mg.addColorStop(1, '#000');
+      g.fillStyle = mg; g.beginPath(); g.ellipse(0, my, 52, mh, 0, 0, 6.29); g.fill();
+      // jagged teeth top + bottom
+      g.fillStyle = '#bdae87';
+      for (let i = -4; i <= 4; i++) {
+        g.beginPath(); g.moveTo(i * 12 - 5, my - mh + 2); g.lineTo(i * 12 + 5, my - mh + 2); g.lineTo(i * 12, my - mh + 18); g.closePath(); g.fill();
+        g.beginPath(); g.moveTo(i * 12 - 5, my + mh - 2); g.lineTo(i * 12 + 5, my + mh - 2); g.lineTo(i * 12, my + mh - 18); g.closePath(); g.fill();
+      }
+      // hat brim across the top
+      const hg = g.createLinearGradient(0, -212, 0, -150);
+      hg.addColorStop(0, '#241b10'); hg.addColorStop(1, '#0a0805');
+      g.fillStyle = hg; g.beginPath(); g.ellipse(0, -180, 168, 60, 0, 0, 6.29); g.fill();
+      g.restore();
+    }
+
+    // The Bacteria — a tall, very skinny, glossy-black blob with long spindly
+    // arms that reach. It skitters out of the dark.
+    const BW = 120, BH = 470;
+    function bacGloss(g, x, y, ry) {
+      const grd = g.createRadialGradient(x - ry * 0.18, y - ry * 0.45, 2, x, y, ry * 1.25);
+      grd.addColorStop(0, '#2c2c34'); grd.addColorStop(0.5, '#131316'); grd.addColorStop(1, '#040405');
+      return grd;
+    }
+    function drawBacteriaBody(g, phase) {
+      const cx = BW / 2, sway = Math.sin(phase), sk = Math.sin(phase * 2);
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      // long spindly arms reaching down (sway, skitter)
+      g.strokeStyle = '#080809'; g.lineWidth = BW * 0.055;
+      g.beginPath(); g.moveTo(cx - 8, BH * 0.30);
+      g.quadraticCurveTo(cx - 40 + sway * 12, BH * 0.5, cx - 26 + sk * 14, BH * 0.9); g.stroke();
+      g.beginPath(); g.moveTo(cx + 8, BH * 0.30);
+      g.quadraticCurveTo(cx + 40 - sway * 12, BH * 0.52, cx + 28 - sk * 14, BH * 0.92); g.stroke();
+      // claw fingers
+      g.lineWidth = BW * 0.022;
+      for (const [hx, hy] of [[cx - 26 + sk * 14, BH * 0.9], [cx + 28 - sk * 14, BH * 0.92]]) {
+        for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + i * 8, hy + 22); g.stroke(); }
+      }
+      // skinny vertical blob body
+      g.fillStyle = bacGloss(g, cx, BH * 0.52, BH * 0.36);
+      g.beginPath();
+      g.moveTo(cx, BH * 0.10);
+      g.bezierCurveTo(cx + BW * 0.27, BH * 0.20, cx + BW * 0.20, BH * 0.72, cx + BW * 0.13 + sway * 4, BH * 0.92);
+      g.bezierCurveTo(cx + BW * 0.05, BH * 0.99, cx - BW * 0.05, BH * 0.99, cx - BW * 0.13 + sway * 4, BH * 0.92);
+      g.bezierCurveTo(cx - BW * 0.20, BH * 0.72, cx - BW * 0.27, BH * 0.20, cx, BH * 0.10);
+      g.fill();
+      // wet gloss highlight
+      g.fillStyle = 'rgba(130,130,150,0.16)';
+      g.beginPath(); g.ellipse(cx - 7, BH * 0.34, 5, BH * 0.12, 0, 0, 6.29); g.fill();
+      // head bulge + uneven glowing pale eyes
+      g.fillStyle = bacGloss(g, cx, BH * 0.15, BW * 0.24);
+      g.beginPath(); g.ellipse(cx, BH * 0.145, BW * 0.21, BW * 0.25, 0, 0, 6.29); g.fill();
+      g.fillStyle = '#dfe6da';
+      g.beginPath(); g.arc(cx - 11, BH * 0.135, 4.2, 0, 6.29); g.fill();
+      g.beginPath(); g.arc(cx + 12, BH * 0.152, 3.2, 0, 6.29); g.fill();
+      g.fillStyle = '#080808';
+      g.beginPath(); g.arc(cx - 11, BH * 0.135, 1.7, 0, 6.29); g.fill();
+      g.beginPath(); g.arc(cx + 12, BH * 0.152, 1.4, 0, 6.29); g.fill();
+    }
+    const BACTERIA_FRAMES = (function () {
+      const N = 12, arr = [];
+      for (let i = 0; i < N; i++) { const c = makeCanvas(BW, BH), g = c.getContext('2d'); drawBacteriaBody(g, (i / N) * Math.PI * 2); arr.push(c); }
+      return arr;
+    })();
+
+    // Bacteria jumpscare face: a glossy black mass, scattered pale eyes, a
+    // vertical gaping maw that tears open.
+    function drawBacteriaFace(g, cx, cy, S, open, t) {
+      g.save(); g.translate(cx, cy); g.scale(S, S);
+      const grd = g.createRadialGradient(-40, -50, 20, 0, 0, 250);
+      grd.addColorStop(0, '#26262c'); grd.addColorStop(0.5, '#121215'); grd.addColorStop(1, '#020203');
+      g.fillStyle = grd; g.beginPath(); g.ellipse(0, 0, 170, 215, 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,150,170,0.12)'; g.beginPath(); g.ellipse(-60, -40, 30, 120, 0.3, 0, 6.29); g.fill();
+      // scattered pale eyes
+      for (const [ex, ey, r] of [[-78, -70, 20], [44, -96, 15], [86, -8, 22], [-30, 24, 17], [-96, 60, 13], [54, 70, 16]]) {
+        g.fillStyle = '#e6ece0'; g.beginPath(); g.arc(ex, ey, r * (1 + open * 0.2), 0, 6.29); g.fill();
+        g.fillStyle = '#070707'; g.beginPath(); g.arc(ex + r * 0.15, ey + r * 0.1, r * 0.42, 0, 6.29); g.fill();
+      }
+      // vertical gaping maw
+      const mh = 60 + open * 150;
+      const mg = g.createRadialGradient(0, 110, 6, 0, 110, mh);
+      mg.addColorStop(0, '#160505'); mg.addColorStop(0.6, '#070303'); mg.addColorStop(1, '#000');
+      g.fillStyle = mg; g.beginPath(); g.ellipse(0, 110, 40, mh, 0, 0, 6.29); g.fill();
+      g.fillStyle = '#cfcabb';
+      for (let i = -3; i <= 3; i++) {
+        g.beginPath(); g.moveTo(i * 11 - 4, 110 - mh + 4); g.lineTo(i * 11 + 4, 110 - mh + 4); g.lineTo(i * 11, 110 - mh + 20); g.closePath(); g.fill();
+      }
+      g.restore();
+    }
+
+    // Openable doors, colour-coded by where they lead (green→yellow halls,
+    // cyan→poolrooms, purple→pitch black). A glow makes them findable in dark.
+    const DOOR_STYLE = {
+      yellow: { glow: 'rgba(120,255,150,0.9)', frame: '#08130b', slab: '#123a20', panel: '#0a2a14', text: '#bdffd2', label: 'HALLS' },
+      pool: { glow: 'rgba(120,235,255,0.9)', frame: '#06222b', slab: '#0e4a5a', panel: '#0a3340', text: '#c8f6ff', label: 'POOLS' },
+      void: { glow: 'rgba(170,120,255,0.85)', frame: '#160a26', slab: '#2c1850', panel: '#1c1038', text: '#e2d2ff', label: 'DARK' }
+    };
+    function buildDoor(s) {
+      const c = makeCanvas(84, 132), g = c.getContext('2d');
+      const glow = g.createRadialGradient(42, 70, 6, 42, 70, 64);
+      glow.addColorStop(0, s.glow); glow.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = glow; g.fillRect(0, 0, 84, 132);
+      g.fillStyle = s.frame; g.fillRect(18, 8, 48, 120);
+      g.fillStyle = s.slab; g.fillRect(22, 12, 40, 112);
+      g.fillStyle = s.panel; g.fillRect(26, 18, 32, 48); g.fillRect(26, 72, 32, 40);
+      g.fillStyle = s.text; g.beginPath(); g.arc(54, 70, 2.8, 0, 6.29); g.fill();
+      g.font = 'bold 11px Nunito, sans-serif'; g.textAlign = 'center'; g.fillText(s.label, 42, 124);
+      return c;
+    }
+    const DOOR_IMGS = { yellow: buildDoor(DOOR_STYLE.yellow), pool: buildDoor(DOOR_STYLE.pool), void: buildDoor(DOOR_STYLE.void) };
+
+    // A slide chute in the floor — a dark hole with rails that drops you deeper.
+    const slideImg = (function () {
+      const c = makeCanvas(120, 96), g = c.getContext('2d');
+      const hole = g.createRadialGradient(60, 60, 4, 60, 60, 52);
+      hole.addColorStop(0, '#000'); hole.addColorStop(0.7, '#0a0a0c'); hole.addColorStop(1, 'rgba(10,10,12,0)');
+      g.fillStyle = hole; g.beginPath(); g.ellipse(60, 62, 54, 34, 0, 0, 6.29); g.fill();
+      g.strokeStyle = '#8a8aa0'; g.lineWidth = 5; g.lineCap = 'round';   // metal rails
+      g.beginPath(); g.moveTo(28, 30); g.lineTo(46, 84); g.stroke();
+      g.beginPath(); g.moveTo(92, 30); g.lineTo(74, 84); g.stroke();
+      g.fillStyle = '#cfcf5a'; g.font = 'bold 13px Nunito'; g.textAlign = 'center'; g.fillText('▼', 60, 24);
+      return c;
+    })();
+
+    // A glowing chalk mark you leave to track where you've been.
+    const markImg = (function () {
+      const c = makeCanvas(48, 48), g = c.getContext('2d');
+      const gl = g.createRadialGradient(24, 24, 1, 24, 24, 22);
+      gl.addColorStop(0, 'rgba(120,255,210,0.95)'); gl.addColorStop(1, 'rgba(60,220,170,0)');
+      g.fillStyle = gl; g.beginPath(); g.arc(24, 24, 22, 0, 6.29); g.fill();
+      g.strokeStyle = '#d6fff0'; g.lineWidth = 4; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(14, 14); g.lineTo(34, 34); g.moveTo(34, 14); g.lineTo(14, 34); g.stroke();
+      return c;
+    })();
+
+    // Furniture that's clipped halfway into a wall (the "phasing" glitch rooms).
+    const glitchImgs = [
+      (function () {   // chair
+        const c = makeCanvas(70, 110), g = c.getContext('2d');
+        g.fillStyle = '#3a2c1c'; g.fillRect(16, 10, 10, 96); g.fillRect(20, 50, 34, 10);
+        g.fillRect(20, 92, 34, 8); g.fillRect(22, 60, 6, 40); g.fillRect(46, 60, 6, 40);
+        g.fillStyle = '#5a4326'; g.fillRect(16, 10, 10, 44);
+        return c;
+      })(),
+      (function () {   // crate
+        const c = makeCanvas(96, 96), g = c.getContext('2d');
+        g.fillStyle = '#4a3a22'; g.fillRect(10, 18, 76, 70);
+        g.strokeStyle = '#2c2012'; g.lineWidth = 4; g.strokeRect(10, 18, 76, 70);
+        g.beginPath(); g.moveTo(10, 18); g.lineTo(86, 88); g.moveTo(86, 18); g.lineTo(10, 88); g.stroke();
+        return c;
+      })()
+    ];
+
+    // A dead body in a yellow hazmat suit, slumped on the floor in a pool of
+    // blood — the other people who didn't make it out of the backrooms.
+    const hazmatImg = (function () {
+      const c = makeCanvas(140, 150), g = c.getContext('2d');
+      // blood pool
+      g.fillStyle = 'rgba(70,6,5,0.85)'; g.beginPath(); g.ellipse(74, 140, 56, 13, 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(110,10,8,0.7)'; g.beginPath(); g.ellipse(48, 143, 30, 7, 0, 0, 6.29); g.fill();
+      // sprawled legs
+      g.fillStyle = '#bd9c26'; g.lineCap = 'round';
+      g.strokeStyle = '#bd9c26'; g.lineWidth = 17;
+      g.beginPath(); g.moveTo(70, 110); g.lineTo(108, 132); g.stroke();
+      g.beginPath(); g.moveTo(70, 110); g.lineTo(40, 134); g.stroke();
+      // slumped torso
+      let tg = g.createLinearGradient(34, 60, 110, 130);
+      tg.addColorStop(0, '#ead033'); tg.addColorStop(1, '#9c7e1c');
+      g.fillStyle = tg; g.beginPath(); g.ellipse(70, 92, 40, 44, 0.18, 0, 6.29); g.fill();
+      // suit folds
+      g.strokeStyle = 'rgba(110,88,18,0.5)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(52, 66); g.lineTo(62, 122); g.stroke();
+      g.beginPath(); g.moveTo(90, 64); g.lineTo(84, 122); g.stroke();
+      // hood/helmet lolling to one side (dead)
+      g.fillStyle = '#d7bb31'; g.beginPath(); g.ellipse(54, 50, 27, 29, -0.3, 0, 6.29); g.fill();
+      g.fillStyle = '#12100a'; g.beginPath(); g.ellipse(50, 52, 16, 18, -0.3, 0, 6.29); g.fill();   // dark visor
+      g.fillStyle = 'rgba(150,170,180,0.22)'; g.beginPath(); g.ellipse(44, 46, 5, 8, -0.3, 0, 6.29); g.fill();
+      // blood smear up the suit
+      g.fillStyle = 'rgba(120,12,9,0.7)'; g.beginPath(); g.ellipse(72, 98, 9, 13, 0, 0, 6.29); g.fill();
+      return c;
+    })();
+
+    // ---------- rendering ----------
+    function render() {
+      // Per-frame lighting: deeper / blackout levels are darker, and the dark
+      // ones flicker like failing fluorescents.
+      let flick = 1;
+      if (darkness > 0.35) {
+        const n = Math.sin(perfNow * 0.013) + Math.sin(perfNow * 0.029) + Math.sin(perfNow * 0.071);
+        flick = n < -1.7 ? 0.35 : (n < -1.2 ? 0.7 : 1);
+      }
+      const ambient = clamp((1 - darkness * 0.62) * flick, 0.05, 1);
+      const fog = 0.07 + darkness * 0.18;
+
+      const halfH = RH / 2;
+      const rd0x = dirX - planeX, rd0y = dirY - planeY;   // ray dir at the left edge
+      const rd1x = dirX + planeX, rd1y = dirY + planeY;   // ray dir at the right edge
+      const buf = buf32, fd = curTheme.floor, cd = curTheme.ceil, wd = curTheme.wall;
+
+      // --- textured floor + ceiling (perspective cast, one pass per row) ---
+      for (let y = (halfH | 0) + 1; y < RH; y++) {
+        const rowDist = halfH / (y - halfH);
+        const stepX = rowDist * (rd1x - rd0x) / RW, stepY = rowDist * (rd1y - rd0y) / RW;
+        let fx = px + rowDist * rd0x, fy = py + rowDist * rd0y;
+        const shade = clamp(1 - rowDist * fog, 0.03, 1) * ambient, cs = shade * 0.92;
+        const fr = y * RW, cr = (RH - 1 - y) * RW;
+        for (let x = 0; x < RW; x++) {
+          const tx = ((fx - Math.floor(fx)) * TW) & TMASK, ty = ((fy - Math.floor(fy)) * TH) & TMASK;
+          const ti = (ty * TW + tx) << 2;
+          buf[fr + x] = (0xff000000 | (((fd[ti + 2] * shade) | 0) << 16) | (((fd[ti + 1] * shade) | 0) << 8) | ((fd[ti] * shade) | 0)) >>> 0;
+          buf[cr + x] = (0xff000000 | (((cd[ti + 2] * cs) | 0) << 16) | (((cd[ti + 1] * cs) | 0) << 8) | ((cd[ti] * cs) | 0)) >>> 0;
+          fx += stepX; fy += stepY;
+        }
+      }
+
+      // --- textured walls (DDA per column into the buffer) ---
+      for (let x = 0; x < RW; x++) {
+        const cameraX = 2 * x / RW - 1;
+        const rdx = dirX + planeX * cameraX, rdy = dirY + planeY * cameraX;
+        let mx = Math.floor(px), my = Math.floor(py);
+        const ddx = Math.abs(1 / rdx), ddy = Math.abs(1 / rdy);
+        let stepX, stepY, sdx, sdy;
+        if (rdx < 0) { stepX = -1; sdx = (px - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - px) * ddx; }
+        if (rdy < 0) { stepY = -1; sdy = (py - my) * ddy; } else { stepY = 1; sdy = (my + 1 - py) * ddy; }
+        let side = 0, hit = 0, guard = 0;
+        while (!hit && guard++ < 96) {
+          if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; }
+          if (mapAt(mx + 0.5, my + 0.5) === 1) hit = 1;
+        }
+        const perp = side === 0 ? (sdx - ddx) : (sdy - ddy);
+        zbuf[x] = perp;
+        const lineH = RH / perp;
+        const drawStartF = halfH - lineH / 2;
+        let wallX = side === 0 ? (py + perp * rdy) : (px + perp * rdx);
+        wallX -= Math.floor(wallX);
+        let texX = (wallX * TW) | 0;
+        if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = TW - 1 - texX;
+        const shade = clamp(1 - perp * fog, 0.04, 1) * ambient * (side === 1 ? 0.7 : 1);
+        const y0 = Math.max(0, Math.ceil(drawStartF)), y1 = Math.min(RH - 1, (drawStartF + lineH) | 0);
+        const tStep = TH / lineH;
+        let tPos = (y0 - drawStartF) * tStep;
+        for (let y = y0; y <= y1; y++) {
+          const ty = (tPos | 0) & TMASK;
+          const ti = ((ty * TW + texX) << 2);
+          buf[y * RW + x] = (0xff000000 | (((wd[ti + 2] * shade) | 0) << 16) | (((wd[ti + 1] * shade) | 0) << 8) | ((wd[ti] * shade) | 0)) >>> 0;
+          tPos += tStep;
+        }
+      }
+
+      // blit the textured scene up to the full screen (soft, atmospheric)
+      sceneCtx.putImageData(sceneImg, 0, 0);
+      ctx.drawImage(sceneCanvas, 0, 0, RW, RH, 0, 0, W, H);
+
+      // billboards — far to near, zbuffer-occluded. Doors/markers glow so
+      // they're findable; the hunters fade into shadow and loom out of it.
+      const sprites = [];
+      for (const dr of doors) sprites.push({ img: DOOR_IMGS[dr.theme] || DOOR_IMGS.yellow, x: dr.x, y: dr.y, sh: 1.0, sw: 0.6, bob: 0, bright: 1 });
+      for (const sl of slides) sprites.push({ img: slideImg, x: sl.x, y: sl.y, sh: 0.42, sw: 0.62, bob: 0, bright: clamp(ambient + 0.3, 0.4, 1), foot: 1 });
+      for (const m of marks) sprites.push({ img: markImg, x: m.x, y: m.y, sh: 0.22, sw: 0.22, bob: 0, bright: 0.9, foot: 1 });
+      for (const b of corpses) {
+        const d = Math.hypot(b.x - px, b.y - py);
+        sprites.push({ img: hazmatImg, x: b.x, y: b.y, sh: 0.5, sw: 0.5, bob: 0, bright: clamp(ambient * (1.25 - d * 0.05) + 0.08, 0.2, 1) });
+      }
+      // furniture phasing through the walls — flickers, no occlusion so it pokes through
+      for (const gl of glitches) {
+        const flick2 = Math.sin(perfNow * 0.02 + gl.ph) > -0.3 ? 1 : 0.25;
+        sprites.push({ img: glitchImgs[gl.kind] || glitchImgs[0], x: gl.x, y: gl.y, sh: gl.kind === 0 ? 0.62 : 0.5, sw: 0.42, bob: 0, bright: clamp(ambient + 0.1, 0.2, 1) * flick2, noOcc: true });
+      }
+      let nearHunter = 99;
+      for (const e of entities) {
+        const d = Math.hypot(e.x - px, e.y - py);
+        if (hasLOS(e.x, e.y, px, py)) nearHunter = Math.min(nearHunter, d);
+        const stepMs = e.state === 'chase' ? 70 : 120;
+        if (e.type === 'bacteria') {
+          const fi = Math.floor(perfNow / (stepMs - 15) + e.phase * 5) % BACTERIA_FRAMES.length;
+          sprites.push({ img: BACTERIA_FRAMES[fi], x: e.x, y: e.y, sh: 1.6, sw: 0.42,
+            bob: Math.sin(perfNow * 0.006 + e.phase) * 5, bright: clamp((ambient + 0.1) * (1.2 - d * 0.055), 0.16, 1) });
+        } else {
+          const fi = Math.floor(perfNow / stepMs + e.phase * 5) % CLARK_FRAMES.length;
+          sprites.push({ img: CLARK_FRAMES[fi], x: e.x, y: e.y, sh: 1.46, sw: 0.5,
+            bob: Math.sin(perfNow * 0.0022 + e.phase) * 4, bright: clamp((ambient + 0.12) * (1.2 - d * 0.055), 0.14, 1) });
+        }
+      }
+      for (const s of sprites) { const sx = s.x - px, sy = s.y - py; const invDet = 1 / (planeX * dirY - dirX * planeY);
+        s.tY = invDet * (-planeY * sx + planeX * sy); }
+      sprites.sort((a, b) => b.tY - a.tY);
+      for (const s of sprites) drawSprite(s);
+
+      // vignette (stronger in the dark)
+      const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.22, W / 2, H / 2, H * 0.72);
+      vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,' + (0.55 + darkness * 0.35) + ')');
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+
+      // danger: when a hunter is close and in view, the screen pulses red
+      if (nearHunter < 3.2) {
+        const pulse = (Math.sin(perfNow * 0.012) * 0.5 + 0.5) * (1 - nearHunter / 3.2);
+        ctx.fillStyle = 'rgba(150,8,8,' + (pulse * 0.4) + ')'; ctx.fillRect(0, 0, W, H);
+      }
+
+      // film grain (drifting) for a found-footage horror look
+      ctx.globalAlpha = 0.05 + darkness * 0.05;
+      const gx = -((Math.random() * 128) | 0), gy = -((Math.random() * 128) | 0);
+      for (let yy = gy; yy < H; yy += 128) for (let xx = gx; xx < W; xx += 128) ctx.drawImage(grainCanvas, xx, yy);
+      ctx.globalAlpha = 1;
+
+      drawHUD();
+      if (banner && banner.t > 0) drawBanner();
+    }
+
+    function drawSprite(s) {
+      const sx = s.x - px, sy = s.y - py;
+      const invDet = 1 / (planeX * dirY - dirX * planeY);
+      const tX = invDet * (dirY * sx - dirX * sy);
+      const tY = s.tY;
+      if (tY <= 0.10) return;
+      const screenX = (W / 2) * (1 + tX / tY);
+      const lineH = H / tY;
+      const spH = lineH * s.sh, spW = lineH * s.sw;
+      const bottomY = H / 2 + lineH / 2;
+      const topY = bottomY - spH + s.bob;
+      const startX = Math.floor(screenX - spW / 2), endX = Math.ceil(screenX + spW / 2);
+      const img = s.img;
+      if (s.bright !== undefined) ctx.globalAlpha = s.bright;
+      const xr = RW / W;   // map full-res screen column -> buffer zbuffer index
+      let runStart = -1;
+      for (let x = startX; x <= endX; x++) {
+        const vis = x >= 0 && x < W && (s.noOcc || tY < zbuf[(x * xr) | 0]) && x < endX;
+        if (vis && runStart < 0) runStart = x;
+        if ((!vis || x === endX) && runStart >= 0) {
+          const runEnd = vis ? x : x - 1;
+          const srcX = ((runStart - startX) / spW) * img.width;
+          const srcW = ((runEnd - runStart + 1) / spW) * img.width;
+          ctx.drawImage(img, srcX, 0, srcW, img.height, runStart, topY, runEnd - runStart + 1, spH);
+          runStart = -1;
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawHUD() {
+      const U = clamp(H / 560, 0.85, 2.4);   // scale the HUD to the screen size
+      // level readout (top-left, clear of the floating ‹ Games / ⛶ buttons)
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(12 * U, 52 * U, 138 * U, 36 * U);
+      ctx.font = '800 ' + (19 * U) + 'px Nunito, sans-serif';
+      ctx.fillStyle = '#e9dd6a'; ctx.fillText('LEVEL ' + level, 22 * U, 78 * U);
+    }
+
+    // Full-screen jumpscare: Captain Clark's face lunges at you with red flashes
+    // and a violent shake, then it cuts to the game-over panel.
+    function drawJumpscare() {
+      const prog = 1 - clamp(jumpT / JUMP_LEN, 0, 1);     // 0 -> 1 over the scare
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      // violent jitter that intensifies as he reaches you
+      const shake = (8 + prog * 30);
+      const ox = Math.sin(perfNow * 0.93) * shake + Math.sin(perfNow * 0.31) * shake * 0.6;
+      const oy = Math.cos(perfNow * 1.07) * shake + Math.cos(perfNow * 0.27) * shake * 0.6;
+      // face lunges from far to filling the screen; mouth tears open
+      const S = (H / 360) * (0.5 + prog * 1.25);
+      const open = clamp(prog * 1.3, 0, 1);
+      if (jumpFace === 1) drawBacteriaFace(ctx, W / 2 + ox, H / 2 + oy + H * 0.04, S, open, perfNow);
+      else drawClarkFace(ctx, W / 2 + ox, H / 2 + oy + H * 0.04, S, open, perfNow);
+      // red strobe + brief white static flashes
+      if (Math.sin(perfNow * 0.05) > 0) { ctx.fillStyle = 'rgba(150,0,0,0.32)'; ctx.fillRect(0, 0, W, H); }
+      if (prog > 0.25 && Math.sin(perfNow * 0.11) > 0.6) {
+        ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, W, H);
+      }
+    }
+
+    function drawBanner() {
+      const U = clamp(H / 560, 0.85, 2.4);
+      const a = Math.min(1, banner.t / 0.4);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, H / 2 - 54 * U, W, 108 * U);
+      ctx.textAlign = 'center';
+      ctx.font = '800 ' + (40 * U) + 'px Nunito, sans-serif'; ctx.fillStyle = '#e9dd6a';
+      ctx.fillText(banner.text, W / 2, H / 2 - 4 * U);
+      ctx.font = '700 ' + (18 * U) + 'px Nunito, sans-serif'; ctx.fillStyle = '#d7d3a6';
+      ctx.fillText(banner.sub, W / 2, H / 2 + 28 * U);
+      ctx.globalAlpha = 1;
+    }
+
+    // ---------- update ----------
+    let perfNow = 0;
+    function update(dt) {
+      if (banner && banner.t > 0) banner.t -= dt;
+
+      // ---- player input ----
+      let mv = 0, tn = 0;
+      if (keys.fwd) mv += 1; if (keys.back) mv -= 1;
+      if (keys.left) tn -= 1; if (keys.right) tn += 1;
+      if (joy.active) { mv += joy.mv; tn += joy.tn; }
+      mv = clamp(mv, -1, 1); tn = clamp(tn, -1, 1);
+
+      if (tn) { dir += tn * TURN_SPEED * dt; updateCamera(); }
+      if (mv) {
+        const nx = px + dirX * mv * MOVE_SPEED * dt;
+        const ny = py + dirY * mv * MOVE_SPEED * dt;
+        const r = tryMove(px, py, nx, ny, PLAYER_R); px = r[0]; py = r[1];
+      }
+
+      // ---- hunters: wander, then chase on sight; a catch = death ----
+      for (const e of entities) {
+        const dx = px - e.x, dy = py - e.y, d = Math.hypot(dx, dy);
+        const sees = d < 8 && hasLOS(e.x, e.y, px, py);
+        if (sees) { e.state = 'chase'; e.ang = Math.atan2(dy, dx); }
+        else {
+          e.wT -= dt;
+          if (e.state === 'chase' && d > 9) e.state = 'wander';
+          if (e.wT <= 0) { e.ang += rnd(-1.4, 1.4); e.wT = rnd(0.6, 1.8); }
+        }
+        const sp = (e.state === 'chase' ? e.speed : e.speed * 0.5);
+        const r = tryMove(e.x, e.y, e.x + Math.cos(e.ang) * sp * dt, e.y + Math.sin(e.ang) * sp * dt, 0.3);
+        if (r[0] === e.x && r[1] === e.y) { e.ang += rnd(1.5, 4.7); e.wT = 0.3; } // bumped a wall
+        e.x = r[0]; e.y = r[1];
+        if (d < CATCH_DIST) { caughtBy = e.type; return triggerJumpscare(); }
+      }
+
+      // ---- drop a trail marker (tap M / the Mark button), throttled ----
+      if (wantMark) {
+        wantMark = false;
+        if (!marks.length || Math.hypot(marks[marks.length - 1].x - px, marks[marks.length - 1].y - py) > 0.6) {
+          marks.push({ x: px, y: py });
+          if (marks.length > 60) marks.shift();
+        }
+      }
+
+      // ---- open a door -> go to its kind of level ----
+      for (const dr of doors) {
+        if (Math.hypot(dr.x - px, dr.y - py) < 0.65) return goToLevel(dr.theme);
+      }
+      // ---- step onto a slide -> whoosh down into the next (random) level ----
+      for (const sl of slides) {
+        if (Math.hypot(sl.x - px, sl.y - py) < 0.55) { startSlide(); return; }
+      }
+    }
+
+    function startSlide() {
+      state = 'slide'; slideT = 1.0;
+      keys.fwd = keys.back = keys.left = keys.right = false; joy.active = false;
+    }
+
+    let caughtBy = 'clark';
+    function triggerJumpscare() {
+      state = 'jumpscare';
+      jumpT = JUMP_LEN;
+      jumpFace = caughtBy === 'bacteria' ? 1 : 0;
+      stopMusic();
+      screech();
+      keys.fwd = keys.back = keys.left = keys.right = false;
+      joy.active = false;
+    }
+
+    function gameOver() {
+      state = 'over';
+      const reached = level;
+      if (reached > bestLevel) { bestLevel = reached; saveBest(bestLevel); }
+      document.getElementById('over-level').textContent = reached;
+      document.getElementById('over-best').textContent = bestLevel;
+      const who = caughtBy === 'bacteria' ? 'The Bacteria' : 'Captain Clark';
+      document.getElementById('over-title').textContent = who + ' got you';
+      document.getElementById('over-sub').textContent = 'Caught on level ' + reached + '.';
+      document.getElementById('over').hidden = false;
+    }
+
+    // Eerie ambient drone played while you explore — original synthesized pad:
+    // a low detuned hum + a dissonant tritone, slowly pulsing. Guarded.
+    function startMusic() {
+      try {
+        if (!audio) return;
+        stopMusic();
+        const out = audio.createGain(); out.gain.value = 0.0001; out.connect(audio.destination);
+        out.gain.linearRampToValueAtTime(0.16, audio.currentTime + 2.5);
+        const mk = function (type, freq, gain) {
+          const o = audio.createOscillator(); o.type = type; o.frequency.value = freq;
+          const g = audio.createGain(); g.gain.value = gain;
+          o.connect(g).connect(out); o.start(); return o;
+        };
+        const o1 = mk('sine', 55, 1);          // low hum
+        const o2 = mk('sine', 55.5, 0.8);      // detuned beating
+        const o3 = mk('triangle', 146.8, 0.07);
+        const o4 = mk('triangle', 207.6, 0.05); // tritone dissonance
+        // breathy room-tone: filtered looping noise
+        const nbuf = audio.createBuffer(1, audio.sampleRate * 2, audio.sampleRate);
+        const nd = nbuf.getChannelData(0);
+        for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+        const noise = audio.createBufferSource(); noise.buffer = nbuf; noise.loop = true;
+        const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
+        const ng = audio.createGain(); ng.gain.value = 0.05;
+        noise.connect(lp).connect(ng).connect(out); noise.start();
+        // slow tremolo so it breathes
+        const lfo = audio.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.09;
+        const lfoG = audio.createGain(); lfoG.gain.value = 0.06;
+        lfo.connect(lfoG).connect(out.gain); lfo.start();
+        music = { out: out, nodes: [o1, o2, o3, o4, lfo, noise], stingerT: 0 };
+        music.stingerT = setTimeout(stinger, 4500 + Math.random() * 4000);
+      } catch (e) { music = null; }
+    }
+    // distant dissonant groan that swells now and then
+    function stinger() {
+      try {
+        if (!music || !audio) return;
+        const t0 = audio.currentTime;
+        const o = audio.createOscillator(); o.type = 'sawtooth';
+        const f = 64 + Math.random() * 46; o.frequency.setValueAtTime(f, t0);
+        o.frequency.linearRampToValueAtTime(f * 0.6, t0 + 2.6);
+        const g = audio.createGain(); g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(0.07, t0 + 1.3); g.gain.linearRampToValueAtTime(0.0001, t0 + 2.7);
+        const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 300;
+        o.connect(g).connect(lp).connect(music.out); o.start(t0); o.stop(t0 + 2.8);
+        music.stingerT = setTimeout(stinger, 7000 + Math.random() * 9000);
+      } catch (e) {}
+    }
+    function stopMusic() {
+      try {
+        if (!music) return;
+        const m = music; music = null;
+        clearTimeout(m.stingerT);
+        m.out.gain.cancelScheduledValues(audio.currentTime);
+        m.out.gain.linearRampToValueAtTime(0.0001, audio.currentTime + 0.3);
+        m.nodes.forEach(function (n) { try { n.stop(audio.currentTime + 0.4); } catch (e) {} });
+      } catch (e) {}
+    }
+
+    // Jumpscare screech (dissonant noise + detuned tones). Guarded — silent if
+    // WebAudio is unavailable or the context never got a user-gesture resume.
+    function screech() {
+      try {
+        const ac = audio; if (!ac) return;
+        const t0 = ac.currentTime;
+        const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.7), ac.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.4);
+        const noise = ac.createBufferSource(); noise.buffer = buf;
+        const ng = ac.createGain(); ng.gain.value = 0.3;
+        noise.connect(ng).connect(ac.destination); noise.start(t0);
+        [98, 104, 207, 220].forEach(function (f) {
+          const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.85);
+          o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + 0.9);
+        });
+      } catch (e) {}
+    }
+
+    // ---------- loop ----------
+    let last = 0;
+    function frame(ts) {
+      requestAnimationFrame(frame);
+      perfNow = ts;
+      if (!last) last = ts;
+      let dt = (ts - last) / 1000; last = ts;
+      if (dt > 0.05) dt = 0.05;           // clamp big gaps (tab switch)
+      if (state === 'playing') { update(dt); render(); }
+      else if (state === 'jumpscare') {
+        jumpT -= dt; drawJumpscare();
+        if (jumpT <= 0) gameOver();
+      }
+      else if (state === 'slide') {
+        render(); drawSlide();
+        slideT -= dt;
+        if (slideT <= 0) { goToLevel(SLIDE_THEMES[(level + 1) % SLIDE_THEMES.length]); state = 'playing'; }
+      }
+      else if (state === 'over') { render(); }   // keep the frozen scene behind the panel
+    }
+    requestAnimationFrame(frame);
+
+    // brief "sliding down" transition: dark vignette closing in + downward streaks
+    const SLIDE_THEMES = ['yellow', 'pool', 'void', 'yellow', 'pool'];
+    function drawSlide() {
+      const p = 1 - clamp(slideT / 1.0, 0, 1);
+      ctx.fillStyle = 'rgba(0,0,0,' + (0.3 + p * 0.6) + ')'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(180,180,200,0.25)'; ctx.lineWidth = 2;
+      const off = (perfNow * 0.6) % 60;
+      for (let yy = -60 + off; yy < H; yy += 60) { ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy + 30); ctx.stroke(); }
+      ctx.textAlign = 'center'; ctx.fillStyle = '#cfcf6a';
+      ctx.font = '800 ' + (clamp(H / 560, 0.85, 2.4) * 30) + 'px Nunito, sans-serif';
+      ctx.fillText('sliding down…', W / 2, H / 2);
+    }
+
+    // ---------- input: keyboard ----------
+    const keys = { fwd: false, back: false, left: false, right: false };
+    let wantMark = false;
+    function setKey(e, down) {
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W': keys.fwd = down; break;
+        case 'ArrowDown': case 's': case 'S': keys.back = down; break;
+        case 'ArrowLeft': case 'a': case 'A': keys.left = down; break;
+        case 'ArrowRight': case 'd': case 'D': keys.right = down; break;
+        case 'm': case 'M': case 'e': case 'E': if (down) wantMark = true; break;
+        default: return;
+      }
+      e.preventDefault();
+    }
+    window.addEventListener('keydown', function (e) { if (state === 'playing') setKey(e, true); });
+    window.addEventListener('keyup', function (e) { setKey(e, false); });
+
+    // ---------- input: drag joystick (works for touch + mouse) ----------
+    const joy = { active: false, ox: 0, oy: 0, mv: 0, tn: 0 };
+    function joyStart(cx, cy) { joy.active = true; joy.ox = cx; joy.oy = cy; joy.mv = 0; joy.tn = 0; }
+    function joyMove(cx, cy) {
+      if (!joy.active) return;
+      const dx = cx - joy.ox, dy = cy - joy.oy;
+      joy.tn = clamp(dx / 55, -1, 1);
+      joy.mv = clamp(-dy / 55, -1, 1);
+    }
+    function joyEnd() { joy.active = false; joy.mv = 0; joy.tn = 0; }
+
+    canvas.addEventListener('touchstart', function (e) { if (state !== 'playing') return; const t = e.touches[0]; joyStart(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) { const t = e.touches[0]; joyMove(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchend', function (e) { joyEnd(); e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('mousedown', function (e) { if (state !== 'playing') return; joyStart(e.clientX, e.clientY); });
+    window.addEventListener('mousemove', function (e) { joyMove(e.clientX, e.clientY); });
+    window.addEventListener('mouseup', joyEnd);
+
+    // ---------- start / restart ----------
+    function startGame() {
+      // create / resume the audio context on this user gesture so the jumpscare
+      // screech can play later.
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        if (audio.state === 'suspended') audio.resume();
+      } catch (e) { audio = null; }
+      startMusic();
+      level = 1;
+      bestLevel = loadBest();
+      genLevel(level, 'yellow');
+      state = 'playing';
+      document.getElementById('setup').hidden = true;
+      document.getElementById('over').hidden = true;
+    }
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('again-btn').addEventListener('click', startGame);
+
+    // on-screen Mark button (drop a glowing X to track where you've been)
+    const markBtn = document.getElementById('mark-btn');
+    if (markBtn) markBtn.addEventListener('click', function () { if (state === 'playing') wantMark = true; });
+
+    // ---------- fullscreen (hides the launcher menu for full immersion) ----------
+    const stageEl = document.querySelector('.stage');
+    const fullBtn = document.getElementById('full-btn');
+    function inFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+    function toggleFullscreen() {
+      if (inFullscreen()) {
+        (document.exitFullscreen || document.webkitExitFullscreen || function () {}).call(document);
+      } else {
+        const el = document.documentElement;
+        (el.requestFullscreen || el.webkitRequestFullscreen || function () {}).call(el);
+      }
+    }
+    fullBtn.addEventListener('click', toggleFullscreen);
+    document.addEventListener('fullscreenchange', function () {
+      fullBtn.textContent = inFullscreen() ? '⛶ Exit' : '⛶ Fullscreen';
+      resize();
+    });
+
+    resize();              // size the canvas to the screen before the first frame
+    bestLevel = loadBest();
+  })();
+  </script>
+
+</body>
+</html>
