@@ -85,7 +85,7 @@
   </div>
 
   <p class="hint">
-    <b>Move:</b> A/D &amp; arrow keys, or drag. Catch <b>acorns &amp; treats</b>, dodge <b>bombs</b> 💣 &nbsp;·&nbsp; 3 lives. 2-player: highest score when someone runs out.
+    <b>Move:</b> A/D &amp; arrow keys, or drag. Catch <b>acorns &amp; treats</b>, dodge <b>bombs</b> 💣 &nbsp;·&nbsp; miss <b>15 treats</b> or eat 3 bombs and you're out. 2-player: last one standing (or higher score) wins.
   </p>
 
   <script>
@@ -116,8 +116,9 @@
 
     const TREATS = ['acorn', 'bone', 'apple', 'cherry'];
 
+    const MISS_LIMIT = 15;         // miss this many edible treats and you're out
     function makeCatcher(x, color, dark, keyL, keyR) {
-      return { x: x, w: 92, color: color, dark: dark, score: 0, lives: 3, keyL: false, keyR: false, hurt: 0, target: x };
+      return { x: x, w: 92, color: color, dark: dark, score: 0, lives: 3, misses: 0, keyL: false, keyR: false, hurt: 0, target: x };
     }
 
     function beginGame() {
@@ -132,21 +133,25 @@
       state = 'playing';
     }
 
-    function endGame() {
+    function endGame(loserIdx) {
       state = 'over';
       if (numPlayers === 1) {
-        const best = Math.max(loadBest(), catchers[0].score);
-        if (catchers[0].score >= loadBest()) saveBest(catchers[0].score);
+        const c = catchers[0];
+        const best = Math.max(loadBest(), c.score);
+        if (c.score >= loadBest()) saveBest(c.score);
         document.getElementById('over-title').textContent = 'Game Over';
-        document.getElementById('over-sub').textContent = catchers[0].score >= best && catchers[0].score > 0 ? 'New best! 🏆' : 'Out of lives!';
+        const reason = c.lives <= 0 ? 'Caught too many bombs! 💣' : 'Missed ' + MISS_LIMIT + ' treats!';
+        document.getElementById('over-sub').textContent = c.score >= best && c.score > 0 ? 'New best! 🏆' : reason;
         document.getElementById('over-l1').textContent = 'Score';
         document.getElementById('over-l2').textContent = 'Best';
-        document.getElementById('over-score').textContent = catchers[0].score;
+        document.getElementById('over-score').textContent = c.score;
         document.getElementById('over-best').textContent = best;
       } else {
         const n0 = playerName(0, 'Player 1'), n1 = playerName(1, 'Player 2');
         let title;
-        if (catchers[0].score === catchers[1].score) title = "It's a tie! 🤝";
+        // a knocked-out player loses outright; otherwise fall back to score
+        if (loserIdx === 0 || loserIdx === 1) title = playerName(1 - loserIdx, 'Player ' + (2 - loserIdx)) + ' wins! 🏆';
+        else if (catchers[0].score === catchers[1].score) title = "It's a tie! 🤝";
         else title = (catchers[0].score > catchers[1].score ? n0 : n1) + ' wins! 🏆';
         document.getElementById('over-title').textContent = title;
         document.getElementById('over-sub').textContent = 'Final score';
@@ -225,9 +230,9 @@
     document.getElementById('again-btn').addEventListener('click', showSelect);
 
     // ---------- update ----------
-    function difficulty() { return Math.min(elapsed / 60000, 1); }   // ramps over 60s
-    function fallSpeed() { return 2.4 + difficulty() * 4.2; }
-    function spawnGap() { return 760 - difficulty() * 420; }
+    function difficulty() { return Math.min(elapsed / 45000, 1); }   // ramps to full over 45s
+    function fallSpeed() { return 3.2 + difficulty() * 5.6; }        // 3.2 → 8.8 px/frame
+    function spawnGap() { return 620 - difficulty() * 400; }         // 620 → 220ms between drops
 
     function spawnItem() {
       const d = difficulty();
@@ -276,7 +281,7 @@
           if (it.kind === 'bomb') {
             c.lives--; c.hurt = 24;
             pops.push({ x: it.x, y: it.y, txt: '💥', color: '#ff7d9c', t: 0 });
-            if (c.lives <= 0) { items.splice(i, 1); endGame(); return; }
+            if (c.lives <= 0) { items.splice(i, 1); endGame(caught); return; }
           } else {
             const gain = it.kind === 'gold' ? 5 : 1;
             c.score += gain;
@@ -285,8 +290,18 @@
           items.splice(i, 1); continue;
         }
 
-        // hit ground — a missed treat is just no points; only bombs cost lives
-        if (it.y - it.r > H) { items.splice(i, 1); continue; }
+        // hit ground — missing an edible treat counts against you; bombs are safe to drop
+        if (it.y - it.r > H) {
+          items.splice(i, 1);
+          if (it.kind !== 'bomb') {
+            const idx = numPlayers === 1 ? 0 : (Math.abs(it.x - catchers[0].x) <= Math.abs(it.x - catchers[1].x) ? 0 : 1);
+            const c = catchers[idx];
+            c.misses++; c.hurt = 10;
+            pops.push({ x: it.x, y: GROUND - 10, txt: '✗ ' + c.misses + '/' + MISS_LIMIT, color: '#ff7d9c', t: 0 });
+            if (c.misses >= MISS_LIMIT) { endGame(idx); return; }
+          }
+          continue;
+        }
       }
     }
 
@@ -370,16 +385,24 @@
       if (numPlayers === 1) {
         ctx.fillStyle = '#fff'; ctx.font = "800 34px 'Nunito', sans-serif";
         ctx.strokeText(String(catchers[0].score), 20, 46); ctx.fillText(String(catchers[0].score), 20, 46);
-        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 16px 'Nunito', sans-serif"; ctx.textAlign = 'right';
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 16px 'Nunito', sans-serif";
         ctx.fillText('Best ' + loadBest(), W - 20, 30);
         drawHearts(catchers[0], W - 20, 56, 'right');
+        const m = catchers[0].misses;
+        ctx.fillStyle = m >= MISS_LIMIT - 3 ? '#e94560' : '#cfd6ea'; ctx.font = "800 16px 'Nunito', sans-serif";
+        ctx.fillText('Missed ' + m + '/' + MISS_LIMIT, W - 20, 80);
       } else {
         ctx.font = "800 24px 'Nunito', sans-serif"; ctx.textAlign = 'left'; ctx.fillStyle = '#ffce8a';
         ctx.strokeText('P1  ' + catchers[0].score, 18, 34); ctx.fillText('P1  ' + catchers[0].score, 18, 34);
         drawHearts(catchers[0], 18, 58, 'left');
+        ctx.fillStyle = catchers[0].misses >= MISS_LIMIT - 3 ? '#e94560' : '#9fb0d8'; ctx.font = "800 14px 'Nunito', sans-serif";
+        ctx.fillText('miss ' + catchers[0].misses + '/' + MISS_LIMIT, 18, 78);
         ctx.textAlign = 'right'; ctx.fillStyle = '#aebde8';
         ctx.strokeText(catchers[1].score + '  P2', W - 18, 34); ctx.fillText(catchers[1].score + '  P2', W - 18, 34);
         drawHearts(catchers[1], W - 18, 58, 'right');
+        ctx.fillStyle = catchers[1].misses >= MISS_LIMIT - 3 ? '#e94560' : '#9fb0d8'; ctx.font = "800 14px 'Nunito', sans-serif";
+        ctx.fillText('miss ' + catchers[1].misses + '/' + MISS_LIMIT, W - 18, 78);
       }
       ctx.textAlign = 'left';
     }
