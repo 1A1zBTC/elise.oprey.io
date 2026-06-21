@@ -403,7 +403,7 @@
     let playFrames = 0;  // play-time accumulator (real-time, drives the ramp & mechanics)
     let dtf = 1;         // frame delta ÷ (1000/60): 1.0 @60fps — scales all motion for uniform speed
     let lastTs = 0;
-    const PACE = 1.15;   // global pace multiplier — a touch faster (uniform across devices)
+    const PACE = 1.45;   // global pace multiplier — faster world scroll (uniform across devices)
 
     function applyDifficulty() {
       // ease-in (t²) so the early game stays easy longer before ramping up.

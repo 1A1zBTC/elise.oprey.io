@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bunny Dig</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 16px; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    .topbar { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+    .stage {
+      position: relative; width: 100%; max-width: 480px; border-radius: 20px; overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 560 / 620;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hint { margin-top: 12px; color: #a0a8c0; font-size: 0.82rem; text-align: center; max-width: 480px; line-height: 1.5; }
+    .hint b { color: #ffe8b0; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+    .overlay[hidden] { display: none; }
+    .panel { width: 100%; max-width: 380px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.4; }
+    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
+    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
+    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Bunny Dig</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="560" height="620"></canvas>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Bunny Dig</h2>
+        <div class="sub">Swap veggies to line up 3 or more and feed the bunny! 🐰<br>You have <b>25 moves</b> — score as high as you can.</div>
+        <button class="start-btn" id="start-btn">Start Game</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">Out of Moves!</h2>
+        <div class="sub" id="over-sub">The bunny is full! 🐰</div>
+        <div class="scoreline"><span class="lbl">Score</span><span class="big" id="over-score">0</span></div>
+        <div class="scoreline"><span class="lbl">Best</span><span class="big" id="over-best">0</span></div>
+        <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>Tap two neighbours</b> (or drag) to swap. Make rows/columns of <b>3+</b> matching veggies. Chain cascades for big <b>combo</b> bonuses!
+  </p>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;   // 560 x 620
+
+    const N = 7;                    // grid size
+    const TYPES = 5;
+    const HUD_H = 92;
+    const TILE = Math.floor(Math.min((W - 24) / N, (H - HUD_H - 24) / N));
+    const BX = Math.floor((W - TILE * N) / 2);
+    const BY = HUD_H + Math.floor((H - HUD_H - TILE * N) / 2);
+    const START_MOVES = 25;
+
+    const BEST_KEY = 'bunnydig.best';
+    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
+    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+
+    function ri(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+
+    // veggie palette
+    const VEG = [
+      { name: 'carrot', body: '#ff8a3c', dark: '#e06b1c', leaf: '#46c46a' },
+      { name: 'cabbage', body: '#8fd16a', dark: '#5fae3a', leaf: '#3f8a2a' },
+      { name: 'tomato', body: '#e94560', dark: '#b32742', leaf: '#46c46a' },
+      { name: 'corn', body: '#ffd23f', dark: '#d9a91a', leaf: '#7ec850' },
+      { name: 'eggplant', body: '#9b6bd8', dark: '#6f47a8', leaf: '#5fae3a' }
+    ];
+
+    let grid = [];                 // grid[r][c] = tile | null;  tile: {type, px, py, scale, clearing}
+    let state = 'select';          // 'select' | 'play' | 'over'
+    let score = 0, moves = START_MOVES, combo = 0;
+    let busy = false;
+    let sel = null;                // {r,c} first selection
+    let waitFor = null;            // 'move' | 'clear'
+    let onDone = null;
+    let pops = [];
+    let lastTs = 0, dtMs = 16.7, dtf = 1;
+
+    const setupEl = document.getElementById('setup');
+    const overEl = document.getElementById('over');
+
+    function cellX(c) { return BX + c * TILE; }
+    function cellY(r) { return BY + r * TILE; }
+
+    function newTile(type, r, c, py) { return { type: type, px: cellX(c), py: py == null ? cellY(r) : py, scale: 1, clearing: false }; }
+
+    function makeGrid() {
+      grid = [];
+      for (let r = 0; r < N; r++) {
+        grid[r] = [];
+        for (let c = 0; c < N; c++) {
+          let t;
+          do { t = ri(0, TYPES - 1); }
+          while ((c >= 2 && grid[r][c - 1].type === t && grid[r][c - 2].type === t) ||
+                 (r >= 2 && grid[r - 1][c].type === t && grid[r - 2][c].type === t));
+          grid[r][c] = newTile(t, r, c);
+        }
+      }
+    }
+
+    function beginGame() {
+      makeGrid();
+      score = 0; moves = START_MOVES; combo = 0; busy = false; sel = null; waitFor = null; onDone = null; pops = [];
+      setupEl.hidden = true; overEl.hidden = true;
+      state = 'play';
+    }
+    function endGame() {
+      state = 'over';
+      const best = Math.max(loadBest(), score);
+      if (score >= loadBest()) saveBest(score);
+      document.getElementById('over-title').textContent = score >= best && score > 0 ? 'New Best! 🏆' : 'Out of Moves!';
+      document.getElementById('over-sub').textContent = 'The bunny is full! 🐰';
+      document.getElementById('over-score').textContent = score;
+      document.getElementById('over-best').textContent = best;
+      overEl.hidden = false;
+    }
+
+    // ---------- match logic ----------
+    function findMatches() {
+      const marked = [];
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) marked.push(false);
+      const idx = (r, c) => r * N + c;
+      // horizontal
+      for (let r = 0; r < N; r++) {
+        let run = 1;
+        for (let c = 1; c <= N; c++) {
+          const same = c < N && grid[r][c] && grid[r][c - 1] && grid[r][c].type === grid[r][c - 1].type;
+          if (same) run++;
+          else { if (run >= 3) for (let k = c - run; k < c; k++) marked[idx(r, k)] = true; run = 1; }
+        }
+      }
+      // vertical
+      for (let c = 0; c < N; c++) {
+        let run = 1;
+        for (let r = 1; r <= N; r++) {
+          const same = r < N && grid[r][c] && grid[r - 1][c] && grid[r][c].type === grid[r - 1][c].type;
+          if (same) run++;
+          else { if (run >= 3) for (let k = r - run; k < r; k++) marked[idx(k, c)] = true; run = 1; }
+        }
+      }
+      const cells = [];
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (marked[idx(r, c)]) cells.push({ r: r, c: c });
+      return cells;
+    }
+
+    function startMoveAnim(cb) { waitFor = 'move'; onDone = cb; }
+    function startClearAnim(cb) { waitFor = 'clear'; onDone = cb; }
+
+    function doSwap(r1, c1, r2, c2) {
+      const a = grid[r1][c1], b = grid[r2][c2];
+      grid[r1][c1] = b; grid[r2][c2] = a;
+    }
+
+    function trySwap(r1, c1, r2, c2) {
+      if (busy) return;
+      busy = true;
+      doSwap(r1, c1, r2, c2);
+      // animate to new targets
+      startMoveAnim(function () {
+        const m = findMatches();
+        if (m.length) { moves--; combo = 0; resolve(); }
+        else {
+          // swap back
+          doSwap(r1, c1, r2, c2);
+          startMoveAnim(function () { busy = false; });
+        }
+      });
+    }
+
+    function resolve() {
+      const m = findMatches();
+      if (!m.length) {
+        busy = false;
+        if (moves <= 0) endGame();
+        return;
+      }
+      combo++;
+      const gain = m.length * 10 * combo;
+      score += gain;
+      // popup at the matched cells' centroid
+      let sx = 0, sy = 0;
+      for (const cell of m) { grid[cell.r][cell.c].clearing = true; sx += cellX(cell.c) + TILE / 2; sy += cellY(cell.r) + TILE / 2; }
+      pops.push({ x: sx / m.length, y: sy / m.length, txt: '+' + gain + (combo > 1 ? ' x' + combo : ''), color: combo > 1 ? '#ffd23f' : '#7ed37e', t: 0 });
+      startClearAnim(function () {
+        // remove cleared, collapse columns, spawn new at top
+        for (let c = 0; c < N; c++) {
+          let writeR = N - 1;
+          for (let r = N - 1; r >= 0; r--) {
+            const t = grid[r][c];
+            if (t && !t.clearing) { grid[writeR][c] = t; if (writeR !== r) grid[r][c] = null; writeR--; }
+            else grid[r][c] = null;
+          }
+          // fill remaining from top with new tiles dropping in from above
+          let spawnY = cellY(0) - TILE;
+          for (let r = writeR; r >= 0; r--) {
+            const t = newTile(ri(0, TYPES - 1), r, c, spawnY);
+            spawnY -= TILE;
+            grid[r][c] = t;
+          }
+        }
+        startMoveAnim(function () { resolve(); });   // cascade
+      });
+    }
+
+    // ---------- update / animation ----------
+    function update() {
+      for (let i = pops.length - 1; i >= 0; i--) { pops[i].t += dtf; pops[i].y -= 0.7 * dtf; if (pops[i].t > 50) pops.splice(i, 1); }
+
+      // move tiles toward their grid target
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const t = grid[r][c]; if (!t) continue;
+        const tx = cellX(c), ty = cellY(r);
+        t.px += (tx - t.px) * Math.min(1, 0.34 * dtf);
+        t.py += (ty - t.py) * Math.min(1, 0.34 * dtf);
+        if (Math.abs(t.px - tx) < 0.5) t.px = tx;
+        if (Math.abs(t.py - ty) < 0.5) t.py = ty;
+        if (t.clearing) t.scale -= 0.10 * dtf;
+      }
+
+      if (waitFor === 'move') {
+        let settled = true;
+        for (let r = 0; r < N && settled; r++) for (let c = 0; c < N; c++) {
+          const t = grid[r][c]; if (!t) continue;
+          if (t.px !== cellX(c) || t.py !== cellY(r)) { settled = false; break; }
+        }
+        if (settled) { const cb = onDone; waitFor = null; onDone = null; if (cb) cb(); }
+      } else if (waitFor === 'clear') {
+        let allGone = true;
+        for (let r = 0; r < N && allGone; r++) for (let c = 0; c < N; c++) {
+          const t = grid[r][c]; if (t && t.clearing && t.scale > 0) { allGone = false; break; }
+        }
+        if (allGone) { const cb = onDone; waitFor = null; onDone = null; if (cb) cb(); }
+      }
+    }
+
+    // ---------- input ----------
+    function cellAt(px, py) {
+      const c = Math.floor((px - BX) / TILE), r = Math.floor((py - BY) / TILE);
+      if (r < 0 || r >= N || c < 0 || c >= N) return null;
+      return { r: r, c: c };
+    }
+    function canvasPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : ((e.touches && e.touches[0]) ? e.touches[0] : e);
+      return { x: (t.clientX - rect.left) / rect.width * W, y: (t.clientY - rect.top) / rect.height * H };
+    }
+    function adjacent(a, b) { return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1; }
+
+    let dragStart = null;
+    function onDown(e) {
+      if (state !== 'play' || busy) return;
+      if (e.cancelable) e.preventDefault();
+      const p = canvasPos(e); const cell = cellAt(p.x, p.y);
+      if (!cell) return;
+      dragStart = cell;
+      if (sel && adjacent(sel, cell)) { const s = sel; sel = null; trySwap(s.r, s.c, cell.r, cell.c); }
+      else sel = cell;
+    }
+    function onMove(e) {
+      if (state !== 'play' || busy || !dragStart) return;
+      if (e.cancelable) e.preventDefault();
+      const p = canvasPos(e); const cell = cellAt(p.x, p.y);
+      if (cell && adjacent(dragStart, cell)) { const s = dragStart; dragStart = null; sel = null; trySwap(s.r, s.c, cell.r, cell.c); }
+    }
+    function onUp() { dragStart = null; }
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    canvas.addEventListener('touchstart', onDown, { passive: false });
+    canvas.addEventListener('touchmove', onMove, { passive: false });
+    canvas.addEventListener('touchend', onUp, { passive: false });
+    window.addEventListener('keydown', function (e) {
+      if (e.code === 'Space' || e.code === 'Enter') {
+        if (state === 'select') { e.preventDefault(); beginGame(); }
+        else if (state === 'over') { e.preventDefault(); state = 'select'; overEl.hidden = true; setupEl.hidden = false; }
+      }
+    });
+    document.getElementById('start-btn').addEventListener('click', beginGame);
+    document.getElementById('again-btn').addEventListener('click', function () { state = 'select'; overEl.hidden = true; setupEl.hidden = false; });
+
+    // ---------- drawing ----------
+    function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+    function drawVeg(t) {
+      const v = VEG[t.type];
+      const cx = t.px + TILE / 2, cy = t.py + TILE / 2;
+      const s = t.scale, R = TILE * 0.34 * s;
+      if (s <= 0) return;
+      // soft tile background
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      roundRect(t.px + 4, t.py + 4, TILE - 8, TILE - 8, 12); ctx.fill();
+      ctx.save(); ctx.translate(cx, cy); ctx.scale(s, s);
+      const r = TILE * 0.34;
+      if (v.name === 'carrot') {
+        ctx.fillStyle = v.leaf;
+        for (const a of [-0.5, 0, 0.5]) { ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.ellipse(0, -r - 4, 4, 12, 0, 0, 6.28); ctx.fill(); ctx.restore(); }
+        ctx.fillStyle = v.body; ctx.beginPath(); ctx.moveTo(-r * 0.7, -r * 0.4); ctx.lineTo(r * 0.7, -r * 0.4); ctx.lineTo(0, r); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = v.dark; ctx.lineWidth = 2; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 7, -r * 0.3 + Math.abs(i) * 4); ctx.lineTo(i * 4, r * 0.3); ctx.stroke(); }
+      } else if (v.name === 'cabbage') {
+        ctx.fillStyle = v.dark; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.28); ctx.fill();
+        ctx.fillStyle = v.body; ctx.beginPath(); ctx.arc(0, 2, r * 0.78, 0, 6.28); ctx.fill();
+        ctx.strokeStyle = v.dark; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 2, r * 0.5, 0, 6.28); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -r * 0.5); ctx.lineTo(0, r * 0.5); ctx.moveTo(-r * 0.5, 2); ctx.lineTo(r * 0.5, 2); ctx.stroke();
+      } else if (v.name === 'tomato') {
+        ctx.fillStyle = v.body; ctx.beginPath(); ctx.arc(0, 2, r, 0, 6.28); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.ellipse(-r * 0.3, -r * 0.3, r * 0.25, r * 0.18, -0.6, 0, 6.28); ctx.fill();
+        ctx.fillStyle = v.leaf; for (const a of [0, 1.05, 2.1, -1.05, -2.1]) { ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.ellipse(0, -r + 2, 3, 7, 0, 0, 6.28); ctx.fill(); ctx.restore(); }
+      } else if (v.name === 'corn') {
+        ctx.fillStyle = v.leaf; ctx.beginPath(); ctx.ellipse(-r * 0.5, 0, r * 0.5, r, 0.3, 0, 6.28); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(r * 0.5, 0, r * 0.5, r, -0.3, 0, 6.28); ctx.fill();
+        ctx.fillStyle = v.body; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.55, r, 0, 0, 6.28); ctx.fill();
+        ctx.fillStyle = v.dark; for (let yy = -3; yy <= 3; yy++) for (let xx = -1; xx <= 1; xx++) { ctx.beginPath(); ctx.arc(xx * 6, yy * 6, 2, 0, 6.28); ctx.fill(); }
+      } else { // eggplant
+        ctx.fillStyle = v.body; ctx.beginPath(); ctx.ellipse(0, r * 0.2, r * 0.7, r, 0, 0, 6.28); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.ellipse(-r * 0.25, 0, r * 0.18, r * 0.4, -0.3, 0, 6.28); ctx.fill();
+        ctx.fillStyle = v.leaf; ctx.beginPath(); ctx.arc(0, -r * 0.7, r * 0.4, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#3f8a2a'; ctx.fillRect(-2, -r - 4, 4, 8);
+      }
+      ctx.restore();
+
+      // selection highlight
+      if (sel && grid[sel.r] && grid[sel.r][sel.c] === t) {
+        ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 4;
+        roundRect(t.px + 4, t.py + 4, TILE - 8, TILE - 8, 12); ctx.stroke();
+      }
+    }
+
+    function drawBunny(x, y, s) {
+      ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+      // ears
+      ctx.fillStyle = '#f4f0ea'; ctx.beginPath(); ctx.ellipse(-9, -26, 6, 18, -0.2, 0, 6.28); ctx.fill(); ctx.beginPath(); ctx.ellipse(9, -26, 6, 18, 0.2, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#ffc2d1'; ctx.beginPath(); ctx.ellipse(-9, -26, 2.5, 12, -0.2, 0, 6.28); ctx.fill(); ctx.beginPath(); ctx.ellipse(9, -26, 2.5, 12, 0.2, 0, 6.28); ctx.fill();
+      // head
+      ctx.fillStyle = '#f4f0ea'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, 6.28); ctx.fill();
+      // eyes
+      ctx.fillStyle = '#15151b'; ctx.beginPath(); ctx.arc(-6, -2, 3, 0, 6.28); ctx.arc(6, -2, 3, 0, 6.28); ctx.fill();
+      // nose + cheeks
+      ctx.fillStyle = '#ff9bb0'; ctx.beginPath(); ctx.moveTo(-3, 4); ctx.lineTo(3, 4); ctx.lineTo(0, 7); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(-10, 4, 3, 0, 6.28); ctx.arc(10, 4, 3, 0, 6.28); ctx.fill();
+      // teeth
+      ctx.fillStyle = '#fff'; ctx.fillRect(-3, 8, 2.6, 5); ctx.fillRect(0.4, 8, 2.6, 5);
+      ctx.restore();
+    }
+
+    function drawHUD() {
+      // bunny mascot + score on left, moves on right
+      drawBunny(40, 46, 1.05);
+      ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = "800 30px 'Nunito', sans-serif";
+      ctx.fillText(String(score), 72, 40);
+      ctx.fillStyle = '#a0a8c0'; ctx.font = "800 13px 'Nunito', sans-serif";
+      ctx.fillText('Best ' + loadBest(), 72, 60);
+      // moves
+      ctx.textAlign = 'right';
+      ctx.fillStyle = moves <= 5 ? '#e94560' : '#ffe8b0'; ctx.font = "800 30px 'Nunito', sans-serif";
+      ctx.fillText(String(moves), W - 24, 40);
+      ctx.fillStyle = '#a0a8c0'; ctx.font = "800 12px 'Nunito', sans-serif";
+      ctx.fillText('MOVES LEFT', W - 24, 60);
+      ctx.textAlign = 'left';
+    }
+
+    function draw() {
+      // garden soil backdrop
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#23304f'); g.addColorStop(1, '#1a2440');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      // board frame
+      ctx.fillStyle = 'rgba(15,52,96,0.5)';
+      roundRect(BX - 8, BY - 8, TILE * N + 16, TILE * N + 16, 16); ctx.fill();
+      ctx.strokeStyle = '#0f3460'; ctx.lineWidth = 2;
+      roundRect(BX - 8, BY - 8, TILE * N + 16, TILE * N + 16, 16); ctx.stroke();
+
+      // clip tiles to the board so spawning tiles slide in from above hidden
+      ctx.save();
+      roundRect(BX - 6, BY - 2, TILE * N + 12, TILE * N + 8, 12); ctx.clip();
+      for (let r = 0; r < N; r++) { const row = grid[r]; if (!row) continue; for (let c = 0; c < N; c++) { const t = row[c]; if (t) drawVeg(t); } }
+      ctx.restore();
+
+      ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif";
+      for (const p of pops) { ctx.globalAlpha = Math.max(0, 1 - p.t / 50); ctx.fillStyle = p.color; ctx.fillText(p.txt, p.x, p.y); }
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+
+      if (state !== 'select') drawHUD();
+    }
+
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      dtMs = Math.min(Math.max(ts - lastTs, 1), 100);
+      dtf = dtMs / 16.6667; lastTs = ts;
+      if (state !== 'select') update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    makeGrid();                 // populate the board so it shows behind the start overlay
+    requestAnimationFrame(loop);
+  })();
+  </script>
+
+  <script>
+    if (window.self !== window.top) { var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden'; }
+  </script>
+</body>
+</html>

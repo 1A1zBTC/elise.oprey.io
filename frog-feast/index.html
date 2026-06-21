@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Frog Feast</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 16px; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+    .stage {
+      position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hint { margin-top: 12px; color: #a0a8c0; font-size: 0.82rem; text-align: center; max-width: 560px; line-height: 1.5; }
+    .hint b { color: #ffe8b0; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+    .overlay[hidden] { display: none; }
+    .panel { width: 100%; max-width: 380px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.4; }
+    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
+    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
+    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Frog Feast</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Frog Feast</h2>
+        <div class="sub">Flick your tongue at the bugs to gobble them up! 🐸<br>Snag flies &amp; beetles — but never zap a bee. 🐝</div>
+        <button class="start-btn" id="start-btn">Start Game</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">Game Over</h2>
+        <div class="sub" id="over-sub">You zapped a bee!</div>
+        <div class="scoreline"><span class="lbl">Bugs eaten</span><span class="big" id="over-score">0</span></div>
+        <div class="scoreline"><span class="lbl">Best</span><span class="big" id="over-best">0</span></div>
+        <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>Tap / click</b> anywhere to flick the tongue toward it. Eat <b>flies &amp; beetles</b>, grab <b>golden fireflies</b> for bonus — but a <b>bee 🐝 ends the feast!</b>
+  </p>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;   // 760 x 560
+
+    const BEST_KEY = 'frogfeast.best';
+    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
+    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+    let state = 'select';          // 'select' | 'playing' | 'over'
+    let score = 0, combo = 0, comboTimer = 0;
+    let bugs = [];                 // {x,y,vx,vy,kind,wing,r,wobble,phase}
+    let elapsed = 0, spawnTimer = 0;
+    let pops = [];
+    let lastTs = 0, dtMs = 16.7, dtf = 1;
+
+    // frog + tongue
+    const frog = { x: W / 2, y: H - 40, mouthY: H - 78 };
+    let tongue = null;             // {tx,ty, len, max, phase:'out'/'in', got, ang}
+
+    const setupEl = document.getElementById('setup');
+    const overEl = document.getElementById('over');
+
+    function beginGame() {
+      score = 0; combo = 0; comboTimer = 0; bugs = []; pops = []; elapsed = 0; spawnTimer = 0; tongue = null;
+      setupEl.hidden = true; overEl.hidden = true;
+      state = 'playing';
+    }
+    function endGame(reason) {
+      state = 'over';
+      const best = Math.max(loadBest(), score);
+      if (score >= loadBest()) saveBest(score);
+      document.getElementById('over-title').textContent = score >= best && score > 0 ? 'New Best! 🏆' : 'Game Over';
+      document.getElementById('over-sub').textContent = reason;
+      document.getElementById('over-score').textContent = score;
+      document.getElementById('over-best').textContent = best;
+      overEl.hidden = false;
+    }
+
+    // ---------- input ----------
+    function canvasPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : ((e.touches && e.touches[0]) ? e.touches[0] : e);
+      return { x: (t.clientX - rect.left) / rect.width * W, y: (t.clientY - rect.top) / rect.height * H };
+    }
+    function fireTongue(px, py) {
+      if (state !== 'playing' || tongue) return;
+      const dx = px - frog.x, dy = py - frog.mouthY;
+      const dist = Math.min(Math.hypot(dx, dy), 560);
+      const ang = Math.atan2(dy, dx);
+      tongue = { ang: ang, len: 0, max: Math.max(60, dist), phase: 'out', got: null };
+    }
+    function onDown(e) {
+      if (e.cancelable) e.preventDefault();
+      if (state === 'select') { beginGame(); return; }
+      if (state === 'over') { return; }
+      const p = canvasPos(e);
+      fireTongue(p.x, p.y);
+    }
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('touchstart', onDown, { passive: false });
+    window.addEventListener('keydown', function (e) {
+      if (e.code === 'Space' || e.code === 'Enter') {
+        if (state === 'select') { e.preventDefault(); beginGame(); }
+        else if (state === 'over') { e.preventDefault(); state = 'select'; overEl.hidden = true; setupEl.hidden = false; }
+      }
+    });
+    document.getElementById('start-btn').addEventListener('click', beginGame);
+    document.getElementById('again-btn').addEventListener('click', function () { state = 'select'; overEl.hidden = true; setupEl.hidden = false; });
+
+    // ---------- update ----------
+    function difficulty() { return Math.min(elapsed / 70000, 1); }
+    function spawnGap() { return 900 - difficulty() * 520; }
+
+    function spawnBug() {
+      const d = difficulty();
+      const r = Math.random();
+      let kind;
+      if (r < 0.16 + d * 0.14) kind = 'bee';
+      else if (r < 0.30) kind = 'firefly';
+      else if (r < 0.62) kind = 'beetle';
+      else kind = 'fly';
+      const fromLeft = Math.random() < 0.5;
+      const speed = (1.4 + d * 2.4) * (kind === 'fly' ? 1.25 : kind === 'bee' ? 1.4 : 1);
+      const y = rnd(70, H - 200);
+      bugs.push({
+        x: fromLeft ? -30 : W + 30, y: y, baseY: y,
+        vx: (fromLeft ? 1 : -1) * speed * rnd(0.85, 1.2),
+        kind: kind, r: kind === 'beetle' ? 16 : 13, wing: 0,
+        amp: rnd(10, 34), wob: rnd(0.02, 0.05), phase: rnd(0, 6.28)
+      });
+    }
+
+    function update() {
+      for (let i = pops.length - 1; i >= 0; i--) { pops[i].t += dtf; pops[i].y -= 0.7 * dtf; if (pops[i].t > 45) pops.splice(i, 1); }
+      if (state !== 'playing') return;
+      elapsed += dtMs;
+      if (comboTimer > 0) { comboTimer -= dtMs; if (comboTimer <= 0) combo = 0; }
+
+      // bugs fly across with a sine wobble
+      for (let i = bugs.length - 1; i >= 0; i--) {
+        const b = bugs[i];
+        b.x += b.vx * dtf; b.phase += b.wob * dtf; b.wing += 0.4 * dtf;
+        b.y = b.baseY + Math.sin(b.phase) * b.amp;
+        if (b.x < -50 || b.x > W + 50) bugs.splice(i, 1);
+      }
+
+      // spawn
+      spawnTimer -= dtMs;
+      if (spawnTimer <= 0) { spawnTimer = spawnGap() * rnd(0.6, 1.1); spawnBug(); if (Math.random() < 0.25 + difficulty() * 0.2) spawnBug(); }
+
+      // tongue
+      if (tongue) {
+        const tip = tongueTip();
+        if (tongue.phase === 'out') {
+          tongue.len += 34 * dtf;
+          // check hit if not already grabbing
+          if (!tongue.got) {
+            for (let i = bugs.length - 1; i >= 0; i--) {
+              const b = bugs[i];
+              if (Math.hypot(b.x - tip.x, b.y - tip.y) < b.r + 12) {
+                if (b.kind === 'bee') { endGame('You zapped a bee! 🐝'); tongue = null; return; }
+                tongue.got = b; bugs.splice(i, 1); tongue.phase = 'in';
+                break;
+              }
+            }
+          }
+          if (tongue.len >= tongue.max) tongue.phase = 'in';
+        } else {
+          tongue.len -= 40 * dtf;
+          if (tongue.len <= 0) {
+            if (tongue.got) {
+              const b = tongue.got;
+              combo = Math.min(combo + 1, 9); comboTimer = 1600;
+              const base = b.kind === 'firefly' ? 5 : (b.kind === 'beetle' ? 2 : 1);
+              const gain = base * Math.max(1, combo);
+              score += gain;
+              pops.push({ x: frog.x, y: frog.mouthY - 20, txt: '+' + gain + (combo > 1 ? ' x' + combo : ''), color: b.kind === 'firefly' ? '#ffd23f' : '#7ed37e', t: 0 });
+            }
+            tongue = null;
+          }
+        }
+      }
+    }
+
+    function tongueTip() { return { x: frog.x + Math.cos(tongue.ang) * tongue.len, y: frog.mouthY + Math.sin(tongue.ang) * tongue.len }; }
+
+    // ---------- drawing ----------
+    function drawBug(b) {
+      ctx.save(); ctx.translate(b.x, b.y);
+      const flap = Math.sin(b.wing) * 0.5 + 0.5;
+      if (b.kind === 'bee') {
+        // wings
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath(); ctx.ellipse(-4, -10 - flap * 3, 7, 4, -0.5, 0, 6.28); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(4, -10 - flap * 3, 7, 4, 0.5, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#f4c534'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 10, 0, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#2b2b33'; ctx.fillRect(-9, -8, 4, 16); ctx.fillRect(-1, -10, 4, 20); ctx.fillRect(7, -8, 4, 16);
+        ctx.fillStyle = '#15151b'; ctx.beginPath(); ctx.arc(11, -2, 3, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#e94560'; ctx.font = "800 9px 'Nunito'"; ctx.textAlign = 'center'; ctx.fillText('!', 0, -16);
+      } else if (b.kind === 'firefly') {
+        ctx.fillStyle = 'rgba(255,210,63,0.35)'; ctx.beginPath(); ctx.arc(0, 0, 18, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#f4c534'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 7, 0, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#fff0b8'; ctx.beginPath(); ctx.arc(0, 3, 4, 0, 6.28); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.beginPath(); ctx.ellipse(-5, -7 - flap * 2, 6, 3, -0.5, 0, 6.28); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(5, -7 - flap * 2, 6, 3, 0.5, 0, 6.28); ctx.fill();
+      } else if (b.kind === 'beetle') {
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath(); ctx.ellipse(-6, -8 - flap * 3, 8, 4, -0.6, 0, 6.28); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(6, -8 - flap * 3, 8, 4, 0.6, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#e94560'; ctx.beginPath(); ctx.ellipse(0, 0, 15, 13, 0, 0, 6.28); ctx.fill();
+        ctx.strokeStyle = '#7a1226'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(0, 13); ctx.stroke();
+        ctx.fillStyle = '#15151b'; ctx.beginPath(); ctx.arc(0, -2, 5, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#2b2b33'; ctx.beginPath(); ctx.arc(0, -13, 5, 0, 6.28); ctx.fill();
+      } else { // fly
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.ellipse(-5, -6 - flap * 3, 7, 3, -0.6, 0, 6.28); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(5, -6 - flap * 3, 7, 3, 0.6, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#444a55'; ctx.beginPath(); ctx.ellipse(0, 0, 11, 9, 0, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#6a7280'; ctx.beginPath(); ctx.arc(0, -7, 5, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#e94560'; ctx.beginPath(); ctx.arc(-2, -8, 2, 0, 6.28); ctx.arc(2, -8, 2, 0, 6.28); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawFrog() {
+      const x = frog.x, y = frog.y;
+      // body
+      ctx.fillStyle = '#5fae3a';
+      ctx.beginPath(); ctx.ellipse(x, y + 20, 70, 46, 0, Math.PI, 0); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x, y, 60, 40, 0, 0, Math.PI * 2); ctx.fill();
+      // belly
+      ctx.fillStyle = '#cdefb0'; ctx.beginPath(); ctx.ellipse(x, y + 14, 34, 22, 0, 0, Math.PI * 2); ctx.fill();
+      // eyes
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#5fae3a'; ctx.beginPath(); ctx.arc(x + s * 26, y - 34, 18, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + s * 26, y - 36, 12, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#15151b'; ctx.beginPath(); ctx.arc(x + s * 26, y - 34, 6, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + s * 26 - 2, y - 37, 2.2, 0, 6.28); ctx.fill();
+      }
+      // mouth (open while tongue out)
+      ctx.strokeStyle = '#2f6a1c'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath();
+      if (tongue) ctx.arc(x, y - 6, 26, 0.12 * Math.PI, 0.88 * Math.PI);
+      else ctx.arc(x, y - 12, 26, 0.12 * Math.PI, 0.88 * Math.PI);
+      ctx.stroke(); ctx.lineCap = 'butt';
+    }
+
+    function drawTongue() {
+      if (!tongue) return;
+      const tip = tongueTip();
+      ctx.strokeStyle = '#e9527d'; ctx.lineWidth = 11; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(frog.x, frog.mouthY); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+      ctx.fillStyle = '#ff6f97'; ctx.beginPath(); ctx.arc(tip.x, tip.y, 9, 0, 6.28); ctx.fill();
+      ctx.lineCap = 'butt';
+      if (tongue.got) drawBugAt(tongue.got, tip.x, tip.y);
+    }
+    function drawBugAt(b, x, y) { const ob = { x: x, y: y, kind: b.kind, wing: b.wing, r: b.r }; drawBug(ob); }
+
+    function drawHUD() {
+      ctx.textAlign = 'left'; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillStyle = '#fff'; ctx.font = "800 34px 'Nunito', sans-serif";
+      ctx.strokeText(String(score), 20, 46); ctx.fillText(String(score), 20, 46);
+      if (combo > 1) { ctx.fillStyle = '#ffd23f'; ctx.font = "800 18px 'Nunito', sans-serif"; ctx.fillText('Combo x' + combo, 22, 70); }
+      ctx.textAlign = 'right'; ctx.fillStyle = '#cfd6ea'; ctx.font = "800 16px 'Nunito', sans-serif";
+      ctx.fillText('Best ' + loadBest(), W - 20, 30);
+      ctx.textAlign = 'left';
+    }
+
+    function draw() {
+      // pond / dusk sky
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#264b73'); g.addColorStop(0.55, '#3a6ea5'); g.addColorStop(1, '#2a5a86');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      // moon
+      ctx.fillStyle = 'rgba(255,250,220,0.85)'; ctx.beginPath(); ctx.arc(640, 90, 34, 0, 6.28); ctx.fill();
+      // distant reeds
+      ctx.strokeStyle = 'rgba(20,50,30,0.4)'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+      for (let i = 0; i < 7; i++) { const rx = 40 + i * 120; ctx.beginPath(); ctx.moveTo(rx, H); ctx.quadraticCurveTo(rx + 10, H - 130, rx - 6, H - 200); ctx.stroke(); }
+      ctx.lineCap = 'butt';
+      // lily pad the frog sits on
+      ctx.fillStyle = '#3f8a2a'; ctx.beginPath(); ctx.ellipse(frog.x, H - 14, 110, 26, 0, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#347324'; ctx.beginPath(); ctx.moveTo(frog.x + 20, H - 14); ctx.lineTo(frog.x + 60, H - 6); ctx.lineTo(frog.x + 24, H - 24); ctx.fill();
+
+      for (const b of bugs) drawBug(b);
+      drawTongue();
+      if (state === 'playing' || state === 'over') drawFrog();
+      if (tongue) drawTongue();   // redraw bug-on-tongue above frog
+
+      ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif";
+      for (const p of pops) { ctx.globalAlpha = Math.max(0, 1 - p.t / 45); ctx.fillStyle = p.color; ctx.fillText(p.txt, p.x, p.y); }
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+
+      if (state !== 'select') drawHUD();
+    }
+
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      dtMs = Math.min(Math.max(ts - lastTs, 1), 100);
+      dtf = dtMs / 16.6667; lastTs = ts;
+      update(); draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  })();
+  </script>
+
+  <script>
+    if (window.self !== window.top) { var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden'; }
+  </script>
+</body>
+</html>
