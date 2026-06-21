@@ -110,7 +110,13 @@
     function ensureWorld() {
       while (lastBranchX < camX + W + 500) {
         const prevX = lastBranchX;
-        const gap = rnd(166, 206) + Math.min(bestDist * 0.14, 80);
+        // vary the spacing: a mix of close hops, medium gaps, and big-swing gaps
+        // (plus a gentle distance ramp) so the rhythm keeps changing
+        const ramp = Math.min(bestDist * 0.12, 70);
+        const roll = Math.random();
+        const gap = (roll < 0.35 ? rnd(120, 152)     // close together
+                  : roll < 0.72 ? rnd(168, 210)      // medium
+                  : rnd(230, 282)) + ramp;           // far apart — needs a bigger swing
         const nx = prevX + gap;
         const ny = rnd(82, 184);
         branches.push({ x: nx, y: ny });

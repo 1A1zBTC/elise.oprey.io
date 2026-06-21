@@ -85,7 +85,7 @@
   </div>
 
   <p class="hint">
-    <b>Move:</b> A/D &amp; arrow keys, or drag. Catch <b>acorns &amp; treats</b>, dodge <b>bombs</b> 💣 &nbsp;·&nbsp; miss <b>15 treats</b> or eat 3 bombs and you're out. 2-player: last one standing (or higher score) wins.
+    <b>Move:</b> A/D &amp; arrow keys, or drag. Catch <b>acorns &amp; treats</b>, dodge <b>bombs</b> 💣 &nbsp;·&nbsp; miss <b>15 treats</b> or eat <b>one bomb</b> and you're out. 2-player: last one standing (or higher score) wins.
   </p>
 
   <script>
@@ -118,7 +118,7 @@
 
     const MISS_LIMIT = 15;         // miss this many edible treats and you're out
     function makeCatcher(x, color, dark, keyL, keyR) {
-      return { x: x, w: 92, color: color, dark: dark, score: 0, lives: 3, misses: 0, keyL: false, keyR: false, hurt: 0, target: x };
+      return { x: x, w: 92, color: color, dark: dark, score: 0, lives: 1, misses: 0, keyL: false, keyR: false, hurt: 0, target: x };
     }
 
     function beginGame() {
@@ -140,7 +140,7 @@
         const best = Math.max(loadBest(), c.score);
         if (c.score >= loadBest()) saveBest(c.score);
         document.getElementById('over-title').textContent = 'Game Over';
-        const reason = c.lives <= 0 ? 'Caught too many bombs! 💣' : 'Missed ' + MISS_LIMIT + ' treats!';
+        const reason = c.lives <= 0 ? 'Caught a bomb! 💣' : 'Missed ' + MISS_LIMIT + ' treats!';
         document.getElementById('over-sub').textContent = c.score >= best && c.score > 0 ? 'New best! 🏆' : reason;
         document.getElementById('over-l1').textContent = 'Score';
         document.getElementById('over-l2').textContent = 'Best';
@@ -261,9 +261,9 @@
         if (c.hurt > 0) c.hurt -= dtf;
       }
 
-      // spawn
+      // spawn — one treat at a time: only drop a new one once the screen is clear
       spawnTimer -= dtMs;
-      if (spawnTimer <= 0) { spawnTimer = spawnGap() * rnd(0.7, 1.2); spawnItem(); }
+      if (spawnTimer <= 0 && items.length === 0) { spawnTimer = spawnGap() * rnd(0.7, 1.2); spawnItem(); }
 
       // items
       for (let i = items.length - 1; i >= 0; i--) {
@@ -376,7 +376,7 @@
 
     function drawHearts(c, x, y, align) {
       ctx.font = "800 18px 'Nunito', sans-serif"; ctx.textAlign = align;
-      let s = ''; for (let i = 0; i < 3; i++) s += i < c.lives ? '❤' : '🖤';
+      let s = ''; for (let i = 0; i < 1; i++) s += i < c.lives ? '❤' : '🖤';
       ctx.fillStyle = '#e94560'; ctx.fillText(s, x, y);
     }
 
