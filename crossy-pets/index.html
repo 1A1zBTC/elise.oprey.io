@@ -73,16 +73,19 @@
       background: rgba(10, 14, 28, 0.86);
       backdrop-filter: blur(4px);
       display: flex;
-      align-items: center;
-      justify-content: center;
+      /* NB: center the panel with margin:auto (below), NOT align/justify-center.
+         Flex centering clips a too-tall panel on both ends so Start can't be reached;
+         margin:auto centers when it fits and lets the overlay scroll when it doesn't. */
       padding: 16px;
-      overflow-y: auto;         /* scroll to reach Start on very short screens */
+      overflow-y: auto;         /* scroll to reach Start on short screens */
+      -webkit-overflow-scrolling: touch;
       z-index: 20;
     }
     .overlay[hidden] { display: none; }
     .panel {
       width: 100%;
       max-width: 380px;
+      margin: auto;             /* centers when it fits; lets the overlay scroll when too tall */
       background: #16213e;
       border: 2px solid #0f3460;
       border-radius: 24px;
