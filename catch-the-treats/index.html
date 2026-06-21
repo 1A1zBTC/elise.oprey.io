@@ -126,8 +126,12 @@
       items = []; pops = []; elapsed = 0; spawnTimer = 0;
       if (numPlayers === 1) {
         catchers = [ makeCatcher(W / 2, '#c98a4b', '#a86d33') ];
+        catchers[0].minX = catchers[0].w / 2; catchers[0].maxX = W - catchers[0].w / 2;
       } else {
         catchers = [ makeCatcher(W * 0.3, '#c98a4b', '#a86d33'), makeCatcher(W * 0.7, '#8aa0d8', '#5f76b0') ];
+        // lock each player to their own half so the split actually matters
+        catchers[0].minX = catchers[0].w / 2;          catchers[0].maxX = W / 2 - catchers[0].w / 2;
+        catchers[1].minX = W / 2 + catchers[1].w / 2;  catchers[1].maxX = W - catchers[1].w / 2;
       }
       setupEl.hidden = true; overEl.hidden = true;
       state = 'playing';
@@ -234,15 +238,18 @@
     function fallSpeed() { return 3.2 + difficulty() * 5.6; }        // 3.2 → 8.8 px/frame
     function spawnGap() { return 620 - difficulty() * 400; }         // 620 → 220ms between drops
 
-    function spawnItem() {
+    function spawnItem(side) {
       const d = difficulty();
       const isBomb = Math.random() < (0.16 + d * 0.16);
       const isGold = !isBomb && Math.random() < 0.08;
       const kind = isBomb ? 'bomb' : (isGold ? 'gold' : pick(TREATS));
-      let x;
-      if (numPlayers === 2) x = rnd(40, W - 40);
-      else x = rnd(40, W - 40);
-      items.push({ x: x, y: -30, vy: fallSpeed() * rnd(0.85, 1.15), vx: rnd(-0.4, 0.4), kind: kind, r: 18, spin: rnd(0, 6.28) });
+      let x, vx;
+      if (numPlayers === 2) {
+        // keep each treat inside one player's half (no cross-over drift)
+        x = side === 1 ? rnd(W / 2 + 46, W - 46) : rnd(46, W / 2 - 46);
+        vx = 0;
+      } else { x = rnd(40, W - 40); vx = rnd(-0.4, 0.4); }
+      items.push({ x: x, y: -30, vy: fallSpeed() * rnd(0.85, 1.15), vx: vx, kind: kind, r: 18, spin: rnd(0, 6.28) });
     }
 
     function update() {
@@ -255,15 +262,20 @@
       for (const c of catchers) {
         if (c.keyL) c.target = c.x - speed * 4;
         if (c.keyR) c.target = c.x + speed * 4;
+        c.target = Math.max(c.minX, Math.min(c.maxX, c.target));   // can't aim past your half
         const dx = c.target - c.x;
         c.x += Math.max(-speed * dtf, Math.min(speed * dtf, dx * 0.4 * dtf));
-        c.x = Math.max(c.w / 2, Math.min(W - c.w / 2, c.x));
+        c.x = Math.max(c.minX, Math.min(c.maxX, c.x));
         if (c.hurt > 0) c.hurt -= dtf;
       }
 
       // spawn — one treat at a time: only drop a new one once the screen is clear
       spawnTimer -= dtMs;
-      if (spawnTimer <= 0 && items.length === 0) { spawnTimer = spawnGap() * rnd(0.7, 1.2); spawnItem(); }
+      if (spawnTimer <= 0 && items.length === 0) {
+        spawnTimer = spawnGap() * rnd(0.7, 1.2);
+        if (numPlayers === 2) { spawnItem(0); spawnItem(1); }   // one treat per side, both players busy
+        else spawnItem(0);
+      }
 
       // items
       for (let i = items.length - 1; i >= 0; i--) {
@@ -419,7 +431,12 @@
       // ground
       ctx.fillStyle = '#5fae3a'; ctx.fillRect(0, GROUND + 2, W, H - GROUND);
       ctx.fillStyle = '#4f9a33'; ctx.fillRect(0, GROUND + 2, W, 6);
-      if (numPlayers === 2) { ctx.fillStyle = 'rgba(15,52,96,0.25)'; ctx.fillRect(W / 2 - 2, 70, 4, GROUND - 70); }
+      if (numPlayers === 2) {   // a clear fence: each player owns their own half
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 3; ctx.setLineDash([11, 11]);
+        ctx.beginPath(); ctx.moveTo(W / 2, 70); ctx.lineTo(W / 2, GROUND + 2); ctx.stroke();
+        ctx.restore();
+      }
 
       for (const it of items) drawItem(it);
       for (const c of catchers) drawSquirrel(c);
