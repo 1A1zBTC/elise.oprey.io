@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Monkey Swing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 16px; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+    .stage {
+      position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    .hint { margin-top: 12px; color: #a0a8c0; font-size: 0.82rem; text-align: center; max-width: 560px; line-height: 1.5; }
+    .hint b { color: #ffe8b0; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+    .overlay[hidden] { display: none; }
+    .panel { width: 100%; max-width: 380px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.4; }
+    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
+    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
+    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Monkey Swing</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Monkey Swing</h2>
+        <div class="sub">Swing from branch to branch through the jungle! 🐒<br>You're always swinging on a vine &mdash; <b style="color:#ffe8b0">tap</b> at the right moment to let go and fly forward. The monkey grabs the next branch by itself! Grab bananas 🍌 for bonus points &mdash; just don't fall!</div>
+        <button class="start-btn" id="start-btn">Start Game</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">Splat!</h2>
+        <div class="sub" id="over-sub">You fell into the jungle!</div>
+        <div class="scoreline"><span class="lbl">Score</span><span class="big" id="over-score">0</span></div>
+        <div class="scoreline"><span class="lbl">Best</span><span class="big" id="over-best">0</span></div>
+        <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>Tap</b> (click / Space) at the right moment to let go and fly forward &nbsp;·&nbsp; the monkey <b>auto-grabs</b> the next branch &nbsp;·&nbsp; collect <b>bananas</b> 🍌 &nbsp;·&nbsp; don't fall off the bottom!
+  </p>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;   // 760 x 560
+
+    const BEST_KEY = 'monkeyswing.best';
+    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
+    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+    // ---- tuning ----
+    const G = 0.52;           // gravity per 60fps-frame
+    const MAX_REACH = 330;    // how far the monkey can reach for a branch (tighter = timing matters more)
+    const MAX_ROPE = 155;     // grabbed vines are clamped this short so the monkey always hangs high
+    const DEATH_Y = H + 40;   // fall below this → game over
+
+    let state = 'select';     // 'select' | 'playing' | 'over'
+    let monkey = null;        // {x,y,vx,vy,attached,anchor,ropeLen,grabFlash}
+    let branches = [];        // {x, y}
+    let bananas = [];         // {x, y, got}
+    let pops = [];
+    let lastBranchX = 0, startX = 0, camX = 0;
+    let bestDist = 0, bananaScore = 0, score = 0, introT = 0;
+    let grabCD = 0;           // ms left in the "just let go" window before auto-grabbing again
+    let lastTs = 0, dtMs = 16.7, dtf = 1;
+
+    const setupEl = document.getElementById('setup');
+    const overEl = document.getElementById('over');
+
+    // ---------- world streaming ----------
+    function ensureWorld() {
+      while (lastBranchX < camX + W + 500) {
+        const prevX = lastBranchX;
+        const gap = rnd(166, 206) + Math.min(bestDist * 0.14, 80);
+        const nx = prevX + gap;
+        const ny = rnd(82, 184);
+        branches.push({ x: nx, y: ny });
+        if (Math.random() < 0.55) bananas.push({ x: (prevX + nx) / 2, y: rnd(175, 330), got: false });
+        lastBranchX = nx;
+      }
+      const keepX = camX - 250;
+      branches = branches.filter(function (b) { return b.x > keepX || (monkey && b === monkey.anchor); });
+      bananas = bananas.filter(function (b) { return !b.got && b.x > keepX; });
+    }
+
+    function beginGame() {
+      branches = [{ x: 150, y: 140 }];
+      bananas = []; pops = [];
+      lastBranchX = 150;
+      const b0 = branches[0];
+      monkey = { x: b0.x - 64, y: b0.y + 130, vx: 3.2, vy: 0, attached: true, anchor: b0, ropeLen: Math.hypot(64, 130), grabFlash: 0, lean: 0, wantRelease: false, releaseT: 0 };
+      startX = b0.x; bestDist = 0; bananaScore = 0; score = 0; introT = 0;
+      camX = monkey.x - W * 0.34;
+      grabCD = 0;              // start already hanging & swinging
+      ensureWorld();
+      setupEl.hidden = true; overEl.hidden = true;
+      state = 'playing';
+    }
+
+    function endGame() {
+      state = 'over';
+      const best = Math.max(loadBest(), score);
+      if (score >= loadBest()) saveBest(score);
+      document.getElementById('over-sub').textContent = (score >= best && score > 0) ? 'New best! 🏆' : 'You fell into the jungle!';
+      document.getElementById('over-score').textContent = score;
+      document.getElementById('over-best').textContent = best;
+      overEl.hidden = false;
+    }
+
+    function showSelect() { state = 'select'; overEl.hidden = true; setupEl.hidden = false; }
+
+    // ---------- grab ----------
+    function tryGrab() {
+      let best = null, bestX = -Infinity;
+      for (const b of branches) {
+        const dy = b.y - monkey.y;
+        if (dy > 55) continue;                 // skip branches well below the monkey (can still snag level/just-below ones)
+        const d = Math.hypot(b.x - monkey.x, b.y - monkey.y);
+        if (d < 28 || d > MAX_REACH) continue; // not right on top of it, and within reach
+        if (d > H - 160 - b.y) continue;       // keep vines short so the monkey hangs high, with room to fly after letting go
+        if (b.x > bestX) { bestX = b.x; best = b; }  // grab the farthest-ahead reachable branch
+      }
+      if (best) {
+        monkey.attached = true;
+        monkey.anchor = best;
+        const d = Math.hypot(best.x - monkey.x, best.y - monkey.y) || 1;
+        const below = monkey.y > best.y + 4;
+        monkey.ropeLen = below ? Math.min(d, MAX_ROPE) : d;
+        // when hanging below the branch, pull up to the (short) rope so the monkey
+        // always sits high under it, leaving room to fly after the next let-go
+        if (below && d > monkey.ropeLen) {
+          const ux = (monkey.x - best.x) / d, uy = (monkey.y - best.y) / d;
+          monkey.x = best.x + ux * monkey.ropeLen;
+          monkey.y = best.y + uy * monkey.ropeLen;
+        }
+        monkey.grabFlash = 9;
+      }
+    }
+
+    // ---------- input ----------
+    // One tap = let go of the current vine and fly. The monkey then grabs the
+    // next branch all by itself, so you never just drop to the ground — your
+    // only job is to tap at the right moment to fling forward.
+    function tap() {
+      if (state === 'select') { beginGame(); return; }
+      if (state === 'over') { showSelect(); return; }
+      // arm a release; the monkey actually lets go on its next forward swing
+      if (monkey && monkey.attached) { monkey.wantRelease = true; monkey.releaseT = 0; }
+    }
+
+    canvas.addEventListener('mousedown', function (e) { e.preventDefault(); tap(); });
+    canvas.addEventListener('touchstart', function (e) { e.preventDefault(); tap(); }, { passive: false });
+    window.addEventListener('keydown', function (e) {
+      if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) tap(); }
+    });
+
+    document.getElementById('start-btn').addEventListener('click', beginGame);
+    document.getElementById('again-btn').addEventListener('click', showSelect);
+
+    // ---------- update ----------
+    function update() {
+      for (let i = pops.length - 1; i >= 0; i--) { pops[i].t += dtf; pops[i].y -= 0.7 * dtf; if (pops[i].t > 45) pops.splice(i, 1); }
+      if (state !== 'playing') return;
+      introT += dtMs;
+
+      // deferred release: after a tap, let go only when swinging forward through
+      // the bottom of the arc, so the monkey always flings forward toward the next
+      // branch (never backward into a fall). Safety timeout if it never lines up.
+      if (monkey.attached && monkey.wantRelease) {
+        monkey.releaseT += dtMs;
+        if ((monkey.vx > 0 && monkey.vy < 1.0) || monkey.releaseT > 1300) {
+          monkey.attached = false; monkey.wantRelease = false; grabCD = 300;
+          // guaranteed forward launch so even a small swing carries you across the
+          // gap to the next branch (and capped so it never rockets off-screen)
+          monkey.vx = clamp(monkey.vx, 6.5, 12.5);
+          if (monkey.vy > 1) monkey.vy = 1;
+        }
+      }
+
+      // auto-grab the next branch while flying (after a short "let go" window so
+      // the tap actually releases you before you immediately re-grab)
+      if (grabCD > 0) grabCD -= dtMs;
+      if (!monkey.attached && grabCD <= 0) tryGrab();
+
+      // physics: gravity + rope constraint (position-based, momentum kept tangential)
+      monkey.vy += G * dtf;
+      let nx = monkey.x + monkey.vx * dtf;
+      let ny = monkey.y + monkey.vy * dtf;
+      if (monkey.attached) {
+        const dx = nx - monkey.anchor.x, dy = ny - monkey.anchor.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const k = monkey.ropeLen / d;
+        nx = monkey.anchor.x + dx * k;
+        ny = monkey.anchor.y + dy * k;
+        monkey.vx = (nx - monkey.x) / dtf;
+        monkey.vy = (ny - monkey.y) / dtf;
+      }
+      monkey.vx = clamp(monkey.vx, -26, 26);
+      monkey.vy = clamp(monkey.vy, -28, 28);
+      monkey.x = nx; monkey.y = ny;
+      if (monkey.grabFlash > 0) monkey.grabFlash -= dtf;
+      monkey.lean += (clamp(monkey.vx * 0.025, -0.45, 0.45) - monkey.lean) * 0.2 * dtf;
+
+      // camera follows horizontally, keeping the monkey ~1/3 from the left
+      camX = monkey.x - W * 0.34;
+      ensureWorld();
+
+      // bananas
+      for (const ba of bananas) {
+        if (ba.got) continue;
+        if (Math.hypot(ba.x - monkey.x, ba.y - monkey.y) < 30) {
+          ba.got = true; bananaScore += 5;
+          pops.push({ x: ba.x, y: ba.y, txt: '+5', color: '#ffd23f', t: 0 });
+        }
+      }
+
+      // score = distance travelled (peak) + banana bonus
+      const dist = Math.max(0, Math.floor((monkey.x - startX) / 22));
+      if (dist > bestDist) bestDist = dist;
+      score = bestDist + bananaScore;
+
+      // death
+      if (monkey.y > DEATH_Y) { endGame(); return; }
+    }
+
+    // ---------- drawing ----------
+    function parallaxRow(speed, y, r, color, spacing) {
+      ctx.fillStyle = color;
+      let off = (camX * speed) % spacing;
+      if (off < 0) off += spacing;
+      for (let x = -spacing; x < W + spacing; x += spacing) {
+        const px = x - off;
+        ctx.beginPath();
+        ctx.arc(px, y, r, 0, 6.28);
+        ctx.arc(px + spacing * 0.5, y + r * 0.35, r * 0.85, 0, 6.28);
+        ctx.fill();
+      }
+    }
+
+    function drawBranch(b) {
+      const sx = b.x - camX;
+      // limb growing down from the canopy
+      ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 11; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(sx - 64, -14); ctx.lineTo(sx - 30, b.y - 24); ctx.lineTo(sx, b.y); ctx.stroke();
+      ctx.strokeStyle = '#7c5230'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(sx - 30, b.y - 24); ctx.lineTo(sx, b.y); ctx.stroke();
+      // leaf cluster
+      ctx.fillStyle = '#2e7d32';
+      const lx = sx - 40, ly = b.y - 30;
+      ctx.beginPath(); ctx.arc(lx, ly, 18, 0, 6.28); ctx.arc(lx + 20, ly - 6, 15, 0, 6.28); ctx.arc(lx - 14, ly - 4, 13, 0, 6.28); ctx.arc(lx + 6, ly + 10, 14, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#388e3c';
+      ctx.beginPath(); ctx.arc(lx + 4, ly - 2, 10, 0, 6.28); ctx.fill();
+      // hang knot
+      ctx.fillStyle = '#4a2f17'; ctx.beginPath(); ctx.arc(sx, b.y, 5, 0, 6.28); ctx.fill();
+    }
+
+    function drawBanana(ba) {
+      const sx = ba.x - camX, sy = ba.y;
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(-0.5);
+      ctx.fillStyle = '#ffcf33';
+      ctx.beginPath(); ctx.arc(0, 0, 14, 0.15 * Math.PI, 1.15 * Math.PI); ctx.arc(2, -3, 14, 1.15 * Math.PI, 0.15 * Math.PI, true); ctx.fill();
+      ctx.fillStyle = '#5a3a1c'; ctx.fillRect(-13, -7, 3, 4);
+      ctx.restore();
+    }
+
+    function drawMonkey() {
+      if (!monkey) return;
+      const mx = monkey.x - camX, my = monkey.y;
+      // hand point (where the arms reach)
+      let hx, hy;
+      if (monkey.attached) { hx = monkey.anchor.x - camX; hy = monkey.anchor.y; }
+      else { hx = mx; hy = my - 30; }
+
+      // vine
+      if (monkey.attached) {
+        ctx.strokeStyle = '#3f7d2e'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(mx, my - 12); ctx.stroke();
+      }
+
+      ctx.save();
+      ctx.translate(mx, my); ctx.rotate(monkey.lean || 0); ctx.translate(-mx, -my);
+
+      // tail
+      ctx.strokeStyle = '#6b4322'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(mx + 8, my + 8); ctx.quadraticCurveTo(mx + 36, my + 22, mx + 34, my - 6); ctx.stroke();
+
+      // arms reaching to the hand point
+      ctx.strokeStyle = '#6b4322'; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(mx - 9, my - 4); ctx.lineTo(hx, hy); ctx.moveTo(mx + 9, my - 4); ctx.lineTo(hx, hy); ctx.stroke();
+
+      // legs
+      ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(mx - 7, my + 13); ctx.lineTo(mx - 11, my + 27); ctx.moveTo(mx + 7, my + 13); ctx.lineTo(mx + 11, my + 27); ctx.stroke();
+
+      // body
+      ctx.fillStyle = '#8a5a2b';
+      ctx.beginPath(); ctx.ellipse(mx, my, 16, 18, 0, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#c9a06a';
+      ctx.beginPath(); ctx.ellipse(mx, my + 3, 9, 11, 0, 0, 6.28); ctx.fill();
+
+      // head
+      const hX = mx, hY = my - 22;
+      ctx.fillStyle = '#8a5a2b';
+      ctx.beginPath(); ctx.arc(hX - 14, hY - 2, 7, 0, 6.28); ctx.arc(hX + 14, hY - 2, 7, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#c9a06a';
+      ctx.beginPath(); ctx.arc(hX - 14, hY - 2, 3.6, 0, 6.28); ctx.arc(hX + 14, hY - 2, 3.6, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#8a5a2b';
+      ctx.beginPath(); ctx.arc(hX, hY, 15, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#d9b07a';
+      ctx.beginPath(); ctx.ellipse(hX, hY + 3, 11, 10, 0, 0, 6.28); ctx.fill();
+      // eyes
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(hX - 5, hY - 2, 3.4, 0, 6.28); ctx.arc(hX + 5, hY - 2, 3.4, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#1c1208';
+      ctx.beginPath(); ctx.arc(hX - 4, hY - 1.5, 1.8, 0, 6.28); ctx.arc(hX + 6, hY - 1.5, 1.8, 0, 6.28); ctx.fill();
+      // nostrils + smile
+      ctx.beginPath(); ctx.arc(hX - 3, hY + 5, 1, 0, 6.28); ctx.arc(hX + 3, hY + 5, 1, 0, 6.28); ctx.fill();
+      ctx.strokeStyle = '#5a3a1c'; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(hX, hY + 5, 4, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+
+      ctx.restore();
+
+      // grab flash
+      if (monkey.grabFlash > 0) {
+        ctx.strokeStyle = 'rgba(255,226,176,' + (monkey.grabFlash / 9) + ')'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(hx, hy, 14 - monkey.grabFlash, 0, 6.28); ctx.stroke();
+      }
+    }
+
+    function drawHUD() {
+      ctx.textAlign = 'left'; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillStyle = '#fff'; ctx.font = "800 34px 'Nunito', sans-serif";
+      ctx.strokeText(String(score) + 'm', 20, 46); ctx.fillText(String(score) + 'm', 20, 46);
+      ctx.font = "800 18px 'Nunito', sans-serif"; ctx.fillStyle = '#fff7d6';
+      ctx.strokeText('🍌 ' + (bananaScore / 5), 22, 72); ctx.fillText('🍌 ' + (bananaScore / 5), 22, 72);
+      ctx.textAlign = 'right'; ctx.fillStyle = '#cfd6ea'; ctx.font = "800 16px 'Nunito', sans-serif";
+      ctx.fillText('Best ' + Math.max(loadBest(), score), W - 20, 32);
+      ctx.textAlign = 'left';
+
+      // fading intro prompt
+      if (introT < 4200) {
+        ctx.globalAlpha = Math.min(1, (4200 - introT) / 1200);
+        ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = "800 22px 'Nunito', sans-serif";
+        ctx.strokeText('Tap to let go — you grab the next branch!', W / 2, H - 40);
+        ctx.fillText('Tap to let go — you grab the next branch!', W / 2, H - 40);
+        ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+      }
+    }
+
+    function draw() {
+      // sky
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#bfe9c4'); g.addColorStop(0.55, '#9fdcae'); g.addColorStop(1, '#5fa86a');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+      // layered jungle canopy (parallax)
+      parallaxRow(0.18, 40, 60, '#7fc98a', 150);
+      parallaxRow(0.35, 18, 48, '#5fb070', 130);
+      parallaxRow(0.6, -6, 40, '#3f8f52', 110);
+
+      // distant ground haze at the bottom = danger zone
+      const dg = ctx.createLinearGradient(0, H - 90, 0, H);
+      dg.addColorStop(0, 'rgba(20,60,25,0)'); dg.addColorStop(1, 'rgba(12,40,16,0.55)');
+      ctx.fillStyle = dg; ctx.fillRect(0, H - 90, W, 90);
+
+      for (const ba of bananas) drawBanana(ba);
+      for (const b of branches) drawBranch(b);
+      drawMonkey();
+
+      ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif";
+      for (const p of pops) { ctx.globalAlpha = Math.max(0, 1 - p.t / 45); ctx.fillStyle = p.color; ctx.fillText(p.txt, p.x - camX, p.y); }
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+
+      if (state === 'playing') drawHUD();
+    }
+
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      dtMs = Math.min(Math.max(ts - lastTs, 1), 100);
+      dtf = dtMs / 16.6667; lastTs = ts;
+      update(); draw();
+      requestAnimationFrame(loop);
+    }
+
+    // seed a backdrop so the canvas looks alive behind the setup panel
+    branches = [{ x: 150, y: 140 }]; lastBranchX = 150; camX = 0; ensureWorld();
+    requestAnimationFrame(loop);
+  })();
+  </script>
+
+  <script>
+    if (window.self !== window.top) { var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden'; }
+  </script>
+</body>
+</html>
