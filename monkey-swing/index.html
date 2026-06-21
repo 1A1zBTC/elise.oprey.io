@@ -54,7 +54,7 @@
     <div class="overlay" id="setup">
       <div class="panel">
         <h2>Monkey Swing</h2>
-        <div class="sub">Swing from branch to branch through the jungle! 🐒<br>You're always swinging on a vine &mdash; <b style="color:#ffe8b0">tap</b> at the right moment to let go and fly forward. The monkey grabs the next branch by itself! Grab bananas 🍌 for bonus points &mdash; just don't fall!</div>
+        <div class="sub">Swing from branch to branch through the jungle! 🐒<br>You're always swinging on a vine &mdash; <b style="color:#ffe8b0">tap</b> at the bottom of the swing to let go and fling forward. Swing close enough and he grabs the next branch &mdash; mistime it and he falls! Grab bananas 🍌 for bonus points.</div>
         <button class="start-btn" id="start-btn">Start Game</button>
       </div>
     </div>
@@ -71,7 +71,7 @@
   </div>
 
   <p class="hint">
-    <b>Tap</b> (click / Space) at the right moment to let go and fly forward &nbsp;·&nbsp; the monkey <b>auto-grabs</b> the next branch &nbsp;·&nbsp; collect <b>bananas</b> 🍌 &nbsp;·&nbsp; don't fall off the bottom!
+    <b>Tap</b> (click / Space) at the <b>bottom of the swing</b> to fling forward &nbsp;·&nbsp; land close to the next branch to grab it &mdash; <b>time it or you fall!</b> &nbsp;·&nbsp; collect <b>bananas</b> 🍌
   </p>
 
   <script>
@@ -88,9 +88,9 @@
     function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
     // ---- tuning ----
-    const G = 0.52;           // gravity per 60fps-frame
-    const MAX_REACH = 330;    // how far the monkey can reach for a branch (tighter = timing matters more)
-    const MAX_ROPE = 155;     // grabbed vines are clamped this short so the monkey always hangs high
+    const G = 0.5;            // gravity per 60fps-frame
+    const MAX_REACH = 110;    // arms only reach this far — you must swing CLOSE to a branch to grab it
+    const MAX_ROPE = 84;      // grabbed vines are short so the monkey hangs near the branch line (within reach of the next)
     const DEATH_Y = H + 40;   // fall below this → game over
 
     let state = 'select';     // 'select' | 'playing' | 'over'
@@ -110,13 +110,13 @@
     function ensureWorld() {
       while (lastBranchX < camX + W + 500) {
         const prevX = lastBranchX;
-        // vary the spacing: a mix of close hops, medium gaps, and big-swing gaps
-        // (plus a gentle distance ramp) so the rhythm keeps changing
-        const ramp = Math.min(bestDist * 0.12, 70);
+        // vary the spacing: close hops, medium gaps, and big-swing gaps. With the
+        // short reach these all demand a well-timed release; the far ones especially.
+        const ramp = Math.min(bestDist * 0.06, 26);
         const roll = Math.random();
-        const gap = (roll < 0.35 ? rnd(120, 152)     // close together
-                  : roll < 0.72 ? rnd(168, 210)      // medium
-                  : rnd(230, 282)) + ramp;           // far apart — needs a bigger swing
+        const gap = (roll < 0.4 ? rnd(120, 146)      // close together
+                  : roll < 0.78 ? rnd(156, 184)      // medium
+                  : rnd(192, 216)) + ramp;           // far apart — needs a strong swing
         const nx = prevX + gap;
         const ny = rnd(82, 184);
         branches.push({ x: nx, y: ny });
@@ -133,7 +133,7 @@
       bananas = []; pops = [];
       lastBranchX = 150;
       const b0 = branches[0];
-      monkey = { x: b0.x - 64, y: b0.y + 130, vx: 3.2, vy: 0, attached: true, anchor: b0, ropeLen: Math.hypot(64, 130), grabFlash: 0, lean: 0, wantRelease: false, releaseT: 0 };
+      monkey = { x: b0.x - 42, y: b0.y + 74, vx: 2.6, vy: 0, attached: true, anchor: b0, ropeLen: Math.hypot(42, 74), grabFlash: 0, lean: 0 };
       startX = b0.x; bestDist = 0; bananaScore = 0; score = 0; introT = 0;
       camX = monkey.x - W * 0.34;
       grabCD = 0;              // start already hanging & swinging
@@ -156,14 +156,16 @@
 
     // ---------- grab ----------
     function tryGrab() {
-      let best = null, bestX = -Infinity;
+      let best = null, bestD = Infinity;
       for (const b of branches) {
-        const dy = b.y - monkey.y;
-        if (dy > 55) continue;                 // skip branches well below the monkey (can still snag level/just-below ones)
-        const d = Math.hypot(b.x - monkey.x, b.y - monkey.y);
-        if (d < 28 || d > MAX_REACH) continue; // not right on top of it, and within reach
-        if (d > H - 160 - b.y) continue;       // keep vines short so the monkey hangs high, with room to fly after letting go
-        if (b.x > bestX) { bestX = b.x; best = b; }  // grab the farthest-ahead reachable branch
+        const dx = b.x - monkey.x, dy = b.y - monkey.y;
+        const d = Math.hypot(dx, dy);
+        if (d > MAX_REACH) continue;           // arms can't reach this far — fly closer or fall
+        if (dy > 42) continue;                 // can't grab a branch well below you
+        if (dx < -26) continue;                // only branches ahead (not the one you just left)
+        const towards = (monkey.vx * dx + monkey.vy * dy) / (d || 1);
+        if (towards < -1.5) continue;          // must have momentum toward it, not be flying away
+        if (d < bestD) { bestD = d; best = b; } // grab the closest one within reach
       }
       if (best) {
         monkey.attached = true;
@@ -190,7 +192,15 @@
       if (state === 'select') { beginGame(); return; }
       if (state === 'over') { showSelect(); return; }
       // arm a release; the monkey actually lets go on its next forward swing
-      if (monkey && monkey.attached) { monkey.wantRelease = true; monkey.releaseT = 0; }
+      // let go RIGHT NOW and shove off in your current swing direction. A clean
+      // release at the bottom-front of the arc (moving fast & forward) launches you
+      // far; a mistimed one barely pushes — or shoves you the wrong way — so you fall.
+      if (monkey && monkey.attached) {
+        monkey.attached = false; grabCD = 120;
+        const sp = Math.hypot(monkey.vx, monkey.vy) || 1;
+        monkey.vx += (monkey.vx / sp) * 5.8;
+        monkey.vy += (monkey.vy / sp) * 5.8 - 2.4;   // extra lift so a clean release carries up to the next branch
+      }
     }
 
     canvas.addEventListener('mousedown', function (e) { e.preventDefault(); tap(); });
@@ -208,22 +218,9 @@
       if (state !== 'playing') return;
       introT += dtMs;
 
-      // deferred release: after a tap, let go only when swinging forward through
-      // the bottom of the arc, so the monkey always flings forward toward the next
-      // branch (never backward into a fall). Safety timeout if it never lines up.
-      if (monkey.attached && monkey.wantRelease) {
-        monkey.releaseT += dtMs;
-        if ((monkey.vx > 0 && monkey.vy < 1.0) || monkey.releaseT > 1300) {
-          monkey.attached = false; monkey.wantRelease = false; grabCD = 300;
-          // guaranteed forward launch so even a small swing carries you across the
-          // gap to the next branch (and capped so it never rockets off-screen)
-          monkey.vx = clamp(monkey.vx, 6.5, 12.5);
-          if (monkey.vy > 1) monkey.vy = 1;
-        }
-      }
-
-      // auto-grab the next branch while flying (after a short "let go" window so
-      // the tap actually releases you before you immediately re-grab)
+      // grab the next branch only while flying, after a brief let-go window. With the
+      // short reach this only succeeds if your release flung you close enough with
+      // momentum toward it — otherwise you sail past and fall.
       if (grabCD > 0) grabCD -= dtMs;
       if (!monkey.attached && grabCD <= 0) tryGrab();
 
@@ -386,8 +383,8 @@
       if (introT < 4200) {
         ctx.globalAlpha = Math.min(1, (4200 - introT) / 1200);
         ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = "800 22px 'Nunito', sans-serif";
-        ctx.strokeText('Tap to let go — you grab the next branch!', W / 2, H - 40);
-        ctx.fillText('Tap to let go — you grab the next branch!', W / 2, H - 40);
+        ctx.strokeText('Tap at the bottom of the swing to fly across!', W / 2, H - 40);
+        ctx.fillText('Tap at the bottom of the swing to fly across!', W / 2, H - 40);
         ctx.textAlign = 'left'; ctx.globalAlpha = 1;
       }
     }
