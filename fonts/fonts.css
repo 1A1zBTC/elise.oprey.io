@@ -1,0 +1,17 @@
+/* Self-hosted fonts so the site works fully offline (no Google Fonts network call).
+   Pacifico (OFL) and Nunito (OFL) — the same families the site already used.
+   Latin subset; Nunito is a variable font so 700 and 800 share one file. */
+@font-face {
+  font-family: 'Pacifico';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/pacifico.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700 800;
+  font-display: swap;
+  src: url('/fonts/nunito.woff2') format('woff2');
+}
