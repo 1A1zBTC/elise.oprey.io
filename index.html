@@ -165,6 +165,33 @@
     .name-field input::placeholder { color: #5a648a; font-weight: 700; }
     .name-field input:focus { border-color: #e94560; }
 
+    /* ---------- Player-count filter tabs ---------- */
+    .player-filter {
+      display: flex;
+      gap: 6px;
+    }
+    .pf-tab {
+      flex: 1;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 12px;
+      color: #a0a8c0;
+      font-family: inherit;
+      font-weight: 800;
+      font-size: 0.85rem;
+      padding: 8px 0;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    }
+    .pf-tab:hover { border-color: #e94560; color: #fff; }
+    .pf-tab.active {
+      border-color: #e94560;
+      background: #e94560;
+      color: #fff;
+      box-shadow: 0 0 16px rgba(233, 69, 96, 0.32);
+    }
+    .game-card[hidden] { display: none; }
+
     /* ---------- Mobile: collapse to the classic full-width list ---------- */
     @media (max-width: 759px) {
       .shell { display: block; height: auto; }
@@ -201,6 +228,14 @@
           <label class="name-field"><span>Player 3</span><input id="pn2" type="text" maxlength="12" placeholder="Player 3"></label>
           <label class="name-field"><span>Player 4</span><input id="pn3" type="text" maxlength="12" placeholder="Player 4"></label>
         </div>
+      </div>
+
+      <div class="player-filter" id="playerFilter" role="tablist" aria-label="Filter games by number of players">
+        <button class="pf-tab" data-count="1" role="tab" aria-selected="false">1</button>
+        <button class="pf-tab" data-count="2" role="tab" aria-selected="false">2</button>
+        <button class="pf-tab" data-count="3" role="tab" aria-selected="false">3</button>
+        <button class="pf-tab" data-count="4" role="tab" aria-selected="false">4</button>
+        <button class="pf-tab active" data-count="all" role="tab" aria-selected="true">ALL</button>
       </div>
 
       <a href="kit-clash/index.html" class="game-card">
@@ -428,6 +463,39 @@
             });
           })(i);
         }
+      })();
+
+      // ---- Player-count filter: tabs (1/2/3/4/ALL) show only games playable with
+      // that many players. Each game's range is read from its existing players-badge
+      // text ("1 player", "2 players", "1 – 4 players"), so cards stay the single source.
+      (function wireFilter() {
+        var tabs = document.querySelectorAll('.pf-tab');
+        // Precompute [min, max] per card from its badge.
+        cards.forEach(function (card) {
+          var badge = card.querySelector('.players-badge');
+          var nums = (badge ? badge.textContent : '').match(/\d+/g) || [];
+          card.dataset.minPlayers = nums[0] || '1';
+          card.dataset.maxPlayers = nums[nums.length - 1] || nums[0] || '1';
+        });
+        function applyFilter(count) {
+          cards.forEach(function (card) {
+            if (count === 'all') { card.hidden = false; return; }
+            var n = parseInt(count, 10);
+            var min = parseInt(card.dataset.minPlayers, 10);
+            var max = parseInt(card.dataset.maxPlayers, 10);
+            card.hidden = !(n >= min && n <= max);
+          });
+        }
+        tabs.forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            tabs.forEach(function (t) {
+              var on = t === tab;
+              t.classList.toggle('active', on);
+              t.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            applyFilter(tab.getAttribute('data-count'));
+          });
+        });
       })();
 
       // Only take over on desktop; on mobile the links navigate to the full-page game.
