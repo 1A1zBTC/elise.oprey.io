@@ -62,7 +62,7 @@
       <div class="panel">
         <h2>Scroot Rooms</h2>
         <div class="sub">You've no-clipped into the <b>Backrooms</b>. 🚪<br>
-          Find a glowing <b>door</b> and open it to drop into a different level &mdash; the yellow halls, the <b>poolrooms</b>, or somewhere <b>pitch black</b>. Or take a <b>slide</b> down. Two things hunt you: <b>Captain Clark</b> and the <b>Bacteria</b> &mdash; both <b>faster than you</b>, so break their line of sight around a corner. Leave <b>✕ marks</b> to track where you've been.<br><br>
+          Find a glowing <b>door</b> and open it to drop into a different place &mdash; the yellow halls, the <b>poolrooms</b>, a <b>subway station</b>, a <b>haunted house</b>, the <b>sewers</b>, or a moonlit <b>forest</b>. Or take a <b>slide</b> down. Two things hunt you: <b>Captain Clark</b> and the <b>Bacteria</b> &mdash; both <b>faster than you</b>, so break their line of sight around a corner. Leave <b>✕ marks</b> to track where you've been.<br><br>
           <b style="color:#e0a0a0">Headphones on. They scream.</b><br><br>
           <b>Move</b> drag / WASD &nbsp;·&nbsp; <b>Turn</b> drag / A&nbsp;D &nbsp;·&nbsp; <b>Mark</b> M or the ✕ button</div>
         <button class="start-btn" id="start-btn">Enter the Backrooms</button>
@@ -150,7 +150,7 @@
     // ---------- level generation ----------
     // Recursive-backtracker maze, then knock out extra walls to open it into
     // backrooms-style rooms. even/even intersections stay solid -> regular pillars.
-    const THEME_NAMES = { yellow: 'The Yellow Halls', pool: 'The Poolrooms', void: 'Pitch Black' };
+    const THEME_NAMES = { yellow: 'The Yellow Halls', pool: 'The Poolrooms', subway: 'The Subway Station', haunted: 'The Haunted House', sewer: 'The Sewers', forest: 'The Forest' };
     function genLevel(lvl, theme) {
       themeName = (theme && THEMES[theme]) ? theme : 'yellow';
       curTheme = THEMES[themeName];
@@ -235,7 +235,7 @@
       }
 
       // doors you can open -> each leads to a different kind of level
-      const destPool = ['pool', 'yellow', 'void', 'pool', 'yellow'];
+      const destPool = ['pool', 'subway', 'haunted', 'sewer', 'forest', 'yellow', 'pool', 'subway', 'forest'];
       doors = [];
       const dCount = lvl >= 4 ? 3 : 2;
       const far = reach.length ? reach[0].d : 1;
@@ -293,11 +293,10 @@
         }
       }
 
-      // lighting: per-theme base + depth ramp; void = pitch black, flicker levels
-      darkness = clamp(curTheme.base + 0.12 + (lvl - 1) * 0.05, 0, 0.92);
-      blackout = themeName === 'void' || (lvl >= 3 && lvl % 3 === 0);
-      if (themeName === 'void') darkness = 0.9;
-      else if (blackout) darkness = Math.max(darkness, 0.86);
+      // lighting: per-theme base + a gentle depth ramp. Dim, atmospheric levels
+      // flicker — but nothing goes fully pitch black anymore.
+      darkness = clamp(curTheme.base + 0.12 + (lvl - 1) * 0.04, 0, 0.7);
+      blackout = darkness > 0.45 && lvl >= 3 && lvl % 3 === 0;   // brief flicker on dim levels
 
       updateCamera();
       banner = { text: 'LEVEL ' + lvl, sub: THEME_NAMES[themeName] + (phasing ? ' · it\'s unstable here' : ''), t: 1.7 };
@@ -410,15 +409,107 @@
       ceil: poolTile('#eef6f7', 'rgba(150,180,188,0.45)'),
       base: -0.06, fogTint: null
     };
-    // ---- pitch-black "void" rooms: barely-there dark surfaces ----
-    const T_VOID = {
-      wall: texData(function (g) { g.fillStyle = '#111319'; g.fillRect(0, 0, TW, TH); speck(g, 300, [22, 24, 30], 18, 0.5); nz(g, 200, 0.4); }),
-      floor: texData(function (g) { g.fillStyle = '#0a0b0e'; g.fillRect(0, 0, TW, TH); speck(g, 200, [16, 17, 22], 14, 0.5); }),
-      ceil: texData(function (g) { g.fillStyle = '#0c0d12'; g.fillRect(0, 0, TW, TH); speck(g, 150, [18, 19, 24], 12, 0.5); }),
-      base: 0.84, fogTint: null
+    // ---- subway station: grey tiled walls, concrete platform, dark ceiling ----
+    const T_SUBWAY = {
+      wall: poolTile('#9aa0a6', 'rgba(40,44,50,0.6)'),
+      floor: texData(function (g) {
+        g.fillStyle = '#3d4044'; g.fillRect(0, 0, TW, TH); speck(g, 900, [70, 74, 80], 30, 0.5);
+        g.fillStyle = '#c7a52e'; g.fillRect(0, 54, TW, 6);          // yellow platform-edge stripe
+        g.fillStyle = 'rgba(20,22,24,0.5)'; g.fillRect(0, 60, TW, 4);
+        nz(g, 300, 0.3);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#23262b'; g.fillRect(0, 0, TW, TH); speck(g, 300, [40, 44, 50], 16, 0.4);
+        g.fillStyle = '#d7e0ea'; g.fillRect(8, 30, 48, 4);          // light strip
+        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(0, 0, TW, 2); g.fillRect(0, 62, TW, 2); nz(g, 160, 0.3);
+      }),
+      base: 0.22, fogTint: null
     };
-    const THEMES = { yellow: T_YELLOW, pool: T_POOL, void: T_VOID };
+    // ---- haunted house: dark wood boards + wainscot, creaky plank floor ----
+    const T_HAUNTED = {
+      wall: texData(function (g) {
+        const grd = g.createLinearGradient(0, 0, 0, TH);
+        grd.addColorStop(0, '#5a4636'); grd.addColorStop(0.5, '#422f22'); grd.addColorStop(1, '#2c1d14');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = 'rgba(20,12,8,0.5)';                          // vertical boards
+        for (let k = 0; k < TW; k += 12) g.fillRect(k, 0, 1, TH);
+        g.fillStyle = 'rgba(90,70,50,0.4)'; g.fillRect(0, 44, TW, 3);  // wainscot rail
+        g.strokeStyle = 'rgba(15,9,5,0.4)'; g.lineWidth = 1;        // peeling streaks
+        for (let i = 0; i < 5; i++) { g.beginPath(); const x = Math.random() * TW; g.moveTo(x, 0); g.lineTo(x + 4, TH); g.stroke(); }
+        nz(g, 260, 0.3);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#33241a'; g.fillRect(0, 0, TW, TH); speck(g, 700, [60, 44, 30], 26, 0.5);
+        g.fillStyle = 'rgba(12,8,4,0.5)';                           // plank seams
+        for (let k = 0; k < TH; k += 14) g.fillRect(0, k, TW, 1);
+        nz(g, 320, 0.34);
+      }),
+      ceil: texData(function (g) { g.fillStyle = '#1d1610'; g.fillRect(0, 0, TW, TH); speck(g, 260, [34, 26, 18], 14, 0.5); g.fillStyle = 'rgba(10,6,3,0.5)'; for (let k = 0; k < TW; k += 16) g.fillRect(k, 0, 1, TH); nz(g, 160, 0.3); }),
+      base: 0.4, fogTint: null
+    };
+    // ---- sewer: grimy green brick tunnel + murky water + pipe ceiling ----
+    const T_SEWER = {
+      wall: texData(function (g) {
+        g.fillStyle = '#3f4a3a'; g.fillRect(0, 0, TW, TH); speck(g, 500, [60, 70, 56], 22, 0.5);
+        g.strokeStyle = 'rgba(18,24,16,0.6)'; g.lineWidth = 2;      // brick courses (offset)
+        for (let y = 0; y < TH; y += 12) { g.beginPath(); g.moveTo(0, y); g.lineTo(TW, y); g.stroke(); for (let x = (y % 24 ? 0 : 12); x < TW; x += 24) g.fillRect(x, y, 2, 12); }
+        g.strokeStyle = 'rgba(40,80,50,0.3)'; g.lineWidth = 1;      // grime drips
+        for (let i = 0; i < 6; i++) { g.beginPath(); const x = Math.random() * TW; g.moveTo(x, 0); g.lineTo(x + 2, TH); g.stroke(); }
+        nz(g, 240, 0.34);
+      }),
+      floor: texData(function (g) {                                 // murky green water
+        const grd = g.createLinearGradient(0, 0, TW, TH);
+        grd.addColorStop(0, '#243a26'); grd.addColorStop(0.5, '#345236'); grd.addColorStop(1, '#1d2f20');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.strokeStyle = 'rgba(120,160,120,0.18)'; g.lineWidth = 1;
+        for (let i = 0; i < 8; i++) { g.beginPath(); g.moveTo(Math.random() * TW, 0); g.bezierCurveTo(Math.random() * TW, 22, Math.random() * TW, 42, Math.random() * TW, TH); g.stroke(); }
+        speck(g, 200, [60, 90, 64], 26, 0.25); nz(g, 160, 0.3);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#1b231c'; g.fillRect(0, 0, TW, TH); speck(g, 220, [32, 42, 34], 14, 0.5);
+        g.fillStyle = 'rgba(60,66,60,0.7)'; g.fillRect(0, 26, TW, 7);   // pipe running along
+        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(0, 26, TW, 1); g.fillRect(0, 32, TW, 1); nz(g, 150, 0.3);
+      }),
+      base: 0.42, fogTint: null
+    };
+    // ---- forest (outdoor): tree-bark trunks, leafy ground, sky overhead ----
+    const T_FOREST = {
+      wall: texData(function (g) {
+        const grd = g.createLinearGradient(0, 0, TW, 0);
+        grd.addColorStop(0, '#3a2a1a'); grd.addColorStop(0.5, '#5a4026'); grd.addColorStop(1, '#33240f');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.strokeStyle = 'rgba(20,12,6,0.5)'; g.lineWidth = 1;       // vertical bark grain
+        for (let k = 2; k < TW; k += 4) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + (Math.random() * 2 - 1), TH); g.stroke(); }
+        g.fillStyle = 'rgba(30,46,24,0.5)'; speck(g, 160, [40, 70, 36], 30, 0.4);  // moss
+        nz(g, 220, 0.3);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#2c2414'; g.fillRect(0, 0, TW, TH); speck(g, 1000, [54, 46, 26], 30, 0.5);
+        g.fillStyle = 'rgba(60,80,40,0.4)';                          // scattered leaves
+        for (let i = 0; i < 40; i++) { g.beginPath(); g.ellipse(Math.random() * TW, Math.random() * TH, 2, 1, Math.random() * 3, 0, 6.29); g.fill(); }
+        nz(g, 300, 0.34);
+      }),
+      ceil: null, outdoor: true, base: 0.22, fogTint: [20, 28, 40]
+    };
+    const THEMES = { yellow: T_YELLOW, pool: T_POOL, subway: T_SUBWAY, haunted: T_HAUNTED, sewer: T_SEWER, forest: T_FOREST };
     let curTheme = T_YELLOW;
+
+    // night sky for outdoor (forest) levels — drawn once, blitted as the "ceiling"
+    const skyCanvas = (function () {
+      const c = makeCanvas(256, 140), g = c.getContext('2d');
+      const grd = g.createLinearGradient(0, 0, 0, 140);
+      grd.addColorStop(0, '#0a1022'); grd.addColorStop(1, '#243047');
+      g.fillStyle = grd; g.fillRect(0, 0, 256, 140);
+      for (let i = 0; i < 90; i++) { g.fillStyle = 'rgba(255,255,255,' + (0.3 + Math.random() * 0.6) + ')'; g.fillRect((Math.random() * 256) | 0, (Math.random() * 120) | 0, 1, 1); }
+      const m = g.createRadialGradient(196, 34, 2, 196, 34, 22);    // moon
+      m.addColorStop(0, '#fdf6d8'); m.addColorStop(0.6, 'rgba(230,224,190,0.5)'); m.addColorStop(1, 'rgba(230,224,190,0)');
+      g.fillStyle = m; g.beginPath(); g.arc(196, 34, 22, 0, 6.29); g.fill();
+      g.fillStyle = '#fdf6d8'; g.beginPath(); g.arc(196, 34, 11, 0, 6.29); g.fill();
+      return c;
+    })();
+    const SKYW = 256, SKYH = 140;
+    const SKY = skyCanvas.getContext('2d').getImageData(0, 0, SKYW, SKYH).data;
+    const SKYCOL = (function () { const a = new Int32Array(RW); for (let x = 0; x < RW; x++) a[x] = (x / RW * SKYW) | 0; return a; })();
     // monochrome noise tile for drifting film grain
     const grainCanvas = (function () {
       const c = makeCanvas(128, 128), g = c.getContext('2d');
@@ -514,24 +605,50 @@
       g.beginPath(); g.arc(Q(102), P(232), Q(3), 0, 6.29); g.fill();
       g.beginPath(); g.arc(Q(58), P(200), Q(2.5), 0, 6.29); g.fill();
 
-      // --- head: dark skin, uneven eyes, blood, hat ---
-      const fg = g.createRadialGradient(Q(64), P(headY - 16), P(6), Q(76), P(headY + 4), P(54));
-      fg.addColorStop(0, '#5c4836'); fg.addColorStop(0.5, '#392a1c'); fg.addColorStop(1, '#180f08');
+      // --- head: gaunt dark-skinned face, sculpted with detailed shading ---
+      const fg = g.createRadialGradient(Q(62), P(headY - 18), P(5), Q(78), P(headY + 6), P(56));
+      fg.addColorStop(0, '#6e5642'); fg.addColorStop(0.45, '#3e2d1e'); fg.addColorStop(1, '#140c06');
       g.fillStyle = fg;
       g.beginPath(); g.ellipse(cx, P(headY), Q(24), P(46), 0, 0, 6.29); g.fill();
-      // uneven eyes (left set higher than right), pale sclera + dark pupil
-      g.fillStyle = '#d9d2bf';
-      g.beginPath(); g.ellipse(Q(64), P(headY - 12), Q(6.5), P(5), 0, 0, 6.29); g.fill();    // higher
-      g.beginPath(); g.ellipse(Q(89), P(headY + 3), Q(5.5), P(4.5), 0, 0, 6.29); g.fill();   // lower
-      g.fillStyle = '#0a0604';
-      g.beginPath(); g.arc(Q(64), P(headY - 12), Q(3), 0, 6.29); g.fill();
-      g.beginPath(); g.arc(Q(89), P(headY + 3), Q(2.6), 0, 6.29); g.fill();
-      // bloodshot + a drip
-      g.strokeStyle = 'rgba(150,20,12,0.7)'; g.lineWidth = Q(1.1);
-      g.beginPath(); g.moveTo(Q(58), P(headY - 11)); g.lineTo(Q(70), P(headY - 11)); g.stroke();
-      g.fillStyle = '#170a08'; g.beginPath(); g.ellipse(cx, P(headY + 26), Q(7), P(9), 0, 0, 6.29); g.fill();
-      g.fillStyle = 'rgba(130,14,8,0.85)';
-      g.beginPath(); g.moveTo(Q(73), P(headY + 32)); g.lineTo(Q(78), P(headY + 32)); g.lineTo(Q(75), P(headY + 48)); g.closePath(); g.fill();
+      // temple/jaw shadow + cheekbone highlights for a hollow, gaunt look
+      g.fillStyle = 'rgba(10,6,3,0.5)';
+      g.beginPath(); g.ellipse(Q(54), P(headY + 6), Q(7), P(22), 0.15, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(96), P(headY + 6), Q(7), P(22), -0.15, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,120,86,0.16)';
+      g.beginPath(); g.ellipse(Q(68), P(headY + 9), Q(8), P(7), 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(86), P(headY + 15), Q(7), P(6), 0, 0, 6.29); g.fill();
+      // forehead wrinkles
+      g.strokeStyle = 'rgba(12,7,3,0.4)'; g.lineWidth = Q(0.9);
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(Q(60), P(headY - 30 + i * 4)); g.quadraticCurveTo(Q(75), P(headY - 33 + i * 4), Q(90), P(headY - 30 + i * 4)); g.stroke(); }
+      // brow ridges over each eye
+      g.fillStyle = 'rgba(8,5,2,0.55)';
+      g.beginPath(); g.ellipse(Q(64), P(headY - 18), Q(9), P(4), 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(89), P(headY - 4), Q(8), P(4), 0, 0, 6.29); g.fill();
+      // nose: bridge highlight + nostril shadow
+      g.fillStyle = 'rgba(150,120,86,0.15)'; g.beginPath(); g.ellipse(Q(76), P(headY + 2), Q(3), P(14), 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(8,5,2,0.5)'; g.beginPath(); g.ellipse(Q(78), P(headY + 16), Q(4.5), P(4), 0, 0, 6.29); g.fill();
+      // sunken sockets, then detailed wet eyes (uneven: left higher than right)
+      for (const e of [[64, headY - 12, 6.5, 5], [89, headY + 3, 5.5, 4.5]]) {
+        const ex = e[0], ey = e[1], rx = e[2], ry = e[3];
+        const so = g.createRadialGradient(Q(ex), P(ey), P(1), Q(ex), P(ey), P(rx + 6));
+        so.addColorStop(0, 'rgba(6,4,2,0.85)'); so.addColorStop(1, 'rgba(6,4,2,0)');
+        g.fillStyle = so; g.beginPath(); g.ellipse(Q(ex), P(ey), Q(rx + 4), P(ry + 5), 0, 0, 6.29); g.fill();
+        g.fillStyle = '#cfc6ad'; g.beginPath(); g.ellipse(Q(ex), P(ey), Q(rx), P(ry), 0, 0, 6.29); g.fill();   // sclera
+        g.strokeStyle = 'rgba(150,24,14,0.55)'; g.lineWidth = Q(0.7);                                          // bloodshot
+        g.beginPath(); g.moveTo(Q(ex - rx + 1), P(ey + 1)); g.lineTo(Q(ex + rx - 1), P(ey)); g.stroke();
+        g.fillStyle = '#3a2410'; g.beginPath(); g.arc(Q(ex + 0.6), P(ey + 0.6), Q(rx * 0.55), 0, 6.29); g.fill();   // iris
+        g.fillStyle = '#070402'; g.beginPath(); g.arc(Q(ex + 0.6), P(ey + 0.6), Q(rx * 0.3), 0, 6.29); g.fill();    // pupil
+        g.fillStyle = 'rgba(255,252,240,0.9)'; g.beginPath(); g.arc(Q(ex - rx * 0.3), P(ey - ry * 0.4), Q(rx * 0.2), 0, 6.29); g.fill();  // wet catchlight
+        g.strokeStyle = 'rgba(6,4,2,0.55)'; g.lineWidth = Q(0.8);                                              // lower lid
+        g.beginPath(); g.ellipse(Q(ex), P(ey + ry * 0.5), Q(rx), P(ry * 0.7), 0, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();
+      }
+      // mouth: dark, cracked lips, a couple of teeth, drool of blood
+      g.fillStyle = '#150a07'; g.beginPath(); g.ellipse(cx, P(headY + 28), Q(8), P(6), 0, 0, 6.29); g.fill();
+      g.strokeStyle = 'rgba(90,60,46,0.6)'; g.lineWidth = Q(1);
+      g.beginPath(); g.moveTo(Q(67), P(headY + 28)); g.quadraticCurveTo(Q(75), P(headY + 30), Q(83), P(headY + 28)); g.stroke();
+      g.fillStyle = 'rgba(190,180,150,0.55)'; g.fillRect(Q(72), P(headY + 25), Q(2), P(3)); g.fillRect(Q(77), P(headY + 25), Q(2), P(3));
+      g.fillStyle = 'rgba(150,14,8,0.85)';
+      g.beginPath(); g.moveTo(Q(73), P(headY + 33)); g.lineTo(Q(77), P(headY + 33)); g.lineTo(Q(75), P(headY + 50)); g.closePath(); g.fill();
       // hat (dark brimmed)
       let hg = g.createLinearGradient(0, P(28), 0, P(60));
       hg.addColorStop(0, '#241b10'); hg.addColorStop(1, '#0c0905');
@@ -560,10 +677,25 @@
       const skin = g.createRadialGradient(-46, -70, 24, 0, -10, 250);
       skin.addColorStop(0, '#5f4b38'); skin.addColorStop(0.5, '#382a1c'); skin.addColorStop(1, '#130c06');
       g.fillStyle = skin; g.beginPath(); g.ellipse(0, 0, 152, 212, 0, 0, 6.29); g.fill();
-      // gaunt cheek hollows
+      // skin mottle + clammy sweat sheen
+      g.fillStyle = 'rgba(20,12,6,0.18)';
+      for (let i = 0; i < 60; i++) { g.beginPath(); g.arc((Math.sin(i * 12.9) * 130), (Math.cos(i * 7.7) * 180), 2 + (i % 3), 0, 6.29); g.fill(); }
+      g.fillStyle = 'rgba(180,160,120,0.12)';
+      g.beginPath(); g.ellipse(-30, -110, 40, 26, 0.2, 0, 6.29); g.fill();
+      // gaunt cheek hollows + temple shadows
       g.fillStyle = 'rgba(8,5,2,0.5)';
       g.beginPath(); g.ellipse(-92, 70, 40, 78, 0.2, 0, 6.29); g.fill();
       g.beginPath(); g.ellipse(92, 70, 40, 78, -0.2, 0, 6.29); g.fill();
+      // cheekbone highlights
+      g.fillStyle = 'rgba(150,120,84,0.16)';
+      g.beginPath(); g.ellipse(-44, 36, 30, 22, 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(54, 56, 28, 20, 0, 0, 6.29); g.fill();
+      // forehead creases + brow ridges
+      g.strokeStyle = 'rgba(10,6,3,0.4)'; g.lineWidth = 3;
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(-80, -120 + i * 14); g.quadraticCurveTo(0, -134 + i * 14, 80, -120 + i * 14); g.stroke(); }
+      g.fillStyle = 'rgba(6,4,2,0.5)';
+      g.beginPath(); g.ellipse(-64, -86, 44, 16, 0.1, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(70, -56, 40, 16, -0.1, 0, 6.29); g.fill();
       // blood smears
       g.fillStyle = 'rgba(120,12,8,0.6)';
       g.beginPath(); g.ellipse(40, -10, 22, 50, 0.3, 0, 6.29); g.fill();
@@ -572,13 +704,17 @@
       // misaligned sunken eyes, widen slightly as he lunges
       const ew = 1 + open * 0.25;
       for (const [ex, ey, rx, ry] of [[-64, -54, 34, 44], [70, -24, 27, 36]]) {
-        const so = g.createRadialGradient(ex, ey, 4, ex, ey, rx * 1.6);
+        const so = g.createRadialGradient(ex, ey, 4, ex, ey, rx * 1.7);
         so.addColorStop(0, '#040301'); so.addColorStop(1, 'rgba(4,3,1,0)');
-        g.fillStyle = so; g.beginPath(); g.ellipse(ex, ey, rx * 1.5, ry * 1.5, 0, 0, 6.29); g.fill();
-        g.fillStyle = '#050402'; g.beginPath(); g.ellipse(ex, ey, rx, ry * ew, 0, 0, 6.29); g.fill();
-        // wet reflective pupil
-        g.fillStyle = '#6b5a22'; g.beginPath(); g.arc(ex + 4, ey + 4, rx * 0.28, 0, 6.29); g.fill();
-        g.fillStyle = 'rgba(240,235,200,0.85)'; g.beginPath(); g.arc(ex - rx * 0.25, ey - ry * 0.3, rx * 0.12, 0, 6.29); g.fill();
+        g.fillStyle = so; g.beginPath(); g.ellipse(ex, ey, rx * 1.55, ry * 1.55, 0, 0, 6.29); g.fill();
+        g.fillStyle = '#c9bf9c'; g.beginPath(); g.ellipse(ex, ey, rx, ry * ew, 0, 0, 6.29); g.fill();   // sclera
+        g.strokeStyle = 'rgba(150,20,12,0.5)'; g.lineWidth = 1.4;                                        // veins
+        for (let v = 0; v < 4; v++) { const a = v * 1.6; g.beginPath(); g.moveTo(ex + Math.cos(a) * rx * 0.9, ey + Math.sin(a) * ry * 0.9); g.lineTo(ex + Math.cos(a) * rx * 0.3, ey + Math.sin(a) * ry * 0.3); g.stroke(); }
+        g.fillStyle = '#3c2710'; g.beginPath(); g.arc(ex + 4, ey + 4, rx * 0.5, 0, 6.29); g.fill();       // iris
+        g.fillStyle = '#050301'; g.beginPath(); g.arc(ex + 4, ey + 4, rx * 0.28, 0, 6.29); g.fill();      // pupil
+        g.fillStyle = 'rgba(255,252,240,0.92)'; g.beginPath(); g.arc(ex - rx * 0.22, ey - ry * 0.3, rx * 0.13, 0, 6.29); g.fill();  // catchlight
+        g.strokeStyle = 'rgba(6,4,2,0.6)'; g.lineWidth = 3;                                              // heavy lower lid
+        g.beginPath(); g.ellipse(ex, ey + ry * 0.55, rx, ry * 0.7, 0, 0.08 * Math.PI, 0.92 * Math.PI); g.stroke();
       }
       // nose
       g.fillStyle = 'rgba(30,24,15,0.6)'; g.beginPath(); g.ellipse(2, 40, 14, 40, 0, 0, 6.29); g.fill();
@@ -679,7 +815,10 @@
     const DOOR_STYLE = {
       yellow: { glow: 'rgba(120,255,150,0.9)', frame: '#08130b', slab: '#123a20', panel: '#0a2a14', text: '#bdffd2', label: 'HALLS' },
       pool: { glow: 'rgba(120,235,255,0.9)', frame: '#06222b', slab: '#0e4a5a', panel: '#0a3340', text: '#c8f6ff', label: 'POOLS' },
-      void: { glow: 'rgba(170,120,255,0.85)', frame: '#160a26', slab: '#2c1850', panel: '#1c1038', text: '#e2d2ff', label: 'DARK' }
+      subway: { glow: 'rgba(150,180,255,0.9)', frame: '#0a1020', slab: '#1c2c50', panel: '#13203c', text: '#cfdcff', label: 'SUBWAY' },
+      haunted: { glow: 'rgba(200,140,255,0.85)', frame: '#180a22', slab: '#341a44', panel: '#22122e', text: '#ecd6ff', label: 'HOUSE' },
+      sewer: { glow: 'rgba(150,230,150,0.85)', frame: '#0c1a0c', slab: '#1e3a1e', panel: '#142814', text: '#d2ffce', label: 'SEWER' },
+      forest: { glow: 'rgba(160,255,170,0.85)', frame: '#0a1c0e', slab: '#1c3e22', panel: '#122a16', text: '#d6ffd8', label: 'FOREST' }
     };
     function buildDoor(s) {
       const c = makeCanvas(84, 132), g = c.getContext('2d');
@@ -693,7 +832,8 @@
       g.font = 'bold 11px Nunito, sans-serif'; g.textAlign = 'center'; g.fillText(s.label, 42, 124);
       return c;
     }
-    const DOOR_IMGS = { yellow: buildDoor(DOOR_STYLE.yellow), pool: buildDoor(DOOR_STYLE.pool), void: buildDoor(DOOR_STYLE.void) };
+    const DOOR_IMGS = {};
+    for (const k in DOOR_STYLE) DOOR_IMGS[k] = buildDoor(DOOR_STYLE[k]);
 
     // A slide chute in the floor — a dark hole with rails that drops you deeper.
     const slideImg = (function () {
@@ -782,20 +922,35 @@
       const rd0x = dirX - planeX, rd0y = dirY - planeY;   // ray dir at the left edge
       const rd1x = dirX + planeX, rd1y = dirY + planeY;   // ray dir at the right edge
       const buf = buf32, fd = curTheme.floor, cd = curTheme.ceil, wd = curTheme.wall;
+      const outdoor = !!curTheme.outdoor;
 
-      // --- textured floor + ceiling (perspective cast, one pass per row) ---
+      // --- textured floor + ceiling (perspective cast, one pass per row).
+      // Outdoor (forest) themes draw a night sky overhead instead of a ceiling.
       for (let y = (halfH | 0) + 1; y < RH; y++) {
         const rowDist = halfH / (y - halfH);
         const stepX = rowDist * (rd1x - rd0x) / RW, stepY = rowDist * (rd1y - rd0y) / RW;
         let fx = px + rowDist * rd0x, fy = py + rowDist * rd0y;
         const shade = clamp(1 - rowDist * fog, 0.03, 1) * ambient, cs = shade * 0.92;
         const fr = y * RW, cr = (RH - 1 - y) * RW;
-        for (let x = 0; x < RW; x++) {
-          const tx = ((fx - Math.floor(fx)) * TW) & TMASK, ty = ((fy - Math.floor(fy)) * TH) & TMASK;
-          const ti = (ty * TW + tx) << 2;
-          buf[fr + x] = (0xff000000 | (((fd[ti + 2] * shade) | 0) << 16) | (((fd[ti + 1] * shade) | 0) << 8) | ((fd[ti] * shade) | 0)) >>> 0;
-          buf[cr + x] = (0xff000000 | (((cd[ti + 2] * cs) | 0) << 16) | (((cd[ti + 1] * cs) | 0) << 8) | ((cd[ti] * cs) | 0)) >>> 0;
-          fx += stepX; fy += stepY;
+        if (outdoor) {
+          let syr = ((RH - 1 - y) / halfH * SKYH) | 0; if (syr < 0) syr = 0; else if (syr >= SKYH) syr = SKYH - 1;
+          const skyBase = syr * SKYW;
+          for (let x = 0; x < RW; x++) {
+            const tx = ((fx - Math.floor(fx)) * TW) & TMASK, ty = ((fy - Math.floor(fy)) * TH) & TMASK;
+            const ti = (ty * TW + tx) << 2;
+            buf[fr + x] = (0xff000000 | (((fd[ti + 2] * shade) | 0) << 16) | (((fd[ti + 1] * shade) | 0) << 8) | ((fd[ti] * shade) | 0)) >>> 0;
+            const si = (skyBase + SKYCOL[x]) << 2;
+            buf[cr + x] = (0xff000000 | (SKY[si + 2] << 16) | (SKY[si + 1] << 8) | SKY[si]) >>> 0;
+            fx += stepX; fy += stepY;
+          }
+        } else {
+          for (let x = 0; x < RW; x++) {
+            const tx = ((fx - Math.floor(fx)) * TW) & TMASK, ty = ((fy - Math.floor(fy)) * TH) & TMASK;
+            const ti = (ty * TW + tx) << 2;
+            buf[fr + x] = (0xff000000 | (((fd[ti + 2] * shade) | 0) << 16) | (((fd[ti + 1] * shade) | 0) << 8) | ((fd[ti] * shade) | 0)) >>> 0;
+            buf[cr + x] = (0xff000000 | (((cd[ti + 2] * cs) | 0) << 16) | (((cd[ti + 1] * cs) | 0) << 8) | ((cd[ti] * cs) | 0)) >>> 0;
+            fx += stepX; fy += stepY;
+          }
         }
       }
 
@@ -1154,7 +1309,7 @@
     requestAnimationFrame(frame);
 
     // brief "sliding down" transition: dark vignette closing in + downward streaks
-    const SLIDE_THEMES = ['yellow', 'pool', 'void', 'yellow', 'pool'];
+    const SLIDE_THEMES = ['sewer', 'subway', 'forest', 'haunted', 'pool', 'yellow'];
     function drawSlide() {
       const p = 1 - clamp(slideT / 1.0, 0, 1);
       ctx.fillStyle = 'rgba(0,0,0,' + (0.3 + p * 0.6) + ')'; ctx.fillRect(0, 0, W, H);
