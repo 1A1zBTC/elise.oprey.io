@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Twisted Critters</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="/icons/favicon.png">
+  <script src="/pwa.js" defer></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 12px; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    .topbar { width: 100%; max-width: 620px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+    .stage {
+      position: relative; width: 100%; max-width: 620px; border-radius: 20px; overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.55); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* on-screen jump/duck pads for touch */
+    #pads { width: 100%; max-width: 620px; margin-top: 10px; display: none; gap: 8px;
+      grid-template-columns: repeat(2, 1fr); }
+    #pads.show { display: grid; }
+    #pads.p3 { grid-template-columns: repeat(3, 1fr); }
+    #pads.p4 { grid-template-columns: repeat(2, 1fr); }
+    .pad { border: 2px solid #2a3556; border-radius: 14px; padding: 6px; background: #131c33; }
+    .pad .who { font-weight: 800; font-size: 0.72rem; text-align: center; margin-bottom: 4px; color: #cfd6ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pad .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .pad button { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.9rem; color: #fff;
+      border: none; border-radius: 10px; padding: 11px 4px; cursor: pointer; touch-action: none;
+      background: #243254; box-shadow: 0 3px 0 rgba(0,0,0,0.4); }
+    .pad button.duck { background: #3a2447; }
+    .pad button:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+
+    .hint { margin-top: 10px; color: #a0a8c0; font-size: 0.8rem; text-align: center; max-width: 620px; line-height: 1.5; }
+    .hint b { color: #ffe8b0; }
+    .hint .cy { color: #36e0ff; }
+    .hint .pk { color: #ff4d9d; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+    .overlay[hidden] { display: none; }
+    .panel { width: 100%; max-width: 420px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 22px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.45; }
+
+    .count-label { color: #ffe8b0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 800; margin-bottom: 8px; }
+    .count { display: flex; gap: 8px; justify-content: center; margin-bottom: 14px; }
+    .count button { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.2rem; color: #cfd6ea;
+      width: 56px; height: 56px; border: 2px solid #2a3556; border-radius: 14px; background: #131c33; cursor: pointer; }
+    .count button.sel { color: #16213e; background: #ffd23f; border-color: #ffd23f; }
+
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; text-align: left; }
+    .legend .row { display: flex; align-items: center; gap: 8px; background: #131c33; border: 1px solid #243254; border-radius: 12px; padding: 7px 9px; }
+    .legend .row.hide { display: none; }
+    .legend .em { font-size: 1.3rem; }
+    .legend .nm { font-weight: 800; font-size: 0.82rem; color: #fff; }
+    .legend .ks { font-size: 0.72rem; color: #a0a8c0; }
+    .legend .ks b { color: #ffe8b0; }
+
+    .start-btn { margin-top: 16px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+
+    .results { margin: 10px 0 4px; display: grid; gap: 6px; }
+    .results .r { display: flex; align-items: center; gap: 10px; background: #131c33; border-radius: 12px; padding: 8px 12px; }
+    .results .r .em { font-size: 1.4rem; }
+    .results .r .nm { font-weight: 800; color: #fff; flex: 1; text-align: left; }
+    .results .r .pl { font-size: 0.74rem; color: #a0a8c0; }
+    .results .r .sc { font-weight: 800; color: #ffe8b0; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Twisted Critters</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Twisted Critters</h2>
+        <div class="sub">Spinning bars sweep around the pole &mdash; <b class="cy" style="color:#36e0ff">jump</b> the low one, <b class="pk" style="color:#ff4d9d">duck</b> the high one! Each bar re-rolls behind the pillar, so watch what comes out. It starts slow then speeds up &mdash; last critter standing wins. 🌀</div>
+
+        <div class="count-label">Players</div>
+        <div class="count" id="count">
+          <button data-n="2" class="sel">2</button>
+          <button data-n="3">3</button>
+          <button data-n="4">4</button>
+        </div>
+
+        <div class="legend" id="legend"></div>
+
+        <button class="start-btn" id="start-btn">Start Game</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">Winner!</h2>
+        <div class="sub" id="over-sub"></div>
+        <div class="results" id="results"></div>
+        <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pads"></div>
+
+  <p class="hint">
+    <b class="cy" style="color:#36e0ff">Jump</b> the low cyan bar &nbsp;·&nbsp; <b class="pk" style="color:#ff4d9d">Duck</b> the high pink bar &nbsp;·&nbsp;
+    🐰 <b>Q</b>/<b>A</b> &nbsp; 🐱 <b>↑</b>/<b>↓</b> &nbsp; 🐶 <b>F</b>/<b>V</b> &nbsp; 🐸 <b>O</b>/<b>L</b>
+  </p>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;   // 760 x 560
+
+    const BEST_KEY = 'twistedsystem.best';
+    function loadBest() { try { return parseFloat(localStorage.getItem(BEST_KEY) || '0') || 0; } catch (e) { return 0; } }
+    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+    function playerName(i, fb) { try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fb; } catch (e) { return fb; } }
+
+    // ---- the four animals (colours match the original Twisted System HUD) ----
+    const ANIMALS = [
+      { emoji: '🐰', color: '#ffd23f', dark: '#b8932a', name: 'Rabbit', jump: 'KeyQ',    duck: 'KeyA',       jk: 'Q', dk: 'A' },
+      { emoji: '🐱', color: '#3fa9ff', dark: '#2570b0', name: 'Cat',    jump: 'ArrowUp',  duck: 'ArrowDown',  jk: '↑', dk: '↓' },
+      { emoji: '🐶', color: '#5fe06a', dark: '#3a9a43', name: 'Dog',    jump: 'KeyF',     duck: 'KeyV',       jk: 'F', dk: 'V' },
+      { emoji: '🐸', color: '#ff8c42', dark: '#bd5e22', name: 'Frog',   jump: 'KeyO',     duck: 'KeyL',       jk: 'O', dk: 'L' }
+    ];
+
+    // ---- arena geometry ----
+    const ECX = 380, ECY = 392, ERX = 322, ERY = 92;   // platform ellipse (3/4 view)
+    const POLE_BASE_Y = ECY - 22;                       // where the low bar pivots
+    const HEAD = 104;                                   // height of the high bar above the surface
+    const POLE_TOP_Y = 54;
+
+    // ---- tuning ----
+    const JUMP_DUR = 1.0;       // seconds airborne (nice long hang time)
+    const JUMP_H = 82;          // peak hop height (px, before depth scale)
+    const CLEAR_H = 22;         // must be this high to clear the low bar
+    const DUCK_DROP = 30;       // how far the animal sinks when ducking
+    const OMEGA_BASE = 34;      // deg/sec at the start (nice and slow)
+    const OMEGA_RAMP = 17;      // every this-many seconds adds another OMEGA_BASE of speed
+
+    // ---- line layout (critters stand in a straight row across the front) ----
+    const LINE_Y = 430;         // baseline y for every critter
+    const LINE_SCALE = 1.04;    // uniform size — they're all the same depth
+
+    let state = 'setup';        // 'setup' | 'count' | 'playing' | 'over'
+    let players = [];
+    let numPlayers = 2;
+    let phi = 0;                // master rotation (deg)
+    // two sweeping arms, 180° apart. each one's TYPE (low=jump / high=duck) is
+    // re-rolled the moment it passes directly behind the pillar, so players can't
+    // see it change and can't predict what emerges from the back.
+    let bars = [{ off: 0, type: 'low' }, { off: 180, type: 'high' }];
+    let omega = OMEGA_BASE;
+    let elapsed = 0;            // seconds of play
+    let countT = 0;            // countdown timer
+    let pops = [];             // floating score text
+    let order = [];            // elimination order (player indices, first out first)
+    let lastTs = 0, dtMs = 16.7, dt = 0.0167;
+
+    const setupEl = document.getElementById('setup');
+    const overEl = document.getElementById('over');
+    const padsEl = document.getElementById('pads');
+
+    function rad(d) { return d * Math.PI / 180; }
+    function mod360(a) { return ((a % 360) + 360) % 360; }
+    // does sweeping from `start` by +`delta` degrees pass `target`?
+    function swept(target, start, delta) { const d = mod360(target - start); return d > 1e-6 && d <= delta; }
+
+    // ---------- setup screen ----------
+    function buildLegend() {
+      const el = document.getElementById('legend');
+      el.innerHTML = '';
+      for (let i = 0; i < 4; i++) {
+        const a = ANIMALS[i];
+        const row = document.createElement('div');
+        row.className = 'row' + (i >= numPlayers ? ' hide' : '');
+        row.innerHTML = '<span class="em">' + a.emoji + '</span><span><span class="nm" style="color:' + a.color + '">' +
+          playerName(i, a.name) + '</span><br><span class="ks">jump <b>' + a.jk + '</b> · duck <b>' + a.dk + '</b></span></span>';
+        el.appendChild(row);
+      }
+    }
+
+    document.getElementById('count').addEventListener('click', function (e) {
+      const b = e.target.closest('button'); if (!b) return;
+      numPlayers = parseInt(b.dataset.n, 10);
+      [...document.querySelectorAll('#count button')].forEach(function (x) { x.classList.toggle('sel', x === b); });
+      buildLegend();
+    });
+
+    // ---------- touch pads ----------
+    function buildPads() {
+      padsEl.innerHTML = '';
+      padsEl.className = 'show p' + numPlayers;
+      for (let i = 0; i < numPlayers; i++) {
+        const a = ANIMALS[i], p = players[i];
+        const pad = document.createElement('div');
+        pad.className = 'pad';
+        pad.style.borderColor = a.color;
+        pad.innerHTML = '<div class="who" style="color:' + a.color + '">' + a.emoji + ' ' + p.name + '</div>' +
+          '<div class="btns"><button class="jump">JUMP ▲</button><button class="duck">DUCK ▼</button></div>';
+        const jb = pad.querySelector('.jump'), db = pad.querySelector('.duck');
+        const jd = function (e) { e.preventDefault(); triggerJump(p); };
+        jb.addEventListener('pointerdown', jd);
+        const dOn = function (e) { e.preventDefault(); p.duckHeld = true; };
+        const dOff = function (e) { e.preventDefault(); p.duckHeld = false; };
+        db.addEventListener('pointerdown', dOn);
+        db.addEventListener('pointerup', dOff);
+        db.addEventListener('pointerleave', dOff);
+        db.addEventListener('pointercancel', dOff);
+        padsEl.appendChild(pad);
+      }
+    }
+
+    // ---------- round lifecycle ----------
+    function startRound() {
+      players = [];
+      // even spread across the front arc (35°..145°) so every animal is clearly visible
+      const lo = 35, hi = 145;
+      for (let i = 0; i < numPlayers; i++) {
+        const a = ANIMALS[i];
+        const ang = numPlayers === 1 ? 90 : lo + (hi - lo) * (i / (numPlayers - 1));
+        players.push({
+          idx: i, emoji: a.emoji, color: a.color, dark: a.dark, name: playerName(i, a.name),
+          jumpKey: a.jump, duckKey: a.duck, angle: ang,
+          alive: true, jumpT: 0, duckHeld: false, score: 0,
+          deadT: 0, spin: 0, flash: 0, bob: Math.random() * 6.28
+        });
+      }
+      // start so the first arm sweeps across the line after a short lead-in.
+      // first obstacle is a friendly jump; everything after re-rolls behind the pole.
+      phi = 335; omega = OMEGA_BASE; elapsed = 0; pops = []; order = [];
+      bars = [{ off: 0, type: 'low' }, { off: 180, type: 'high' }];
+      setupEl.hidden = true; overEl.hidden = true;
+      buildPads();
+      countT = 3.0; state = 'count';
+    }
+
+    function endRound() {
+      state = 'over';
+      const alive = players.filter(function (p) { return p.alive; });
+      let winner = null, draw = false;
+      if (alive.length === 1) winner = alive[0];
+      else if (alive.length === 0) {
+        // simultaneous knockout — highest score takes it
+        const top = players.slice().sort(function (a, b) { return b.score - a.score; });
+        if (top.length && (top.length < 2 || top[0].score !== top[1].score)) winner = top[0]; else draw = true;
+      } else { // ran out of time? (shouldn't happen) — highest score
+        const top = alive.slice().sort(function (a, b) { return b.score - a.score; });
+        winner = top[0];
+      }
+
+      const best = Math.max(loadBest(), Math.floor(elapsed));
+      if (Math.floor(elapsed) > loadBest()) saveBest(Math.floor(elapsed));
+
+      document.getElementById('over-title').textContent = draw ? "It's a tie!" : (winner.name + ' wins! ' + winner.emoji);
+      document.getElementById('over-sub').textContent = 'Survived ' + elapsed.toFixed(1) + 's' +
+        (Math.floor(elapsed) >= best && elapsed > 0 ? ' — new record! 🏆' : ' · best ' + best + 's');
+
+      // results board, best score first
+      const res = document.getElementById('results'); res.innerHTML = '';
+      players.slice().sort(function (a, b) {
+        const ra = order.indexOf(a.idx), rb = order.indexOf(b.idx);
+        const sa = a.alive ? 1e9 : ra, sb = b.alive ? 1e9 : rb;  // alive ranks above eliminated
+        return sb - sa;
+      }).forEach(function (p) {
+        const row = document.createElement('div'); row.className = 'r';
+        row.innerHTML = '<span class="em">' + p.emoji + '</span><span class="nm" style="color:' + p.color + '">' + p.name +
+          (p.alive ? ' 👑' : '') + '</span><span class="sc">' + p.score + ' pts</span>';
+        res.appendChild(row);
+      });
+
+      overEl.hidden = false;
+    }
+
+    // ---------- input ----------
+    function triggerJump(p) { if (p && p.alive && p.jumpT <= 0 && !p.duckHeld) p.jumpT = JUMP_DUR; }
+
+    function jumpHeight(p) { if (p.jumpT <= 0) return 0; const t = 1 - p.jumpT / JUMP_DUR; return Math.sin(t * Math.PI) * JUMP_H; }
+    function isAirborne(p) { return jumpHeight(p) >= CLEAR_H; }
+    function isDucking(p) { return p.duckHeld && p.jumpT <= 0; }
+
+    window.addEventListener('keydown', function (e) {
+      if (state === 'count' || state === 'playing') {
+        for (const p of players) {
+          if (e.code === p.jumpKey) { if (!e.repeat) triggerJump(p); e.preventDefault(); }
+          else if (e.code === p.duckKey) { p.duckHeld = true; e.preventDefault(); }
+        }
+      }
+      if ((e.code === 'Enter' || e.code === 'Space')) {
+        if (state === 'setup') { e.preventDefault(); startRound(); }
+        else if (state === 'over') { e.preventDefault(); showSetup(); }
+      }
+    });
+    window.addEventListener('keyup', function (e) {
+      for (const p of players) if (e.code === p.duckKey) { p.duckHeld = false; e.preventDefault(); }
+    });
+
+    function showSetup() { state = 'setup'; overEl.hidden = true; setupEl.hidden = false; padsEl.className = ''; padsEl.innerHTML = ''; buildLegend(); }
+
+    document.getElementById('start-btn').addEventListener('click', startRound);
+    document.getElementById('again-btn').addEventListener('click', showSetup);
+
+    // ---------- update ----------
+    function eliminate(p) {
+      p.alive = false; p.deadT = 0; p.spin = (Math.random() < 0.5 ? -1 : 1);
+      order.push(p.idx);
+      pops.push({ x: 0, y: 0, p: p, txt: 'OUT!', color: '#ff5a6e', t: 0, big: true });
+    }
+
+    function update() {
+      // floating score pops
+      for (let i = pops.length - 1; i >= 0; i--) { pops[i].t += dt; if (pops[i].t > 1.0) pops.splice(i, 1); }
+
+      if (state === 'count') {
+        countT -= dt;
+        if (countT <= 0) { state = 'playing'; elapsed = 0; }
+        return;
+      }
+      if (state !== 'playing') return;
+
+      elapsed += dt;
+      omega = OMEGA_BASE * (1 + elapsed / OMEGA_RAMP);
+      const delta = omega * dt;
+      const prev = phi;
+      phi = mod360(phi + delta);
+
+      // tick player timers up front
+      for (const p of players) {
+        if (p.jumpT > 0) p.jumpT = Math.max(0, p.jumpT - dt);
+        if (p.flash > 0) p.flash -= dt;
+        if (!p.alive) p.deadT += dt;
+      }
+
+      // advance each arm; re-roll its type the instant it slips behind the pole (270°)
+      for (const bar of bars) {
+        const prevA = mod360(prev + bar.off);
+        if (swept(270, prevA, delta)) bar.type = Math.random() < 0.5 ? 'low' : 'high';
+
+        const wantDuck = bar.type === 'high';
+        const popColor = wantDuck ? '#ff4d9d' : '#36e0ff';
+        for (const p of players) {
+          if (!p.alive) continue;
+          if (!swept(p.angle, prevA, delta)) continue;
+          const safe = wantDuck ? isDucking(p) : isAirborne(p);
+          if (safe) { p.score++; p.flash = 0.3; pops.push({ x: 0, y: 0, p: p, txt: '+1', color: popColor, t: 0 }); }
+          else eliminate(p);
+        }
+      }
+
+      if (players.filter(function (p) { return p.alive; }).length <= (numPlayers === 1 ? 0 : 1)) {
+        // small delay so the knockout reads before the overlay
+        if (!update._t) update._t = 0;
+        update._t += dt;
+        if (update._t > 0.7) { update._t = 0; endRound(); }
+      } else { update._t = 0; }
+    }
+
+    // ---------- drawing ----------
+    function playerPos(angle) {
+      // critters stand in a straight horizontal row: x still tracks the sweep
+      // angle (so the bar passes each one in turn) but y and size are constant.
+      const r = rad(angle);
+      const x = ECX + ERX * Math.cos(r);
+      return { x: x, y: LINE_Y, scale: LINE_SCALE };
+    }
+    function barEnd(angle, lift) {
+      const r = rad(angle);
+      return { x: ECX + ERX * Math.cos(r), y: ECY + ERY * Math.sin(r) - lift };
+    }
+
+    function drawBackground() {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#0a1326'); g.addColorStop(0.5, '#0c1a30'); g.addColorStop(1, '#08101f');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      // rotating ambient light streaks behind the pillar
+      ctx.save();
+      ctx.translate(ECX, POLE_BASE_Y);
+      ctx.globalAlpha = 0.10;
+      for (let i = 0; i < 8; i++) {
+        ctx.rotate(rad(45 + phi * 0.3));
+        ctx.fillStyle = i % 2 ? '#1c5f7a' : '#123a52';
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(W, -60); ctx.lineTo(W, 60); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawPlatform() {
+      // soft glow under the disc
+      ctx.save();
+      ctx.shadowColor = 'rgba(54,224,255,0.5)'; ctx.shadowBlur = 40;
+      ctx.fillStyle = '#0e2036';
+      ctx.beginPath(); ctx.ellipse(ECX, ECY, ERX, ERY, 0, 0, 6.2832); ctx.fill();
+      ctx.restore();
+      // disc surface
+      const g = ctx.createRadialGradient(ECX, ECY - 20, 20, ECX, ECY, ERX);
+      g.addColorStop(0, '#16314e'); g.addColorStop(1, '#0c1c30');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(ECX, ECY, ERX, ERY, 0, 0, 6.2832); ctx.fill();
+      // neon rim
+      ctx.lineWidth = 3; ctx.strokeStyle = '#2ec6ff'; ctx.shadowColor = '#2ec6ff'; ctx.shadowBlur = 16;
+      ctx.beginPath(); ctx.ellipse(ECX, ECY, ERX, ERY, 0, 0, 6.2832); ctx.stroke();
+      ctx.shadowBlur = 0;
+      // inner ring
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(46,198,255,0.25)';
+      ctx.beginPath(); ctx.ellipse(ECX, ECY, ERX * 0.62, ERY * 0.62, 0, 0, 6.2832); ctx.stroke();
+    }
+
+    function drawPole() {
+      const topW = 26, botW = 40;
+      const g = ctx.createLinearGradient(ECX - botW, 0, ECX + botW, 0);
+      g.addColorStop(0, '#142b40'); g.addColorStop(0.5, '#27506e'); g.addColorStop(1, '#0e1f30');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(ECX - topW, POLE_TOP_Y);
+      ctx.lineTo(ECX + topW, POLE_TOP_Y);
+      ctx.lineTo(ECX + botW, POLE_BASE_Y);
+      ctx.lineTo(ECX - botW, POLE_BASE_Y);
+      ctx.closePath(); ctx.fill();
+      // panel lines
+      ctx.strokeStyle = 'rgba(46,198,255,0.18)'; ctx.lineWidth = 1.5;
+      for (let i = 1; i < 4; i++) {
+        const y = POLE_TOP_Y + (POLE_BASE_Y - POLE_TOP_Y) * i / 4;
+        const wl = topW + (botW - topW) * i / 4;
+        ctx.beginPath(); ctx.moveTo(ECX - wl, y); ctx.lineTo(ECX + wl, y); ctx.stroke();
+      }
+      // glowing cap
+      ctx.fillStyle = '#36e0ff'; ctx.shadowColor = '#36e0ff'; ctx.shadowBlur = 18;
+      ctx.beginPath(); ctx.ellipse(ECX, POLE_TOP_Y, topW, 7, 0, 0, 6.2832); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    function drawBar(angle, lift, color, pivotY) {
+      const end = barEnd(angle, lift);
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.shadowColor = color; ctx.shadowBlur = 22;
+      // outer glow stroke
+      ctx.strokeStyle = color; ctx.lineWidth = 11;
+      ctx.beginPath(); ctx.moveTo(ECX, pivotY); ctx.lineTo(end.x, end.y); ctx.stroke();
+      // bright core
+      ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.85; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(ECX, pivotY); ctx.lineTo(end.x, end.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+      // bar tip node
+      ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 18;
+      ctx.beginPath(); ctx.arc(end.x, end.y, 8, 0, 6.2832); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPlayer(p) {
+      const pos = playerPos(p.angle);
+      const sc = pos.scale;
+      const jh = jumpHeight(p) * sc;
+      const ducking = isDucking(p);
+
+      // shadow on the disc
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      const shr = 26 * sc * (1 - jh / 260);
+      ctx.beginPath(); ctx.ellipse(pos.x, pos.y + 4, shr, shr * 0.4, 0, 0, 6.2832); ctx.fill();
+
+      // colour ring at the feet
+      ctx.save();
+      ctx.lineWidth = 3.5; ctx.strokeStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.flash > 0 ? 22 : 10;
+      ctx.beginPath(); ctx.ellipse(pos.x, pos.y + 2, 24 * sc, 9 * sc, 0, 0, 6.2832); ctx.stroke();
+      ctx.restore();
+
+      // the animal
+      const size = 54 * sc;
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      if (p.alive) {
+        const bobY = Math.sin(p.bob + elapsed * 4) * 1.5;
+        ctx.translate(pos.x, pos.y + 4 - jh + bobY);
+        if (ducking) { ctx.scale(1.2, 0.58); ctx.translate(0, DUCK_DROP * 0.5); }
+        ctx.font = size + "px 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
+        ctx.fillText(p.emoji, 0, 0);
+      } else {
+        // knocked out — tumble away and fade
+        const t = p.deadT;
+        ctx.globalAlpha = Math.max(0, 1 - t * 0.7);
+        ctx.translate(pos.x + p.spin * t * 70, pos.y + 4 - Math.sin(Math.min(t, 1) * Math.PI) * 90 + t * t * 40);
+        ctx.rotate(p.spin * t * 7);
+        ctx.font = size + "px 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
+        ctx.fillText(p.emoji, 0, 0);
+      }
+      ctx.restore();
+
+      // name tag
+      ctx.globalAlpha = p.alive ? 1 : 0.4;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = "800 13px 'Nunito', sans-serif";
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.name, pos.x, pos.y + 26 * sc);
+      ctx.globalAlpha = 1;
+    }
+
+    function drawHUD() {
+      // top-centre clock + speed
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#fff'; ctx.font = "800 28px 'Nunito', sans-serif";
+      ctx.fillText(elapsed.toFixed(1) + 's', W / 2, 38);
+      ctx.fillStyle = '#7fa6c8'; ctx.font = "800 12px 'Nunito', sans-serif";
+      ctx.fillText('SPEED ' + Math.round(omega) + '°/s', W / 2, 56);
+
+      // per-player score bars along the bottom
+      const n = players.length;
+      const bw = Math.min(150, (W - 40) / n - 10);
+      const total = n * bw + (n - 1) * 14;
+      let x = (W - total) / 2;
+      const y = H - 30;
+      for (const p of players) {
+        ctx.globalAlpha = p.alive ? 1 : 0.45;
+        // pill
+        ctx.fillStyle = '#0c1626'; roundRect(x, y, bw, 24, 12); ctx.fill();
+        ctx.strokeStyle = p.color; ctx.lineWidth = 2; roundRect(x, y, bw, 24, 12); ctx.stroke();
+        // dot + emoji
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.font = "16px 'Segoe UI Emoji', sans-serif";
+        ctx.fillText(p.emoji, x + 8, y + 12);
+        ctx.fillStyle = p.alive ? '#fff' : '#8a93a8'; ctx.font = "800 14px 'Nunito', sans-serif";
+        ctx.fillText(p.alive ? String(p.score) : 'OUT', x + 30, y + 13);
+        ctx.globalAlpha = 1;
+        x += bw + 14;
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function drawPops() {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const pp of pops) {
+        const pos = playerPos(pp.p.angle);
+        const yy = pos.y - 40 - pp.t * 36;
+        ctx.globalAlpha = Math.max(0, 1 - pp.t);
+        ctx.fillStyle = pp.color;
+        ctx.font = (pp.big ? "800 26px" : "800 20px") + " 'Nunito', sans-serif";
+        ctx.fillText(pp.txt, pos.x, yy);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawCountdown() {
+      ctx.fillStyle = 'rgba(6,12,24,0.45)'; ctx.fillRect(0, 0, W, H);
+      const n = Math.ceil(countT);
+      const frac = countT - (n - 1);     // 1 → 0 within this second
+      ctx.save();
+      ctx.translate(W / 2, H / 2 - 20);
+      ctx.globalAlpha = Math.min(1, frac * 1.4);
+      ctx.scale(1.6 - frac * 0.6, 1.6 - frac * 0.6);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = "800 120px 'Nunito', sans-serif";
+      ctx.fillText(n > 0 ? String(n) : 'GO!', 0, 0);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    function draw() {
+      drawBackground();
+      drawPlatform();
+
+      // each arm draws as cyan-low (jump) or pink-high (duck) per its current type.
+      // arms behind the pole (sin < 0) draw first, then the pole, then front arms.
+      const arms = bars.map(function (bar) {
+        const angle = mod360(phi + bar.off);
+        const high = bar.type === 'high';
+        return {
+          angle: angle, s: Math.sin(rad(angle)),
+          lift: high ? HEAD : 0,
+          color: high ? '#ff4d9d' : '#36e0ff',
+          pivotY: high ? POLE_BASE_Y - HEAD : POLE_BASE_Y
+        };
+      }).sort(function (a, b) { return a.s - b.s; });   // back (sin<0) first
+
+      let poleDrawn = false;
+      for (const a of arms) {
+        if (!poleDrawn && a.s >= 0) { drawPole(); poleDrawn = true; }
+        drawBar(a.angle, a.lift, a.color, a.pivotY);
+      }
+      if (!poleDrawn) drawPole();   // both arms were behind the pole
+
+      // players, sorted back-to-front so nearer animals overlap farther ones
+      players.slice().sort(function (a, b) { return playerPos(a.angle).y - playerPos(b.angle).y; })
+        .forEach(drawPlayer);
+
+      drawPops();
+      if (state === 'playing' || state === 'count') drawHUD();
+      if (state === 'count') drawCountdown();
+    }
+
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      dtMs = Math.min(Math.max(ts - lastTs, 1), 60);
+      dt = dtMs / 1000; lastTs = ts;
+      update(); draw();
+      requestAnimationFrame(loop);
+    }
+
+    // idle backdrop spins gently behind the setup panel
+    buildLegend();
+    (function idle() {
+      // seed a couple of demo animals so the disc isn't empty on the menu
+      if (state === 'setup' && !players.length) {
+        players = [0, 1].map(function (i) {
+          const a = ANIMALS[i];
+          return { idx: i, emoji: a.emoji, color: a.color, dark: a.dark, name: '', jumpKey: '', duckKey: '',
+            angle: 55 + i * 60, alive: true, jumpT: 0, duckHeld: false, score: 0, deadT: 0, spin: 0, flash: 0, bob: i };
+        });
+      }
+    })();
+    // keep the menu disc alive by slowly turning the bars
+    setInterval(function () { if (state === 'setup') phi = mod360(phi + 0.6); }, 30);
+
+    requestAnimationFrame(loop);
+  })();
+  </script>
+
+  <script>
+    if (window.self !== window.top) { var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden'; }
+  </script>
+</body>
+</html>

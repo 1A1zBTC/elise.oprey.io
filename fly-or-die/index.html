@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Fly or Die</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="/icons/favicon.png">
+  <script src="/pwa.js" defer></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      height: 100vh; height: 100dvh; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 8px; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    .topbar { width: 100%; max-width: 1400px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex: 0 0 auto; }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+    .stage {
+      position: relative; width: 100%; max-width: 1400px; flex: 1 1 auto; min-height: 0;
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5); border: 2px solid #0f3460;
+    }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    .hint { margin-top: 8px; color: #a0a8c0; font-size: 0.8rem; text-align: center; max-width: 900px; line-height: 1.5; flex: 0 0 auto; }
+    .hint b { color: #ffe8b0; }
+    .hint .o2 { color: #6ee7ff; } .hint .h2o { color: #4ea8ff; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+    .overlay[hidden] { display: none; }
+    .panel { width: 100%; max-width: 420px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.8rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 12px; line-height: 1.45; }
+    .evo { font-size: 1.6rem; letter-spacing: 1px; margin: 10px 0 6px; }
+    .evo .arrow { color: #5a648a; font-size: 0.95rem; }
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left; margin: 12px 0 2px; }
+    .legend .row { background: #131c33; border: 1px solid #243254; border-radius: 12px; padding: 8px 10px; font-size: 0.78rem; color: #cfd6ea; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .legend .row b { display: block; font-size: 0.66rem; color: #8b93b0; font-weight: 800; }
+    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
+    .scoreline .big { font-size: 2.1rem; display: block; line-height: 1.1; }
+    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .start-btn { margin-top: 14px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Fly or Die</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Fly or Die</h2>
+        <div class="sub">You're a tiny flying critter. <b>Eat</b> food and smaller creatures to grow &amp; <b>evolve</b> — but bigger creatures will eat <b>you</b>!</div>
+        <div class="evo">🪰<span class="arrow"> › </span>🐝<span class="arrow"> › </span>🦋<span class="arrow"> › </span>🐦<span class="arrow"> › </span>🦜<span class="arrow"> › </span>🦅<span class="arrow"> › </span>🦉<span class="arrow"> › </span>🐉</div>
+        <div class="legend">
+          <div class="row"><span style="font-size:1.2rem">🟢</span><span><b>Smaller</b>Safe to eat</span></div>
+          <div class="row"><span style="font-size:1.2rem">🔴</span><span><b>Bigger</b>Will eat you!</span></div>
+          <div class="row"><span style="font-size:1.2rem">🦂</span><span><b>Ground beasts</b>Bite if you fly low</span></div>
+          <div class="row"><span style="font-size:1.2rem">🍓</span><span><b>Biome food</b>On ground &amp; trees</span></div>
+        </div>
+        <div class="sub" style="margin-top:10px"><b>WASD</b> to fly: <b>W</b> flaps up, <b>gravity</b> pulls you down, <b>A/D</b> steer, <b>S</b> dives. Each area has its own food &mdash; and its own ground predators!</div>
+        <button class="start-btn" id="start-btn">Start Game</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">You died!</h2>
+        <div class="sub" id="over-sub"></div>
+        <div class="scoreline"><span class="lbl">Score</span><span class="big" id="over-score">0</span></div>
+        <div class="scoreline"><span class="lbl">Best</span><span class="big" id="over-best">0</span></div>
+        <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>WASD</b> to fly (W flaps, gravity pulls down) &nbsp;·&nbsp; eat <b>ground &amp; tree</b> food to evolve &nbsp;·&nbsp;
+    dodge <span style="color:#ff5a6e">bigger</span> fliers &amp; <span style="color:#ff5a6e">ground beasts</span> 🦂🐺 &nbsp;·&nbsp; <span class="o2">O₂</span> in space ↑ &nbsp;·&nbsp; <span class="h2o">water</span> in seas ↓
+  </p>
+
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let VW = canvas.width, VH = canvas.height;     // backing-store pixels (set by resize)
+    const VIEW_W = 980;                            // world units shown across — bigger = smaller characters / wider view
+    let ZOOM = 1, VIEW_H = 420, uiS = 1;           // px-per-world-unit, world units tall, HUD scale
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      VW = canvas.width = Math.max(2, Math.round((rect.width || 760) * dpr));
+      VH = canvas.height = Math.max(2, Math.round((rect.height || 560) * dpr));
+      ZOOM = VW / VIEW_W;
+      VIEW_H = VH / ZOOM;
+      uiS = clamp(VW / 760, 0.85, 2.4);
+    }
+    window.addEventListener('resize', resize);
+
+    const BEST_KEY = 'flyordie.best';
+    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
+    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function rndInt(a, b) { return Math.floor(rnd(a, b + 1)); }
+    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+    function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+
+    // ---- evolution ladder (all flying animals) ----
+    // each level needs noticeably more XP than the last (steeper curve)
+    const STAGES = [
+      { e: '🪰', r: 16, next: 5,   speed: 4.7 },
+      { e: '🐝', r: 22, next: 14,  speed: 4.5 },
+      { e: '🦋', r: 29, next: 30,  speed: 4.3 },
+      { e: '🐦', r: 37, next: 55,  speed: 4.1 },
+      { e: '🦜', r: 46, next: 95,  speed: 3.9 },
+      { e: '🦅', r: 56, next: 155, speed: 3.8 },
+      { e: '🦉', r: 68, next: 240, speed: 3.6 },
+      { e: '🐉', r: 84, next: 999, speed: 3.7 }
+    ];
+    const MAXTIER = STAGES.length - 1;
+
+    // ---- world & zones ----
+    // a really WIDE world split into distinct biomes, with a space band on top,
+    // scattered seas (not a full-width floor), and solid obstacles to fly around.
+    const WORLD = { w: 8400, h: 2200 };
+    const SPACE_Y = 320;          // y < this → space (oxygen drains)
+    const GROUND_Y = WORLD.h - 150;  // visual ground strip starts here
+    const NPC_MAX = 26;
+    const FOOD_MAX = 110;
+    const BIOME_W = WORLD.w / 6;
+
+    // gravity flight: you fall unless you flap (W). A/D move, S dives.
+    const GRAV = 0.30, THRUST = 0.78, DIVE = 0.55, HACCEL = 0.72;
+    const HDRAG = 0.86, VDRAG = 0.985, MAXVX = 6.2, MAXVUP = 9.5, MAXVDOWN = 12;
+
+    // each biome: its look + obstacle kit + FOOD that only grows here + GROUND predators
+    const BIOMES = [
+      { name: 'Meadow',    sky: ['#62b3e6', '#bfe6c0'], ground: '#6fbf5a', obs: ['🌳', '🌲', '🌷'],
+        food: ['🍓', '🌼', '🍒', '🐛'], pred: [{ e: '🐍', tier: 3 }, { e: '🐀', tier: 2 }] },
+      { name: 'Forest',    sky: ['#4d93c4', '#86c08a'], ground: '#2f8a3e', obs: ['🌲', '🌳', '🪨'],
+        food: ['🍄', '🌰', '🫐', '🐌'], pred: [{ e: '🐺', tier: 5 }, { e: '🦊', tier: 4 }] },
+      { name: 'Desert',    sky: ['#e9cf8a', '#f0dca0'], ground: '#d9a85a', obs: ['🌵', '🪨', '🌵'],
+        food: ['🦗', '🌶️', '🥚', '🍈'], pred: [{ e: '🦂', tier: 3 }, { e: '🕷️', tier: 3 }, { e: '🐍', tier: 4 }] },
+      { name: 'Ocean',     sky: ['#4fa6d6', '#9fd6ef'], ground: '#e9d8a8', obs: ['🪨', '⛵', '🏝️'],
+        food: ['🐟', '🦐', '🐚', '🪼'], pred: [{ e: '🦀', tier: 3 }, { e: '🦈', tier: 6 }] },
+      { name: 'Mountains', sky: ['#8ba0bd', '#c6d2e0'], ground: '#727a88', obs: ['⛰️', '🪨', '🗻'],
+        food: ['🍇', '🥜', '🍐', '🪺'], pred: [{ e: '🐻', tier: 6 }, { e: '🐺', tier: 5 }] },
+      { name: 'Tundra',    sky: ['#a9c6dd', '#e6f1f7'], ground: '#cfe2ee', obs: ['🏔️', '🧊', '🪨'],
+        food: ['🐟', '🫐', '🥚', '🍥'], pred: [{ e: '🐻‍❄️', tier: 6 }, { e: '🦭', tier: 5 }] }
+    ];
+    function biomeIndexAt(x) { return clamp(Math.floor(x / BIOME_W), 0, BIOMES.length - 1); }
+    function biomeAt(x) { return BIOMES[biomeIndexAt(x)]; }
+
+    let WATERS = [];      // seas/lakes: {x,y,rx,ry}
+    let OBSTACLES = [];   // solid things to bump into: {x,y,r,e}
+    let grounders = [];   // ground predators that attack near the floor
+
+    let state = 'setup';     // 'setup' | 'playing' | 'over'
+    let player = null;
+    let foods = [], npcs = [], parts = [];
+    let camX = 0, camY = 0;
+    let score = 0, best = 0, maxTier = 0;
+    let evolveMsg = 0, zoneMsg = '', zoneMsgT = 0;
+    let stars = [];
+
+    // input
+    const keys = {};
+    let tx = 0, ty = 0, haveTarget = false, pointerActive = false;
+
+    const setupEl = document.getElementById('setup');
+    const overEl = document.getElementById('over');
+
+    // ---------- entities ----------
+    // food grows where it belongs: on the GROUND or in the TREES of its own biome
+    function spawnFood(f) {
+      f = f || {};
+      const bi = rndInt(0, BIOMES.length - 1), bm = BIOMES[bi];
+      f.x = rnd(bi * BIOME_W + 40, (bi + 1) * BIOME_W - 40);
+      // ~40% perch in a tree of this biome, else sit on the ground
+      const trees = OBSTACLES.filter(function (o) { return (o.e === '🌳' || o.e === '🌲') && Math.floor(o.x / BIOME_W) === bi; });
+      if (trees.length && Math.random() < 0.4) {
+        const t = trees[rndInt(0, trees.length - 1)];
+        f.x = t.x + rnd(-t.r * 0.4, t.r * 0.4); f.y = t.y - t.r * 0.5;
+      } else {
+        f.y = GROUND_Y - rnd(6, 26);
+      }
+      f.r = rnd(9, 13);
+      f.e = bm.food[rndInt(0, bm.food.length - 1)];
+      f.biome = bi;
+      f.bob = rnd(0, 6.28);
+      return f;
+    }
+    // ground predators: patrol the floor of their biome, lunge when you fly low
+    function spawnGrounder(g, bi) {
+      g = g || {};
+      const bm = BIOMES[bi], kind = bm.pred[rndInt(0, bm.pred.length - 1)];
+      g.x = rnd(bi * BIOME_W + 60, (bi + 1) * BIOME_W - 60);
+      g.tier = kind.tier; g.e = kind.e; g.r = STAGES[kind.tier].r * 0.9;
+      g.y = GROUND_Y - g.r * 0.5;
+      g.vx = rnd(-1, 1) < 0 ? -1 : 1; g.wt = rnd(1, 3); g.bite = 0; g.step = rnd(0, 6.28);
+      return g;
+    }
+    function spawnNpc(n, awayFrom) {
+      n = n || {};
+      let x, y, tries = 0;
+      do { x = rnd(60, WORLD.w - 60); y = rnd(60, WORLD.h - 60); tries++; }
+      while (awayFrom && tries < 20 && dist2(x, y, awayFrom.x, awayFrom.y) < 520 * 520);
+      n.x = x; n.y = y; n.vx = 0; n.vy = 0;
+      const pt = player ? player.tier : 1;
+      // gentle distribution — biased toward edible (≤ player) so you're not swarmed by predators
+      const offs = [-2, -1, -1, 0, 0, 0, 1, 1, 2];
+      let off = offs[rndInt(0, offs.length - 1)];
+      const maxUp = (player && player.tier < 2) ? 1 : 2;   // tiny creatures never face huge predators
+      if (off > maxUp) off = maxUp;
+      n.tier = clamp(pt + off, 0, MAXTIER);
+      n.r = STAGES[n.tier].r;
+      n.e = STAGES[n.tier].e;
+      n.wx = rnd(60, WORLD.w - 60); n.wy = rnd(60, WORLD.h - 60);
+      n.wt = rnd(1, 3); n.flap = rnd(0, 6.28);
+      return n;
+    }
+    function burst(x, y, color, n) {
+      for (let i = 0; i < n; i++) {
+        const a = rnd(0, 6.28), s = rnd(1, 5.5);
+        parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, color: color });
+      }
+    }
+
+    function begin() {
+      seedWorld();
+      player = {
+        x: BIOME_W * 0.5, y: (SPACE_Y + GROUND_Y) / 2, vx: 0, vy: 0,
+        tier: 0, r: STAGES[0].r, drawR: STAGES[0].r, xp: 0,
+        hp: 100, o2: 100, water: 100, iframe: 0, grace: 3, flap: 0
+      };
+      player.grounded = false;
+      // nudge the spawn out of any obstacle it landed on
+      collideObstacles(player);
+      foods = []; for (let i = 0; i < FOOD_MAX; i++) foods.push(spawnFood());
+      npcs = []; for (let i = 0; i < NPC_MAX; i++) npcs.push(spawnNpc({}, player));
+      grounders = []; for (let b = 0; b < BIOMES.length; b++) { const n = rndInt(2, 3); for (let i = 0; i < n; i++) grounders.push(spawnGrounder({}, b)); }
+      parts = []; score = 0; maxTier = 0; evolveMsg = 0; zoneMsgT = 0;
+      best = loadBest();
+      haveTarget = false;
+      resize();
+      setupEl.hidden = true; overEl.hidden = true;
+      state = 'playing';
+    }
+    function gameOver(reason) {
+      state = 'over';
+      if (score > loadBest()) saveBest(score);
+      best = Math.max(loadBest(), score);
+      document.getElementById('over-title').textContent = 'You died! ' + STAGES[player.tier].e;
+      document.getElementById('over-sub').textContent = reason + ' Reached the ' + stageName(player.tier) + '.' +
+        (score >= best && score > 0 ? ' New best! 🏆' : '');
+      document.getElementById('over-score').textContent = score;
+      document.getElementById('over-best').textContent = best;
+      overEl.hidden = false;
+    }
+    function showSetup() { state = 'setup'; overEl.hidden = true; setupEl.hidden = false; }
+    function stageName(t) {
+      return ['fly', 'bee', 'butterfly', 'bird', 'parrot', 'eagle', 'owl', 'dragon'][t];
+    }
+
+    // ---------- input ----------
+    function setTargetFromEvent(e) {
+      const rect = canvas.getBoundingClientRect();
+      // map the click position (in CSS px) straight to world units across the view
+      const sx = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / rect.width * VIEW_W;
+      const sy = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / rect.height * VIEW_H;
+      tx = camX + sx; ty = camY + sy; haveTarget = true;
+    }
+    canvas.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (state === 'setup') { begin(); return; }
+      if (state === 'over') { showSetup(); return; }
+      pointerActive = true; setTargetFromEvent(e);
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (state !== 'playing') return;
+      // desktop: follow hover; touch: only while pressed
+      if (pointerActive || e.pointerType === 'mouse') setTargetFromEvent(e);
+    });
+    window.addEventListener('pointerup', function () { pointerActive = false; });
+    window.addEventListener('keydown', function (e) {
+      if (state === 'setup' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); begin(); return; }
+      if (state === 'over' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); showSetup(); return; }
+      keys[e.code] = true;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].indexOf(e.code) >= 0) e.preventDefault();
+    });
+    window.addEventListener('keyup', function (e) { keys[e.code] = false; });
+
+    document.getElementById('start-btn').addEventListener('click', begin);
+    document.getElementById('again-btn').addEventListener('click', showSetup);
+
+    // ---------- update ----------
+    function inWater(x, y) {
+      for (const w of WATERS) { const dx = (x - w.x) / w.rx, dy = (y - w.y) / w.ry; if (dx * dx + dy * dy <= 1) return true; }
+      return false;
+    }
+    function zoneOf(x, y) { return y < SPACE_Y ? 'space' : (inWater(x, y) ? 'water' : 'sky'); }
+
+    function update(dt) {
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const p = parts[i]; p.t += dt; p.x += p.vx; p.y += p.vy; p.vx *= 0.94; p.vy *= 0.94; p.vy += 0.05;
+        if (p.t > 0.7) parts.splice(i, 1);
+      }
+      if (evolveMsg > 0) evolveMsg -= dt;
+      if (zoneMsgT > 0) zoneMsgT -= dt;
+      if (state !== 'playing') return;
+
+      // ---- gravity flight (WASD): W flaps up, A/D move, S dives ----
+      let left = keys['KeyA'] || keys['ArrowLeft'];
+      let right = keys['KeyD'] || keys['ArrowRight'];
+      let up = keys['KeyW'] || keys['ArrowUp'] || keys['Space'];
+      let down = keys['KeyS'] || keys['ArrowDown'];
+      // touch: hold to flap up and steer toward your finger's x
+      if (pointerActive && haveTarget) {
+        up = true;
+        if (tx < player.x - 24) left = true; else if (tx > player.x + 24) right = true;
+      }
+      if (left) player.vx -= HACCEL;
+      if (right) player.vx += HACCEL;
+      player.vx *= HDRAG;
+      player.vy += GRAV;                       // gravity always pulls down
+      if (up) player.vy -= THRUST;             // flap to rise
+      if (down) player.vy += DIVE;             // dive faster
+      player.vy *= VDRAG;
+      player.vx = clamp(player.vx, -MAXVX, MAXVX);
+      player.vy = clamp(player.vy, -MAXVUP, MAXVDOWN);
+      player.x = clamp(player.x + player.vx, player.r, WORLD.w - player.r);
+      player.y = clamp(player.y + player.vy, player.r, WORLD.h - player.r);
+      // land on the ground
+      player.grounded = false;
+      const floor = GROUND_Y - player.r;
+      if (player.y >= floor) { player.y = floor; if (player.vy > 0) player.vy = 0; player.grounded = true; }
+      collideObstacles(player);
+      player.flap += (Math.abs(player.vx) * 0.05 + (up ? 0.5 : 0.12));
+      player.drawR += (player.r - player.drawR) * 0.12;
+      if (player.iframe > 0) player.iframe -= dt;
+      if (player.grace > 0) player.grace -= dt;
+
+      // ---- zones: oxygen + water ----
+      const z = zoneOf(player.x, player.y);
+      if (z === 'space') { player.o2 -= 11 * dt; if (zoneMsg !== 'space') { zoneMsg = 'space'; zoneMsgT = 2; } }
+      else { player.o2 += 16 * dt; if (z !== 'space' && zoneMsg === 'space') zoneMsg = ''; }
+      if (z === 'water') { player.water += 42 * dt; if (zoneMsg !== 'water') { zoneMsg = 'water'; zoneMsgT = 2; } }
+      else { player.water -= 3.6 * dt; if (zoneMsg === 'water') zoneMsg = ''; }
+      player.o2 = clamp(player.o2, 0, 100);
+      player.water = clamp(player.water, 0, 100);
+
+      // empty bars hurt; otherwise slowly heal
+      let starving = false;
+      if (player.o2 <= 0) { player.hp -= 16 * dt; starving = true; }
+      if (player.water <= 0) { player.hp -= 14 * dt; starving = true; }
+      if (!starving && player.iframe <= 0) player.hp += 3 * dt;
+      player.hp = clamp(player.hp, 0, 100);
+      if (player.hp <= 0) {
+        gameOver(player.o2 <= 0 ? 'You suffocated in space!' : (player.water <= 0 ? 'You dried out!' : 'A bigger creature got you!'));
+        return;
+      }
+
+      // ---- food ----
+      for (const f of foods) {
+        f.bob += dt * 3;
+        if (dist2(f.x, f.y, player.x, player.y) < (player.r + f.r) * (player.r + f.r)) {
+          gainXp(1); player.hp = clamp(player.hp + 1.5, 0, 100);
+          burst(f.x, f.y, '#9be15d', 5); score += 1;
+          spawnFood(f);
+        }
+      }
+
+      // ---- npcs ----
+      for (const n of npcs) {
+        const npcBig = n.r > player.r * 1.08;
+        const npcSmall = player.r > n.r * 1.08;
+        const dd = Math.hypot(n.x - player.x, n.y - player.y);
+        const ns = STAGES[n.tier].speed * 0.6;
+        // behaviour
+        if (dd < 320 && npcBig) {           // hunter: chase the player
+          const a = Math.atan2(player.y - n.y, player.x - n.x);
+          n.vx += (Math.cos(a) * ns - n.vx) * 0.05; n.vy += (Math.sin(a) * ns - n.vy) * 0.05;
+        } else if (dd < 300 && npcSmall) {  // prey: flee
+          const a = Math.atan2(n.y - player.y, n.x - player.x);
+          n.vx += (Math.cos(a) * ns - n.vx) * 0.06; n.vy += (Math.sin(a) * ns - n.vy) * 0.06;
+        } else {                             // wander
+          n.wt -= dt; if (n.wt <= 0) { n.wx = rnd(60, WORLD.w - 60); n.wy = rnd(60, WORLD.h - 60); n.wt = rnd(1.5, 4); }
+          const a = Math.atan2(n.wy - n.y, n.wx - n.x);
+          n.vx += (Math.cos(a) * ns * 0.6 - n.vx) * 0.03; n.vy += (Math.sin(a) * ns * 0.6 - n.vy) * 0.03;
+        }
+        n.x = clamp(n.x + n.vx, n.r, WORLD.w - n.r);
+        n.y = clamp(n.y + n.vy, n.r, WORLD.h - n.r);
+        collideObstacles(n);
+        n.flap += Math.hypot(n.vx, n.vy) * 0.05 + 0.04;
+
+        // collisions
+        const touch = (player.r + n.r) * 0.78;
+        if (dist2(n.x, n.y, player.x, player.y) < touch * touch) {
+          if (npcSmall) {                    // eat it
+            gainXp((n.tier + 1) * 2); player.hp = clamp(player.hp + 5, 0, 100);
+            burst(n.x, n.y, '#9be15d', 12); score += (n.tier + 1) * 2;
+            spawnNpc(n, player);
+          } else if (npcBig && player.iframe <= 0 && player.grace <= 0) {   // get bitten
+            player.hp -= 18; player.iframe = 1.2;
+            const a = Math.atan2(player.y - n.y, player.x - n.x);
+            player.vx += Math.cos(a) * 9; player.vy += Math.sin(a) * 9;
+            burst(player.x, player.y, '#ff5a6e', 12);
+            if (player.hp <= 0) { gameOver('A wild ' + stageName(n.tier) + ' ate you!'); return; }
+          }
+        }
+      }
+
+      // ---- ground predators (scorpions, wolves, …) — dangerous when you fly low ----
+      const lowEnough = player.y > GROUND_Y - 240;   // only a threat near the floor
+      for (const g of grounders) {
+        if (g.bite > 0) g.bite -= dt;
+        const gd = player.x - g.x, adx = Math.abs(gd);
+        if (lowEnough && adx < 360) {            // notice you and charge along the ground
+          g.vx += ((gd > 0 ? 1 : -1) * 2.6 - g.vx) * 0.08;
+        } else {                                 // patrol
+          g.wt -= dt; if (g.wt <= 0) { g.vx = (Math.random() < 0.5 ? -1 : 1) * rnd(0.6, 1.4); g.wt = rnd(1.5, 3.5); }
+        }
+        g.x = clamp(g.x + g.vx, g.r, WORLD.w - g.r);
+        g.y = GROUND_Y - g.r * 0.5 + Math.sin(g.step += Math.abs(g.vx) * 0.15) * 2;
+        // attack / be eaten
+        const touch = (player.r + g.r) * 0.8;
+        if (dist2(g.x, g.y, player.x, player.y) < touch * touch) {
+          if (player.r > g.r * 1.12) {           // big enough → eat it for a treat
+            gainXp((g.tier + 1) * 2); player.hp = clamp(player.hp + 6, 0, 100);
+            burst(g.x, g.y, '#9be15d', 12); score += (g.tier + 1) * 2;
+            spawnGrounder(g, biomeIndexAt(g.x));
+          } else if (g.bite <= 0 && player.iframe <= 0 && player.grace <= 0) {  // bites you
+            player.hp -= 16; player.iframe = 1.1; g.bite = 1;
+            player.vy -= 8; player.vx += (gd > 0 ? -6 : 6);   // knock you up & back
+            burst(player.x, player.y, '#ff5a6e', 12);
+            if (player.hp <= 0) { gameOver('A ' + biomeAt(g.x).name.toLowerCase() + ' ' + grounderName(g.e) + ' got you!'); return; }
+          }
+        }
+      }
+
+      // camera follows player, clamped to the world (in world units)
+      camX = clamp(player.x - VIEW_W / 2, 0, Math.max(0, WORLD.w - VIEW_W));
+      camY = clamp(player.y - VIEW_H / 2, 0, Math.max(0, WORLD.h - VIEW_H));
+    }
+    function grounderName(e) {
+      return { '🐍': 'snake', '🐀': 'rat', '🐺': 'wolf', '🦊': 'fox', '🦂': 'scorpion', '🕷️': 'tarantula',
+        '🦀': 'crab', '🦈': 'shark', '🐻': 'bear', '🐻‍❄️': 'polar bear', '🦭': 'seal' }[e] || 'beast';
+    }
+
+    function gainXp(amount) {
+      player.xp += amount;
+      while (player.tier < MAXTIER && player.xp >= STAGES[player.tier].next) {
+        player.xp -= STAGES[player.tier].next;
+        player.tier++;
+        player.r = STAGES[player.tier].r;
+        player.hp = 100;
+        maxTier = Math.max(maxTier, player.tier);
+        evolveMsg = 1.8; score += 25;
+        burst(player.x, player.y, '#ffd23f', 26);
+      }
+      if (player.tier >= MAXTIER) player.xp = Math.min(player.xp, STAGES[MAXTIER].next);
+    }
+
+    // push an entity out of any solid obstacle it overlaps
+    function collideObstacles(o) {
+      for (const ob of OBSTACLES) {
+        const dx = o.x - ob.x, dy = o.y - ob.y;
+        const min = o.r + ob.r;
+        let d2v = dx * dx + dy * dy;
+        if (d2v < min * min && d2v > 0.0001) {
+          const d = Math.sqrt(d2v), nx = dx / d, ny = dy / d;
+          o.x = ob.x + nx * min; o.y = ob.y + ny * min;
+          if (o.vx !== undefined) {
+            const vd = o.vx * nx + o.vy * ny;
+            if (vd < 0) { o.vx -= vd * nx; o.vy -= vd * ny; }
+          }
+        }
+      }
+    }
+
+    // build the wide world: seas (not a full floor) + obstacles per biome
+    function seedWorld() {
+      WATERS = [];
+      // a handful of seas/lakes in chosen biomes, sitting low but with land gaps between
+      WATERS.push({ x: BIOME_W * 0.7, y: WORLD.h - 230, rx: 360, ry: 150 });           // Meadow lake
+      WATERS.push({ x: BIOME_W * 3.5, y: WORLD.h - 250, rx: 760, ry: 200 });           // big Ocean sea
+      WATERS.push({ x: BIOME_W * 4.4, y: WORLD.h - 200, rx: 300, ry: 120 });           // Ocean cove
+      WATERS.push({ x: BIOME_W * 5.6, y: WORLD.h - 220, rx: 320, ry: 130 });           // Tundra melt lake
+
+      OBSTACLES = [];
+      const sizeFor = function (e) {
+        if (e === '⛰️' || e === '🗻' || e === '🏔️') return rnd(70, 110);
+        if (e === '🌳' || e === '🌲') return rnd(40, 56);
+        if (e === '🧊' || e === '🪨') return rnd(28, 42);
+        return rnd(30, 46);
+      };
+      for (let b = 0; b < BIOMES.length; b++) {
+        const kit = BIOMES[b].obs, n = rndInt(7, 10);
+        for (let i = 0; i < n; i++) {
+          const e = kit[rndInt(0, kit.length - 1)];
+          const r = sizeFor(e);
+          // big terrain sits near the ground; smaller rocks/trees float through mid-air
+          const groundType = (e === '🌳' || e === '🌲' || e === '🌵' || e === '⛰️' || e === '🗻' || e === '🏔️' || e === '🌷');
+          const x = rnd(b * BIOME_W + 80, (b + 1) * BIOME_W - 80);
+          const y = groundType ? rnd(GROUND_Y - 120, GROUND_Y - 10) : rnd(SPACE_Y + 120, GROUND_Y - 60);
+          if (inWater(x, y)) continue;            // don't drop rocks in the sea
+          OBSTACLES.push({ x: x, y: y, r: r, e: e });
+        }
+      }
+      // asteroids drifting in space
+      for (let i = 0; i < 14; i++) OBSTACLES.push({ x: rnd(80, WORLD.w - 80), y: rnd(40, SPACE_Y - 30), r: rnd(26, 40), e: '☄️' });
+    }
+
+    // ---------- drawing ----------
+    function worldToScreenX(x) { return (x - camX) * ZOOM; }
+    function worldToScreenY(y) { return (y - camY) * ZOOM; }
+
+    function drawBackground() {
+      // each biome paints its own slice of the world width (distinct areas)
+      for (let b = 0; b < BIOMES.length; b++) {
+        let sx0 = worldToScreenX(b * BIOME_W), sx1 = worldToScreenX((b + 1) * BIOME_W);
+        if (sx1 < 0 || sx0 > VW) continue;
+        const x0 = Math.max(0, sx0), x1 = Math.min(VW, sx1);
+        const bm = BIOMES[b];
+        const g = ctx.createLinearGradient(0, 0, 0, VH);
+        g.addColorStop(0, bm.sky[0]); g.addColorStop(1, bm.sky[1]);
+        ctx.fillStyle = g; ctx.fillRect(x0, 0, x1 - x0, VH);
+        // ground strip
+        const gy = worldToScreenY(GROUND_Y);
+        if (gy < VH) {
+          ctx.fillStyle = bm.ground;
+          ctx.fillRect(x0, gy, x1 - x0, VH - gy);
+          ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(x0, gy, x1 - x0, 4 * uiS);
+        }
+      }
+      // biome name as you enter a new area
+      if (player) {
+        ctx.globalAlpha = 0.16; ctx.fillStyle = '#fff';
+        ctx.font = '800 ' + (90 * uiS) + "px 'Nunito',sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(biomeAt(player.x).name, VW / 2, VH * 0.5);
+        ctx.globalAlpha = 1;
+      }
+
+      // seas / lakes (only where placed — never the whole floor)
+      for (const w of WATERS) {
+        const cx = worldToScreenX(w.x), cy = worldToScreenY(w.y), rx = w.rx * ZOOM, ry = w.ry * ZOOM;
+        if (cx + rx < 0 || cx - rx > VW || cy - ry > VH) continue;
+        ctx.save();
+        const wg = ctx.createLinearGradient(0, cy - ry, 0, cy + ry);
+        wg.addColorStop(0, 'rgba(90,180,240,0.9)'); wg.addColorStop(1, 'rgba(12,50,120,0.95)');
+        ctx.fillStyle = wg;
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.2832); ctx.fill();
+        ctx.lineWidth = 3 * uiS; ctx.strokeStyle = 'rgba(180,230,255,0.8)';
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 6.2832); ctx.stroke();
+        // sparkle on the surface
+        ctx.globalAlpha = 0.5; ctx.fillStyle = '#dff3ff';
+        for (let i = 0; i < 4; i++) {
+          const px = cx + Math.sin(_t * 0.002 + i * 2) * rx * 0.5;
+          ctx.fillRect(px, cy - ry * 0.5 + i * 6 * ZOOM, 10 * ZOOM, 2 * ZOOM);
+        }
+        ctx.restore();
+      }
+
+      // space band on top (oxygen zone)
+      if (camY < SPACE_Y) {
+        const sy = worldToScreenY(SPACE_Y);
+        const sg = ctx.createLinearGradient(0, 0, 0, sy);
+        sg.addColorStop(0, '#05060f'); sg.addColorStop(1, '#0b1c3a');
+        ctx.fillStyle = sg; ctx.fillRect(0, 0, VW, sy);
+        ctx.fillStyle = '#ffffff';
+        for (const s of stars) {
+          const ssy = worldToScreenY(s.y);
+          if (ssy > sy) continue;
+          ctx.globalAlpha = s.a * (0.5 + 0.5 * Math.sin(_t * 0.003 + s.p));
+          ctx.fillRect(worldToScreenX(s.x), ssy, s.s * ZOOM, s.s * ZOOM);
+        }
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(110,231,255,0.18)'; ctx.fillRect(0, sy - 3, VW, 4 * uiS);
+      }
+
+      // a few clouds in the sky (subtle)
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      for (const c of clouds) {
+        const cx = worldToScreenX(c.x), cy = worldToScreenY(c.y), cr = c.r * ZOOM;
+        if (cx < -cr * 2 || cx > VW + cr * 2 || cy < -cr || cy > VH + cr) continue;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, cr, cr * 0.5, 0, 0, 6.28);
+        ctx.ellipse(cx + cr * 0.7, cy + 6 * ZOOM, cr * 0.7, cr * 0.4, 0, 0, 6.28);
+        ctx.fill();
+      }
+    }
+
+    function drawObstacles() {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const ob of OBSTACLES) {
+        const x = worldToScreenX(ob.x), y = worldToScreenY(ob.y), r = ob.r * ZOOM;
+        if (x < -r * 2 || x > VW + r * 2 || y < -r * 2 || y > VH + r * 2) continue;
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = r * 0.3; ctx.shadowOffsetY = 2;
+        ctx.font = (r * 2.2) + "px 'Segoe UI Emoji',sans-serif";
+        ctx.fillText(ob.e, x, y);
+        ctx.restore();
+      }
+    }
+
+    // x,y are screen px; r is in world units (scaled here by ZOOM)
+    function drawCreature(e, x, y, r, flap, ring) {
+      const R = r * ZOOM;
+      if (ring) {
+        // glow disc + ring so prey/predator status reads clearly + makes the body pop
+        ctx.save();
+        const gd = ctx.createRadialGradient(x, y, R * 0.4, x, y, R + 10 * ZOOM);
+        gd.addColorStop(0, 'rgba(255,255,255,0.28)'); gd.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gd; ctx.beginPath(); ctx.arc(x, y, R + 10 * ZOOM, 0, 6.2832); ctx.fill();
+        ctx.globalAlpha = 0.3; ctx.fillStyle = ring;
+        ctx.beginPath(); ctx.arc(x, y, R + 5, 0, 6.2832); ctx.fill();
+        ctx.globalAlpha = 1; ctx.lineWidth = Math.max(2.5, 3.5 * ZOOM); ctx.strokeStyle = ring;
+        ctx.beginPath(); ctx.arc(x, y, R + 4, 0, 6.2832); ctx.stroke();
+        ctx.restore();
+      }
+      const sq = 1 + Math.sin(flap) * 0.08;
+      ctx.save();
+      ctx.translate(x, y); ctx.scale(1, sq);
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = Math.max(4, R * 0.32); ctx.shadowOffsetY = 2;
+      ctx.font = (R * 1.95) + "px 'Segoe UI Emoji','Apple Color Emoji',sans-serif";
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(e, 0, 0);
+      ctx.restore();
+    }
+
+    function bar(x, y, w, h, frac, col, label) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      rr(x, y, w, h, h / 2); ctx.fill();
+      ctx.fillStyle = col;
+      rr(x, y, Math.max(h, w * clamp(frac, 0, 1)), h, h / 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '800 ' + Math.round(11 * uiS) + "px 'Nunito',sans-serif";
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + 9 * uiS, y + h / 2 + 0.5);
+    }
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+
+    function drawHUD() {
+      const S = uiS;
+      const bw = Math.min(214 * S, VW * 0.34);   // shrink to fit narrow (mobile) screens
+      // bars top-left
+      bar(14 * S, 14 * S, bw, 20 * S, player.hp / 100, '#ff5a6e', '❤ ' + Math.ceil(player.hp));
+      bar(14 * S, 40 * S, bw, 20 * S, player.o2 / 100, '#6ee7ff', '🫧 O₂');
+      bar(14 * S, 66 * S, bw, 20 * S, player.water / 100, '#4ea8ff', '💧 H₂O');
+
+      // evolve progress + creature (top-right)
+      const st = STAGES[player.tier];
+      const nextE = player.tier < MAXTIER ? STAGES[player.tier + 1].e : '👑';
+      const frac = player.tier < MAXTIER ? player.xp / st.next : 1;
+      const ew = Math.min(200 * S, VW * 0.34);
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.font = (26 * S) + "px 'Segoe UI Emoji',sans-serif"; ctx.fillStyle = '#fff'; ctx.fillText(st.e, VW - 60 * S, 32 * S);
+      ctx.fillStyle = '#7fa6c8'; ctx.font = '800 ' + (14 * S) + "px 'Nunito',sans-serif";
+      ctx.fillText('→', VW - 42 * S, 32 * S);
+      ctx.font = (20 * S) + "px 'Segoe UI Emoji',sans-serif"; ctx.fillText(nextE, VW - 14 * S, 32 * S);
+      const xpLabel = player.tier < MAXTIER ? (Math.floor(player.xp) + ' / ' + st.next) : 'MAX 🐉';
+      bar(VW - ew - 14 * S, 52 * S, ew, 18 * S, frac, '#ffd23f', xpLabel);
+
+      // score + level top-centre
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#fff'; ctx.font = '800 ' + (30 * S) + "px 'Nunito',sans-serif";
+      ctx.fillText(String(score), VW / 2, 40 * S);
+      ctx.fillStyle = '#ffe8b0'; ctx.font = '800 ' + (14 * S) + "px 'Nunito',sans-serif";
+      ctx.fillText('LEVEL ' + (player.tier + 1) + ' · ' + stageName(player.tier).toUpperCase(), VW / 2, 60 * S);
+
+      // zone alerts
+      if (zoneMsgT > 0 && zoneMsg) {
+        ctx.globalAlpha = Math.min(1, zoneMsgT);
+        ctx.font = '800 ' + (24 * S) + "px 'Nunito',sans-serif"; ctx.textAlign = 'center';
+        if (zoneMsg === 'space') { ctx.fillStyle = '#6ee7ff'; ctx.fillText('🚀 SPACE — oxygen draining!', VW / 2, VH - 30 * S); }
+        else { ctx.fillStyle = '#4ea8ff'; ctx.fillText('🌊 WATER — refilling!', VW / 2, VH - 30 * S); }
+        ctx.globalAlpha = 1;
+      }
+      // evolve banner
+      if (evolveMsg > 0) {
+        ctx.globalAlpha = Math.min(1, evolveMsg * 1.4);
+        ctx.fillStyle = '#ffd23f'; ctx.font = '800 ' + (36 * S) + "px 'Nunito',sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText('EVOLVED! ' + STAGES[player.tier].e, VW / 2, VH / 2 - 70 * S);
+        ctx.globalAlpha = 1;
+      }
+      // low-bar vignette warning
+      if ((player.o2 < 25 || player.water < 25) && state === 'playing') {
+        ctx.save();
+        const a = 0.25 + 0.15 * Math.sin(_t * 0.01);
+        ctx.strokeStyle = player.o2 < 25 ? 'rgba(110,231,255,' + a + ')' : 'rgba(78,168,255,' + a + ')';
+        ctx.lineWidth = 14 * S; ctx.strokeRect(7 * S, 7 * S, VW - 14 * S, VH - 14 * S);
+        ctx.restore();
+      }
+    }
+
+    function draw() {
+      drawBackground();
+      drawObstacles();
+
+      if (player) {
+        // food — each gets a soft glow orb so it pops on any background colour
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (const f of foods) {
+          const x = worldToScreenX(f.x), y = worldToScreenY(f.y) + Math.sin(f.bob) * 2 * ZOOM;
+          const fr = f.r * ZOOM;
+          if (x < -fr * 2 || x > VW + fr * 2 || y < -fr * 2 || y > VH + fr * 2) continue;
+          ctx.save();
+          const gx = ctx.createRadialGradient(x, y, fr * 0.2, x, y, fr * 1.5);
+          gx.addColorStop(0, 'rgba(255,255,255,0.55)'); gx.addColorStop(0.7, 'rgba(255,255,255,0.12)'); gx.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = gx; ctx.beginPath(); ctx.arc(x, y, fr * 1.5, 0, 6.28); ctx.fill();
+          ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = fr * 0.4; ctx.shadowOffsetY = 1;
+          ctx.font = (f.r * 2.7 * ZOOM) + "px 'Segoe UI Emoji',sans-serif";
+          ctx.fillText(f.e, x, y);
+          ctx.restore();
+        }
+        // ground predators (sit on the floor)
+        for (const g of grounders) {
+          const x = worldToScreenX(g.x), y = worldToScreenY(g.y);
+          const gr = g.r * ZOOM;
+          if (x < -gr * 2 || x > VW + gr * 2 || y < -gr * 2 || y > VH + gr * 2) continue;
+          const ring = player.r > g.r * 1.12 ? '#5fe06a' : '#ff5a6e';
+          drawCreature(g.e, x, y, g.r, g.flap || 0, ring);
+        }
+        // npcs
+        for (const n of npcs) {
+          const x = worldToScreenX(n.x), y = worldToScreenY(n.y);
+          const nr = n.r * ZOOM;
+          if (x < -nr * 2 || x > VW + nr * 2 || y < -nr * 2 || y > VH + nr * 2) continue;
+          const ring = n.r > player.r * 1.08 ? '#ff5a6e' : (player.r > n.r * 1.08 ? '#5fe06a' : '#9aa6c0');
+          drawCreature(n.e, x, y, n.r, n.flap, ring);
+        }
+        // player — soft glow halo so you can always spot yourself
+        const px = worldToScreenX(player.x), py = worldToScreenY(player.y);
+        const pr = player.drawR * ZOOM;
+        const gg = ctx.createRadialGradient(px, py, pr * 0.2, px, py, pr * 1.7);
+        gg.addColorStop(0, 'rgba(255,255,255,0.45)'); gg.addColorStop(0.6, 'rgba(255,240,180,0.18)'); gg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, pr * 1.7, 0, 6.28); ctx.fill();
+        // spawn-shield ring
+        if (player.grace > 0) {
+          ctx.lineWidth = 3 * ZOOM; ctx.strokeStyle = 'rgba(110,231,255,' + (0.4 + 0.4 * Math.sin(_t * 0.012)) + ')';
+          ctx.beginPath(); ctx.arc(px, py, pr + 8 * ZOOM, 0, 6.28); ctx.stroke();
+        }
+        if (player.iframe > 0 && Math.floor(_t * 0.02) % 2 === 0) ctx.globalAlpha = 0.45;
+        drawCreature(STAGES[player.tier].e, px, py, player.drawR, player.flap, null);
+        ctx.globalAlpha = 1;
+        // direction pip
+        const sp = Math.hypot(player.vx, player.vy);
+        if (sp > 0.5) {
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.beginPath(); ctx.arc(px + player.vx / sp * (player.drawR * ZOOM + 8), py + player.vy / sp * (player.drawR * ZOOM + 8), 3 * uiS, 0, 6.28); ctx.fill();
+        }
+      }
+
+      // particles
+      for (const p of parts) {
+        ctx.globalAlpha = Math.max(0, 1 - p.t / 0.7); ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(worldToScreenX(p.x), worldToScreenY(p.y), 3 * ZOOM, 0, 6.28); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      if (state === 'playing') { drawHUD(); drawMinimap(); }
+    }
+
+    // tiny overview map so you can navigate the very wide world
+    function drawMinimap() {
+      const mmW = clamp(VW * 0.2, 150, 300), mmH = mmW * WORLD.h / WORLD.w;
+      const mx = VW - mmW - 12 * uiS, my = VH - mmH - 12 * uiS;
+      const sx = mmW / WORLD.w, sy = mmH / WORLD.h;
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      // biome bands
+      for (let b = 0; b < BIOMES.length; b++) {
+        ctx.fillStyle = BIOMES[b].sky[0];
+        ctx.fillRect(mx + b * BIOME_W * sx, my, BIOME_W * sx + 1, mmH);
+      }
+      // space band
+      ctx.fillStyle = '#0b1c3a'; ctx.fillRect(mx, my, mmW, SPACE_Y * sy);
+      // waters
+      ctx.fillStyle = '#2a72c8';
+      for (const w of WATERS) { ctx.beginPath(); ctx.ellipse(mx + w.x * sx, my + w.y * sy, w.rx * sx, w.ry * sy, 0, 0, 6.28); ctx.fill(); }
+      ctx.globalAlpha = 1;
+      // border
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.strokeRect(mx, my, mmW, mmH);
+      // view rect
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
+      ctx.strokeRect(mx + camX * sx, my + camY * sy, VIEW_W * sx, VIEW_H * sy);
+      // predators (red), ground beasts (orange), then player (white)
+      for (const n of npcs) { if (n.r > player.r * 1.08) { ctx.fillStyle = '#ff5a6e'; ctx.fillRect(mx + n.x * sx - 1, my + n.y * sy - 1, 3, 3); } }
+      ctx.fillStyle = '#ff8c42';
+      for (const g of grounders) { if (g.r > player.r * 1.12) ctx.fillRect(mx + g.x * sx - 1, my + g.y * sy - 1, 3, 3); }
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(mx + player.x * sx, my + player.y * sy, 3, 0, 6.28); ctx.fill();
+      ctx.restore();
+    }
+
+    // ---------- world deco ----------
+    let clouds = [];
+    function seedDeco() {
+      stars = []; for (let i = 0; i < 220; i++) stars.push({ x: rnd(0, WORLD.w), y: rnd(0, SPACE_Y), s: rndInt(1, 2), a: rnd(0.4, 1), p: rnd(0, 6.28) });
+      clouds = []; for (let i = 0; i < 26; i++) clouds.push({ x: rnd(0, WORLD.w), y: rnd(SPACE_Y + 60, GROUND_Y - 120), r: rnd(40, 90) });
+    }
+
+    // ---------- loop ----------
+    let _t = 0, lastTs = 0;
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      let dt = Math.min(Math.max(ts - lastTs, 1), 60) / 1000;
+      _t += (ts - lastTs); lastTs = ts;
+      update(dt); draw();
+      requestAnimationFrame(loop);
+    }
+
+    seedWorld();
+    seedDeco();
+    best = loadBest();
+    resize();
+    // idle camera panned over the world for the menu backdrop
+    camX = clamp(BIOME_W * 1.5 - VIEW_W / 2, 0, WORLD.w - VIEW_W);
+    camY = clamp((SPACE_Y + GROUND_Y) / 2 - VIEW_H / 2, 0, WORLD.h - VIEW_H);
+    requestAnimationFrame(loop);
+  })();
+  </script>
+
+  <script>
+    if (window.self !== window.top) { var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden'; }
+  </script>
+</body>
+</html>

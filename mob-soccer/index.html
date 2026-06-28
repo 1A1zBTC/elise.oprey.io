@@ -465,7 +465,7 @@
     }
 
     function placeKickoff(towards) {
-      ball = { x: WORLD_W / 2, y: WORLD_H / 2, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 14, owner: null, freeCD: 0, lastSide: towards === 0 ? 1 : 0 };
+      ball = { x: WORLD_W / 2, y: WORLD_H / 2, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 14, owner: null, freeCD: 0, lastSide: towards === 0 ? 1 : 0, trail: [] };
       ballHold = 0; possCD = 0;
       for (const t of teams) for (const p of t.onPitch) { const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.benched = false; }
       if (towards === 0) ball.vx = -2.5; else if (towards === 1) ball.vx = 2.5;
@@ -913,6 +913,7 @@
         ball.x = clamp(o.x + fx * (o.r + ball.r + 3), M + ball.r, WORLD_W - M - ball.r);
         ball.y = clamp(o.y + fy * (o.r + ball.r + 3), M + ball.r, WORLD_H - M - ball.r);
         ball.vx = o.vx; ball.vy = o.vy; ball.z = 0; ball.vz = 0; ball.spin += 0.12 * dtf;
+        if (ball.trail.length) ball.trail.shift();   // dribbling: let any flight trail fade out
         if (possCD > 0) possCD -= dtf;
         else {
           for (const t of teams) { for (const p of t.onPitch) { if (p.side === o.side) continue; if (Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 2) { setOwner(p); return; } } }
@@ -923,6 +924,9 @@
       if (ball.z > 0 || ball.vz > 0) { ball.vz -= GRAV_Z * dtf; ball.z += ball.vz * dtf; if (ball.z <= 0) { ball.z = 0; ball.vz = 0; } }
       ball.vx *= Math.pow(0.99, dtf); ball.vy *= Math.pow(0.99, dtf);
       ball.x += ball.vx * dtf; ball.y += ball.vy * dtf; ball.spin += ball.vx * 0.02 * dtf;
+      // comet trail: record the flight path while the ball travels fast (shots, headers, long passes)
+      if (Math.hypot(ball.vx, ball.vy) > 8) { ball.trail.push({ x: ball.x, y: ball.y - ball.z }); if (ball.trail.length > 16) ball.trail.shift(); }
+      else if (ball.trail.length) ball.trail.shift();
       if (outOrGoal()) return;
       if (ball.freeCD <= 0 && ball.z < 12) {
         let best = null, bd = Infinity;
@@ -1070,6 +1074,17 @@
 
     function drawBall() {
       if (!ball) return;
+      // comet trail behind a moving ball — tinted to whoever last struck it, fading & shrinking into the past
+      if (ball.trail && ball.trail.length > 1) {
+        const tint = ball.lastSide === 0 ? '120,170,255' : (ball.lastSide === 1 ? '255,150,150' : '255,255,255');
+        for (let i = 0; i < ball.trail.length; i++) {
+          const pt = ball.trail[i], f = (i + 1) / ball.trail.length;
+          ctx.globalAlpha = f * 0.5;
+          ctx.fillStyle = 'rgba(' + tint + ',1)';
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, ball.r * (0.22 + 0.72 * f), 0, 6.28); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(ball.x, ball.y, ball.r * 0.95, ball.r * 0.5, 0, 0, 6.28); ctx.fill();
       const sy = ball.y - ball.z, rr = ball.r * (1 + ball.z * 0.004);
       ctx.save(); ctx.translate(ball.x, sy); ctx.rotate(ball.spin);
@@ -1083,6 +1098,40 @@
       const c = chargeT[side] / SHOOT_MAX, w = 50, x = p.x - w / 2, y = p.y - p.r * 1.5 - 26;
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(x, y, w, 7, 3); ctx.fill();
       ctx.fillStyle = c > 0.66 ? '#ff5a5a' : (c > 0.33 ? '#ffd23f' : '#7ed37e'); roundRect(x, y, w * c, 7, 3); ctx.fill();
+    }
+
+    // While charging a shot, draw an animated dotted line + target showing where the ball will go.
+    // Direction = the player's facing (the shot direction); length grows with charge (power).
+    function drawAimGuide(p, side) {
+      const c = clamp(chargeT[side] / SHOOT_MAX, 0, 1);
+      let fx = p.fx, fy = p.fy; const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
+      const sx = p.x + fx * (p.r + 6), sy = p.y + fy * (p.r + 6);
+      const len = 110 + c * 430;                 // farther = more power
+      const ex = sx + fx * len, ey = sy + fy * len;
+      const col = c > 0.66 ? '#ff5a5a' : (c > 0.33 ? '#ffd23f' : '#7ed37e');
+      ctx.save();
+      ctx.lineCap = 'round';
+      // dark casing first so the beam reads on top of the grass
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 9;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      // dashed beam — marching ants make it read as "live"
+      ctx.setLineDash([5, 12]);
+      ctx.lineDashOffset = -(lastTs * 0.03) % 17;
+      ctx.lineWidth = 5; ctx.strokeStyle = col;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      // bright white dashes interleaved for extra pop
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      // target reticle at the landing spot — dark ring, colour fill, white crosshair
+      ctx.setLineDash([]);
+      ctx.fillStyle = col; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(ex, ey, 13, 0, 6.28); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(ex - 18, ey); ctx.lineTo(ex + 18, ey);
+      ctx.moveTo(ex, ey - 18); ctx.lineTo(ex, ey + 18);
+      ctx.stroke();
+      ctx.restore();
     }
 
     function drawTeamHUD(side, x0) {
@@ -1127,6 +1176,8 @@
       ctx.clearRect(0, 0, VW, VH);
       ctx.save(); ctx.scale(ZOOM, ZOOM); ctx.translate(-cam.x, -cam.y);
       drawPitch(); drawBall();
+      // aim guides sit on the turf, under the players
+      for (let s = 0; s < 2; s++) { const ap = activePlayer(teams[s]); if (shootHeld[s] && ball.owner === ap) drawAimGuide(ap, s); }
       for (let s = 0; s < 2; s++) { const t = teams[s], human = isHumanTeam(s); for (let i = 0; i < t.onPitch.length; i++) { const pl = t.onPitch[i]; (pl.emoji ? drawCardPlayer : drawPlayer)(pl, human && i === t.active); } }
       for (let s = 0; s < 2; s++) { if (shootHeld[s] && ball.owner === activePlayer(teams[s])) drawChargeBar(activePlayer(teams[s]), s); }
       ctx.textAlign = 'center';

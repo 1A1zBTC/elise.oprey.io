@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Chameleons</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="/icons/favicon.png">
+  <script src="/pwa.js" defer></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh; color: #fff;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+      padding: 12px; touch-action: pan-y; user-select: none; -webkit-user-select: none;
+    }
+    .topbar { width: 100%; max-width: 600px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s, background 0.15s; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+
+    .phasebar { width: 100%; max-width: 600px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    .phasebar .who { font-weight: 800; font-size: 0.95rem; color: #ffe8b0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .timer { font-weight: 900; font-size: 1.15rem; font-variant-numeric: tabular-nums; background: #141d35; border: 2px solid #0f3460; border-radius: 12px; padding: 4px 12px; color: #fff; flex: none; }
+    .timer.warn { color: #ff7a90; border-color: #ff7a90; }
+
+    .stage {
+      position: relative; width: 100%; max-width: 600px; border-radius: 18px; overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+
+    .hintpill { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+      background: rgba(10,14,28,0.74); border: 1px solid rgba(255,255,255,0.12); color: #cfe;
+      font-weight: 700; font-size: 0.74rem; padding: 4px 12px; border-radius: 999px; pointer-events: none; z-index: 4; text-align: center; }
+    .zoomhint { position: absolute; top: 8px; left: 8px; background: rgba(10,14,28,0.7); border: 1px solid rgba(255,255,255,0.12); color: #cfe; font-weight: 800; font-size: 0.66rem; padding: 3px 9px; border-radius: 999px; pointer-events: none; z-index: 4; }
+
+    /* tools */
+    .tools { width: 100%; max-width: 600px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .toolrow { display: flex; gap: 8px; }
+    .tool { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #16213e; border: 2px solid #0f3460; border-radius: 14px; padding: 8px 4px; cursor: pointer; color: #cfd5ea; font-weight: 800; font-size: 0.72rem; transition: border-color 0.15s, background 0.15s, color 0.15s; }
+    .tool .ic { font-size: 1.3rem; line-height: 1; }
+    .tool.active { border-color: #6fe26f; background: #1c2c50; color: #fff; box-shadow: 0 0 16px rgba(111,226,111,0.28); }
+    .tool .sub { font-size: 0.58rem; font-weight: 700; color: #8b93b0; }
+    .pose { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; background: #16213e; border: 2px solid #0f3460; border-radius: 14px; padding: 8px 4px; cursor: pointer; color: #cfd5ea; font-weight: 800; font-size: 0.82rem; transition: border-color 0.15s, background 0.15s, color 0.15s; }
+    .pose .ic { font-size: 1.15rem; line-height: 1; }
+    .pose.active { border-color: #ffe8b0; background: #2a2c40; color: #fff; box-shadow: 0 0 14px rgba(255,232,176,0.25); }
+
+    /* on-canvas d-pad for walking (third person) */
+    .dpad { position: absolute; left: 10px; bottom: 10px; width: 132px; height: 132px; z-index: 6; }
+    .dpad .dbtn { position: absolute; width: 44px; height: 44px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.22);
+      background: rgba(10,14,28,0.55); color: #fff; font-size: 1.05rem; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .dpad .dbtn:active { background: rgba(111,226,111,0.5); }
+    .dpad .up { left: 44px; top: 0; } .dpad .down { left: 44px; bottom: 0; }
+    .dpad .left { left: 0; top: 44px; } .dpad .right { right: 0; top: 44px; }
+
+    .brush-row { display: flex; align-items: center; gap: 10px; background: #141d35; border: 2px solid #0f3460; border-radius: 14px; padding: 8px 12px; }
+    .brush-row .lab { font-size: 0.62rem; font-weight: 800; color: #8b93b0; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
+    .brush-row input[type=range] { flex: 1; -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; background: #0f3460; outline: none; }
+    .brush-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #6fe26f; border: 2px solid #fff; cursor: pointer; box-shadow: 0 0 10px rgba(111,226,111,0.5); }
+    .brush-row input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #6fe26f; border: 2px solid #fff; cursor: pointer; }
+    .brush-dot { width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; }
+    .brush-dot .d { background: #cfd5ea; border-radius: 50%; }
+
+    .palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: #141d35; border: 2px solid #0f3460; border-radius: 14px; padding: 8px; }
+    .swatch { width: 30px; height: 30px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.18); cursor: pointer; transition: transform 0.1s; }
+    .swatch:active { transform: scale(0.9); }
+    .swatch.sel { border-color: #fff; box-shadow: 0 0 0 2px #6fe26f; }
+    .active-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .active-sw { width: 38px; height: 38px; border-radius: 10px; border: 2px solid #fff; box-shadow: 0 0 10px rgba(0,0,0,0.4); }
+    .active-lab { font-size: 0.62rem; font-weight: 800; color: #8b93b0; text-transform: uppercase; letter-spacing: 0.4px; }
+    .active-lab b { color: #6fe26f; display: block; font-size: 0.72rem; }
+
+    .donebar { width: 100%; max-width: 600px; margin-top: 10px; }
+    .btn { width: 100%; background: #e94560; color: #fff; border: none; border-radius: 14px; padding: 14px; font-family: inherit; font-weight: 800; font-size: 1rem; cursor: pointer; box-shadow: 0 8px 24px rgba(233,69,96,0.35); transition: transform 0.1s, filter 0.15s; }
+    .btn.green { background: #2faf5a; box-shadow: 0 8px 24px rgba(47,175,90,0.35); }
+    .btn:hover { filter: brightness(1.08); }
+    .btn:active { transform: scale(0.98); }
+
+    [hidden] { display: none !important; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.88); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; overflow-y: auto; }
+    .panel { width: 100%; max-width: 420px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 26px 22px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.9rem; font-weight: 400; margin-bottom: 8px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.92rem; line-height: 1.55; margin-bottom: 18px; }
+    .panel .sub b { color: #ffe8b0; }
+    .panel .big-emoji { font-size: 3rem; line-height: 1; margin-bottom: 6px; }
+    .count-row { display: flex; gap: 8px; justify-content: center; margin: 4px 0 18px; }
+    .count-btn { width: 54px; height: 54px; border-radius: 14px; border: 2px solid #0f3460; background: #0f1830; color: #fff; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
+    .count-btn.sel { border-color: #6fe26f; background: #1c2c50; box-shadow: 0 0 16px rgba(111,226,111,0.3); }
+    .score-big { font-size: 3.2rem; font-weight: 900; line-height: 1; margin: 6px 0; }
+    .board { text-align: left; margin: 6px 0 18px; }
+    .board .row { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-radius: 12px; background: #0f1830; border: 1px solid #0f3460; margin-bottom: 7px; font-weight: 800; }
+    .board .row.lead { border-color: #6fe26f; box-shadow: 0 0 14px rgba(111,226,111,0.22); }
+    .board .row .pts { color: #6fe26f; }
+    .board .row .rk { color: #8b93b0; margin-right: 10px; }
+
+    /* ---------- Mobile: compact controls so everything stays reachable ---------- */
+    @media (max-width: 600px) {
+      body { padding: 8px; }
+      .title { font-size: 1.35rem; }
+      .topbar { margin-bottom: 6px; }
+      .phasebar { margin-bottom: 6px; }
+      .phasebar .who { font-size: 0.85rem; }
+      .timer { font-size: 1rem; padding: 3px 10px; }
+      .tools { margin-top: 8px; gap: 6px; }
+      .tool { padding: 7px 3px; font-size: 0.66rem; }
+      .tool .ic { font-size: 1.2rem; }
+      .tool .sub { display: none; }
+      .brush-row { padding: 7px 10px; gap: 8px; }
+      .palette { gap: 5px; padding: 7px; }
+      .swatch { width: 28px; height: 28px; }
+      .active-sw { width: 34px; height: 34px; }
+      .donebar { margin-top: 8px; }
+      .btn { padding: 13px; }
+      .hintpill { font-size: 0.66rem; max-width: 90%; }
+    }
+    /* Short screens (landscape phones): cap the arena height so tools stay on-screen */
+    @media (max-height: 620px) {
+      .stage { width: auto; height: 50vh; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Chameleons</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="phasebar" id="phasebar" hidden>
+    <span class="who" id="whoLabel">Hiding</span>
+    <span class="timer" id="timer">2:00</span>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+    <div class="zoomhint" id="zoomhint" hidden>🔎 close-up — they're tiny!</div>
+    <div class="hintpill" id="hintpill" hidden></div>
+    <div class="dpad" id="dpad" hidden>
+      <button class="dbtn up" data-dir="up">▲</button>
+      <button class="dbtn left" data-dir="left">◀</button>
+      <button class="dbtn right" data-dir="right">▶</button>
+      <button class="dbtn down" data-dir="down">▼</button>
+    </div>
+  </div>
+
+  <!-- paint tools (hide phase only) -->
+  <div class="tools" id="tools" hidden>
+    <div class="toolrow">
+      <button class="pose active" data-pose="stand"><span class="ic">🧍</span>Stand</button>
+      <button class="pose" data-pose="sit"><span class="ic">🪑</span>Sit</button>
+      <button class="pose" data-pose="lie"><span class="ic">🛌</span>Lie</button>
+    </div>
+    <div class="toolrow">
+      <button class="tool active" data-tool="paint"><span class="ic">🖌️</span>Paint<span class="sub">round brush</span></button>
+      <button class="tool" data-tool="fill"><span class="ic">🪣</span>Fill<span class="sub">whole body</span></button>
+      <button class="tool" data-tool="match"><span class="ic">💧</span>Match<span class="sub">grab bg colour</span></button>
+    </div>
+    <div class="brush-row">
+      <span class="lab">Brush</span>
+      <input type="range" id="brush" min="3" max="34" value="11">
+      <div class="brush-dot"><div class="d" id="brushDot"></div></div>
+    </div>
+    <div class="palette" id="palette">
+      <div class="active-wrap">
+        <div class="active-lab">Colour<b id="activeLab">picked</b></div>
+        <div class="active-sw" id="activeSw"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="donebar" id="donebar" hidden>
+    <button class="btn green" id="doneBtn">✅ Done hiding</button>
+  </div>
+
+  <!-- setup -->
+  <div class="overlay" id="setupOv">
+    <div class="panel">
+      <div class="big-emoji">🧍🎨</div>
+      <h2>Chameleons</h2>
+      <div class="sub">Everyone hides on the <b>same map</b>! On your turn you get <b>2 minutes</b> to <b>move</b> your little person anywhere and <b>paint</b> them to blend in. Then everyone hunts to <b>find them all</b>.</div>
+      <div class="active-lab" style="margin-bottom:6px">How many players?</div>
+      <div class="count-row" id="countRow">
+        <button class="count-btn" data-n="1">1</button>
+        <button class="count-btn sel" data-n="2">2</button>
+        <button class="count-btn" data-n="3">3</button>
+        <button class="count-btn" data-n="4">4</button>
+      </div>
+      <button class="btn" id="startBtn">Start</button>
+    </div>
+  </div>
+
+  <!-- handoff -->
+  <div class="overlay" id="handoffOv" hidden>
+    <div class="panel">
+      <div class="big-emoji" id="handoffEmoji">🎨</div>
+      <h2 id="handoffName">Player 1</h2>
+      <div class="sub" id="handoffSub">it's your turn to hide.</div>
+      <button class="btn" id="handoffBtn">I'm ready</button>
+    </div>
+  </div>
+
+  <!-- result (hide or seek) -->
+  <div class="overlay" id="resultOv" hidden>
+    <div class="panel">
+      <div class="big-emoji" id="resEmoji">🧍</div>
+      <h2 id="resTitle">Camouflage</h2>
+      <div class="score-big" id="resScore">—</div>
+      <div class="sub" id="resSub"></div>
+      <button class="btn" id="resBtn">Continue</button>
+    </div>
+  </div>
+
+  <!-- final -->
+  <div class="overlay" id="finalOv" hidden>
+    <div class="panel">
+      <div class="big-emoji">🏆</div>
+      <h2 id="finalTitle">Winner</h2>
+      <div class="board" id="finalBoard"></div>
+      <button class="btn" id="rematchBtn">Play again</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const W = 760, H = 560;
+  const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
+  const bgx = bg.getContext('2d', { willReadFrequently: true });
+  let dpr = 1;
+  function fit(){ dpr = Math.min(window.devicePixelRatio || 1, 2); cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+  fit(); window.addEventListener('resize', fit);
+
+  function pname(i, f){ try { const a = JSON.parse(localStorage.getItem('elise.playerNames')); const n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || f; } catch(e){ return f; } }
+
+  const PALETTE = ['#3c6e1f','#6aa84f','#9ccb5a','#c8d96f','#d6b24a','#e08a2e','#a9543b','#7a4f2a',
+                   '#4a3220','#e6e0d2','#b8bdc4','#7d8893','#4a5a6b','#2b3a4a','#86c5d8','#d98a8a',
+                   '#b56fb0','#5a4bb0','#c23b54','#161a12'];
+
+  // ---------- little-person silhouettes (one mask per pose) ----------
+  const BW = 76, BH = 104;                 // bounding box (wide enough to lie down)
+  const comp  = document.createElement('canvas'); comp.width=BW; comp.height=BH;
+  const tint  = document.createElement('canvas'); tint.width=BW; tint.height=BH;
+  const cctx = comp.getContext('2d', { willReadFrequently: true });
+
+  function drawPerson(g, pose){
+    g.clearRect(0,0,BW,BH);
+    g.fillStyle = '#000'; g.strokeStyle = '#000';
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    const cx = BW/2;
+    if (pose === 'lie'){
+      // horizontal: head left, legs right, lying on a surface
+      const y = 78;
+      g.lineWidth = 13; g.beginPath(); g.moveTo(20,y); g.lineTo(58,y); g.stroke();   // torso
+      g.lineWidth = 10; g.beginPath(); g.moveTo(58,y-3); g.lineTo(BW-4,y-7); g.stroke(); // legs
+      g.lineWidth = 7;  g.beginPath(); g.moveTo(34,y); g.lineTo(48,y+10); g.stroke();  // arm
+      g.beginPath(); g.arc(13,y-2,10,0,Math.PI*2); g.fill();                           // head
+    } else if (pose === 'sit'){
+      g.beginPath(); g.arc(cx,28,10,0,Math.PI*2); g.fill();                            // head
+      g.fillRect(cx-4,36,8,8);                                                         // neck
+      g.beginPath(); g.moveTo(cx-12,46); g.quadraticCurveTo(cx,42,cx+12,46);           // torso
+      g.lineTo(cx+10,72); g.quadraticCurveTo(cx,76,cx-10,72); g.closePath(); g.fill();
+      g.lineWidth = 11; g.beginPath(); g.moveTo(cx-7,70); g.lineTo(cx+16,72); g.stroke();   // thighs fwd
+      g.beginPath(); g.moveTo(cx+13,72); g.lineTo(cx+14,98); g.stroke();              // shins down
+      g.beginPath(); g.moveTo(cx-9,72); g.lineTo(cx-8,98); g.stroke();
+      g.lineWidth = 8; g.beginPath(); g.moveTo(cx-10,50); g.lineTo(cx-2,72); g.stroke(); // arm
+    } else { // stand
+      g.lineWidth = 11;
+      g.beginPath(); g.moveTo(cx-7, 60); g.lineTo(cx-9, 98); g.stroke();
+      g.beginPath(); g.moveTo(cx+7, 60); g.lineTo(cx+9, 98); g.stroke();
+      g.lineWidth = 7;
+      g.beginPath(); g.moveTo(cx-9,98); g.lineTo(cx-16,99); g.stroke();
+      g.beginPath(); g.moveTo(cx+9,98); g.lineTo(cx+16,99); g.stroke();
+      g.lineWidth = 8;
+      g.beginPath(); g.moveTo(cx-9, 32); g.lineTo(cx-19, 58); g.stroke();
+      g.beginPath(); g.moveTo(cx+9, 32); g.lineTo(cx+19, 58); g.stroke();
+      g.beginPath(); g.moveTo(cx-12,30); g.quadraticCurveTo(cx,26,cx+12,30);
+      g.lineTo(cx+10,62); g.quadraticCurveTo(cx,66,cx-10,62); g.closePath(); g.fill();
+      g.fillRect(cx-4,20,8,8);
+      g.beginPath(); g.arc(cx,12,10,0,Math.PI*2); g.fill();
+    }
+  }
+  // build a mask + grey ghost + outline ring for each pose
+  const POSES = ['stand','sit','lie'];
+  const poseSet = {};
+  for (const pose of POSES){
+    const mask=document.createElement('canvas'); mask.width=BW; mask.height=BH;
+    const ghost=document.createElement('canvas'); ghost.width=BW; ghost.height=BH;
+    const outl=document.createElement('canvas'); outl.width=BW; outl.height=BH;
+    const mctx=mask.getContext('2d',{willReadFrequently:true});
+    drawPerson(mctx, pose);
+    const gg=ghost.getContext('2d'); gg.fillStyle='#c9b89a'; gg.fillRect(0,0,BW,BH);
+    gg.globalCompositeOperation='destination-in'; gg.drawImage(mask,0,0); gg.globalCompositeOperation='source-over';
+    const oo=outl.getContext('2d'); const offs=[[-2,0],[2,0],[0,-2],[0,2],[-2,-2],[2,2],[2,-2],[-2,2]];
+    for (const o of offs) oo.drawImage(mask,o[0],o[1]);
+    oo.globalCompositeOperation='destination-out'; oo.drawImage(mask,0,0); oo.globalCompositeOperation='source-over';
+    poseSet[pose] = { mask, ghost, outl, mctx };
+  }
+
+  function buildComp(srcPaint, poseMask){ cctx.clearRect(0,0,BW,BH); cctx.globalCompositeOperation='source-over'; cctx.drawImage(srcPaint,0,0); cctx.globalCompositeOperation='destination-in'; cctx.drawImage(poseMask,0,0); cctx.globalCompositeOperation='source-over'; }
+  function drawTinted(src, x, y, color, alpha){
+    const t = tint.getContext('2d'); t.clearRect(0,0,BW,BH); t.globalCompositeOperation='source-over'; t.drawImage(src,0,0);
+    t.globalCompositeOperation='source-in'; t.fillStyle=color; t.fillRect(0,0,BW,BH); t.globalCompositeOperation='source-over';
+    ctx.globalAlpha=alpha; ctx.drawImage(tint, x, y); ctx.globalAlpha=1;
+  }
+
+  // ---------- busy scene generator ----------
+  function rnd(a,b){ return a + Math.random()*(b-a); }
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function jit(hex, f){ const n=parseInt(hex.slice(1),16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+    r=Math.max(0,Math.min(255,Math.round(r*f))); g=Math.max(0,Math.min(255,Math.round(g*f))); b=Math.max(0,Math.min(255,Math.round(b*f)));
+    return 'rgb('+r+','+g+','+b+')'; }
+  function leaf(x,y,s,col,ang){ bgx.save(); bgx.translate(x,y); bgx.rotate(ang); bgx.fillStyle=col;
+    bgx.beginPath(); bgx.ellipse(0,0,s,s*0.42,0,0,Math.PI*2); bgx.fill();
+    bgx.strokeStyle='rgba(0,0,0,0.18)'; bgx.lineWidth=1.5; bgx.beginPath(); bgx.moveTo(-s,0); bgx.lineTo(s,0); bgx.stroke(); bgx.restore(); }
+
+  // pseudo-3D one-point-perspective room helpers
+  function lerpP(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
+  function quadP(p0,p1,p2,p3,fill){ bgx.fillStyle=fill; bgx.beginPath(); bgx.moveTo(p0[0],p0[1]); bgx.lineTo(p1[0],p1[1]); bgx.lineTo(p2[0],p2[1]); bgx.lineTo(p3[0],p3[1]); bgx.closePath(); bgx.fill(); }
+  function rowT(i,n,K){ const u=i/n; return (1-1/(1+u*K))/(1-1/(1+K)); }   // perspective depth compression
+  function tiled(FL,FR,BR,BL, cols, rows, K, colA, colB, lightFn){
+    for (let i=0;i<rows;i++){ const t0=rowT(i,rows,K), t1=rowT(i+1,rows,K);
+      const lA=lerpP(FL,BL,t0), rA=lerpP(FR,BR,t0), lB=lerpP(FL,BL,t1), rB=lerpP(FR,BR,t1);
+      for (let j=0;j<cols;j++){ const s0=j/cols, s1=(j+1)/cols;
+        const p0=lerpP(lA,rA,s0), p1=lerpP(lA,rA,s1), p2=lerpP(lB,rB,s1), p3=lerpP(lB,rB,s0);
+        let c=((i+j)&1)?colA:colB; if (lightFn){ const o=lightFn(i,j); if (o) c=o; }
+        quadP(p0,p1,p2,p3,c); } }
+  }
+  function transLines(Ftop,Btop,Fbot,Bbot, n, K, color, w){ bgx.strokeStyle=color; bgx.lineWidth=w||1.5;
+    for (let i=0;i<=n;i++){ const t=rowT(i,n,K); const a=lerpP(Ftop,Btop,t), b=lerpP(Fbot,Bbot,t); bgx.beginPath(); bgx.moveTo(a[0],a[1]); bgx.lineTo(b[0],b[1]); bgx.stroke(); } }
+  function longLines(FL,FR,BL,BR, n, color, w){ bgx.strokeStyle=color; bgx.lineWidth=w||1.5;
+    for (let j=0;j<=n;j++){ const s=j/n; const f=lerpP(FL,FR,s), b=lerpP(BL,BR,s); bgx.beginPath(); bgx.moveTo(f[0],f[1]); bgx.lineTo(b[0],b[1]); bgx.stroke(); } }
+  function clipPoly(pts, fn){ bgx.save(); bgx.beginPath(); bgx.moveTo(pts[0][0],pts[0][1]); for (let i=1;i<pts.length;i++) bgx.lineTo(pts[i][0],pts[i][1]); bgx.closePath(); bgx.clip(); fn(); bgx.restore(); }
+  function rr(x,y,w,h,r){ if (bgx.roundRect){ bgx.beginPath(); bgx.roundRect(x,y,w,h,r); bgx.fill(); } else bgx.fillRect(x,y,w,h); }
+  // furniture you can stand/sit/lie against and try to blend into (solid colour blocks)
+  function drawObstacles(){
+    const cc = pick(['#c2554d','#3f7e8c','#7a6cae','#caa15f','#4f8a5c','#b5683a']);
+    const cxp=rnd(W*0.16,W*0.30), cyp=rnd(H*0.74,H*0.84), cw=180, ch=58;            // couch
+    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(cxp, cyp+10, cw*0.55, 16, 0,0,Math.PI*2); bgx.fill();
+    bgx.fillStyle=jit(cc,1.12); bgx.fillRect(cxp-cw/2, cyp-ch-30, cw, 36);          // backrest
+    bgx.fillStyle=cc; rr(cxp-cw/2, cyp-ch, cw, ch, 12);                             // seat
+    bgx.fillStyle=jit(cc,0.85); rr(cxp-cw/2-14, cyp-ch-26, 24, ch+30, 8); rr(cxp+cw/2-10, cyp-ch-26, 24, ch+30, 8); // arms
+    const tx=rnd(W*0.68,W*0.82), ty=rnd(H*0.66,H*0.76), tw=150, th=92;             // TV + cabinet
+    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(tx, ty+34, 86, 14, 0,0,Math.PI*2); bgx.fill();
+    bgx.fillStyle='#9a7b46'; bgx.fillRect(tx-64, ty+th-30, 128, 40);                // cabinet
+    bgx.fillStyle='#15171c'; rr(tx-tw/2, ty-th, tw, th, 6);                          // bezel
+    bgx.fillStyle=jit('#22323f', rnd(0.85,1.3)); bgx.fillRect(tx-tw/2+8, ty-th+8, tw-16, th-16); // screen glow
+    const px=rnd(W*0.42,W*0.58), py=rnd(H*0.70,H*0.80);                              // potted plant
+    bgx.fillStyle='#8a5a32'; bgx.fillRect(px-13, py-16, 26, 22);
+    bgx.fillStyle=jit('#3c8e4f',rnd(0.85,1.15)); bgx.beginPath(); bgx.arc(px,py-30,26,0,Math.PI*2); bgx.fill();
+    bgx.fillStyle=jit('#48a85c',rnd(0.85,1.15)); bgx.beginPath(); bgx.arc(px-14,py-22,16,0,Math.PI*2); bgx.arc(px+14,py-24,15,0,Math.PI*2); bgx.fill();
+  }
+
+  const THEMES = ['backrooms','poolrooms','lounge','office'];
+  function genScene(){
+    const theme = pick(THEMES);
+    const vx = W*rnd(0.44,0.56), vy = H*rnd(0.42,0.47);
+    const bw = W*0.42, bh = H*0.48;          // bigger back wall = shallower, cosier (medium-small) room
+    const bL=vx-bw/2, bR=vx+bw/2, bT=vy-bh/2, bB=vy+bh/2;
+    const FTL=[0,0], FTR=[W,0], FBL=[0,H], FBR=[W,H];
+    const BTL=[bL,bT], BTR=[bR,bT], BBL=[bL,bB], BBR=[bR,bB];
+    const floorQ=[FBL,FBR,BBR,BBL], ceilQ=[FTL,FTR,BTR,BTL];
+
+    if (theme === 'backrooms'){
+      // liminal mono-yellow office: damp carpet, wallpaper, drop ceiling + buzzing lights
+      bgx.fillStyle='#b89a3a'; bgx.fillRect(0,0,W,H);
+      quadP(FTL,BTL,BBL,FBL, '#b39633'); quadP(FTR,BTR,BBR,FBR, '#c2a23c');         // side walls
+      transLines(FTL,BTL,FBL,BBL, 8, 4, 'rgba(0,0,0,0.10)', 1.2);                    // wallpaper seams
+      transLines(FTR,BTR,FBR,BBR, 8, 4, 'rgba(0,0,0,0.10)', 1.2);
+      tiled(FTL,FTR,BTR,BTL, 12,7, 5, '#d8c684','#cdbb77', (i,j)=> (i%2===0 && j%3===1)?'#fbf6d8':null); // ceiling tiles+lights
+      quadP(FBL,FBR,BBR,BBL, '#b09134');                                             // carpet
+      clipPoly(floorQ, ()=>{ for (let k=0;k<130;k++){ bgx.fillStyle=jit('#b09134', rnd(0.8,1.08)); bgx.globalAlpha=rnd(0.12,0.4);
+        bgx.beginPath(); bgx.ellipse(rnd(0,W), rnd(vy,H), rnd(8,32), rnd(4,15), 0,0,Math.PI*2); bgx.fill(); } bgx.globalAlpha=1; });
+      bgx.fillStyle='#9c7f2c'; bgx.fillRect(bL,bT,bw,bh);                            // back wall
+      bgx.fillStyle='#7a6320'; bgx.fillRect(bL+bw*0.4, bT+bh*0.25, bw*0.2, bh*0.75); // far doorway
+    }
+    else if (theme === 'poolrooms'){
+      // wet tiled rooms, aqua + white
+      bgx.fillStyle='#bfe6ea'; bgx.fillRect(0,0,W,H);
+      tiled(FTL,FBL,BBL,BTL, 6,7, 4, '#d6f1f3','#bfe3e8', null);                     // left wall tiles
+      tiled(FTR,FBR,BBR,BTR, 6,7, 4, '#d6f1f3','#bfe3e8', null);                     // right wall tiles
+      tiled(FTL,FTR,BTR,BTL, 12,7, 5, '#eafafa','#d6eef0', (i,j)=> (i%3===1 && j%4===2)?'#ffffff':null); // ceiling
+      tiled(FBL,FBR,BBR,BBL, 12,8, 5, '#9fd6dd','#86c4cd', null);                    // pool floor tiles
+      clipPoly(floorQ, ()=>{ for (let k=0;k<60;k++){ bgx.strokeStyle='rgba(255,255,255,0.18)'; bgx.lineWidth=1.5;
+        bgx.beginPath(); bgx.arc(rnd(0,W), rnd(vy,H), rnd(6,18), 0, Math.PI*2); bgx.stroke(); } });
+      tiled([bL,bT],[bR,bT],[bR,bB],[bL,bB], 5,5, 99, '#cdeef0','#b6dfe4', null);    // back wall tiles
+    }
+    else if (theme === 'lounge'){
+      // generic cosy living room: wood floor, warm walls, window, couch, rug
+      bgx.fillStyle='#e7d6b6'; bgx.fillRect(0,0,W,H);
+      quadP(FTL,BTL,BBL,FBL, '#dcc8a2'); quadP(FTR,BTR,BBR,FBR, '#e3d0aa');          // side walls
+      quadP(FTL,FTR,BTR,BTL, '#f0e6cf');                                             // ceiling
+      quadP(FBL,FBR,BBR,BBL, '#8a5a32');                                             // wood floor
+      longLines(FBL,FBR,BBL,BBR, 14, 'rgba(60,30,10,0.35)', 1.4);                    // plank seams to VP
+      bgx.fillStyle='#cdb78d'; bgx.fillRect(bL,bT,bw,bh);                            // back wall
+      const wx=bL+bw*0.16, wy=bT+bh*0.16, ww=bw*0.68, wh=bh*0.5;                     // window
+      const wg=bgx.createLinearGradient(wx,wy,wx,wy+wh); wg.addColorStop(0,'#bfe0f5'); wg.addColorStop(1,'#7fb3d8');
+      bgx.fillStyle=wg; bgx.fillRect(wx,wy,ww,wh);
+      bgx.strokeStyle='#6b4a28'; bgx.lineWidth=4; bgx.strokeRect(wx,wy,ww,wh); bgx.beginPath(); bgx.moveTo(wx+ww/2,wy); bgx.lineTo(wx+ww/2,wy+wh); bgx.moveTo(wx,wy+wh/2); bgx.lineTo(wx+ww,wy+wh/2); bgx.stroke();
+      bgx.fillStyle='#9a8050'; bgx.fillRect(W*0.12,vy+8,46,30); bgx.fillStyle='#b6452f'; bgx.fillRect(W*0.80,vy+2,40,30); // wall pictures
+      bgx.fillStyle='#6b4a28'; bgx.beginPath(); bgx.ellipse(W*0.5, H*0.86, 230, 60, 0,0,Math.PI*2); bgx.fill();         // rug shadow
+      bgx.fillStyle='#c98a3a'; bgx.beginPath(); bgx.ellipse(W*0.5, H*0.86, 210, 50, 0,0,Math.PI*2); bgx.fill();         // rug
+      const cx2=W*0.5, cy2=H*0.78, cw=250, ch=70;                                    // couch
+      bgx.fillStyle='#2f8f8a'; if (bgx.roundRect){ bgx.beginPath(); bgx.roundRect(cx2-cw/2, cy2-ch, cw, ch, 16); bgx.fill(); } else bgx.fillRect(cx2-cw/2,cy2-ch,cw,ch);
+      bgx.fillStyle='#3aa39d'; bgx.fillRect(cx2-cw/2, cy2-ch-34, cw, 40);            // backrest
+      bgx.fillStyle='#267a76'; bgx.fillRect(cx2-cw/2-14, cy2-ch-30, 22, ch+24); bgx.fillRect(cx2+cw/2-8, cy2-ch-30, 22, ch+24); // arms
+    }
+    else {
+      // open-plan office: carpet, cubicle panels, drop ceiling + lights, desks
+      bgx.fillStyle='#7d8a99'; bgx.fillRect(0,0,W,H);
+      quadP(FTL,BTL,BBL,FBL, '#8a96a3'); quadP(FTR,BTR,BBR,FBR, '#929daa'); // side walls
+      tiled(FTL,FTR,BTR,BTL, 12,7, 5, '#dfe4ea','#cfd6df', (i,j)=> (i%2===0 && j%4===2)?'#f6f9fc':null);  // ceiling+lights
+      tiled(FBL,FBR,BBR,BBL, 14,9, 5, '#5f6b7a','#586474', null);                    // carpet tiles
+      bgx.fillStyle='#b8bdc4'; bgx.fillRect(bL,bT,bw,bh);                            // back wall
+      // cubicle partitions + desks on floor (foreground)
+      const part=['#3c8e4f','#2f7fb0','#c98a3a','#b56fb0'];
+      clipPoly(floorQ, ()=>{ for (let k=0;k<5;k++){ const x=W*(0.12+k*0.18), y=H*(0.6+rnd(-0.05,0.12));
+        bgx.fillStyle=jit(pick(part),rnd(0.9,1.1)); bgx.fillRect(x-46,y-60,92,60);   // partition
+        bgx.fillStyle='#caa15f'; bgx.fillRect(x-40,y,80,16);                          // desk
+        bgx.fillStyle='#1b2330'; bgx.fillRect(x-14,y-26,28,20); } });                 // monitor
+    }
+    if (theme !== 'lounge') drawObstacles();   // couch / TV / plant to blend into
+  }
+
+  // ---------- game state ----------
+  let nPlayers = 2, names = [], scores = [];
+  let cur = 0;                             // current hider during hide phase
+  let phase = 'setup';
+  let pPaint = [], pox = [], poy = [], pCamo = [], pFound = [], pPose = [];   // per-player layers/positions/poses
+  let activeColor = PALETTE[1], matched = false, tool = 'paint', brushR = 11;
+  let endAt = 0, painting = false, lastPt = null, lastTapMsg = '';
+  const moveDir = { up:false, down:false, left:false, right:false };   // third-person walk
+  const WALK = 3.4;
+
+  function sampleBg(x,y){ x=Math.max(0,Math.min(W-1,x|0)); y=Math.max(0,Math.min(H-1,y|0)); const d=bgx.getImageData(x,y,1,1).data; return [d[0],d[1],d[2]]; }
+  function rgbStr(a){ return 'rgb('+a[0]+','+a[1]+','+a[2]+')'; }
+  function poseOf(i){ return poseSet[pPose[i]] || poseSet.stand; }
+  function clampPos(i){ pox[i]=Math.max(4,Math.min(W-BW-4,pox[i])); poy[i]=Math.max(Math.round(H*0.28),Math.min(H-BH-4,poy[i])); }
+
+  // ---------- turn flow ----------
+  function startGame(){
+    names = []; scores = []; pPaint = []; pox = []; poy = []; pCamo = []; pFound = []; pPose = [];
+    genScene();                            // ONE shared map for everyone
+    for (let i=0;i<nPlayers;i++){
+      names.push(pname(i,'Player '+(i+1))); scores.push(0); pCamo.push(0); pFound.push(false); pPose.push('stand');
+      const c = document.createElement('canvas'); c.width=BW; c.height=BH; pPaint.push(c);
+      // spread starting spots around the map; players can walk from here
+      pox.push(Math.round(rnd(20, W-BW-20))); poy.push(Math.round(rnd(H*0.40, H-BH-12)));
+    }
+    cur = 0; document.getElementById('setupOv').hidden = true; hideHandoff();
+  }
+  function hideHandoff(){
+    document.getElementById('handoffEmoji').textContent = '🎨';
+    document.getElementById('handoffName').textContent = names[cur];
+    document.getElementById('handoffSub').innerHTML = 'it’s your turn. <b>Walk</b> with the arrows, strike a <b>pose</b> against the couch or TV, then <b>paint</b> to blend in. No peeking, everyone else!';
+    document.getElementById('handoffBtn').textContent = 'Start hiding';
+    document.getElementById('handoffBtn').onclick = beginHide;
+    document.getElementById('handoffOv').hidden = false;
+  }
+  function beginHide(){
+    document.getElementById('handoffOv').hidden = true;
+    tool='paint'; setTool('paint'); activeColor=PALETTE[1]; matched=false; refreshActive();
+    moveDir.up=moveDir.down=moveDir.left=moveDir.right=false;
+    setPose(pPose[cur]);
+    phase='hide'; endAt = nowSec()+120;
+    document.getElementById('phasebar').hidden = false;
+    document.getElementById('whoLabel').textContent = '🎨 ' + names[cur] + ' is hiding';
+    document.getElementById('tools').hidden = false;
+    document.getElementById('donebar').hidden = false;
+    document.getElementById('dpad').hidden = false;
+    document.getElementById('zoomhint').hidden = false;
+    showHint('Arrows to walk · pose against the couch/TV · Match a colour and paint');
+  }
+  function endHide(){
+    pCamo[cur] = computeCamo(cur);
+    cur++; phase='handoff';
+    document.getElementById('tools').hidden = true;
+    document.getElementById('donebar').hidden = true;
+    document.getElementById('phasebar').hidden = true;
+    document.getElementById('dpad').hidden = true;
+    document.getElementById('zoomhint').hidden = true;
+    if (cur < nPlayers){ hideHandoff(); return; }
+    if (nPlayers >= 2) findHandoff();
+    else showResult('🧍','Camouflage', pCamo[0]+'%', gradeText(pCamo[0]), ()=>{ document.getElementById('resultOv').hidden=true; finishScores(); });
+  }
+  function findHandoff(){
+    document.getElementById('handoffEmoji').textContent = '🔍';
+    document.getElementById('handoffName').textContent = 'Find them all!';
+    document.getElementById('handoffSub').innerHTML = 'Everyone look together — <b>'+nPlayers+' people</b> are hidden in the room. You have <b>1 minute</b> — tap each one you can spot!';
+    document.getElementById('handoffBtn').textContent = 'Start the hunt';
+    document.getElementById('handoffBtn').onclick = beginFind;
+    document.getElementById('handoffOv').hidden = false;
+  }
+  function beginFind(){
+    document.getElementById('handoffOv').hidden = true;
+    phase='seek'; endAt = nowSec()+60; lastTapMsg='';
+    document.getElementById('phasebar').hidden = false;
+    document.getElementById('whoLabel').textContent = '🔍 Find the ' + nPlayers + ' hidden people!';
+    showHint('Watch for a faint shimmer — tap a hidden person to reveal them');
+  }
+  function finishScores(){
+    for (let i=0;i<nPlayers;i++) scores[i] = Math.round(pCamo[i]*0.4) + (pFound[i] ? 0 : 50);
+    showFinal();
+  }
+
+  function computeCamo(i){
+    const ps = poseOf(i);
+    buildComp(pPaint[i], ps.mask);
+    const pd = cctx.getImageData(0,0,BW,BH).data;
+    const md = ps.mctx.getImageData(0,0,BW,BH).data;
+    const bd = bgx.getImageData(pox[i],poy[i],BW,BH).data;
+    let total=0, count=0;
+    for (let y=0;y<BH;y+=2){ for (let x=0;x<BW;x+=2){ const k=(y*BW+x)*4;
+      if (md[k+3] < 40) continue;
+      count++;
+      if (pd[k+3] < 30){ total += 0; continue; }
+      const d = Math.sqrt((pd[k]-bd[k])**2 + (pd[k+1]-bd[k+1])**2 + (pd[k+2]-bd[k+2])**2);
+      total += Math.max(0, 1 - d/150);
+    }}
+    return count ? Math.round(total/count*100) : 0;
+  }
+  function gradeText(c){ if(c>=90)return 'Invisible!'; if(c>=75)return 'Great hide'; if(c>=55)return 'Not bad'; if(c>=35)return 'Spotted easily'; return 'Way too obvious'; }
+
+  // ---------- overlays ----------
+  function showResult(emoji,title,score,sub,cb){
+    document.getElementById('resEmoji').textContent=emoji; document.getElementById('resTitle').textContent=title;
+    document.getElementById('resScore').textContent=score; document.getElementById('resSub').textContent=sub;
+    document.getElementById('resBtn').onclick=cb; document.getElementById('resultOv').hidden=false;
+  }
+  function showFinal(){
+    phase='done';
+    const idx = names.map((n,i)=>i).sort((a,b)=>scores[b]-scores[a]); const top=idx[0];
+    document.getElementById('finalTitle').textContent = (nPlayers===1)?'Nice hiding!':names[top]+' wins!';
+    let html=''; idx.forEach((i,rank)=>{ const tag = (nPlayers>=2) ? (pFound[i]?'🔍 found':'🫥 hidden') : (pCamo[i]+'% camo');
+      html+='<div class="row'+(rank===0?' lead':'')+'"><span><span class="rk">'+(rank+1)+'.</span>'+names[i]+' <span style="color:#8b93b0;font-weight:700;font-size:0.82em">'+tag+'</span></span><span class="pts">'+scores[i]+' pts</span></div>'; });
+    document.getElementById('finalBoard').innerHTML=html; document.getElementById('finalOv').hidden=false;
+  }
+
+  // ---------- tools ----------
+  function setTool(t){ tool=t; document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('active', b.dataset.tool===t)); cv.style.cursor=(t==='match')?'copy':'crosshair'; }
+  document.querySelectorAll('.tool').forEach(b=> b.addEventListener('click', ()=> setTool(b.dataset.tool)) );
+  function setPose(p){ pPose[cur]=p; document.querySelectorAll('.pose').forEach(b=>b.classList.toggle('active', b.dataset.pose===p)); }
+  document.querySelectorAll('.pose').forEach(b=> b.addEventListener('click', ()=>{ if (phase==='hide') setPose(b.dataset.pose); }) );
+  function refreshActive(){
+    document.getElementById('activeSw').style.background=activeColor;
+    document.getElementById('activeLab').textContent = matched?'matched!':'picked';
+    document.querySelectorAll('.swatch').forEach(s=> s.classList.toggle('sel', !matched && s.dataset.col===activeColor));
+  }
+  (function(){ const pal=document.getElementById('palette'); const aw=pal.querySelector('.active-wrap');
+    PALETTE.forEach(col=>{ const s=document.createElement('div'); s.className='swatch'; s.style.background=col; s.dataset.col=col;
+      s.addEventListener('click',()=>{ activeColor=col; matched=false; refreshActive(); }); pal.insertBefore(s,aw); }); })();
+
+  const brushDot = document.getElementById('brushDot');
+  function refreshBrush(){ const d=Math.max(4, brushR); brushDot.style.width=d+'px'; brushDot.style.height=d+'px'; brushDot.style.background=activeColor; }
+  document.getElementById('brush').addEventListener('input', e=>{ brushR=+e.target.value; refreshBrush(); });
+
+  // ---------- painting / moving ----------
+  function dab(px,py){ const g=pPaint[cur].getContext('2d'); g.globalCompositeOperation='source-over'; g.fillStyle=activeColor; g.beginPath(); g.arc(px,py,brushR,0,Math.PI*2); g.fill(); }
+  function strokeTo(a,b){ const dx=b.x-a.x, dy=b.y-a.y; const dist=Math.hypot(dx,dy); const step=Math.max(1,brushR*0.4); const n=Math.ceil(dist/step);
+    for (let i=0;i<=n;i++){ const t=n?i/n:0; dab(a.x+dx*t, a.y+dy*t); } }
+  function fillBody(){ const g=pPaint[cur].getContext('2d'); g.globalCompositeOperation='source-over'; g.fillStyle=activeColor; g.fillRect(0,0,BW,BH); }
+
+  function toLogical(e){ const r=cv.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H }; }
+  function applyDown(p){
+    if (tool==='match'){ activeColor=rgbStr(sampleBg(p.x,p.y)); matched=true; refreshActive(); refreshBrush(); return; }
+    if (tool==='fill'){ fillBody(); return; }
+    painting=true; const bp={x:p.x-pox[cur],y:p.y-poy[cur]}; dab(bp.x,bp.y); lastPt=bp;
+  }
+  cv.addEventListener('pointerdown', e=>{ e.preventDefault(); const p=toLogical(e);
+    if (phase==='hide'){ try { cv.setPointerCapture(e.pointerId); } catch(err){} applyDown(p); }
+    else if (phase==='seek'){ doFind(p); } });
+  cv.addEventListener('pointermove', e=>{ if (phase!=='hide') return;
+    if (painting && tool==='paint'){ const p=toLogical(e); const bp={x:p.x-pox[cur],y:p.y-poy[cur]}; strokeTo(lastPt,bp); lastPt=bp; } });
+  function stopPaint(){ painting=false; lastPt=null; }
+  cv.addEventListener('pointerup', stopPaint); cv.addEventListener('pointercancel', stopPaint);
+
+  function maskAlphaAt(mctx2,px,py){ if(px<0||py<0||px>=BW||py>=BH) return 0; return mctx2.getImageData(px,py,1,1).data[3]; }
+  function doFind(p){
+    // find the nearest not-yet-found person whose silhouette is under the tap
+    for (let i=0;i<nPlayers;i++){ if (pFound[i]) continue;
+      const m=poseOf(i).mctx; const px=p.x-pox[i], py=p.y-poy[i]; let hit=false;
+      for (let a=0;a<9 && !hit;a++){ const ang=a/9*Math.PI*2, rr=(a===0?0:9); if (maskAlphaAt(m, Math.round(px+Math.cos(ang)*rr), Math.round(py+Math.sin(ang)*rr))>40) hit=true; }
+      if (hit){ pFound[i]=true; showHint('✅ '+names[i]+' found!');
+        if (pFound.every(Boolean)) setTimeout(()=>{ if (phase==='seek') { phase='done'; finishScores(); } }, 700);
+        return; }
+    }
+    showHint('Nobody there…');
+  }
+
+  // ---------- timer + render ----------
+  function nowSec(){ return performance.now()/1000; }
+  function fmt(s){ s=Math.max(0,Math.ceil(s)); const m=Math.floor(s/60); const ss=s%60; return m+':'+(ss<10?'0':'')+ss; }
+  function showHint(t){ const h=document.getElementById('hintpill'); h.textContent=t; h.hidden=false; }
+
+  function labelAbove(i, text, color){
+    const x = pox[i]+BW/2, y = poy[i]-6;
+    ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    const w = ctx.measureText(text).width + 14;
+    ctx.fillStyle='rgba(10,14,28,0.8)'; ctx.beginPath(); ctx.roundRect(x-w/2, y-18, w, 17, 8); ctx.fill();
+    ctx.fillStyle=color; ctx.fillText(text, x, y-3);
+  }
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    if (phase==='setup' || phase==='done' || phase==='handoff'){ ctx.drawImage(bg,0,0); requestAnimationFrame(render); return; }
+    ctx.drawImage(bg,0,0);
+    if (phase==='hide'){
+      // third-person walk
+      if (moveDir.up) poy[cur]-=WALK; if (moveDir.down) poy[cur]+=WALK;
+      if (moveDir.left) pox[cur]-=WALK; if (moveDir.right) pox[cur]+=WALK;
+      if (moveDir.up||moveDir.down||moveDir.left||moveDir.right) clampPos(cur);
+      const ps = poseOf(cur);
+      buildComp(pPaint[cur], ps.mask);
+      ctx.globalAlpha=0.85; ctx.drawImage(ps.ghost, pox[cur], poy[cur]); ctx.globalAlpha=1;   // unpainted skin shows grey
+      ctx.drawImage(comp, pox[cur], poy[cur]);
+    } else if (phase==='seek'){
+      const t = performance.now();
+      const pulse = 0.5 + 0.5*Math.sin(t/150);
+      for (let i=0;i<nPlayers;i++){
+        const ps = poseOf(i);
+        // unfound people gently sway + shimmer so a sharp seeker can spot them (no hard outline)
+        const dx = pFound[i] ? 0 : Math.sin(t/520 + i*2.1)*1.6;
+        const dy = pFound[i] ? 0 : Math.sin(t/610 + i*1.3)*0.8;
+        ctx.drawImage(ps.ghost, pox[i]+dx, poy[i]+dy);
+        buildComp(pPaint[i], ps.mask); ctx.drawImage(comp, pox[i]+dx, poy[i]+dy);
+        if (pFound[i]){ drawTinted(ps.outl, pox[i], poy[i], '#6fe26f', 0.5+0.45*pulse); labelAbove(i, names[i], '#6fe26f'); }
+        else { const sh = 0.06 + 0.13*(0.5+0.5*Math.sin(t/360 + i*1.9)); drawTinted(ps.mask, pox[i]+dx, poy[i]+dy, '#ffffff', sh); }
+      }
+    }
+    if (phase==='hide' || phase==='seek'){
+      const left = endAt - nowSec(); const tEl=document.getElementById('timer'); tEl.textContent=fmt(left); tEl.classList.toggle('warn', left<=10);
+      if (left<=0){ if (phase==='hide') endHide(); else { phase='done'; finishScores(); } }
+    }
+    requestAnimationFrame(render);
+  }
+  refreshBrush(); requestAnimationFrame(render);
+
+  // ---------- walking: arrow keys + on-screen d-pad ----------
+  const KEYDIR = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right',
+                   KeyW:'up', KeyS:'down', KeyA:'left', KeyD:'right' };
+  window.addEventListener('keydown', e=>{ const d=KEYDIR[e.code]; if (d && phase==='hide'){ moveDir[d]=true; e.preventDefault(); } });
+  window.addEventListener('keyup',   e=>{ const d=KEYDIR[e.code]; if (d){ moveDir[d]=false; } });
+  document.querySelectorAll('.dbtn').forEach(b=>{ const d=b.dataset.dir;
+    const on=e=>{ e.preventDefault(); moveDir[d]=true; }; const off=e=>{ e.preventDefault(); moveDir[d]=false; };
+    b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off); b.addEventListener('pointerleave',off); b.addEventListener('pointercancel',off);
+  });
+
+  // ---------- wiring ----------
+  document.querySelectorAll('.count-btn').forEach(b=> b.addEventListener('click', ()=>{ nPlayers=+b.dataset.n; document.querySelectorAll('.count-btn').forEach(x=>x.classList.toggle('sel', x===b)); }));
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('doneBtn').addEventListener('click', ()=>{ if (phase==='hide') endHide(); });
+  document.getElementById('rematchBtn').addEventListener('click', ()=>{ document.getElementById('finalOv').hidden=true; phase='setup'; document.getElementById('setupOv').hidden=false; });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sumo Smash</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="/icons/favicon.png">
+  <script src="/pwa.js" defer></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 12px; touch-action: none; user-select: none; -webkit-user-select: none;
+      color: #fff; overflow: hidden;
+    }
+    .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s, background 0.15s; }
+    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
+
+    /* scorebar */
+    .scorebar { width: 100%; max-width: 560px; display: flex; gap: 10px; margin-bottom: 8px; }
+    .pteam { flex: 1; background: #141d35; border: 2px solid #0f3460; border-radius: 14px; padding: 7px 12px; display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .pteam.right { flex-direction: row-reverse; text-align: right; }
+    .pteam .dot { width: 16px; height: 16px; border-radius: 50%; flex: none; box-shadow: 0 0 10px currentColor; }
+    .pteam .pn { font-weight: 800; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pteam .pips { display: flex; gap: 5px; margin-left: auto; flex: none; }
+    .pteam.right .pips { margin-left: 0; margin-right: auto; }
+    .pip { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.18); }
+    .pip.on { background: currentColor; border-color: currentColor; box-shadow: 0 0 8px currentColor; }
+
+    .stage {
+      position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
+      touch-action: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* round banner pill */
+    .roundpill {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(10,14,28,0.7); border: 1px solid rgba(255,255,255,0.12); color: #ffe8b0;
+      font-weight: 800; font-size: 0.8rem; letter-spacing: 0.04em; padding: 4px 14px; border-radius: 999px;
+      pointer-events: none; z-index: 6;
+    }
+
+    /* touch joysticks + boost */
+    .joystick { position: absolute; width: 92px; height: 92px; border-radius: 50%;
+      background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.18);
+      transform: translate(-50%,-50%); pointer-events: none; z-index: 7; display: none; }
+    .joystick .knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%;
+      transform: translate(-50%,-50%); background: rgba(255,255,255,0.85); box-shadow: 0 0 14px rgba(255,255,255,0.5); }
+    .boost { position: absolute; bottom: 12px; width: 66px; height: 66px; border-radius: 50%;
+      border: 2px solid; font-weight: 900; font-size: 0.72rem; letter-spacing: 0.03em; color: #fff;
+      background: rgba(10,14,28,0.55); display: none; align-items: center; justify-content: center; z-index: 8;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+    .boost:active { transform: scale(0.92); }
+    .boost.left { left: 12px; border-color: #36d1dc; color: #aef6ff; }
+    .boost.right { right: 12px; border-color: #e94560; color: #ffc2cd; }
+    body.touch .boost { display: flex; }
+
+    .hint { margin-top: 10px; color: #a0a8c0; font-size: 0.8rem; text-align: center; max-width: 560px; line-height: 1.5; }
+    .hint b { color: #ffe8b0; }
+    body.touch .hint.kbd { display: none; }
+    .hint.touchonly { display: none; }
+    body.touch .hint.touchonly { display: block; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; }
+    .overlay[hidden] { display: none; }
+    .panel { width: 100%; max-width: 400px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 26px 22px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 2rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #a0a8c0; font-size: 0.92rem; line-height: 1.55; margin-bottom: 18px; }
+    .panel .sub b { color: #ffe8b0; }
+    .vs { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 4px 0 18px; }
+    .vs .who { display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 800; font-size: 0.95rem; }
+    .vs .ball { width: 40px; height: 40px; border-radius: 50%; border: 4px solid; box-shadow: 0 0 16px currentColor; }
+    .vs .x { color: #a0a8c0; font-weight: 900; font-size: 1.2rem; }
+    .start-btn { width: 100%; background: #e94560; color: #fff; border: none; border-radius: 16px; padding: 15px; font-family: inherit; font-weight: 800; font-size: 1.05rem; cursor: pointer; box-shadow: 0 8px 24px rgba(233,69,96,0.4); transition: transform 0.1s, filter 0.15s; }
+    .start-btn:hover { filter: brightness(1.08); }
+    .start-btn:active { transform: scale(0.97); }
+    .trophy { font-size: 3rem; line-height: 1; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Sumo Smash</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="scorebar">
+    <div class="pteam left" id="team0">
+      <span class="dot" style="color:#36d1dc;background:#36d1dc"></span>
+      <span class="pn" id="name0">Player 1</span>
+      <span class="pips" style="color:#36d1dc"><span class="pip" data-p="0"></span><span class="pip" data-p="0"></span></span>
+    </div>
+    <div class="pteam right" id="team1">
+      <span class="dot" style="color:#e94560;background:#e94560"></span>
+      <span class="pn" id="name1">Player 2</span>
+      <span class="pips" style="color:#e94560"><span class="pip" data-p="1"></span><span class="pip" data-p="1"></span></span>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+    <div class="roundpill" id="roundpill" hidden></div>
+    <div class="joystick" id="stick0"><div class="knob"></div></div>
+    <div class="joystick" id="stick1"><div class="knob"></div></div>
+    <button class="boost left" id="boost0">BOOST</button>
+    <button class="boost right" id="boost1">BOOST</button>
+  </div>
+
+  <p class="hint kbd"><b>P1</b> WASD + <b>Left Shift</b> to boost &nbsp;·&nbsp; <b>P2</b> Arrows + <b>Right Shift</b> to boost</p>
+  <p class="hint touchonly">Drag your half of the ring to roll · tap <b>BOOST</b> to slam!</p>
+
+  <!-- start screen -->
+  <div class="overlay" id="startOv">
+    <div class="panel">
+      <h2>Sumo Smash</h2>
+      <div class="vs">
+        <div class="who"><div class="ball" style="color:#36d1dc;border-color:#36d1dc"></div><span id="vs0">Player 1</span></div>
+        <div class="x">VS</div>
+        <div class="who"><div class="ball" style="color:#e94560;border-color:#e94560"></div><span id="vs1">Player 2</span></div>
+      </div>
+      <div class="sub">Roll your ball into your rival to knock them off the platform. The ring keeps <b>shrinking</b> — last one standing wins the round. <b>Best of 3!</b></div>
+      <button class="start-btn" id="startBtn">Start Match</button>
+    </div>
+  </div>
+
+  <!-- match over -->
+  <div class="overlay" id="overOv" hidden>
+    <div class="panel">
+      <div class="trophy">🏆</div>
+      <h2 id="winName">Winner</h2>
+      <div class="sub" id="winSub">won the match!</div>
+      <button class="start-btn" id="rematchBtn">Rematch</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const W = 760, H = 560, cx = W/2, cy = H/2;
+  let dpr = 1;
+  function fit(){ dpr = Math.min(window.devicePixelRatio || 1, 2); cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+  fit(); window.addEventListener('resize', fit);
+
+  // tuning (per 1/60s step)
+  const MAXR = 250, MINR = 70, BALLR = 26;
+  const ACC = 0.55, FRIC = 0.92, BOOST = 7.6, BOOST_CD = 1.1, HARDCAP = 14, REST = 1.22;
+  const GRACE = 3.5, SHRINK_TIME = 22, WINS_NEEDED = 2;
+
+  function pname(i, f){ try { const a = JSON.parse(localStorage.getItem('elise.playerNames')); const n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || f; } catch(e){ return f; } }
+
+  const players = [
+    { col:'#36d1dc', glow:'#aef6ff', name:'Player 1', wins:0 },
+    { col:'#e94560', glow:'#ffc2cd', name:'Player 2', wins:0 }
+  ];
+
+  let state = 'start';   // start | countdown | play | roundend | matchover
+  let round = 0, arenaR = MAXR, roundT = 0, stateT = 0, loserIdx = -1, winnerIdx = -1, shake = 0;
+  const touchDir = [{x:0,y:0},{x:0,y:0}];
+
+  // ---------- input ----------
+  const keys = {};
+  const KMAP = { KeyW:1,KeyS:1,KeyA:1,KeyD:1,ArrowUp:1,ArrowDown:1,ArrowLeft:1,ArrowRight:1 };
+  function active(){ return state==='countdown' || state==='play' || state==='roundend'; }
+  window.addEventListener('keydown', function(e){
+    if (e.repeat) return;
+    if (KMAP[e.code]) { keys[e.code] = true; if (active()) e.preventDefault(); return; }
+    if (e.code==='ShiftLeft' || e.code==='Space') { if (active()){ tryBoost(0); e.preventDefault(); } }
+    else if (e.code==='ShiftRight' || e.code==='Enter' || e.code==='Slash') { if (active()){ tryBoost(1); e.preventDefault(); } }
+  });
+  window.addEventListener('keyup', function(e){ if (KMAP[e.code]) keys[e.code] = false; });
+
+  function inputVec(i){
+    const t = touchDir[i];
+    let x = 0, y = 0;
+    if (t.x || t.y) { x = t.x; y = t.y; }
+    else {
+      if (keys[i ? 'ArrowLeft':'KeyA']) x -= 1;
+      if (keys[i ? 'ArrowRight':'KeyD']) x += 1;
+      if (keys[i ? 'ArrowUp':'KeyW']) y -= 1;
+      if (keys[i ? 'ArrowDown':'KeyS']) y += 1;
+    }
+    const m = Math.hypot(x, y);
+    if (m > 1) { x /= m; y /= m; }
+    return { x:x, y:y };
+  }
+
+  function tryBoost(i){
+    if (state !== 'play') return;
+    const p = players[i];
+    if (!p.alive || p.falling || p.boostCd > 0) return;
+    let v = inputVec(i);
+    let m = Math.hypot(v.x, v.y);
+    if (m < 0.05) { const s = Math.hypot(p.vx, p.vy); if (s > 0.5) { v = { x:p.vx/s, y:p.vy/s }; m = 1; } else return; }
+    p.vx += v.x / m * BOOST; p.vy += v.y / m * BOOST;
+    p.boostCd = BOOST_CD; p.boostFx = 0.32; shake = Math.min(shake + 4, 9);
+  }
+
+  // ---------- touch joysticks ----------
+  const stage = document.getElementById('stage');
+  const stickEls = [document.getElementById('stick0'), document.getElementById('stick1')];
+  const pointers = {};
+  if (matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch');
+
+  function showStick(i, x, y){ const s = stickEls[i]; s.style.left = x+'px'; s.style.top = y+'px'; s.style.display = 'block'; moveKnob(i, 0, 0); }
+  function hideStick(i){ stickEls[i].style.display = 'none'; }
+  function moveKnob(i, dx, dy){ stickEls[i].querySelector('.knob').style.transform = 'translate(calc(-50% + '+dx+'px), calc(-50% + '+dy+'px))'; }
+
+  stage.addEventListener('pointerdown', function(e){
+    if (e.pointerType === 'mouse') return;
+    const r = stage.getBoundingClientRect();
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    const half = px < r.width/2 ? 0 : 1;
+    if (pointers[e.pointerId] != null) return;
+    pointers[e.pointerId] = { player:half, sx:px, sy:py };
+    showStick(half, px, py);
+    try { stage.setPointerCapture(e.pointerId); } catch(err){}
+  });
+  stage.addEventListener('pointermove', function(e){
+    const ptr = pointers[e.pointerId]; if (!ptr) return;
+    const r = stage.getBoundingClientRect();
+    const dx = (e.clientX - r.left) - ptr.sx, dy = (e.clientY - r.top) - ptr.sy;
+    const RAD = 44; let m = Math.hypot(dx, dy); let nx = dx, ny = dy;
+    if (m > RAD) { nx = dx/m*RAD; ny = dy/m*RAD; }
+    touchDir[ptr.player] = { x:nx/RAD, y:ny/RAD };
+    moveKnob(ptr.player, nx, ny);
+  });
+  function endPtr(e){ const ptr = pointers[e.pointerId]; if (!ptr) return; touchDir[ptr.player] = {x:0,y:0}; hideStick(ptr.player); delete pointers[e.pointerId]; }
+  stage.addEventListener('pointerup', endPtr);
+  stage.addEventListener('pointercancel', endPtr);
+
+  function boostBtn(i){ return function(e){ e.preventDefault(); e.stopPropagation(); tryBoost(i); }; }
+  document.getElementById('boost0').addEventListener('pointerdown', boostBtn(0));
+  document.getElementById('boost1').addEventListener('pointerdown', boostBtn(1));
+
+  // ---------- rounds ----------
+  function startRound(){
+    round++; arenaR = MAXR; roundT = 0; loserIdx = -1;
+    players.forEach(function(p, i){
+      p.x = cx + (i ? 120 : -120); p.y = cy; p.vx = 0; p.vy = 0;
+      p.boostCd = 0; p.boostFx = 0; p.falling = false; p.fallT = 0; p.alive = true; p.scale = 1; p.trail = [];
+    });
+    state = 'countdown'; stateT = 0;
+    updateHUD();
+  }
+  function resetMatch(){
+    players[0].name = pname(0, 'Player 1');
+    players[1].name = pname(1, 'Player 2');
+    players[0].wins = 0; players[1].wins = 0; round = 0;
+    startRound();
+  }
+  function nextAfterRound(){
+    if (players[winnerIdx].wins >= WINS_NEEDED) {
+      state = 'matchover';
+      document.getElementById('winName').textContent = players[winnerIdx].name;
+      document.getElementById('winName').style.color = players[winnerIdx].col;
+      document.getElementById('winSub').textContent = 'won the match ' + players[0].wins + ' – ' + players[1].wins + '!';
+      document.getElementById('overOv').hidden = false;
+    } else {
+      startRound();
+    }
+  }
+
+  // ---------- simulation ----------
+  function simBalls(dt){
+    for (let i=0;i<2;i++){
+      const p = players[i];
+      if (!p.alive) continue;
+      if (p.falling) {
+        p.fallT += dt; p.scale = Math.max(0, p.scale - dt/0.7);
+        p.x += p.vx*0.55; p.y += p.vy*0.55;
+        if (p.fallT >= 0.7) p.alive = false;
+        continue;
+      }
+      if (p.boostCd > 0) p.boostCd -= dt;
+      if (p.boostFx > 0) p.boostFx -= dt;
+      if (state === 'play') { const v = inputVec(i); p.vx += v.x*ACC; p.vy += v.y*ACC; }
+      p.vx *= FRIC; p.vy *= FRIC;
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp > HARDCAP) { p.vx = p.vx/sp*HARDCAP; p.vy = p.vy/sp*HARDCAP; }
+      p.x += p.vx; p.y += p.vy;
+      p.trail.push({ x:p.x, y:p.y, a:0.6 });
+      if (p.trail.length > 10) p.trail.shift();
+    }
+    for (let i=0;i<2;i++){ const tr = players[i].trail; for (let j=0;j<tr.length;j++) tr[j].a -= dt*1.6; }
+    collide();
+  }
+  function collide(){
+    const a = players[0], b = players[1];
+    if (!a.alive || !b.alive || a.falling || b.falling) return;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    let d = Math.hypot(dx, dy) || 0.0001; const min = BALLR*2;
+    if (d < min) {
+      const nx = dx/d, ny = dy/d, overlap = min - d;
+      a.x -= nx*overlap/2; a.y -= ny*overlap/2; b.x += nx*overlap/2; b.y += ny*overlap/2;
+      const van = a.vx*nx + a.vy*ny, vbn = b.vx*nx + b.vy*ny;
+      if (van - vbn > 0) {
+        const imp = (van - vbn) * REST;
+        a.vx -= nx*imp; a.vy -= ny*imp; b.vx += nx*imp; b.vy += ny*imp;
+        shake = Math.min(shake + (van - vbn)*0.6, 11);
+      }
+    }
+  }
+  function checkFalls(){
+    const out = [];
+    for (let i=0;i<2;i++){ const p = players[i]; if (p.alive && !p.falling){ const d = Math.hypot(p.x-cx, p.y-cy); if (d > arenaR) out.push({ i:i, d:d }); } }
+    if (!out.length) return;
+    out.sort(function(m,n){ return n.d - m.d; });
+    loserIdx = out[0].i; winnerIdx = loserIdx === 0 ? 1 : 0;
+    players[loserIdx].falling = true; players[loserIdx].fallT = 0;
+    players[winnerIdx].wins++;
+    state = 'roundend'; stateT = 0; shake = Math.min(shake + 6, 11);
+    updateHUD();
+  }
+
+  function step(dt){
+    if (shake > 0) shake = Math.max(0, shake - dt*40);
+    if (state === 'countdown') { stateT += dt; if (stateT >= 3.0) { state = 'play'; roundT = 0; } return; }
+    if (state === 'play') {
+      roundT += dt;
+      const sh = Math.max(0, roundT - GRACE);
+      arenaR = Math.max(MINR, MAXR - (MAXR - MINR) * (sh / SHRINK_TIME));
+      simBalls(dt);
+      checkFalls();
+    } else if (state === 'roundend') {
+      stateT += dt; simBalls(dt);
+      if (stateT >= 1.6) nextAfterRound();
+    }
+  }
+
+  // ---------- render ----------
+  function render(){
+    ctx.save();
+    if (shake > 0.1) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+
+    // backdrop
+    ctx.fillStyle = '#0a0e1c'; ctx.fillRect(-20, -20, W+40, H+40);
+
+    // green void halo around the rim
+    const halo = ctx.createRadialGradient(cx, cy, Math.max(1, arenaR-12), cx, cy, arenaR+150);
+    halo.addColorStop(0, 'rgba(20,255,160,0)');
+    halo.addColorStop(0.18, 'rgba(34,255,170,0.55)');
+    halo.addColorStop(0.4, 'rgba(20,200,140,0.18)');
+    halo.addColorStop(1, 'rgba(20,200,140,0)');
+    ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
+
+    // arena disk (clipped)
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, arenaR, 0, Math.PI*2); ctx.clip();
+    const disk = ctx.createRadialGradient(cx, cy-40, 30, cx, cy, arenaR);
+    disk.addColorStop(0, '#26324f'); disk.addColorStop(1, '#101830');
+    ctx.fillStyle = disk; ctx.fillRect(cx-arenaR, cy-arenaR, arenaR*2, arenaR*2);
+    // tile grid
+    ctx.strokeStyle = 'rgba(120,150,210,0.13)'; ctx.lineWidth = 1.5;
+    const g = 40;
+    ctx.beginPath();
+    for (let x = cx-arenaR - (cx % g); x < cx+arenaR; x += g) { ctx.moveTo(x, cy-arenaR); ctx.lineTo(x, cy+arenaR); }
+    for (let y = cy-arenaR - (cy % g); y < cy+arenaR; y += g) { ctx.moveTo(cx-arenaR, y); ctx.lineTo(cx+arenaR, y); }
+    ctx.stroke();
+    ctx.restore();
+
+    // rim
+    const danger = arenaR <= MINR + 4;
+    ctx.lineWidth = 7; ctx.strokeStyle = danger ? '#ff5a7a' : '#0f3460';
+    ctx.shadowColor = danger ? 'rgba(255,90,122,0.8)' : 'rgba(46,255,170,0.45)'; ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.arc(cx, cy, arenaR, 0, Math.PI*2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath(); ctx.arc(cx, cy, arenaR-4, 0, Math.PI*2); ctx.stroke();
+
+    // shadows
+    for (let i=0;i<2;i++){ const p = players[i]; if (!p.alive) continue; const r = BALLR*p.scale;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(p.x, p.y+r*0.55, r*0.95, r*0.42, 0, 0, Math.PI*2); ctx.fill(); }
+
+    // balls
+    for (let i=0;i<2;i++) drawBall(players[i], i);
+
+    // banners
+    if (state === 'countdown') {
+      const c = 3 - Math.floor(stateT);
+      drawBanner(stateT > 2.55 ? 'GO!' : String(c), stateT > 2.55 ? '#46ffaa' : '#fff', null);
+    } else if (state === 'roundend') {
+      drawBanner(players[winnerIdx].name + ' wins!', players[winnerIdx].col,
+                 'Round ' + round + ' · ' + players[0].wins + ' – ' + players[1].wins);
+    }
+    ctx.restore();
+  }
+
+  function drawBall(p, i){
+    if (!p.alive) return;
+    const r = BALLR * p.scale;
+    // trail
+    for (let j=0;j<p.trail.length;j++){ const t = p.trail[j]; if (t.a <= 0) continue;
+      ctx.globalAlpha = t.a * 0.5; ctx.fillStyle = p.col;
+      ctx.beginPath(); ctx.arc(t.x, t.y, r*0.5*(j/p.trail.length), 0, Math.PI*2); ctx.fill(); }
+    ctx.globalAlpha = p.falling ? Math.max(0, p.scale) : 1;
+
+    // glow when boosting
+    if (p.boostFx > 0) { ctx.shadowColor = p.glow; ctx.shadowBlur = 24; }
+    // core
+    const cgrad = ctx.createRadialGradient(p.x-r*0.3, p.y-r*0.3, r*0.2, p.x, p.y, r);
+    cgrad.addColorStop(0, 'rgba(255,255,255,0.35)'); cgrad.addColorStop(0.5, p.col); cgrad.addColorStop(1, p.col);
+    ctx.fillStyle = cgrad; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // cage lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(p.x-r, p.y); ctx.lineTo(p.x+r, p.y);
+    ctx.moveTo(p.x, p.y-r); ctx.lineTo(p.x, p.y+r);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x, p.y, r*0.55, 0, Math.PI*2); ctx.stroke();
+
+    // boost cooldown ring
+    if (!p.falling && p.boostCd > 0) {
+      const frac = 1 - p.boostCd / BOOST_CD;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r+5, -Math.PI/2, -Math.PI/2 + frac*Math.PI*2); ctx.stroke();
+    } else if (!p.falling) {
+      ctx.strokeStyle = p.glow; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r+5, 0, Math.PI*2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBanner(text, color, sub){
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 12;
+    ctx.fillStyle = color; ctx.font = "700 64px 'Pacifico', cursive";
+    ctx.fillText(text, cx, cy - (sub ? 16 : 0));
+    if (sub) { ctx.font = "800 22px 'Nunito', sans-serif"; ctx.fillStyle = '#ffe8b0'; ctx.fillText(sub, cx, cy + 36); }
+    ctx.shadowBlur = 0;
+  }
+
+  // ---------- HUD ----------
+  function updateHUD(){
+    document.getElementById('name0').textContent = players[0].name;
+    document.getElementById('name1').textContent = players[1].name;
+    const pips = document.querySelectorAll('.pip');
+    pips.forEach(function(el){ const i = +el.dataset.p; const idx = Array.prototype.indexOf.call(el.parentNode.children, el); el.classList.toggle('on', players[i].wins > idx); });
+    const rp = document.getElementById('roundpill');
+    if (state === 'countdown' || state === 'play') { rp.hidden = false; rp.textContent = (arenaR <= MINR+4 && state==='play') ? 'SUDDEN DEATH' : ('ROUND ' + round); }
+    else rp.hidden = true;
+  }
+
+  // ---------- loop ----------
+  let last = 0, acc = 0; const STEP = 1/60;
+  function frame(t){
+    if (!last) last = t;
+    let dt = (t - last) / 1000; last = t; if (dt > 0.1) dt = 0.1;
+    if (state !== 'start' && state !== 'matchover') {
+      acc += dt;
+      let n = 0;
+      while (acc >= STEP && n < 5) { step(STEP); acc -= STEP; n++; }
+      if (acc > STEP) acc = 0;
+      // refresh roundpill text on shrink transition cheaply
+      const rp = document.getElementById('roundpill');
+      if (!rp.hidden && state === 'play') rp.textContent = (arenaR <= MINR+4) ? 'SUDDEN DEATH' : ('ROUND ' + round);
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---------- buttons ----------
+  document.getElementById('startBtn').addEventListener('click', function(){
+    document.getElementById('startOv').hidden = true;
+    resetMatch();
+  });
+  document.getElementById('rematchBtn').addEventListener('click', function(){
+    document.getElementById('overOv').hidden = true;
+    resetMatch();
+  });
+
+  // populate VS names on start screen
+  document.getElementById('vs0').textContent = pname(0, 'Player 1');
+  document.getElementById('vs1').textContent = pname(1, 'Player 2');
+  document.getElementById('name0').textContent = pname(0, 'Player 1');
+  document.getElementById('name1').textContent = pname(1, 'Player 2');
+})();
+</script>
+</body>
+</html>

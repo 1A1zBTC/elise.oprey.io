@@ -238,6 +238,72 @@
         <button class="pf-tab active" data-count="all" role="tab" aria-selected="true">ALL</button>
       </div>
 
+      <a href="wavelength/index.html" class="game-card">
+        <div class="game-icon">🎯</div>
+        <div class="game-info">
+          <div class="game-title">Wavelength</div>
+          <div class="game-meta">
+            <span class="players-badge">2 – 4 players</span>
+            <span>Party · Teams</span>
+          </div>
+        </div>
+      </a>
+
+      <a href="fly-or-die/index.html" class="game-card">
+        <div class="game-icon">🐉</div>
+        <div class="game-info">
+          <div class="game-title">Fly or Die</div>
+          <div class="game-meta">
+            <span class="players-badge">1 player</span>
+            <span>Arcade · Evolve</span>
+          </div>
+        </div>
+      </a>
+
+      <a href="chameleons/index.html" class="game-card">
+        <div class="game-icon">🦎</div>
+        <div class="game-info">
+          <div class="game-title">Chameleons</div>
+          <div class="game-meta">
+            <span class="players-badge">1 – 4 players</span>
+            <span>Party · Hide &amp; paint</span>
+          </div>
+        </div>
+      </a>
+
+      <a href="fruit-merge/index.html" class="game-card">
+        <div class="game-icon">🍉</div>
+        <div class="game-info">
+          <div class="game-title">Fruit Merge</div>
+          <div class="game-meta">
+            <span class="players-badge">1 player</span>
+            <span>Puzzle · Merge</span>
+          </div>
+        </div>
+      </a>
+
+      <a href="twisted-system/index.html" class="game-card">
+        <div class="game-icon">🌀</div>
+        <div class="game-info">
+          <div class="game-title">Twisted Critters</div>
+          <div class="game-meta">
+            <span class="players-badge">2 – 4 players</span>
+            <span>Party · Jump &amp; Duck</span>
+          </div>
+        </div>
+      </a>
+
+      <a href="sumo/index.html" class="game-card">
+        <div class="game-icon">🤼</div>
+        <div class="game-info">
+          <div class="game-title">Sumo Smash</div>
+          <div class="game-meta">
+            <span class="players-badge">2 players</span>
+            <span>Arcade · Versus</span>
+          </div>
+        </div>
+      </a>
+
       <a href="kit-clash/index.html" class="game-card">
         <div class="game-icon">👕</div>
         <div class="game-info">
@@ -424,6 +490,17 @@
           </div>
         </div>
       </a>
+
+      <a href="grindy-vet/index.html" class="game-card">
+        <div class="game-icon">🩺</div>
+        <div class="game-info">
+          <div class="game-title">Grindy Vet</div>
+          <div class="game-meta">
+            <span class="players-badge">1 player</span>
+            <span>Sim · Manage</span>
+          </div>
+        </div>
+      </a>
     </nav>
 
     <main class="content">
@@ -501,16 +578,41 @@
       // Only take over on desktop; on mobile the links navigate to the full-page game.
       function isDesktop() { return window.matchMedia('(min-width: 760px)').matches; }
 
+      // ---- Deep links: the open game lives in the URL hash (e.g. #mob-soccer), so a
+      // refresh — or a shared/bookmarked link — reopens the same game, not the picker.
+      function slugFromHref(href) {
+        href = (href || '').replace(/[?#].*$/, '').replace(/\/index\.html$/i, '').replace(/\/+$/, '');
+        var parts = href.split('/');
+        return parts[parts.length - 1] || '';
+      }
+      function cardForSlug(slug) {
+        for (var i = 0; i < cards.length; i++) { if (slugFromHref(cards[i].getAttribute('href')) === slug) return cards[i]; }
+        return null;
+      }
+      function curSlug() { return (location.hash || '').replace(/^#/, ''); }
+      function setActive(card) { cards.forEach(function (c) { c.classList.toggle('active', c === card); }); }
+      function openInPane(card) {
+        welcome.hidden = true; setActive(card);
+        if (slugFromHref(stage.src) !== slugFromHref(card.getAttribute('href'))) stage.src = card.getAttribute('href');
+      }
+      function showPicker() { setActive(null); welcome.hidden = false; stage.src = 'about:blank'; }
+      function syncFromHash() {
+        var card = curSlug() ? cardForSlug(curSlug()) : null;
+        if (!card) { showPicker(); return; }
+        if (!isDesktop()) { window.location.replace(card.getAttribute('href')); return; }  // mobile → full game page
+        openInPane(card);
+      }
+
       cards.forEach(function (card) {
         card.addEventListener('click', function (e) {
-          if (!isDesktop()) return;          // mobile → let the <a> navigate
+          if (!isDesktop()) return;          // mobile → let the <a> navigate to the full page
           e.preventDefault();
-          stage.src = card.getAttribute('href');
-          welcome.hidden = true;
-          cards.forEach(function (c) { c.classList.remove('active'); });
-          card.classList.add('active');
+          var slug = slugFromHref(card.getAttribute('href'));
+          if (curSlug() === slug) openInPane(card);   // already there → just (re)focus it
+          else location.hash = slug;                  // updates the URL → hashchange opens it
         });
       });
+      window.addEventListener('hashchange', syncFromHash);
 
       // The games are standalone pages with their own "‹ Games" topbar. When shown in
       // this pane it's redundant (the sidebar is the nav) and its back link would load
@@ -525,12 +627,11 @@
         var hasGame = loc && loc !== 'about:blank';
         var clicked = Array.prototype.some.call(cards, function (c) { return c.classList.contains('active'); });
 
-        // Restored-on-refresh: a game is loaded but the user didn't pick it this session,
-        // so the sidebar shows no active card and the transparent welcome overlay would
-        // sit on top of the game. Reset to a clean picker instead.
-        if (hasGame && !clicked) {
-          stage.src = 'about:blank';
-          welcome.hidden = false;
+        // Restored-on-refresh with NO deep-link hash: a game is loaded but nothing in
+        // the URL says which, so reset to a clean picker. With a hash, syncFromHash has
+        // already opened the right game and marked its card active (clicked === true).
+        if (hasGame && !clicked && !cardForSlug(curSlug())) {
+          showPicker();
           return;
         }
 
@@ -551,6 +652,9 @@
         stage.focus();
         try { stage.contentWindow.focus(); } catch (e) { /* ignore */ }
       });
+
+      // Open whatever the URL hash points at on first load (deep link / refresh / shared link).
+      syncFromHash();
     })();
   </script>
 

@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Grindy Vet</title>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="/icons/favicon.png">
+  <script src="/pwa.js" defer></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: #76b65a;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Full-bleed canvas fills the whole pane / viewport. */
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      touch-action: none;
+    }
+
+    /* Overlay topbar floats above the canvas. */
+    .topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      z-index: 10;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(10,14,28,0.45) 0%, rgba(10,14,28,0) 100%);
+    }
+    .back {
+      pointer-events: auto;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 0.95rem;
+      padding: 7px 12px;
+      border-radius: 12px;
+      background: rgba(10,14,28,0.35);
+      transition: background 0.15s ease;
+    }
+    .back:hover { background: rgba(10,14,28,0.6); }
+    .title {
+      font-family: 'Pacifico', cursive;
+      color: #fff;
+      font-size: 1.7rem;
+      line-height: 1;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    }
+
+    .hint {
+      position: fixed;
+      bottom: 12px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      pointer-events: none;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-align: center;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: rgba(10,14,28,0.4);
+      white-space: nowrap;
+    }
+    .hint b { color: #ffe8b0; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Grindy Vet</span>
+    <span style="width:64px"></span>
+  </div>
+
+  <canvas id="game"></canvas>
+
+  <div class="hint"><b>Arrow keys</b> / <b>WASD</b> to walk — on mobile, <b>drag</b> anywhere.</div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    var canvas = document.getElementById('game');
+    var ctx = canvas.getContext('2d');
+
+    // ---- Isometric world constants ---------------------------------------
+    var TILE_W = 64, TILE_H = 32;          // 2:1 isometric tile footprint
+    var TILE_HW = TILE_W / 2, TILE_HH = TILE_H / 2;
+    var WALL_H = 62;                       // tall back walls
+    var FRONT_WALL_H = 30;                 // short front walls (see over them)
+    var ROOM = 8;                          // floor grid is ROOM x ROOM
+    // Automatic sliding double doors centred in the front-left wall: the opening
+    // spans tiles 3 & 4 (grid gx 2.5 … 4.5, centred on gx 3.5).
+    var DOOR_A = 2.5, DOOR_B = 4.5, DOOR_MID = 3.5;
+    var DOOR_H = 48;                        // entrance height (taller than the low side walls)
+
+    // ---- Game state (small + extendable) ---------------------------------
+    var vet = {
+      x: ROOM / 2 - 0.5, y: ROOM / 2 - 0.5,  // float grid position (tile units)
+      speed: 3.3, dir: 'SE', moving: false, walkPhase: 0
+    };
+    var input = { up: false, down: false, left: false, right: false };
+    var touchInput = { active: false, dx: 0, dy: 0 };
+
+    // Automatic doors: open (0..1) eases toward 1 when the vet OR a visitor is near.
+    var door = { open: 0 };
+
+    // ---- Visitors --------------------------------------------------------
+    // Every `frq` seconds a new client walks in from the road, up the path,
+    // through the doors, and waits inside. Each visitor follows a fixed list of
+    // grid waypoints; `wait` parks them at a spot inside the clinic.
+    var frq = 30;                          // seconds between arrivals
+    var wait = 20;                         // seconds a client waits before storming off
+    var spawnTimer = frq;                  // first one arrives after `frq` seconds
+    var visitors = [];
+    var visitorSeq = 0;
+    var WAIT_SPOTS = [                      // inside-the-clinic spots to queue at
+      { x: 1.4, y: 5.4 }, { x: 1.4, y: 4.2 }, { x: 1.4, y: 3.0 },
+      { x: 2.6, y: 5.4 }, { x: 2.6, y: 4.2 }, { x: 2.6, y: 3.0 }
+    ];
+    // Visitor look-up tables (cycled by arrival order).
+    var V_SHIRT = ['#e0683c', '#d94f6e', '#5a8fd6', '#e0a93c', '#7d5bbe', '#3aa686'];
+    var V_LEGS  = ['#3a4760', '#42506a', '#5a4636', '#384a44'];
+    var V_SKIN  = ['#f0c8a4', '#e0b189', '#c98e63', '#a86c45'];
+    var V_HAIR  = ['#3a2c22', '#6b4a32', '#241a14', '#8a6a3a', '#2b2b33'];
+    var PETS    = ['dog-s', 'dog-m', 'dog-l', 'cat'];      // arrival cycle
+    var CARRIER = ['#e0683c', '#3d8fd0', '#7d5bbe', '#3bb1a2', '#e0a93c', '#d94f6e'];
+
+    // ---- Canvas + offscreen layers ---------------------------------------
+    // Everything static (grass, path, floor, back walls) is cached in `bg`;
+    // the short front walls (which occlude the vet) cache in `fg`. Each frame
+    // we just blit bg, draw the vet, blit fg — cheap.
+    var view = { w: 0, h: 0, dpr: 1 };
+    var camera = { x: 0, y: 0 };
+    var bg = document.createElement('canvas'), bgx = bg.getContext('2d');
+    var fg = document.createElement('canvas'), fgx = fg.getContext('2d');
+
+    function resize() {
+      var rect = canvas.getBoundingClientRect();
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      view.w = rect.width; view.h = rect.height; view.dpr = dpr;
+      canvas.width = bg.width = fg.width = Math.round(rect.width * dpr);
+      canvas.height = bg.height = fg.height = Math.round(rect.height * dpr);
+      // Centre the room; nudge up so the front path has room below.
+      var c = isoRaw(ROOM / 2 - 0.5, ROOM / 2 - 0.5);
+      camera.x = view.w / 2 - c.x;
+      camera.y = view.h / 2 - c.y - 28;
+      renderStatic();
+    }
+
+    function isoRaw(gx, gy) {
+      return { x: (gx - gy) * TILE_HW, y: (gx + gy) * TILE_HH };
+    }
+    function iso(gx, gy) {
+      return { x: (gx - gy) * TILE_HW + camera.x, y: (gx + gy) * TILE_HH + camera.y };
+    }
+    function screenToGrid(sx, sy) {
+      var a = (sx - camera.x) / TILE_HW, b = (sy - camera.y) / TILE_HH;
+      return { gx: (a + b) / 2, gy: (b - a) / 2 };
+    }
+
+    // Deterministic 0..1 hash (no Math.random — keeps texture stable on resize).
+    function hash(x, y) {
+      var n = (x | 0) * 374761393 + (y | 0) * 668265263;
+      n = (n ^ (n >> 13)) * 1274126177;
+      return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+    }
+
+    // ---- Tile + surface primitives (draw onto a given context) -----------
+    function diamondPath(c, cx, cy) {
+      c.beginPath();
+      c.moveTo(cx, cy - TILE_HH);
+      c.lineTo(cx + TILE_HW, cy);
+      c.lineTo(cx, cy + TILE_HH);
+      c.lineTo(cx - TILE_HW, cy);
+      c.closePath();
+    }
+
+    var GRASS = ['#7cc15f', '#74ba56', '#82c766', '#6fb551'];
+    function grassTile(c, gx, gy) {
+      var s = iso(gx, gy), h = hash(gx, gy);
+      diamondPath(c, s.x, s.y);
+      c.fillStyle = GRASS[(h * GRASS.length) | 0];
+      c.fill();
+      // a few darker blades for texture on ~30% of tiles
+      if (h > 0.7) {
+        c.strokeStyle = 'rgba(60,120,50,0.55)';
+        c.lineWidth = 1.4;
+        for (var i = 0; i < 3; i++) {
+          var hx = hash(gx * 7 + i, gy * 13 - i);
+          var bx = s.x + (hx - 0.5) * TILE_W * 0.5;
+          var by = s.y + (hash(gx - i, gy + i) - 0.5) * TILE_H * 0.5;
+          c.beginPath();
+          c.moveTo(bx, by);
+          c.lineTo(bx + (hx - 0.5) * 4, by - 5);
+          c.stroke();
+        }
+      }
+    }
+
+    function pathTile(c, gx, gy) {
+      var s = iso(gx, gy), h = hash(gx * 3 + 99, gy * 3 + 7);
+      diamondPath(c, s.x, s.y);
+      c.fillStyle = h > 0.5 ? '#d9cfb8' : '#d0c5ac';
+      c.fill();
+      c.strokeStyle = 'rgba(150,138,110,0.45)';
+      c.lineWidth = 1;
+      c.stroke();
+    }
+
+    function roadTile(c, gx, gy) {
+      var s = iso(gx, gy), h = hash(gx * 5 + 3, gy * 5 + 8);
+      diamondPath(c, s.x, s.y);
+      c.fillStyle = h > 0.5 ? '#5c636c' : '#565d66';
+      c.fill();
+    }
+
+    function floorTile(c, gx, gy) {
+      var s = iso(gx, gy);
+      var light = (gx + gy) % 2 === 0;
+      var h = hash(gx + 31, gy + 17);
+      diamondPath(c, s.x, s.y);
+      c.fillStyle = light ? '#eaf3f6' : '#dde9ee';
+      c.fill();
+      // faint per-tile shade variance for subtle texture
+      c.fillStyle = 'rgba(120,150,170,' + (0.03 + h * 0.05).toFixed(3) + ')';
+      c.fill();
+      c.strokeStyle = 'rgba(150,180,196,0.5)';
+      c.lineWidth = 1;
+      c.stroke();
+    }
+
+    // Vertical wall face rising height `H` from base segment a→b.
+    function wallFace(c, ax, ay, bx, by, H, faceTop, faceBot, capCol, trimCol) {
+      var a = iso(ax, ay), b = iso(bx, by);
+      var grad = c.createLinearGradient(0, a.y - H, 0, a.y);
+      grad.addColorStop(0, faceTop);
+      grad.addColorStop(1, faceBot);
+      c.beginPath();
+      c.moveTo(a.x, a.y - H);
+      c.lineTo(b.x, b.y - H);
+      c.lineTo(b.x, b.y);
+      c.lineTo(a.x, a.y);
+      c.closePath();
+      c.fillStyle = grad;
+      c.fill();
+      // coloured baseboard trim along the bottom
+      if (trimCol) {
+        c.beginPath();
+        c.moveTo(a.x, a.y);
+        c.lineTo(b.x, b.y);
+        c.lineTo(b.x, b.y - 6);
+        c.lineTo(a.x, a.y - 6);
+        c.closePath();
+        c.fillStyle = trimCol;
+        c.fill();
+      }
+      // top cap edge
+      c.beginPath();
+      c.moveTo(a.x, a.y - H);
+      c.lineTo(b.x, b.y - H);
+      c.strokeStyle = capCol;
+      c.lineWidth = 3;
+      c.stroke();
+    }
+
+    // A filled band on the front-left wall plane (gy = ROOM-0.5), between grid
+    // columns gxA..gxB and screen-heights hBot..hTop above the floor line.
+    function wallQuad(c, gxA, gxB, hTop, hBot, fill) {
+      var a = iso(gxA, ROOM - 0.5), b = iso(gxB, ROOM - 0.5);
+      c.beginPath();
+      c.moveTo(a.x, a.y - hTop); c.lineTo(b.x, b.y - hTop);
+      c.lineTo(b.x, b.y - hBot); c.lineTo(a.x, a.y - hBot); c.closePath();
+      c.fillStyle = fill; c.fill();
+    }
+
+    // Static frame (jambs + lintel + sign) around the sliding doors.
+    function drawDoorFrame(c) {
+      var H = DOOR_H, frame = '#d6dfe4';
+      wallQuad(c, DOOR_A, DOOR_A + 0.16, H, 0, frame);        // left jamb
+      wallQuad(c, DOOR_B - 0.16, DOOR_B, H, 0, frame);        // right jamb
+      wallQuad(c, DOOR_A, DOOR_B, H, H - 9, frame);           // top lintel
+      wallQuad(c, DOOR_A, DOOR_B, H - 9, H - 11, '#37b3a3');  // teal accent stripe
+      // white vet cross on the lintel
+      var m = iso(DOOR_MID, ROOM - 0.5);
+      c.fillStyle = '#fff';
+      c.fillRect(m.x - 2.5, m.y - (H - 1), 5, 8);
+      c.fillRect(m.x - 5, m.y - (H - 1) + 1.5, 11, 4);
+    }
+
+    // Animated automatic sliding double doors. `open` is 0 (shut) … 1 (apart).
+    // Drawing is clipped to the opening so panels appear to slide into the wall.
+    function drawSlidingDoors(c, open) {
+      var H = DOOR_H - 10;
+      var a = iso(DOOR_A, ROOM - 0.5), b = iso(DOOR_B, ROOM - 0.5);
+      c.save();
+      c.beginPath();
+      c.moveTo(a.x, a.y - H); c.lineTo(b.x, b.y - H);
+      c.lineTo(b.x, b.y); c.lineTo(a.x, a.y); c.closePath();
+      c.clip();
+      doorPanel(c, DOOR_MID - 1 - open, DOOR_MID - open, H, true);   // left panel
+      doorPanel(c, DOOR_MID + open, DOOR_MID + 1 + open, H, false);  // right panel
+      c.restore();
+    }
+
+    function doorPanel(c, gxA, gxB, H, handleRight) {
+      var a = iso(gxA, ROOM - 0.5), b = iso(gxB, ROOM - 0.5);
+      var g = c.createLinearGradient(0, a.y - H, 0, a.y);
+      g.addColorStop(0, 'rgba(210,236,244,0.94)');
+      g.addColorStop(1, 'rgba(168,208,224,0.94)');
+      c.beginPath();
+      c.moveTo(a.x, a.y - H); c.lineTo(b.x, b.y - H);
+      c.lineTo(b.x, b.y); c.lineTo(a.x, a.y); c.closePath();
+      c.fillStyle = g; c.fill();
+      c.strokeStyle = '#9fb6c2'; c.lineWidth = 2; c.stroke();
+      // sheen
+      c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(a.x + (b.x - a.x) * 0.32, a.y - H * 0.82);
+      c.lineTo(a.x + (b.x - a.x) * 0.5, a.y - H * 0.2);
+      c.stroke();
+      // vertical handle near the meeting edge
+      var hx = handleRight ? b.x - 4 : a.x + 4, hy = handleRight ? b.y : a.y;
+      c.strokeStyle = '#566873'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(hx, hy - H * 0.62); c.lineTo(hx, hy - H * 0.34); c.stroke();
+    }
+
+    // ---- Build the static layers -----------------------------------------
+    function renderStatic() {
+      bgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      fgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      bgx.clearRect(0, 0, view.w, view.h);
+      fgx.clearRect(0, 0, view.w, view.h);
+
+      // 1) grass: cover the whole viewport (grid bbox of the 4 screen corners)
+      var corners = [screenToGrid(0, 0), screenToGrid(view.w, 0),
+                     screenToGrid(0, view.h), screenToGrid(view.w, view.h)];
+      var minGx = 1e9, maxGx = -1e9, minGy = 1e9, maxGy = -1e9;
+      corners.forEach(function (p) {
+        minGx = Math.min(minGx, p.gx); maxGx = Math.max(maxGx, p.gx);
+        minGy = Math.min(minGy, p.gy); maxGy = Math.max(maxGy, p.gy);
+      });
+      minGx = Math.floor(minGx) - 2; maxGx = Math.ceil(maxGx) + 2;
+      minGy = Math.floor(minGy) - 2; maxGy = Math.ceil(maxGy) + 2;
+      for (var gy = minGy; gy <= maxGy; gy++)
+        for (var gx = minGx; gx <= maxGx; gx++)
+          grassTile(bgx, gx, gy);
+
+      // 2) path (2 tiles wide) from the doors out to the road
+      for (var py = ROOM; py <= ROOM + 4; py++) { pathTile(bgx, 3, py); pathTile(bgx, 4, py); }
+      // road crossing at the end of the path (runs along the gx axis)
+      var rGy0 = ROOM + 5, rGy1 = ROOM + 6, mid = (rGy0 + rGy1) / 2;
+      for (var rgx = -3; rgx <= ROOM + 2; rgx++) { roadTile(bgx, rgx, rGy0); roadTile(bgx, rgx, rGy1); }
+      // dashed yellow centre line down the middle of the road
+      bgx.strokeStyle = '#ecc94b'; bgx.lineWidth = 3;
+      for (var lx = -3; lx <= ROOM + 2; lx++) {
+        if ((lx & 1) === 0) {
+          var p1 = iso(lx - 0.32, mid), p2 = iso(lx + 0.32, mid);
+          bgx.beginPath(); bgx.moveTo(p1.x, p1.y); bgx.lineTo(p2.x, p2.y); bgx.stroke();
+        }
+      }
+      // welcome mat just outside the doors (2 wide)
+      [3, 4].forEach(function (mx) {
+        var s = iso(mx, ROOM - 0.02);
+        diamondPath(bgx, s.x, s.y);
+        bgx.fillStyle = '#b5564f'; bgx.fill();
+        bgx.strokeStyle = 'rgba(120,50,45,0.55)'; bgx.lineWidth = 1; bgx.stroke();
+      });
+
+      // 3) clinic floor
+      for (var fy = 0; fy < ROOM; fy++)
+        for (var fx = 0; fx < ROOM; fx++)
+          floorTile(bgx, fx, fy);
+      // soft warm light pool, clipped to the floor diamond
+      (function () {
+        var ctr = iso(ROOM / 2 - 0.5, ROOM / 2 - 0.5);
+        var g = bgx.createRadialGradient(ctr.x, ctr.y, 10, ctr.x, ctr.y, ROOM * TILE_W * 0.42);
+        g.addColorStop(0, 'rgba(255,244,210,0.22)');
+        g.addColorStop(1, 'rgba(255,244,210,0)');
+        bgx.save();
+        var t = iso(-0.5, -0.5), r = iso(ROOM - 0.5, -0.5),
+            b2 = iso(ROOM - 0.5, ROOM - 0.5), l = iso(-0.5, ROOM - 0.5);
+        bgx.beginPath();
+        bgx.moveTo(t.x, t.y); bgx.lineTo(r.x, r.y); bgx.lineTo(b2.x, b2.y); bgx.lineTo(l.x, l.y);
+        bgx.closePath(); bgx.clip();
+        bgx.fillStyle = g; bgx.fillRect(ctr.x - 460, ctr.y - 460, 920, 920);
+        bgx.restore();
+      })();
+
+      // 4) tall back walls (behind the vet) → bg
+      // back-left along gx = -0.5 (lit)
+      wallFace(bgx, -0.5, -0.5, -0.5, ROOM - 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+      // back-right along gy = -0.5 (shaded)
+      wallFace(bgx, -0.5, -0.5, ROOM - 0.5, -0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+
+      // 5) short front walls (occlude the vet) → fg
+      // front-right along gx = ROOM-0.5
+      wallFace(fgx, ROOM - 0.5, -0.5, ROOM - 0.5, ROOM - 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
+      // front-left along gy = ROOM-0.5, segmented to leave the doorway (tiles 3 & 4)
+      for (var dx = 0; dx < ROOM; dx++) {
+        if (dx === 3 || dx === 4) continue;   // doorway opening
+        wallFace(fgx, dx - 0.5, ROOM - 0.5, dx + 0.5, ROOM - 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
+      }
+      drawDoorFrame(fgx);                       // static jambs + lintel around the doors
+    }
+
+    // ---- The vet character (clean flat-iso style) ------------------------
+    function drawVet() {
+      var s = iso(vet.x, vet.y);
+      var bob = vet.moving ? Math.sin(vet.walkPhase) * 2.5 : 0;
+      var step = vet.moving ? Math.sin(vet.walkPhase) : 0;
+      var front = (vet.dir === 'SE' || vet.dir === 'SW');   // facing camera
+      var mirror = (vet.dir === 'SW' || vet.dir === 'NW') ? -1 : 1;
+      var baseY = s.y - bob;
+
+      // soft ground shadow
+      var sh = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, 17);
+      sh.addColorStop(0, 'rgba(20,40,30,0.30)');
+      sh.addColorStop(1, 'rgba(20,40,30,0)');
+      ctx.fillStyle = sh;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+
+      ctx.save();
+      ctx.translate(s.x, baseY);
+
+      // legs (navy scrub trousers) with a little walk step
+      ctx.fillStyle = '#34506f';
+      ctx.fillRect(-7, -15, 6, 15 + step * 1.5);
+      ctx.fillRect(1, -15, 6, 15 - step * 1.5);
+      // shoes
+      ctx.fillStyle = '#26323f';
+      ctx.fillRect(-8, -2 + step * 1.5, 7, 3);
+      ctx.fillRect(1, -2 - step * 1.5, 7, 3);
+
+      // torso — teal scrubs with a soft gradient
+      var bodyTop = -42;
+      var bg2 = ctx.createLinearGradient(0, bodyTop, 0, -12);
+      bg2.addColorStop(0, '#46c3b3');
+      bg2.addColorStop(1, '#2f9e90');
+      ctx.fillStyle = bg2;
+      roundRect(ctx, -12, bodyTop, 24, 30, 8); ctx.fill();
+      // short sleeves
+      ctx.fillStyle = '#3bb1a2';
+      roundRect(ctx, -15, bodyTop + 2, 5, 14, 2.5); ctx.fill();
+      roundRect(ctx, 10, bodyTop + 2, 5, 14, 2.5); ctx.fill();
+      // hands
+      ctx.fillStyle = '#f0c8a4';
+      ctx.fillRect(-15, bodyTop + 15, 5, 4);
+      ctx.fillRect(10, bodyTop + 15, 5, 4);
+
+      if (front) {
+        // V-neck
+        ctx.fillStyle = '#2a8d80';
+        ctx.beginPath();
+        ctx.moveTo(-5, bodyTop); ctx.lineTo(0, bodyTop + 9); ctx.lineTo(5, bodyTop); ctx.closePath();
+        ctx.fill();
+        // chest pocket
+        ctx.fillStyle = 'rgba(0,0,0,0.07)';
+        ctx.fillRect(3, bodyTop + 14, 7, 6);
+        // stethoscope
+        ctx.strokeStyle = '#243240'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, bodyTop + 4, 7, Math.PI * 0.1, Math.PI * 0.9, false); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-5, bodyTop + 8); ctx.lineTo(-4, bodyTop + 22); ctx.stroke();
+        ctx.fillStyle = '#9fb3c4';
+        ctx.beginPath(); ctx.arc(-4, bodyTop + 23, 2.4, 0, Math.PI * 2); ctx.fill();
+      } else {
+        // back: a centre seam
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, bodyTop + 3); ctx.lineTo(0, -14); ctx.stroke();
+      }
+
+      // neck
+      ctx.fillStyle = '#e7bd98';
+      ctx.fillRect(-3, bodyTop - 4, 6, 5);
+
+      // head
+      var hy = bodyTop - 13;
+      ctx.fillStyle = '#f0c8a4';
+      ctx.beginPath(); ctx.arc(0, hy, 9, 0, Math.PI * 2); ctx.fill();
+      // ears
+      ctx.fillRect(-10, hy - 1, 2, 3);
+      ctx.fillRect(8, hy - 1, 2, 3);
+      // surgical cap (blue) over the top of the head
+      ctx.fillStyle = '#3d8fd0';
+      ctx.beginPath(); ctx.arc(0, hy - 1, 9, Math.PI * 1.02, Math.PI * 1.98, false); ctx.closePath(); ctx.fill();
+      ctx.fillRect(-9, hy - 2, 18, 3);
+
+      if (front) {
+        // face
+        ctx.fillStyle = '#2b2b33';
+        ctx.beginPath();
+        ctx.arc(-3.2 * mirror, hy, 1.4, 0, Math.PI * 2);
+        ctx.arc(3.2 * mirror, hy, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+        // light beard
+        ctx.fillStyle = 'rgba(120,80,55,0.5)';
+        ctx.beginPath(); ctx.arc(0, hy + 5, 5, 0.1 * Math.PI, 0.9 * Math.PI); ctx.fill();
+        // smile
+        ctx.strokeStyle = '#9a5f44'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(0, hy + 3, 2.4, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+      } else {
+        // back of head: hair under the cap
+        ctx.fillStyle = '#6b4a32';
+        ctx.beginPath(); ctx.arc(0, hy + 3, 8, Math.PI * 0.05, Math.PI * 0.95, false); ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function roundRect(c, x, y, w, h, r) {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.arcTo(x + w, y, x + w, y + h, r);
+      c.arcTo(x + w, y + h, x, y + h, r);
+      c.arcTo(x, y + h, x, y, r);
+      c.arcTo(x, y, x + w, y, r);
+      c.closePath();
+    }
+
+    // ---- Update -----------------------------------------------------------
+    function update(dt) {
+      var mx = 0, my = 0;
+      if (touchInput.active) { mx = touchInput.dx; my = touchInput.dy; }
+      else {
+        if (input.right) mx += 1; if (input.left) mx -= 1;
+        if (input.down) my += 1; if (input.up) my -= 1;
+      }
+      var len = Math.hypot(mx, my);
+      vet.moving = len > 0.01;
+      if (vet.moving) {
+        mx /= len; my /= len;
+        vet.x += mx * vet.speed * dt;
+        vet.y += my * vet.speed * dt;
+        vet.dir = chooseDir(mx, my);
+        vet.walkPhase += dt * 10;
+      } else {
+        vet.walkPhase = 0;
+      }
+      var pad = 0.4;
+      vet.x = Math.max(pad, Math.min(ROOM - 1 - pad, vet.x));
+      vet.y = Math.max(pad, Math.min(ROOM - 1 - pad, vet.y));
+    }
+
+    function chooseDir(mx, my) {
+      if (Math.abs(mx) > Math.abs(my)) return mx > 0 ? 'SE' : 'NW';
+      return my > 0 ? 'SW' : 'NE';
+    }
+
+    // ---- Render -----------------------------------------------------------
+    function draw() {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(bg, 0, 0);
+      ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      drawVet();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(fg, 0, 0);
+      // gentle vignette for focus
+      var vg = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2,
+        Math.min(canvas.width, canvas.height) * 0.35, canvas.width / 2, canvas.height / 2,
+        Math.max(canvas.width, canvas.height) * 0.72);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,0.22)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    var last = 0;
+    function frame(ts) {
+      if (!last) last = ts;
+      var dt = Math.min((ts - last) / 1000, 0.05);
+      last = ts;
+      update(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    // ---- Input: keyboard --------------------------------------------------
+    var KEYMAP = {
+      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+      w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right'
+    };
+    window.addEventListener('keydown', function (e) {
+      var k = KEYMAP[e.key]; if (k) { input[k] = true; e.preventDefault(); }
+    });
+    window.addEventListener('keyup', function (e) {
+      var k = KEYMAP[e.key]; if (k) { input[k] = false; e.preventDefault(); }
+    });
+
+    // ---- Input: drag-anywhere virtual joystick ----------------------------
+    var origin = null;
+    function getPoint(e) { var t = e.touches ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; }
+    function dragStart(e) { origin = getPoint(e); touchInput.active = true; touchInput.dx = 0; touchInput.dy = 0; e.preventDefault(); }
+    function dragMove(e) {
+      if (!touchInput.active || !origin) return;
+      var p = getPoint(e);
+      var sx = p.x - origin.x, sy = p.y - origin.y;
+      // screen drag → grid axes
+      var gx = (sx / TILE_HW + sy / TILE_HH) / 2;
+      var gy = (sy / TILE_HH - sx / TILE_HW) / 2;
+      var len = Math.hypot(gx, gy);
+      if (len < 0.12) { touchInput.dx = 0; touchInput.dy = 0; }
+      else { var mag = Math.min(len / 1.2, 1); touchInput.dx = gx / len * mag; touchInput.dy = gy / len * mag; }
+      e.preventDefault();
+    }
+    function dragEnd(e) { touchInput.active = false; touchInput.dx = 0; touchInput.dy = 0; origin = null; if (e && e.preventDefault) e.preventDefault(); }
+    canvas.addEventListener('touchstart', dragStart, { passive: false });
+    canvas.addEventListener('touchmove', dragMove, { passive: false });
+    canvas.addEventListener('touchend', dragEnd, { passive: false });
+    canvas.addEventListener('touchcancel', dragEnd, { passive: false });
+    canvas.addEventListener('mousedown', dragStart);
+    window.addEventListener('mousemove', dragMove);
+    window.addEventListener('mouseup', dragEnd);
+
+    // ---- Boot -------------------------------------------------------------
+    window.addEventListener('resize', resize);
+    resize();
+    requestAnimationFrame(frame);
+  })();
+  </script>
+
+  <script>
+    // On desktop the homepage loads this game in a pane. Hide the "‹ Games" back link
+    // (it would reload the homepage inside the pane) while keeping the title visible.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
+  </script>
+</body>
+</html>
