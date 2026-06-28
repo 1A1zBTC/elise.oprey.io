@@ -54,7 +54,7 @@
     .pose .ic { font-size: 1.15rem; line-height: 1; }
     .pose.active { border-color: #ffe8b0; background: #2a2c40; color: #fff; box-shadow: 0 0 14px rgba(255,232,176,0.25); }
 
-    /* on-canvas d-pad for walking (third person) */
+    /* on-canvas d-pad (hide: ▲▼ walk, ◀▶ turn · seek: walk/turn to hunt) */
     .dpad { position: absolute; left: 10px; bottom: 10px; width: 132px; height: 132px; z-index: 6; }
     .dpad .dbtn { position: absolute; width: 44px; height: 44px; border-radius: 12px; border: 2px solid rgba(255,255,255,0.22);
       background: rgba(10,14,28,0.55); color: #fff; font-size: 1.05rem; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -143,12 +143,12 @@
 
   <div class="stage" id="stage">
     <canvas id="game"></canvas>
-    <div class="zoomhint" id="zoomhint" hidden>🔎 close-up — they're tiny!</div>
+    <div class="zoomhint" id="zoomhint" hidden></div>
     <div class="hintpill" id="hintpill" hidden></div>
     <div class="dpad" id="dpad" hidden>
       <button class="dbtn up" data-dir="up">▲</button>
-      <button class="dbtn left" data-dir="left">◀</button>
-      <button class="dbtn right" data-dir="right">▶</button>
+      <button class="dbtn left" data-dir="left">↺</button>
+      <button class="dbtn right" data-dir="right">↻</button>
       <button class="dbtn down" data-dir="down">▼</button>
     </div>
   </div>
@@ -163,7 +163,7 @@
     <div class="toolrow">
       <button class="tool active" data-tool="paint"><span class="ic">🖌️</span>Paint<span class="sub">round brush</span></button>
       <button class="tool" data-tool="fill"><span class="ic">🪣</span>Fill<span class="sub">whole body</span></button>
-      <button class="tool" data-tool="match"><span class="ic">💧</span>Match<span class="sub">grab bg colour</span></button>
+      <button class="tool" data-tool="match"><span class="ic">💧</span>Match<span class="sub">grab wall colour</span></button>
     </div>
     <div class="brush-row">
       <span class="lab">Brush</span>
@@ -187,7 +187,7 @@
     <div class="panel">
       <div class="big-emoji">🧍🎨</div>
       <h2>Chameleons</h2>
-      <div class="sub">Everyone hides on the <b>same map</b>! On your turn you get <b>2 minutes</b> to <b>move</b> your little person anywhere and <b>paint</b> them to blend in. Then everyone hunts to <b>find them all</b>.</div>
+      <div class="sub">A 3D hide &amp; seek room. On your turn, <b>walk</b> up to a wall or painting, strike a <b>pose</b>, and <b>paint</b> yourself to vanish into it. Then everyone <b>walks the room</b> to find the hidden players.</div>
       <div class="active-lab" style="margin-bottom:6px">How many players?</div>
       <div class="count-row" id="countRow">
         <button class="count-btn" data-n="1">1</button>
@@ -234,472 +234,434 @@
 (function(){
   const cv = document.getElementById('game');
   const ctx = cv.getContext('2d');
-  const W = 760, H = 560;
-  const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
-  const bgx = bg.getContext('2d', { willReadFrequently: true });
-  let dpr = 1;
-  function fit(){ dpr = Math.min(window.devicePixelRatio || 1, 2); cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
-  fit(); window.addEventListener('resize', fit);
 
-  function pname(i, f){ try { const a = JSON.parse(localStorage.getItem('elise.playerNames')); const n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || f; } catch(e){ return f; } }
+  // ---------- raycaster buffer (ported from Scroot Rooms) ----------
+  let W=760, H=560, RW=320, RH=236, PLANE=0.66, dpr=1;
+  const sceneCanvas=document.createElement('canvas'), sceneCtx=sceneCanvas.getContext('2d');
+  let sceneImg=null, buf32=null, zbuf=new Float32Array(RW);
+  const TW=64, TH=64, TMASK=63;
+  function resize(){
+    const r=cv.getBoundingClientRect(); dpr=Math.min(window.devicePixelRatio||1,2);
+    let cw=Math.max(2,Math.round((r.width||760)*dpr)), ch=Math.max(2,Math.round((r.height||560)*dpr));
+    const MAXW=1100; if(cw>MAXW){ ch=Math.round(ch*MAXW/cw); cw=MAXW; }
+    cv.width=cw; cv.height=ch; W=cw; H=ch;
+    PLANE=0.66*(W/H);
+    RH=Math.max(2,Math.round(RW*H/W));
+    sceneCanvas.width=RW; sceneCanvas.height=RH;
+    sceneImg=sceneCtx.createImageData(RW,RH); buf32=new Uint32Array(sceneImg.data.buffer);
+    zbuf=new Float32Array(RW);
+    ctx.imageSmoothingEnabled=true;
+  }
+  window.addEventListener('resize', resize);
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function rnd(a,b){ return a+Math.random()*(b-a); }
+  function rint(a,b){ return Math.floor(rnd(a,b+1)); }
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function pname(i,f){ try{ const a=JSON.parse(localStorage.getItem('elise.playerNames')); const n=(a&&a[i]!=null?String(a[i]):'').trim(); return n||f; }catch(e){ return f; } }
+  function jitC(hex,f){ const n=parseInt(hex.slice(1),16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255; r=clamp(r*f|0,0,255);g=clamp(g*f|0,0,255);b=clamp(b*f|0,0,255); return 'rgb('+r+','+g+','+b+')'; }
 
   const PALETTE = ['#3c6e1f','#6aa84f','#9ccb5a','#c8d96f','#d6b24a','#e08a2e','#a9543b','#7a4f2a',
                    '#4a3220','#e6e0d2','#b8bdc4','#7d8893','#4a5a6b','#2b3a4a','#86c5d8','#d98a8a',
                    '#b56fb0','#5a4bb0','#c23b54','#161a12'];
 
-  // ---------- little-person silhouettes (one mask per pose) ----------
-  const BW = 76, BH = 104;                 // bounding box (wide enough to lie down)
-  const comp  = document.createElement('canvas'); comp.width=BW; comp.height=BH;
-  const tint  = document.createElement('canvas'); tint.width=BW; tint.height=BH;
-  const cctx = comp.getContext('2d', { willReadFrequently: true });
+  // ---------- textures ----------
+  function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+  function texData(draw){ const c=mkCanvas(TW,TH), g=c.getContext('2d'); draw(g); return g.getImageData(0,0,TW,TH).data; }
+  function nz(g,n,a){ for(let i=0;i<n;i++){ g.fillStyle='rgba(0,0,0,'+(Math.random()*a)+')'; g.fillRect((Math.random()*TW)|0,(Math.random()*TH)|0,1,1);} }
+  function speck(g,n,base,spread,a){ for(let i=0;i<n;i++){ const s=Math.random(); g.fillStyle='rgba('+((base[0]+s*spread)|0)+','+((base[1]+s*spread)|0)+','+((base[2]+s*spread)|0)+','+a+')'; g.fillRect((Math.random()*TW)|0,(Math.random()*TH)|0,1,1);} }
+  function grad(g,c0,c1){ const gd=g.createLinearGradient(0,0,0,TH); gd.addColorStop(0,c0); gd.addColorStop(1,c1); g.fillStyle=gd; g.fillRect(0,0,TW,TH); }
 
+  // abstract colourful painting textures (blend targets)
+  const ART_PALS=[['#e8554d','#f2a93b','#f5e06b'],['#2f7fb0','#6fc3d8','#bfe9f2'],['#7a4bb0','#c86fb0','#f0b6d6'],
+                  ['#2f8f5c','#8fd06a','#e7e36b'],['#e0712e','#c23b54','#3a2f6b'],['#3a6ea5','#9ecf6a','#f2d24a']];
+  function paintingTex(pal){
+    return texData(function(g){
+      const gd=g.createLinearGradient(0,0,TW,TH); gd.addColorStop(0,pal[0]); gd.addColorStop(0.5,pal[1]); gd.addColorStop(1,pal[2]);
+      g.fillStyle=gd; g.fillRect(0,0,TW,TH);
+      for(let s=0;s<5;s++){ g.globalAlpha=0.55; g.fillStyle=pal[s%3];
+        if(s%2){ g.beginPath(); g.arc(Math.random()*TW, Math.random()*TH, 6+Math.random()*14, 0, 7); g.fill(); }
+        else { g.beginPath(); g.moveTo(Math.random()*TW,Math.random()*TH); g.lineTo(Math.random()*TW,Math.random()*TH); g.lineTo(Math.random()*TW,Math.random()*TH); g.closePath(); g.fill(); } }
+      g.globalAlpha=1; g.lineWidth=4; g.strokeStyle='#caa14a'; g.strokeRect(2,2,TW-4,TH-4);
+    });
+  }
+  const THEMES = {
+    lounge: {
+      wall: texData(g=>{ grad(g,'#d8c39b','#b89a6e'); g.globalAlpha=0.5; g.strokeStyle='#9c8052'; g.lineWidth=1; for(let y=0;y<TH;y+=10){ g.beginPath(); g.moveTo(0,y); g.lineTo(TW,y); g.stroke(); } g.globalAlpha=1; nz(g,140,0.12); }),
+      floor: texData(g=>{ grad(g,'#9a6a3c','#6e4824'); for(let y=0;y<TH;y+=16){ g.fillStyle='rgba(40,22,8,0.4)'; g.fillRect(0,y,TW,2);} speck(g,500,[120,80,44],30,0.4); }),
+      ceil: texData(g=>{ grad(g,'#efe7d2','#dccab0'); speck(g,200,[230,222,200],20,0.3); })
+    },
+    gallery: {
+      wall: texData(g=>{ grad(g,'#ececf1','#cccdd6'); g.fillStyle='rgba(0,0,0,0.05)'; for(let y=0;y<TH;y+=20)g.fillRect(0,y,TW,1); nz(g,90,0.07); }),
+      floor: texData(g=>{ grad(g,'#cfc8bc','#a89e8f'); for(let y=0;y<TH;y+=21)for(let x=0;x<TW;x+=21){ g.fillStyle='rgba(255,255,255,0.06)'; g.fillRect(x,y,20,20);} speck(g,300,[180,172,160],20,0.3); }),
+      ceil: texData(g=>{ grad(g,'#fbfbfd','#e7e8ee'); speck(g,120,[245,245,250],12,0.3); })
+    }
+  };
+  const ARTS = ART_PALS.map(paintingTex);
+
+  // ---------- furniture billboard sprites ----------
+  function spriteCanvas(w,h,draw){ const c=mkCanvas(w,h); draw(c.getContext('2d'),w,h); return c; }
+  function vg(g,x,y,w,h,c0,c1){ const gd=g.createLinearGradient(x,y,x,y+h); gd.addColorStop(0,c0); gd.addColorStop(1,c1); g.fillStyle=gd; g.fillRect(x,y,w,h); }
+  function rrf(g,x,y,w,h,r){ if(g.roundRect){ g.beginPath(); g.roundRect(x,y,w,h,r); g.fill(); } else g.fillRect(x,y,w,h); }
+  function bshadow(g,w,h,rw){ g.fillStyle='rgba(0,0,0,0.24)'; g.beginPath(); g.ellipse(w/2,h-5,(rw||w*0.44),8,0,0,7); g.fill(); }
+  // unique, shaded 3D-ish furniture sprites. sh/sw = billboard size in tiles.
+  const FURN = {
+    couch:{ sh:0.36, sw:1.0, img:spriteCanvas(180,128,(g,w,h)=>{ bshadow(g,w,h); const c=pick(['#b5544b','#3f7e8c','#7a6cae','#4f8a5c','#c98a3a']);
+      vg(g,16,28,w-32,46,jitC(c,1.18),jitC(c,0.96)); rrf(g,16,28,w-32,48,14);
+      vg(g,8,58,w-16,50,jitC(c,1.06),jitC(c,0.72)); rrf(g,8,58,w-16,52,16);
+      for(let i=0;i<3;i++){ const cw=(w-44)/3; vg(g,22+i*cw,62,cw-6,38,jitC(c,1.24),jitC(c,0.98)); rrf(g,22+i*cw,62,cw-6,38,9); }
+      g.fillStyle=jitC(c,0.8); rrf(g,2,50,24,58,12); rrf(g,w-26,50,24,58,12);
+      g.fillStyle='#2a1e12'; g.fillRect(20,h-16,12,12); g.fillRect(w-32,h-16,12,12); }) },
+    armchair:{ sh:0.36, sw:0.5, img:spriteCanvas(104,128,(g,w,h)=>{ bshadow(g,w,h,w*0.42); const c=pick(['#c2554d','#5a6fb0','#3f8e6a','#b08a3a']);
+      vg(g,18,18,w-36,58,jitC(c,1.18),jitC(c,0.9)); rrf(g,18,18,w-36,60,16);
+      vg(g,12,60,w-24,46,jitC(c,1.08),jitC(c,0.74)); rrf(g,12,60,w-24,48,14);
+      g.fillStyle=jitC(c,0.8); rrf(g,4,40,18,64,10); rrf(g,w-22,40,18,64,10);
+      g.fillStyle='#2a1e12'; g.fillRect(18,h-14,10,10); g.fillRect(w-28,h-14,10,10); }) },
+    tv:{ sh:0.4, sw:0.72, img:spriteCanvas(130,120,(g,w,h)=>{ bshadow(g,w,h,w*0.4); vg(g,w/2-40,h-34,80,30,'#8a6a3e','#54401f'); g.fillStyle='#3a2c16'; g.fillRect(w/2-40,h-34,80,5);
+      g.fillStyle='#0b0d11'; rrf(g,10,6,w-20,h-46,7); const sg=g.createLinearGradient(16,10,w-16,h-50); sg.addColorStop(0,'#2b3744'); sg.addColorStop(1,'#0e141b'); g.fillStyle=sg; g.fillRect(16,12,w-32,h-58);
+      g.fillStyle='rgba(255,255,255,0.10)'; g.beginPath(); g.moveTo(20,14); g.lineTo(54,14); g.lineTo(24,h-50); g.lineTo(20,h-50); g.closePath(); g.fill(); }) },
+    bookshelf:{ sh:0.66, sw:0.56, img:spriteCanvas(120,210,(g,w,h)=>{ bshadow(g,w,h,w*0.42); vg(g,6,4,w-12,h-12,'#7a5630','#4e351c');
+      const rows=5, rh=(h-22)/rows; for(let r=0;r<rows;r++){ const sy=10+r*rh; g.fillStyle='#2e1f10'; g.fillRect(10,sy+rh-6,w-20,6);
+        let bx=14; while(bx<w-16){ const bw=6+Math.random()*10, bh=rh*(0.5+Math.random()*0.36); g.fillStyle=jitC(pick(['#c23b54','#2f7fb0','#3c8e4f','#caa14a','#7a4bb0','#e0712e','#d8d2c4']),0.85+Math.random()*0.4); g.fillRect(bx,sy+rh-6-bh,bw,bh); bx+=bw+2; } } }) },
+    cabinet:{ sh:0.5, sw:0.62, img:spriteCanvas(130,150,(g,w,h)=>{ bshadow(g,w,h,w*0.42); vg(g,8,6,w-16,h-14,'#9a6a3c','#5e3c1f');
+      g.strokeStyle='rgba(0,0,0,0.3)'; g.lineWidth=2; for(let r=0;r<3;r++){ const y=14+r*((h-26)/3); g.strokeRect(16,y,w-32,(h-26)/3-6); g.fillStyle='#d8c089'; g.beginPath(); g.arc(w/2,y+((h-26)/3-6)/2,4,0,7); g.fill(); } }) },
+    table:{ sh:0.26, sw:0.7, img:spriteCanvas(140,90,(g,w,h)=>{ bshadow(g,w,h,w*0.42); vg(g,10,18,w-20,16,'#a9763f','#7a4f28'); rrf(g,10,18,w-20,16,5);
+      g.fillStyle='#5e3c1f'; g.fillRect(18,34,9,h-40); g.fillRect(w-27,34,9,h-40);
+      vg(g,w/2-9,2,18,18,'#86c5d8','#3f8eb0'); g.beginPath(); g.ellipse(w/2,4,9,4,0,0,7); g.fill(); }) },
+    plant:{ sh:0.46, sw:0.5, img:spriteCanvas(96,140,(g,w,h)=>{ bshadow(g,w,h,28); vg(g,w/2-17,h-32,34,28,'#c98a55','#7a4f2a'); rrf(g,w/2-17,h-32,34,28,4);
+      for(let k=0;k<13;k++){ const a=-1.57+rnd(-1.25,1.25); g.save(); g.translate(w/2,h-30); g.rotate(a); g.fillStyle=jitC(pick(['#2f8f4c','#3faf5c','#57c06a','#247a40','#6bbf55']),rnd(0.9,1.12)); g.beginPath(); g.ellipse(0,-34,8,34,0,0,7); g.fill(); g.restore(); } }) },
+    lamp:{ sh:0.6, sw:0.4, img:spriteCanvas(80,180,(g,w,h)=>{ bshadow(g,w,h,18); g.fillStyle='#3a3a42'; g.beginPath(); g.ellipse(w/2,h-6,16,5,0,0,7); g.fill();
+      g.strokeStyle='#4a4a52'; g.lineWidth=5; g.beginPath(); g.moveTo(w/2,h-8); g.lineTo(w/2,52); g.stroke();
+      const gl=g.createRadialGradient(w/2,40,4,w/2,46,70); gl.addColorStop(0,'rgba(255,238,180,0.55)'); gl.addColorStop(1,'rgba(255,238,180,0)'); g.fillStyle=gl; g.beginPath(); g.ellipse(w/2,46,46,60,0,0,7); g.fill();
+      vg(g,w/2-28,8,56,46,'#f6e6ab','#d6b667'); g.beginPath(); g.moveTo(w/2-28,52); g.lineTo(w/2+28,52); g.lineTo(w/2+16,8); g.lineTo(w/2-16,8); g.closePath(); g.fill(); }) },
+    crate:{ sh:0.32, sw:0.42, img:spriteCanvas(90,90,(g,w,h)=>{ bshadow(g,w,h,w*0.4); vg(g,10,8,w-20,h-18,'#b9893f','#7c5526'); g.strokeStyle='#5e3c1f'; g.lineWidth=4; g.strokeRect(10,8,w-20,h-18);
+      g.beginPath(); g.moveTo(10,8); g.lineTo(w-10,h-10); g.moveTo(w-10,8); g.lineTo(10,h-10); g.stroke(); g.strokeRect(10,8,w-20,(h-18)/2); }) }
+  };
+
+  // ---------- person silhouettes (one mask per pose) ----------
+  const BW=76, BH=104;
+  const comp=mkCanvas(BW,BH), cctx=comp.getContext('2d');
+  function standUpper(g,cx,armA,armB){   // arms can swing for the walk cycle
+    g.lineWidth=8; g.beginPath(); g.moveTo(cx-9,32); g.lineTo(cx-19,58+(armA||0)); g.stroke(); g.beginPath(); g.moveTo(cx+9,32); g.lineTo(cx+19,58+(armB||0)); g.stroke();
+    g.beginPath(); g.moveTo(cx-12,30); g.quadraticCurveTo(cx,26,cx+12,30); g.lineTo(cx+10,62); g.quadraticCurveTo(cx,66,cx-10,62); g.closePath(); g.fill();
+    g.fillRect(cx-4,20,8,8); g.beginPath(); g.arc(cx,12,10,0,7); g.fill();
+  }
+  function legs(g,cx,a,b){ g.lineWidth=11; g.beginPath(); g.moveTo(cx-7,60); g.lineTo(cx+a,98); g.stroke(); g.beginPath(); g.moveTo(cx+7,60); g.lineTo(cx+b,98); g.stroke();
+    g.lineWidth=7; g.beginPath(); g.moveTo(cx+a,98); g.lineTo(cx+a-7,99); g.stroke(); g.beginPath(); g.moveTo(cx+b,98); g.lineTo(cx+b+7,99); g.stroke(); }
   function drawPerson(g, pose){
-    g.clearRect(0,0,BW,BH);
-    g.fillStyle = '#000'; g.strokeStyle = '#000';
-    g.lineJoin = 'round'; g.lineCap = 'round';
-    const cx = BW/2;
-    if (pose === 'lie'){
-      // horizontal: head left, legs right, lying on a surface
-      const y = 78;
-      g.lineWidth = 13; g.beginPath(); g.moveTo(20,y); g.lineTo(58,y); g.stroke();   // torso
-      g.lineWidth = 10; g.beginPath(); g.moveTo(58,y-3); g.lineTo(BW-4,y-7); g.stroke(); // legs
-      g.lineWidth = 7;  g.beginPath(); g.moveTo(34,y); g.lineTo(48,y+10); g.stroke();  // arm
-      g.beginPath(); g.arc(13,y-2,10,0,Math.PI*2); g.fill();                           // head
-    } else if (pose === 'sit'){
-      g.beginPath(); g.arc(cx,28,10,0,Math.PI*2); g.fill();                            // head
-      g.fillRect(cx-4,36,8,8);                                                         // neck
-      g.beginPath(); g.moveTo(cx-12,46); g.quadraticCurveTo(cx,42,cx+12,46);           // torso
-      g.lineTo(cx+10,72); g.quadraticCurveTo(cx,76,cx-10,72); g.closePath(); g.fill();
-      g.lineWidth = 11; g.beginPath(); g.moveTo(cx-7,70); g.lineTo(cx+16,72); g.stroke();   // thighs fwd
-      g.beginPath(); g.moveTo(cx+13,72); g.lineTo(cx+14,98); g.stroke();              // shins down
-      g.beginPath(); g.moveTo(cx-9,72); g.lineTo(cx-8,98); g.stroke();
-      g.lineWidth = 8; g.beginPath(); g.moveTo(cx-10,50); g.lineTo(cx-2,72); g.stroke(); // arm
-    } else { // stand
-      g.lineWidth = 11;
-      g.beginPath(); g.moveTo(cx-7, 60); g.lineTo(cx-9, 98); g.stroke();
-      g.beginPath(); g.moveTo(cx+7, 60); g.lineTo(cx+9, 98); g.stroke();
-      g.lineWidth = 7;
-      g.beginPath(); g.moveTo(cx-9,98); g.lineTo(cx-16,99); g.stroke();
-      g.beginPath(); g.moveTo(cx+9,98); g.lineTo(cx+16,99); g.stroke();
-      g.lineWidth = 8;
-      g.beginPath(); g.moveTo(cx-9, 32); g.lineTo(cx-19, 58); g.stroke();
-      g.beginPath(); g.moveTo(cx+9, 32); g.lineTo(cx+19, 58); g.stroke();
-      g.beginPath(); g.moveTo(cx-12,30); g.quadraticCurveTo(cx,26,cx+12,30);
-      g.lineTo(cx+10,62); g.quadraticCurveTo(cx,66,cx-10,62); g.closePath(); g.fill();
-      g.fillRect(cx-4,20,8,8);
-      g.beginPath(); g.arc(cx,12,10,0,Math.PI*2); g.fill();
+    g.clearRect(0,0,BW,BH); g.fillStyle='#000'; g.strokeStyle='#000'; g.lineJoin='round'; g.lineCap='round'; const cx=BW/2;
+    if(pose==='lie'){ const y=78; g.lineWidth=13; g.beginPath(); g.moveTo(20,y); g.lineTo(58,y); g.stroke();
+      g.lineWidth=10; g.beginPath(); g.moveTo(58,y-3); g.lineTo(BW-4,y-7); g.stroke();
+      g.lineWidth=7; g.beginPath(); g.moveTo(34,y); g.lineTo(48,y+10); g.stroke();
+      g.beginPath(); g.arc(13,y-2,10,0,7); g.fill();
+    } else if(pose==='sit'){ g.beginPath(); g.arc(cx,28,10,0,7); g.fill(); g.fillRect(cx-4,36,8,8);
+      g.beginPath(); g.moveTo(cx-12,46); g.quadraticCurveTo(cx,42,cx+12,46); g.lineTo(cx+10,72); g.quadraticCurveTo(cx,76,cx-10,72); g.closePath(); g.fill();
+      g.lineWidth=11; g.beginPath(); g.moveTo(cx-7,70); g.lineTo(cx+16,72); g.stroke(); g.beginPath(); g.moveTo(cx+13,72); g.lineTo(cx+14,98); g.stroke(); g.beginPath(); g.moveTo(cx-9,72); g.lineTo(cx-8,98); g.stroke();
+      g.lineWidth=8; g.beginPath(); g.moveTo(cx-10,50); g.lineTo(cx-2,72); g.stroke();
+    } else if(pose==='walk1'){ legs(g,cx,-15,3); standUpper(g,cx,4,-3); }
+    else if(pose==='walk2'){ legs(g,cx,-3,15); standUpper(g,cx,-3,4); }
+    else { legs(g,cx,-9,9); standUpper(g,cx,0,0); }
+  }
+  const POSES=['stand','sit','lie','walk1','walk2'], poseSet={};
+  for(const p of POSES){ const mask=mkCanvas(BW,BH), mctx=mask.getContext('2d',{willReadFrequently:true}); drawPerson(mctx,p);
+    const ghost=mkCanvas(BW,BH), gg=ghost.getContext('2d'); gg.fillStyle='#c9b89a'; gg.fillRect(0,0,BW,BH); gg.globalCompositeOperation='destination-in'; gg.drawImage(mask,0,0);
+    poseSet[p]={mask,ghost,mctx}; }
+  const POSE_SH={stand:0.36,sit:0.30,lie:0.26,walk1:0.36,walk2:0.36};   // ~0.3x — a real person's height in the room
+  // build composite: grey ghost (unpainted skin) under the painted layer, masked to the body
+  function makeBody(dst, srcPaint, pose){
+    const g=dst.getContext('2d'); g.clearRect(0,0,BW,BH);
+    g.drawImage(poseSet[pose].ghost,0,0);            // exposed skin shows grey
+    g.save(); g.globalCompositeOperation='source-over'; g.drawImage(srcPaint,0,0); g.restore();
+    g.globalCompositeOperation='destination-in'; g.drawImage(poseSet[pose].mask,0,0); g.globalCompositeOperation='source-over';
+  }
+
+  // ---------- map ----------
+  let map, mapW, mapH, theme, curTex;
+  function mapAt(x,y){ const ix=Math.floor(x), iy=Math.floor(y); if(ix<0||iy<0||ix>=mapW||iy>=mapH) return 1; return map[iy][ix]; }
+  let furniture=[];
+  function buildMap(){
+    theme = pick(['lounge','gallery']); curTex=THEMES[theme];
+    mapW=15; mapH=11; map=[];
+    for(let y=0;y<mapH;y++){ const row=[]; for(let x=0;x<mapW;x++){ row.push((x===0||y===0||x===mapW-1||y===mapH-1)?1:0); } map.push(row); }
+    // a few interior blocks (pillars / nooks)
+    const blocks=[[4,3],[10,3],[4,7],[10,7],[7,5]];
+    for(const [bx,by] of blocks){ if(Math.random()<0.7) map[by][bx]=1; }
+    // assign paintings to wall cells (borders + interior blocks), value 10+art
+    const wallCells=[];
+    for(let y=0;y<mapH;y++)for(let x=0;x<mapW;x++){ if(map[y][x]===1){ // only walls adjacent to floor (visible)
+      if(mapAt(x+1,y)===0||mapAt(x-1,y)===0||mapAt(x,y+1)===0||mapAt(x,y-1)===0) wallCells.push([x,y]); } }
+    const nArt=Math.min(wallCells.length, 7+rint(0,3));
+    for(let i=0;i<nArt;i++){ const c=wallCells.splice(rint(0,wallCells.length-1),1)[0]; map[c[1]][c[0]]=10+rint(0,ARTS.length-1); }
+    // furniture billboards on open floor (not near spawn 1.5,1.5)
+    furniture=[];
+    const kinds=Object.keys(FURN);
+    const open=[]; for(let y=1;y<mapH-1;y++)for(let x=1;x<mapW-1;x++) if(map[y][x]===0) open.push([x,y]);
+    const want=theme==='gallery'?6:9;
+    for(let i=0;i<want && open.length;i++){ const idx=rint(0,open.length-1); const c=open.splice(idx,1)[0];
+      if(Math.hypot(c[0]+0.5-1.5,c[1]+0.5-1.5)<1.6) continue;
+      const k=pick(kinds); const F=FURN[k]; furniture.push({img:F.img, x:c[0]+0.5, y:c[1]+0.5, sh:F.sh, sw:F.sw}); }
+  }
+  function wallTex(v){ return v>=10 ? ARTS[v-10] : curTex.wall; }
+
+  // ---------- camera ----------
+  let px=1.5, py=1.5, dir=0, cx2=1.5, cy2=1.5, dirX=1, dirY=0, planeX=0, planeY=PLANE, camDist=1.15;
+  const CAMBACK=1.2, MOVE=2.5, TURN=2.4, PR_RAD=0.22;   // camera behind so the small character stays fully on-screen (feet on floor)
+  function updateCamera(){
+    dirX=Math.cos(dir); dirY=Math.sin(dir); planeX=-dirY*PLANE; planeY=dirX*PLANE;
+    if(phase==='seek'){ cx2=px; cy2=py; camDist=0.001; }
+    else { let cb=CAMBACK; while(cb>0.35 && mapAt(px-dirX*cb, py-dirY*cb)!==0) cb-=0.1; camDist=cb; cx2=px-dirX*cb; cy2=py-dirY*cb; }
+  }
+
+  // ---------- render ----------
+  function render(){
+    const ambient=1, fog=0.10;
+    const halfH=RH/2;
+    const rd0x=dirX-planeX, rd0y=dirY-planeY, rd1x=dirX+planeX, rd1y=dirY+planeY;
+    const buf=buf32, fd=curTex.floor, cd=curTex.ceil;
+    for(let y=(halfH|0)+1;y<RH;y++){
+      const rowDist=halfH/(y-halfH);
+      const stepX=rowDist*(rd1x-rd0x)/RW, stepY=rowDist*(rd1y-rd0y)/RW;
+      let fx=cx2+rowDist*rd0x, fy=cy2+rowDist*rd0y;
+      const shade=clamp(1-rowDist*fog,0.12,1)*ambient, cs=shade*0.94;
+      const fr=y*RW, cr=(RH-1-y)*RW;
+      for(let x=0;x<RW;x++){
+        const tx=((fx-Math.floor(fx))*TW)&TMASK, ty=((fy-Math.floor(fy))*TH)&TMASK; const ti=(ty*TW+tx)<<2;
+        buf[fr+x]=(0xff000000 | (((fd[ti+2]*shade)|0)<<16) | (((fd[ti+1]*shade)|0)<<8) | ((fd[ti]*shade)|0))>>>0;
+        buf[cr+x]=(0xff000000 | (((cd[ti+2]*cs)|0)<<16) | (((cd[ti+1]*cs)|0)<<8) | ((cd[ti]*cs)|0))>>>0;
+        fx+=stepX; fy+=stepY;
+      }
     }
-  }
-  // build a mask + grey ghost + outline ring for each pose
-  const POSES = ['stand','sit','lie'];
-  const poseSet = {};
-  for (const pose of POSES){
-    const mask=document.createElement('canvas'); mask.width=BW; mask.height=BH;
-    const ghost=document.createElement('canvas'); ghost.width=BW; ghost.height=BH;
-    const outl=document.createElement('canvas'); outl.width=BW; outl.height=BH;
-    const mctx=mask.getContext('2d',{willReadFrequently:true});
-    drawPerson(mctx, pose);
-    const gg=ghost.getContext('2d'); gg.fillStyle='#c9b89a'; gg.fillRect(0,0,BW,BH);
-    gg.globalCompositeOperation='destination-in'; gg.drawImage(mask,0,0); gg.globalCompositeOperation='source-over';
-    const oo=outl.getContext('2d'); const offs=[[-2,0],[2,0],[0,-2],[0,2],[-2,-2],[2,2],[2,-2],[-2,2]];
-    for (const o of offs) oo.drawImage(mask,o[0],o[1]);
-    oo.globalCompositeOperation='destination-out'; oo.drawImage(mask,0,0); oo.globalCompositeOperation='source-over';
-    poseSet[pose] = { mask, ghost, outl, mctx };
-  }
-
-  function buildComp(srcPaint, poseMask){ cctx.clearRect(0,0,BW,BH); cctx.globalCompositeOperation='source-over'; cctx.drawImage(srcPaint,0,0); cctx.globalCompositeOperation='destination-in'; cctx.drawImage(poseMask,0,0); cctx.globalCompositeOperation='source-over'; }
-  function drawTinted(src, x, y, color, alpha){
-    const t = tint.getContext('2d'); t.clearRect(0,0,BW,BH); t.globalCompositeOperation='source-over'; t.drawImage(src,0,0);
-    t.globalCompositeOperation='source-in'; t.fillStyle=color; t.fillRect(0,0,BW,BH); t.globalCompositeOperation='source-over';
-    ctx.globalAlpha=alpha; ctx.drawImage(tint, x, y); ctx.globalAlpha=1;
-  }
-
-  // ---------- busy scene generator ----------
-  function rnd(a,b){ return a + Math.random()*(b-a); }
-  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-  function jit(hex, f){ const n=parseInt(hex.slice(1),16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
-    r=Math.max(0,Math.min(255,Math.round(r*f))); g=Math.max(0,Math.min(255,Math.round(g*f))); b=Math.max(0,Math.min(255,Math.round(b*f)));
-    return 'rgb('+r+','+g+','+b+')'; }
-  function leaf(x,y,s,col,ang){ bgx.save(); bgx.translate(x,y); bgx.rotate(ang); bgx.fillStyle=col;
-    bgx.beginPath(); bgx.ellipse(0,0,s,s*0.42,0,0,Math.PI*2); bgx.fill();
-    bgx.strokeStyle='rgba(0,0,0,0.18)'; bgx.lineWidth=1.5; bgx.beginPath(); bgx.moveTo(-s,0); bgx.lineTo(s,0); bgx.stroke(); bgx.restore(); }
-
-  // pseudo-3D one-point-perspective room helpers
-  function lerpP(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
-  function quadP(p0,p1,p2,p3,fill){ bgx.fillStyle=fill; bgx.beginPath(); bgx.moveTo(p0[0],p0[1]); bgx.lineTo(p1[0],p1[1]); bgx.lineTo(p2[0],p2[1]); bgx.lineTo(p3[0],p3[1]); bgx.closePath(); bgx.fill(); }
-  function rowT(i,n,K){ const u=i/n; return (1-1/(1+u*K))/(1-1/(1+K)); }   // perspective depth compression
-  function tiled(FL,FR,BR,BL, cols, rows, K, colA, colB, lightFn){
-    for (let i=0;i<rows;i++){ const t0=rowT(i,rows,K), t1=rowT(i+1,rows,K);
-      const lA=lerpP(FL,BL,t0), rA=lerpP(FR,BR,t0), lB=lerpP(FL,BL,t1), rB=lerpP(FR,BR,t1);
-      for (let j=0;j<cols;j++){ const s0=j/cols, s1=(j+1)/cols;
-        const p0=lerpP(lA,rA,s0), p1=lerpP(lA,rA,s1), p2=lerpP(lB,rB,s1), p3=lerpP(lB,rB,s0);
-        let c=((i+j)&1)?colA:colB; if (lightFn){ const o=lightFn(i,j); if (o) c=o; }
-        quadP(p0,p1,p2,p3,c); } }
-  }
-  function transLines(Ftop,Btop,Fbot,Bbot, n, K, color, w){ bgx.strokeStyle=color; bgx.lineWidth=w||1.5;
-    for (let i=0;i<=n;i++){ const t=rowT(i,n,K); const a=lerpP(Ftop,Btop,t), b=lerpP(Fbot,Bbot,t); bgx.beginPath(); bgx.moveTo(a[0],a[1]); bgx.lineTo(b[0],b[1]); bgx.stroke(); } }
-  function longLines(FL,FR,BL,BR, n, color, w){ bgx.strokeStyle=color; bgx.lineWidth=w||1.5;
-    for (let j=0;j<=n;j++){ const s=j/n; const f=lerpP(FL,FR,s), b=lerpP(BL,BR,s); bgx.beginPath(); bgx.moveTo(f[0],f[1]); bgx.lineTo(b[0],b[1]); bgx.stroke(); } }
-  function clipPoly(pts, fn){ bgx.save(); bgx.beginPath(); bgx.moveTo(pts[0][0],pts[0][1]); for (let i=1;i<pts.length;i++) bgx.lineTo(pts[i][0],pts[i][1]); bgx.closePath(); bgx.clip(); fn(); bgx.restore(); }
-  function rr(x,y,w,h,r){ if (bgx.roundRect){ bgx.beginPath(); bgx.roundRect(x,y,w,h,r); bgx.fill(); } else bgx.fillRect(x,y,w,h); }
-  function rrp(x,y,w,h,r){ if (bgx.roundRect){ bgx.beginPath(); bgx.roundRect(x,y,w,h,r);} else { bgx.beginPath(); bgx.rect(x,y,w,h);} }   // path only
-  function quadFill(p0,p1,p2,p3){ bgx.beginPath(); bgx.moveTo(p0[0],p0[1]); bgx.lineTo(p1[0],p1[1]); bgx.lineTo(p2[0],p2[1]); bgx.lineTo(p3[0],p3[1]); bgx.closePath(); bgx.fill(); }
-  function vGrad(x,y,h,c0,c1){ const g=bgx.createLinearGradient(x,y,x,y+h); g.addColorStop(0,c0); g.addColorStop(1,c1); return g; }
-  function hGrad(x0,x1,y,c0,c1){ const g=bgx.createLinearGradient(x0,y,x1,y); g.addColorStop(0,c0); g.addColorStop(1,c1); return g; }
-
-  // a framed artwork you can stand in front of and blend into (multi-colour)
-  function drawPainting(x,y,w,h){
-    bgx.save();
-    bgx.fillStyle='rgba(0,0,0,0.25)'; bgx.fillRect(x+5,y+6,w,h);                      // drop shadow
-    const fr=pick(['#caa14a','#7a5a32','#b8b2a6','#2b2b30']);                          // frame
-    bgx.fillStyle=jit(fr,1.1); bgx.fillRect(x-6,y-6,w+12,h+12);
-    bgx.fillStyle=jit(fr,0.8); bgx.fillRect(x-2,y-2,w+4,h+4);
-    bgx.save(); rrp(x,y,w,h,2); bgx.clip();
-    const pals=[['#e8554d','#f2a93b','#f5e06b'],['#2f7fb0','#6fc3d8','#bfe9f2'],['#7a4bb0','#c86fb0','#f0b6d6'],['#2f8f5c','#8fd06a','#e7e36b'],['#e0712e','#c23b54','#3a2f6b']];
-    const pal=pick(pals);
-    const bgrd=bgx.createLinearGradient(x,y,x+w,y+h); bgrd.addColorStop(0,pal[0]); bgrd.addColorStop(0.5,pal[1]); bgrd.addColorStop(1,pal[2]);
-    bgx.fillStyle=bgrd; bgx.fillRect(x,y,w,h);
-    for (let s=0;s<5;s++){ bgx.globalAlpha=rnd(0.4,0.8); bgx.fillStyle=jit(pick(pal),rnd(0.7,1.3));
-      if (s%2){ bgx.beginPath(); bgx.arc(x+rnd(0,w), y+rnd(0,h), rnd(w*0.08,w*0.24), 0, Math.PI*2); bgx.fill(); }
-      else { bgx.beginPath(); bgx.moveTo(x+rnd(0,w),y+rnd(0,h)); bgx.lineTo(x+rnd(0,w),y+rnd(0,h)); bgx.lineTo(x+rnd(0,w),y+rnd(0,h)); bgx.closePath(); bgx.fill(); } }
-    bgx.globalAlpha=1; bgx.restore(); bgx.restore();
-  }
-  // realistic gradient couch
-  function drawCouch(cx,cy,cw,ch,base){
-    bgx.fillStyle='rgba(0,0,0,0.26)'; bgx.beginPath(); bgx.ellipse(cx, cy+8, cw*0.56, 16, 0,0,Math.PI*2); bgx.fill();
-    bgx.fillStyle=vGrad(cx, cy-ch-40, 44, jit(base,1.18), jit(base,0.92)); rr(cx-cw/2, cy-ch-40, cw, 46, 14);   // backrest
-    bgx.fillStyle=vGrad(cx, cy-ch, ch+8, jit(base,1.05), jit(base,0.7)); rr(cx-cw/2, cy-ch, cw, ch+8, 14);      // seat base
-    const n=3, sw=(cw-16)/n;                                                                                    // cushions
-    for (let i=0;i<n;i++){ const sx=cx-cw/2+8+i*sw; bgx.fillStyle=vGrad(sx, cy-ch+4, ch-6, jit(base,1.22), jit(base,0.95)); rr(sx+3, cy-ch+4, sw-6, ch-10, 9);
-      bgx.strokeStyle='rgba(0,0,0,0.12)'; bgx.lineWidth=1.5; rrp(sx+3, cy-ch+4, sw-6, ch-10, 9); bgx.stroke(); }
-    bgx.fillStyle=vGrad(cx, cy-ch-30, ch+34, jit(base,1.0), jit(base,0.62)); rr(cx-cw/2-16, cy-ch-30, 26, ch+38, 10); rr(cx+cw/2-10, cy-ch-30, 26, ch+38, 10); // arms
-  }
-  function drawTV(tx,ty,tw,th){
-    bgx.fillStyle='rgba(0,0,0,0.24)'; bgx.beginPath(); bgx.ellipse(tx, ty+44, 96, 15, 0,0,Math.PI*2); bgx.fill();
-    bgx.fillStyle=vGrad(tx, ty+th-4, 46, '#8a6a3e', '#5e4628'); bgx.fillRect(tx-72, ty+th-4, 144, 46);          // cabinet
-    bgx.fillStyle='#0c0e12'; rr(tx-tw/2, ty-th, tw, th, 7);                                                     // bezel
-    const sg=bgx.createLinearGradient(tx-tw/2, ty-th, tx+tw/2, ty); sg.addColorStop(0,'#26303c'); sg.addColorStop(1,'#10161d');
-    bgx.fillStyle=sg; bgx.fillRect(tx-tw/2+7, ty-th+7, tw-14, th-14);                                           // screen
-    bgx.fillStyle='rgba(255,255,255,0.10)'; bgx.beginPath(); bgx.moveTo(tx-tw/2+7,ty-th+7); bgx.lineTo(tx-tw/2+40,ty-th+7); bgx.lineTo(tx-tw/2+10,ty-7); bgx.lineTo(tx-tw/2+7,ty-7); bgx.closePath(); bgx.fill(); // reflection
-  }
-  function drawRug(cx,cy,rw,rh,col){
-    const g=bgx.createRadialGradient(cx,cy,8,cx,cy,rw); g.addColorStop(0,jit(col,1.2)); g.addColorStop(1,jit(col,0.8));
-    bgx.fillStyle=g; bgx.beginPath(); bgx.ellipse(cx,cy,rw,rh,0,0,Math.PI*2); bgx.fill();
-    bgx.strokeStyle=jit(col,0.6); bgx.lineWidth=5; bgx.beginPath(); bgx.ellipse(cx,cy,rw*0.86,rh*0.86,0,0,Math.PI*2); bgx.stroke();
-  }
-  function drawPlant(px,py){
-    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(px,py+4,30,9,0,0,Math.PI*2); bgx.fill();
-    bgx.fillStyle=vGrad(px,py-20,28,'#c98a55','#7a4f2a'); rr(px-16,py-20,32,28,4);                              // pot
-    for (let k=0;k<9;k++){ const a=-Math.PI/2+rnd(-1.1,1.1), len=rnd(26,46); bgx.save(); bgx.translate(px,py-20); bgx.rotate(a);
-      bgx.fillStyle=jit(pick(['#2f8f4c','#3faf5c','#57c06a','#247a40']),rnd(0.9,1.1)); bgx.beginPath(); bgx.ellipse(0,-len/2,7,len/2,0,0,Math.PI*2); bgx.fill(); bgx.restore(); }
-  }
-  function drawShelf(x,yBase,w,h){
-    bgx.fillStyle=vGrad(x,yBase-h,h,'#7a5630','#553a1e'); bgx.fillRect(x,yBase-h,w,h);                          // frame
-    const rows=4, rh=(h-8)/rows;
-    for (let r=0;r<rows;r++){ const sy=yBase-h+6+r*rh; bgx.fillStyle='#3a2814'; bgx.fillRect(x+4, sy+rh-5, w-8, 5);   // shelf board
-      let bx=x+7; while (bx < x+w-10){ const bw2=rnd(6,12), bh2=rnd(rh*0.5,rh*0.82);
-        bgx.fillStyle=vGrad(bx,sy+rh-5-bh2,bh2, jit(pick(['#c23b54','#2f7fb0','#3c8e4f','#caa14a','#7a4bb0','#e0712e','#d8d2c4']),1.15), jit(pick(['#a02d44','#256490','#2f7340','#a8842f']),0.9));
-        bgx.fillRect(bx, sy+rh-5-bh2, bw2, bh2); bx+=bw2+1; } }
-  }
-  function drawLamp(x,floorY){
-    const top=floorY-180;
-    bgx.strokeStyle='#4a4a52'; bgx.lineWidth=5; bgx.beginPath(); bgx.moveTo(x,floorY); bgx.lineTo(x,top+30); bgx.stroke();
-    const g=bgx.createRadialGradient(x,top+40,4,x,top+120,150); g.addColorStop(0,'rgba(255,238,180,0.5)'); g.addColorStop(1,'rgba(255,238,180,0)');
-    bgx.fillStyle=g; bgx.beginPath(); bgx.ellipse(x,top+150,120,150,0,0,Math.PI*2); bgx.fill();                 // warm glow
-    bgx.fillStyle=vGrad(x-26,top,40,'#f3e2a6','#d8b96a'); bgx.beginPath(); bgx.moveTo(x-26,top+40); bgx.lineTo(x+26,top+40); bgx.lineTo(x+16,top); bgx.lineTo(x-16,top); bgx.closePath(); bgx.fill(); // shade
-  }
-  function drawBench(cx,cy,bw2){
-    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(cx,cy+6,bw2*0.55,12,0,0,Math.PI*2); bgx.fill();
-    bgx.fillStyle=vGrad(cx,cy-26,30,'#3a3f4a','#23272f'); rr(cx-bw2/2,cy-26,bw2,26,6);
-    bgx.fillStyle='#1b1e24'; bgx.fillRect(cx-bw2/2+6,cy,8,18); bgx.fillRect(cx+bw2/2-14,cy,8,18);
-  }
-
-  let roomBackY = H*0.66;                     // floor depth reference (back wall bottom), set per scene
-  const THEMES = ['lounge','gallery'];
-  function genScene(){
-    const theme = pick(THEMES);
-    const vx = W*rnd(0.46,0.54), vy = H*rnd(0.40,0.45);
-    const bw = W*0.46, bh = H*0.50;          // shallow, cosy (medium-small) room
-    const bL=vx-bw/2, bR=vx+bw/2, bT=vy-bh/2, bB=vy+bh/2;
-    roomBackY = bB;
-    const FTL=[0,0], FTR=[W,0], FBL=[0,H], FBR=[W,H];
-    const BTL=[bL,bT], BTR=[bR,bT], BBL=[bL,bB], BBR=[bR,bB];
-    const floorQ=[FBL,FBR,BBR,BBL];
-
-    // ---- room shell (gradient lit) ----
-    const pal = theme==='gallery'
-      ? { ceil0:'#fbfbfd', ceil1:'#e7e8ee', wall0:'#ececf1', wall1:'#cfd0d8', wallSide:'#d6d7df', floor0:'#cdc6ba', floor1:'#8f877a', plank:'rgba(80,70,55,0.18)' }
-      : { ceil0:'#f4ecd9', ceil1:'#e0d5bd', wall0:'#ecdcbe', wall1:'#cdb88f', wallSide:'#d8c39b', floor0:'#a8743f', floor1:'#5a3a1d', plank:'rgba(50,28,10,0.30)' };
-    bgx.fillStyle=vGrad(0,0,vy,pal.ceil0,pal.ceil1); quadFill(FTL,FTR,BTR,BTL);                 // ceiling
-    bgx.fillStyle=hGrad(0,bL,0,jit(pal.wallSide,0.86),pal.wallSide); quadFill(FTL,BTL,BBL,FBL); // left wall (AO toward back)
-    bgx.fillStyle=hGrad(W,bR,0,jit(pal.wallSide,0.86),pal.wallSide); quadFill(FTR,BTR,BBR,FBR); // right wall
-    bgx.fillStyle=vGrad(bT,0,bh,pal.wall0,pal.wall1); bgx.fillRect(bL,bT,bw,bh);                 // back wall
-    // floor with light pool
-    bgx.fillStyle=vGrad(bB,0,H-bB,jit(pal.floor1,1.05),pal.floor1); quadFill(FBL,FBR,BBR,BBL);
-    const fp=bgx.createRadialGradient(W/2,H*0.98,30,W/2,H*0.62,W*0.66); fp.addColorStop(0,'rgba(255,245,220,0.30)'); fp.addColorStop(1,'rgba(255,245,220,0)');
-    clipPoly(floorQ, ()=>{ if (theme==='lounge') longLines(FBL,FBR,BBL,BBR,16,pal.plank,1.4); else { longLines(FBL,FBR,BBL,BBR,10,'rgba(0,0,0,0.08)',1); }
-      bgx.fillStyle=fp; bgx.fillRect(0,bB,W,H-bB); });
-    bgx.strokeStyle='rgba(0,0,0,0.28)'; bgx.lineWidth=3; bgx.beginPath(); bgx.moveTo(BBL[0],BBL[1]); bgx.lineTo(BBR[0],BBR[1]); bgx.stroke(); // baseboard line
-    // corner ambient occlusion
-    bgx.fillStyle='rgba(0,0,0,0.10)'; quadP(BTL,[bL+18,bT],[bL+18,bB],BBL); quadP(BTR,[bR-18,bT],[bR-18,bB],BBR);
-
-    if (theme === 'gallery'){
-      // art gallery: several paintings to blend into + a bench, polished floor reflections
-      drawPainting(bL+bw*0.10, bT+bh*0.30, bw*0.32, bh*0.50);
-      drawPainting(bL+bw*0.56, bT+bh*0.22, bw*0.34, bh*0.42);
-      drawPainting(W*0.06, vy*0.7, 70, 150);                       // left wall art (foreshortened-ish)
-      drawPainting(W*0.84, vy*0.7, 70, 150);
-      drawBench(W*0.5, H*0.84, 150);
-      drawPlant(W*0.16, H*0.80);
-    } else {
-      // cosy living room
-      drawPainting(bL+bw*0.30, bT+bh*0.18, bw*0.42, bh*0.46);      // big wall art (blend target)
-      drawRug(W*0.52, H*0.86, 230, 56, pick(['#b5683a','#3f6e8c','#7a6cae','#4f8a5c']));
-      drawShelf(W*0.04, H*0.80, 110, 150);
-      drawTV(W*0.80, H*0.66, 150, 92);
-      drawCouch(W*0.46, H*0.82, 240, 64, pick(['#c2554d','#3f7e8c','#7a6cae','#4f8a5c','#caa15f']));
-      drawPlant(W*0.66, H*0.74);
-      drawLamp(W*0.12, H*0.78);
+    for(let x=0;x<RW;x++){
+      const cameraX=2*x/RW-1; const rdx=dirX+planeX*cameraX, rdy=dirY+planeY*cameraX;
+      let mx=Math.floor(cx2), my=Math.floor(cy2);
+      const ddx=Math.abs(1/rdx), ddy=Math.abs(1/rdy);
+      let stepX,stepY,sdx,sdy;
+      if(rdx<0){ stepX=-1; sdx=(cx2-mx)*ddx; } else { stepX=1; sdx=(mx+1-cx2)*ddx; }
+      if(rdy<0){ stepY=-1; sdy=(cy2-my)*ddy; } else { stepY=1; sdy=(my+1-cy2)*ddy; }
+      let side=0,hit=0,guard=0,cellv=1;
+      while(!hit && guard++<64){ if(sdx<sdy){ sdx+=ddx; mx+=stepX; side=0; } else { sdy+=ddy; my+=stepY; side=1; } cellv=mapAt(mx+0.5,my+0.5); if(cellv!==0) hit=1; }
+      const perp=side===0?(sdx-ddx):(sdy-ddy); zbuf[x]=perp;
+      const lineH=RH/perp, drawStartF=halfH-lineH/2;
+      let wallX=side===0?(cy2+perp*rdy):(cx2+perp*rdx); wallX-=Math.floor(wallX);
+      let texX=(wallX*TW)|0; if((side===0&&rdx>0)||(side===1&&rdy<0)) texX=TW-1-texX;
+      const wd=wallTex(cellv);
+      const shade=clamp(1-perp*fog,0.14,1)*ambient*(side===1?0.78:1);
+      const y0=Math.max(0,Math.ceil(drawStartF)), y1=Math.min(RH-1,(drawStartF+lineH)|0);
+      const tStep=TH/lineH; let tPos=(y0-drawStartF)*tStep;
+      for(let y=y0;y<=y1;y++){ const ty=(tPos|0)&TMASK; const ti=((ty*TW+texX)<<2);
+        buf[y*RW+x]=(0xff000000 | (((wd[ti+2]*shade)|0)<<16) | (((wd[ti+1]*shade)|0)<<8) | ((wd[ti]*shade)|0))>>>0; tPos+=tStep; }
     }
+    sceneCtx.putImageData(sceneImg,0,0);
+    ctx.drawImage(sceneCanvas,0,0,RW,RH,0,0,W,H);
+
+    // sprites: furniture + players
+    const sprites=[];
+    for(const f of furniture) sprites.push({img:f.img,x:f.x,y:f.y,sh:f.sh,sw:f.sw,bright:1});
+    if(phase==='seek'){ for(let i=0;i<nPlayers;i++){ const fore=foreOf(i);
+      // hide better: face-on (at the hide angle) the wall texture bleeds through + colours match → nearly invisible; off-angle = opaque + mismatched → sticks out
+      const a=pFound[i]?1:clamp(0.96-fore*0.5,0.46,0.96);
+      sprites.push({img:pSprite[i], x:pX[i], y:pY[i], sh:POSE_SH[pPose[i]], sw:POSE_SH[pPose[i]]*0.72*fore, bright:a, pid:i}); } }
+    for(const s of sprites){ const sx=s.x-cx2, sy=s.y-cy2; const invDet=1/(planeX*dirY-dirX*planeY); s.tY=invDet*(-planeY*sx+planeX*sy); }
+    sprites.sort((a,b)=>b.tY-a.tY);
+    for(const s of sprites) drawSprite(s);
+
+    // third-person: draw the current player centered, in front of camera (walk-animate when moving)
+    if(phase==='hide'){
+      let ap=pPose[cur], bob=0;
+      if((moveDir.up||moveDir.down) && pPose[cur]==='stand'){ const ph=performance.now()/120; ap=(Math.floor(ph)%2)?'walk1':'walk2'; bob=Math.abs(Math.sin(ph*Math.PI))*7; }
+      makeBody(comp, pPaint[cur], ap);
+      drawSprite({img:comp, x:px, y:py, sh:POSE_SH[ap], sw:POSE_SH[ap]*0.72, bright:1, noOcc:true, bob:bob});
+    }
+
+    // seek: found markers + labels
+    if(phase==='seek'){ for(let i=0;i<nPlayers;i++){ if(!pFound[i]) continue; const pr=projectSprite(pX[i],pY[i],POSE_SH[pPose[i]],POSE_SH[pPose[i]]*0.72*foreOf(i)); if(pr){ ctx.strokeStyle='#6fe26f'; ctx.lineWidth=3; ctx.strokeRect(pr.leftX, pr.topY, Math.max(8,pr.spW), pr.spH); label(pr.screenX, pr.topY-4, names[i]); } } drawReticle(); }
+
+    // gentle vignette
+    const vig=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.75); vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.32)'); ctx.fillStyle=vig; ctx.fillRect(0,0,W,H);
   }
+  function project(wx,wy){ const sx=wx-cx2, sy=wy-cy2; const invDet=1/(planeX*dirY-dirX*planeY);
+    const tX=invDet*(dirY*sx-dirX*sy), tY=invDet*(-planeY*sx+planeX*sy); if(tY<=0.12) return null;
+    const screenX=(W/2)*(1+tX/tY), lineH=H/tY; return {screenX, tY, lineH}; }
+  function drawSprite(s){
+    const sx=s.x-cx2, sy=s.y-cy2; const invDet=1/(planeX*dirY-dirX*planeY);
+    const tX=invDet*(dirY*sx-dirX*sy); const tY=s.tY!==undefined?s.tY:invDet*(-planeY*sx+planeX*sy);
+    if(tY<=0.12) return;
+    const screenX=(W/2)*(1+tX/tY), lineH=H/tY, spH=lineH*s.sh, spW=lineH*s.sw;
+    const bottomY=H/2+lineH/2, topY=bottomY-spH-(s.bob||0);
+    const startX=Math.floor(screenX-spW/2), endX=Math.ceil(screenX+spW/2);
+    const img=s.img; if(s.bright!==undefined) ctx.globalAlpha=s.bright;
+    const xr=RW/W; let runStart=-1;
+    for(let x=startX;x<=endX;x++){ const vis=x>=0 && x<W && (s.noOcc || tY<zbuf[(x*xr)|0]) && x<endX;
+      if(vis&&runStart<0) runStart=x;
+      if((!vis||x===endX)&&runStart>=0){ const runEnd=vis?x:x-1; const srcX=((runStart-startX)/spW)*img.width; const srcW=((runEnd-runStart+1)/spW)*img.width;
+        ctx.drawImage(img, srcX,0,srcW,img.height, runStart,topY,runEnd-runStart+1,spH); runStart=-1; } }
+    ctx.globalAlpha=1;
+  }
+  function drawReticle(){ ctx.save(); ctx.translate(W/2,H/2); ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=Math.max(2,W/380);
+    const r=Math.max(12,W*0.02); ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.moveTo(-r*1.6,0); ctx.lineTo(-r*0.5,0); ctx.moveTo(r*0.5,0); ctx.lineTo(r*1.6,0); ctx.moveTo(0,-r*1.6); ctx.lineTo(0,-r*0.5); ctx.moveTo(0,r*0.5); ctx.lineTo(0,r*1.6); ctx.stroke(); ctx.restore(); }
+  function label(x,y,text){ ctx.font='800 '+Math.max(12,W/52)+'px Nunito, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    const w=ctx.measureText(text).width+14; ctx.fillStyle='rgba(10,14,28,0.82)'; ctx.beginPath(); ctx.roundRect(x-w/2,y-20,w,18,8); ctx.fill(); ctx.fillStyle='#6fe26f'; ctx.fillText(text,x,y-4); }
+
+  // the centered player's on-screen rect (device px) — for painting taps + camo
+  function playerRect(){ const cb=Math.max(0.35,camDist); const sh=POSE_SH[pPose[cur]], sw=sh*0.72; const lineH=H/cb; const spH=lineH*sh, spW=lineH*sw; const bottomY=H/2+lineH/2; return {leftX:W/2-spW/2, topY:bottomY-spH, spW, spH}; }
 
   // ---------- game state ----------
-  let nPlayers = 2, names = [], scores = [];
-  let cur = 0;                             // current hider during hide phase
-  let phase = 'setup';
-  let pPaint = [], pfx = [], pfy = [], pCamo = [], pFound = [], pPose = [];   // per-player layers / FOOT positions / poses
-  let activeColor = PALETTE[1], matched = false, tool = 'paint', brushR = 11;
-  let endAt = 0, painting = false, lastPt = null, lastTapMsg = '';
-  const moveDir = { up:false, down:false, left:false, right:false };   // third-person walk
-  const WALK = 3.2, SC_MIN = 0.5, SC_MAX = 1.28;
+  let nPlayers=2, names=[], scores=[], cur=0, phase='setup';
+  let pPaint=[], pX=[], pY=[], pDir=[], pPose=[], pCamo=[], pFound=[], pSprite=[];
+  let activeColor=PALETTE[1], matched=false, tool='paint', brushR=11, endAt=0, painting=false, lastPt=null;
+  const moveDir={up:false,down:false,left:false,right:false};
 
-  function sampleBg(x,y){ x=Math.max(0,Math.min(W-1,x|0)); y=Math.max(0,Math.min(H-1,y|0)); const d=bgx.getImageData(x,y,1,1).data; return [d[0],d[1],d[2]]; }
   function rgbStr(a){ return 'rgb('+a[0]+','+a[1]+','+a[2]+')'; }
-  function poseOf(i){ return poseSet[pPose[i]] || poseSet.stand; }
-  // depth scale: further back (smaller y) = smaller; near camera (large y) = bigger
-  function scaleAt(fy){ const t=(fy-roomBackY)/(H-roomBackY); return SC_MIN + (SC_MAX-SC_MIN)*Math.max(0,Math.min(1,t)); }
-  function rectOf(i){ const s=scaleAt(pfy[i]); const w=BW*s, h=BH*s; return { s:s, w:w, h:h, x:pfx[i]-w/2, y:pfy[i]-h }; }
-  function clampFoot(i){ pfy[i]=Math.max(roomBackY+4, Math.min(H-4, pfy[i])); const hw=BW*scaleAt(pfy[i])/2; pfx[i]=Math.max(hw, Math.min(W-hw, pfx[i])); }
+  function sampleWall(sx,sy){ const bx=clamp((sx/W*RW)|0,0,RW-1), by=clamp((sy/H*RH)|0,0,RH-1); const d=sceneCtx.getImageData(bx,by,1,1).data; return [d[0],d[1],d[2]]; }
 
   // ---------- turn flow ----------
+  function spawn(){ px=1.5; py=1.5; dir=0.0; // face into the room from corner
+    // pick a random open floor near a wall to start facing
+    dir=rnd(0,6.28); updateCamera(); }
   function startGame(){
-    names = []; scores = []; pPaint = []; pfx = []; pfy = []; pCamo = []; pFound = []; pPose = [];
-    genScene();                            // ONE shared 3D room for everyone
-    for (let i=0;i<nPlayers;i++){
-      names.push(pname(i,'Player '+(i+1))); scores.push(0); pCamo.push(0); pFound.push(false); pPose.push('stand');
-      const c = document.createElement('canvas'); c.width=BW; c.height=BH; pPaint.push(c);
-      // spread starting foot positions on the floor; players walk from here
-      pfx.push(Math.round(rnd(W*0.2, W*0.8))); pfy.push(Math.round(rnd(roomBackY+30, H-20)));
-    }
-    cur = 0; document.getElementById('setupOv').hidden = true; hideHandoff();
+    names=[];scores=[];pPaint=[];pX=[];pY=[];pDir=[];pPose=[];pCamo=[];pFound=[];pSprite=[];
+    buildMap();
+    for(let i=0;i<nPlayers;i++){ names.push(pname(i,'Player '+(i+1))); scores.push(0); pCamo.push(0); pFound.push(false); pPose.push('stand');
+      const c=mkCanvas(BW,BH); pPaint.push(c); pX.push(0);pY.push(0);pDir.push(0);
+      pSprite.push(mkCanvas(BW,BH)); }
+    cur=0; document.getElementById('setupOv').hidden=true; hideHandoff();
   }
   function hideHandoff(){
-    document.getElementById('handoffEmoji').textContent = '🎨';
-    document.getElementById('handoffName').textContent = names[cur];
-    document.getElementById('handoffSub').innerHTML = 'it’s your turn. <b>Walk</b> with the arrows, strike a <b>pose</b> against the couch or TV, then <b>paint</b> to blend in. No peeking, everyone else!';
-    document.getElementById('handoffBtn').textContent = 'Start hiding';
-    document.getElementById('handoffBtn').onclick = beginHide;
-    document.getElementById('handoffOv').hidden = false;
+    document.getElementById('handoffEmoji').textContent='🎨';
+    document.getElementById('handoffName').textContent=names[cur];
+    document.getElementById('handoffSub').innerHTML='it’s your turn. <b>Walk</b> up to a wall or painting, pick a <b>pose</b>, then <b>paint</b> yourself to blend in. No peeking, everyone else!';
+    document.getElementById('handoffBtn').textContent='Start hiding';
+    document.getElementById('handoffBtn').onclick=beginHide;
+    document.getElementById('handoffOv').hidden=false;
   }
   function beginHide(){
-    document.getElementById('handoffOv').hidden = true;
+    document.getElementById('handoffOv').hidden=true;
     tool='paint'; setTool('paint'); activeColor=PALETTE[1]; matched=false; refreshActive();
-    moveDir.up=moveDir.down=moveDir.left=moveDir.right=false;
-    setPose(pPose[cur]);
-    phase='hide'; endAt = nowSec()+120;
-    document.getElementById('phasebar').hidden = false;
-    document.getElementById('whoLabel').textContent = '🎨 ' + names[cur] + ' is hiding';
-    document.getElementById('tools').hidden = false;
-    document.getElementById('donebar').hidden = false;
-    document.getElementById('dpad').hidden = false;
-    document.getElementById('zoomhint').hidden = false;
-    showHint('Arrows to walk · pose against the couch/TV · Match a colour and paint');
+    moveDir.up=moveDir.down=moveDir.left=moveDir.right=false; setPose(pPose[cur]);
+    px=1.5; py=1.5; dir=0.4; updateCamera();
+    phase='hide'; endAt=nowSec()+120;
+    document.getElementById('phasebar').hidden=false;
+    document.getElementById('whoLabel').textContent='🎨 '+names[cur]+' is hiding';
+    document.getElementById('tools').hidden=false; document.getElementById('donebar').hidden=false; document.getElementById('dpad').hidden=false;
+    showHint('▲▼ walk · ↺↻ turn · walk to a wall, then Match a colour & paint');
   }
   function endHide(){
-    pCamo[cur] = computeCamo(cur);
+    pX[cur]=px; pY[cur]=py; pDir[cur]=dir;
+    pCamo[cur]=computeCamo();
+    makeBody(pSprite[cur], pPaint[cur], pPose[cur]);     // bake their look for the seek phase
     cur++; phase='handoff';
-    document.getElementById('tools').hidden = true;
-    document.getElementById('donebar').hidden = true;
-    document.getElementById('phasebar').hidden = true;
-    document.getElementById('dpad').hidden = true;
-    document.getElementById('zoomhint').hidden = true;
-    if (cur < nPlayers){ hideHandoff(); return; }
-    if (nPlayers >= 2) findHandoff();
+    document.getElementById('tools').hidden=true; document.getElementById('donebar').hidden=true; document.getElementById('phasebar').hidden=true; document.getElementById('dpad').hidden=true;
+    if(cur<nPlayers){ hideHandoff(); return; }
+    if(nPlayers>=2) findHandoff();
     else showResult('🧍','Camouflage', pCamo[0]+'%', gradeText(pCamo[0]), ()=>{ document.getElementById('resultOv').hidden=true; finishScores(); });
   }
   function findHandoff(){
-    document.getElementById('handoffEmoji').textContent = '🔍';
-    document.getElementById('handoffName').textContent = 'Find them all!';
-    document.getElementById('handoffSub').innerHTML = 'Everyone look together — <b>'+nPlayers+' people</b> are hidden in the room. You have <b>1 minute</b> — tap each one you can spot!';
-    document.getElementById('handoffBtn').textContent = 'Start the hunt';
-    document.getElementById('handoffBtn').onclick = beginFind;
-    document.getElementById('handoffOv').hidden = false;
+    document.getElementById('handoffEmoji').textContent='🔍';
+    document.getElementById('handoffName').textContent='Find them all!';
+    document.getElementById('handoffSub').innerHTML='Everyone hunt together — <b>'+nPlayers+' people</b> are hidden in the room. <b>Walk around</b> (▲▼ ↺↻) and <b>tap</b> each one you spot. You have <b>1 minute</b>!';
+    document.getElementById('handoffBtn').textContent='Start the hunt';
+    document.getElementById('handoffBtn').onclick=beginFind;
+    document.getElementById('handoffOv').hidden=false;
   }
   function beginFind(){
-    document.getElementById('handoffOv').hidden = true;
-    phase='seek'; endAt = nowSec()+60; lastTapMsg='';
-    document.getElementById('phasebar').hidden = false;
-    document.getElementById('whoLabel').textContent = '🔍 Find the ' + nPlayers + ' hidden people!';
-    showHint('Look for an out-of-place shape — tap a hidden person to reveal them');
+    document.getElementById('handoffOv').hidden=true;
+    phase='seek'; endAt=nowSec()+60; moveDir.up=moveDir.down=moveDir.left=moveDir.right=false;
+    px=1.5; py=1.5; dir=0.4; updateCamera();
+    document.getElementById('phasebar').hidden=false; document.getElementById('dpad').hidden=false;
+    document.getElementById('whoLabel').textContent='🔍 Find the '+nPlayers+' hidden people!';
+    showHint('Walk the room · tap a hidden person to reveal them');
   }
-  function finishScores(){
-    for (let i=0;i<nPlayers;i++) scores[i] = Math.round(pCamo[i]*0.4) + (pFound[i] ? 0 : 50);
-    showFinal();
-  }
+  function finishScores(){ document.getElementById('phasebar').hidden=true; document.getElementById('dpad').hidden=true;
+    for(let i=0;i<nPlayers;i++) scores[i]=Math.round(pCamo[i]*0.4)+(pFound[i]?0:50); showFinal(); }
 
-  function computeCamo(i){
-    const ps = poseOf(i), R = rectOf(i);
-    buildComp(pPaint[i], ps.mask);
-    const pd = cctx.getImageData(0,0,BW,BH).data;
-    const md = ps.mctx.getImageData(0,0,BW,BH).data;
-    const w = Math.max(1,Math.round(R.w)), h = Math.max(1,Math.round(R.h));
-    const bx = Math.max(0,Math.min(W-w,Math.round(R.x))), by = Math.max(0,Math.min(H-h,Math.round(R.y)));
-    const bd = bgx.getImageData(bx,by,w,h).data;
-    let total=0, count=0;
-    for (let y=0;y<BH;y+=2){ for (let x=0;x<BW;x+=2){ const k=(y*BW+x)*4;
-      if (md[k+3] < 40) continue;
-      count++;
-      if (pd[k+3] < 30){ continue; }                                  // unpainted = exposed (0)
-      let sx=Math.round(R.x + x*R.s - bx), sy=Math.round(R.y + y*R.s - by);
-      sx=Math.max(0,Math.min(w-1,sx)); sy=Math.max(0,Math.min(h-1,sy));
-      const b=(sy*w+sx)*4;
-      const d = Math.sqrt((pd[k]-bd[b])**2 + (pd[k+1]-bd[b+1])**2 + (pd[k+2]-bd[b+2])**2);
-      total += Math.max(0, 1 - d/150);
-    }}
-    return count ? Math.round(total/count*100) : 0;
+  function computeCamo(){
+    makeBody(comp, pPaint[cur], pPose[cur]);
+    const pose=pPose[cur]; const pd=cctx.getImageData(0,0,BW,BH).data; const md=poseSet[pose].mctx.getImageData(0,0,BW,BH).data;
+    // player's projected rect in BUFFER coords (scene = walls/floor behind, no player)
+    const cb=Math.max(0.35,camDist); const sh=POSE_SH[pose], sw=sh*0.72; const lineH=RH/cb; const spH=lineH*sh, spW=lineH*sw; const bottomY=RH/2+lineH/2; const lx=RW/2-spW/2, ty=bottomY-spH;
+    const bx=clamp(lx|0,0,RW-1), by=clamp(ty|0,0,RH-1); const bw=clamp(Math.round(spW),1,RW-bx), bh=clamp(Math.round(spH),1,RH-by);
+    const sd=sceneCtx.getImageData(bx,by,bw,bh).data;
+    let total=0,count=0;
+    for(let v=0;v<BH;v+=2)for(let u=0;u<BW;u+=2){ const k=(v*BW+u)*4; if(md[k+3]<40) continue; count++; if(pd[k+3]<30) continue;
+      let su=clamp(Math.round(u/BW*bw),0,bw-1), sv=clamp(Math.round(v/BH*bh),0,bh-1); const b=(sv*bw+su)*4;
+      const dd=Math.sqrt((pd[k]-sd[b])**2+(pd[k+1]-sd[b+1])**2+(pd[k+2]-sd[b+2])**2); total+=Math.max(0,1-dd/150); }
+    return count?Math.round(total/count*100):0;
   }
   function gradeText(c){ if(c>=90)return 'Invisible!'; if(c>=75)return 'Great hide'; if(c>=55)return 'Not bad'; if(c>=35)return 'Spotted easily'; return 'Way too obvious'; }
 
   // ---------- overlays ----------
-  function showResult(emoji,title,score,sub,cb){
-    document.getElementById('resEmoji').textContent=emoji; document.getElementById('resTitle').textContent=title;
-    document.getElementById('resScore').textContent=score; document.getElementById('resSub').textContent=sub;
-    document.getElementById('resBtn').onclick=cb; document.getElementById('resultOv').hidden=false;
-  }
-  function showFinal(){
-    phase='done';
-    const idx = names.map((n,i)=>i).sort((a,b)=>scores[b]-scores[a]); const top=idx[0];
-    document.getElementById('finalTitle').textContent = (nPlayers===1)?'Nice hiding!':names[top]+' wins!';
-    let html=''; idx.forEach((i,rank)=>{ const tag = (nPlayers>=2) ? (pFound[i]?'🔍 found':'🫥 hidden') : (pCamo[i]+'% camo');
-      html+='<div class="row'+(rank===0?' lead':'')+'"><span><span class="rk">'+(rank+1)+'.</span>'+names[i]+' <span style="color:#8b93b0;font-weight:700;font-size:0.82em">'+tag+'</span></span><span class="pts">'+scores[i]+' pts</span></div>'; });
-    document.getElementById('finalBoard').innerHTML=html; document.getElementById('finalOv').hidden=false;
-  }
+  function showResult(emoji,title,score,sub,cb){ document.getElementById('resEmoji').textContent=emoji; document.getElementById('resTitle').textContent=title; document.getElementById('resScore').textContent=score; document.getElementById('resSub').textContent=sub; document.getElementById('resBtn').onclick=cb; document.getElementById('resultOv').hidden=false; }
+  function showFinal(){ phase='done'; const idx=names.map((n,i)=>i).sort((a,b)=>scores[b]-scores[a]); const top=idx[0];
+    document.getElementById('finalTitle').textContent=(nPlayers===1)?'Nice hiding!':names[top]+' wins!';
+    let html=''; idx.forEach((i,rank)=>{ const tag=(nPlayers>=2)?(pFound[i]?'🔍 found':'🫥 hidden'):(pCamo[i]+'% camo'); html+='<div class="row'+(rank===0?' lead':'')+'"><span><span class="rk">'+(rank+1)+'.</span>'+names[i]+' <span style="color:#8b93b0;font-weight:700;font-size:0.82em">'+tag+'</span></span><span class="pts">'+scores[i]+' pts</span></div>'; });
+    document.getElementById('finalBoard').innerHTML=html; document.getElementById('finalOv').hidden=false; }
 
   // ---------- tools ----------
   function setTool(t){ tool=t; document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('active', b.dataset.tool===t)); cv.style.cursor=(t==='match')?'copy':'crosshair'; }
-  document.querySelectorAll('.tool').forEach(b=> b.addEventListener('click', ()=> setTool(b.dataset.tool)) );
+  document.querySelectorAll('.tool').forEach(b=> b.addEventListener('click', ()=> setTool(b.dataset.tool)));
   function setPose(p){ pPose[cur]=p; document.querySelectorAll('.pose').forEach(b=>b.classList.toggle('active', b.dataset.pose===p)); }
-  document.querySelectorAll('.pose').forEach(b=> b.addEventListener('click', ()=>{ if (phase==='hide') setPose(b.dataset.pose); }) );
-  function refreshActive(){
-    document.getElementById('activeSw').style.background=activeColor;
-    document.getElementById('activeLab').textContent = matched?'matched!':'picked';
-    document.querySelectorAll('.swatch').forEach(s=> s.classList.toggle('sel', !matched && s.dataset.col===activeColor));
-  }
-  (function(){ const pal=document.getElementById('palette'); const aw=pal.querySelector('.active-wrap');
-    PALETTE.forEach(col=>{ const s=document.createElement('div'); s.className='swatch'; s.style.background=col; s.dataset.col=col;
-      s.addEventListener('click',()=>{ activeColor=col; matched=false; refreshActive(); }); pal.insertBefore(s,aw); }); })();
-
-  const brushDot = document.getElementById('brushDot');
-  function refreshBrush(){ const d=Math.max(4, brushR); brushDot.style.width=d+'px'; brushDot.style.height=d+'px'; brushDot.style.background=activeColor; }
+  document.querySelectorAll('.pose').forEach(b=> b.addEventListener('click', ()=>{ if(phase==='hide') setPose(b.dataset.pose); }));
+  function refreshActive(){ document.getElementById('activeSw').style.background=activeColor; document.getElementById('activeLab').textContent=matched?'matched!':'picked'; document.querySelectorAll('.swatch').forEach(s=> s.classList.toggle('sel', !matched && s.dataset.col===activeColor)); }
+  (function(){ const pal=document.getElementById('palette'); const aw=pal.querySelector('.active-wrap'); PALETTE.forEach(col=>{ const s=document.createElement('div'); s.className='swatch'; s.style.background=col; s.dataset.col=col; s.addEventListener('click',()=>{ activeColor=col; matched=false; refreshActive(); }); pal.insertBefore(s,aw); }); })();
+  const brushDot=document.getElementById('brushDot');
+  function refreshBrush(){ const d=Math.max(4,brushR); brushDot.style.width=d+'px'; brushDot.style.height=d+'px'; brushDot.style.background=activeColor; }
   document.getElementById('brush').addEventListener('input', e=>{ brushR=+e.target.value; refreshBrush(); });
 
-  // ---------- painting / moving ----------
-  function dab(px,py){ const g=pPaint[cur].getContext('2d'); g.globalCompositeOperation='source-over'; g.fillStyle=activeColor; g.beginPath(); g.arc(px,py,brushR,0,Math.PI*2); g.fill(); }
-  function strokeTo(a,b){ const dx=b.x-a.x, dy=b.y-a.y; const dist=Math.hypot(dx,dy); const step=Math.max(1,brushR*0.4); const n=Math.ceil(dist/step);
-    for (let i=0;i<=n;i++){ const t=n?i/n:0; dab(a.x+dx*t, a.y+dy*t); } }
+  // ---------- painting / input ----------
+  function dab(u,v){ const g=pPaint[cur].getContext('2d'); g.globalCompositeOperation='source-over'; g.fillStyle=activeColor; g.beginPath(); g.arc(u,v,brushR,0,7); g.fill(); }
+  function strokeTo(a,b){ const dx=b.x-a.x, dy=b.y-a.y; const dist=Math.hypot(dx,dy); const step=Math.max(1,brushR*0.4); const n=Math.ceil(dist/step); for(let i=0;i<=n;i++){ const t=n?i/n:0; dab(a.x+dx*t, a.y+dy*t); } }
   function fillBody(){ const g=pPaint[cur].getContext('2d'); g.globalCompositeOperation='source-over'; g.fillStyle=activeColor; g.fillRect(0,0,BW,BH); }
-
   function toLogical(e){ const r=cv.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H }; }
-  function toNative(p){ const R=rectOf(cur); return { x:(p.x-R.x)/R.s, y:(p.y-R.y)/R.s }; }
-  function applyDown(p){
-    if (tool==='match'){ activeColor=rgbStr(sampleBg(p.x,p.y)); matched=true; refreshActive(); refreshBrush(); return; }
-    if (tool==='fill'){ fillBody(); return; }
-    painting=true; const bp=toNative(p); dab(bp.x,bp.y); lastPt=bp;
-  }
-  cv.addEventListener('pointerdown', e=>{ e.preventDefault(); const p=toLogical(e);
-    if (phase==='hide'){ try { cv.setPointerCapture(e.pointerId); } catch(err){} applyDown(p); }
-    else if (phase==='seek'){ doFind(p); } });
-  cv.addEventListener('pointermove', e=>{ if (phase!=='hide') return;
-    if (painting && tool==='paint'){ const bp=toNative(toLogical(e)); strokeTo(lastPt,bp); lastPt=bp; } });
-  function stopPaint(){ painting=false; lastPt=null; }
-  cv.addEventListener('pointerup', stopPaint); cv.addEventListener('pointercancel', stopPaint);
+  function toNative(p){ const R=playerRect(); return { x:clamp((p.x-R.leftX)/R.spW*BW,0,BW), y:clamp((p.y-R.topY)/R.spH*BH,0,BH) }; }
+  function applyDown(p){ if(tool==='match'){ activeColor=rgbStr(sampleWall(p.x,p.y)); matched=true; refreshActive(); refreshBrush(); return; } if(tool==='fill'){ fillBody(); return; } painting=true; const bp=toNative(p); dab(bp.x,bp.y); lastPt=bp; }
+  cv.addEventListener('pointerdown', e=>{ e.preventDefault(); const p=toLogical(e); if(phase==='hide'){ try{cv.setPointerCapture(e.pointerId);}catch(err){} applyDown(p); } else if(phase==='seek'){ doFind(p); } });
+  cv.addEventListener('pointermove', e=>{ if(phase!=='hide'||!painting||tool!=='paint') return; const bp=toNative(toLogical(e)); strokeTo(lastPt,bp); lastPt=bp; });
+  function stopPaint(){ painting=false; lastPt=null; } cv.addEventListener('pointerup', stopPaint); cv.addEventListener('pointercancel', stopPaint);
 
-  function maskAlphaAt(mctx2,px,py){ if(px<0||py<0||px>=BW||py>=BH) return 0; return mctx2.getImageData(px,py,1,1).data[3]; }
-  function doFind(p){
-    // find the nearest not-yet-found person whose (scaled) silhouette is under the tap
-    for (let i=0;i<nPlayers;i++){ if (pFound[i]) continue;
-      const m=poseOf(i).mctx, R=rectOf(i); const px=(p.x-R.x)/R.s, py=(p.y-R.y)/R.s; const rr=10/R.s; let hit=false;
-      for (let a=0;a<9 && !hit;a++){ const ang=a/9*Math.PI*2, d=(a===0?0:rr); if (maskAlphaAt(m, Math.round(px+Math.cos(ang)*d), Math.round(py+Math.sin(ang)*d))>40) hit=true; }
-      if (hit){ pFound[i]=true; showHint('✅ '+names[i]+' found!');
-        if (pFound.every(Boolean)) setTimeout(()=>{ if (phase==='seek') { phase='done'; finishScores(); } }, 700);
-        return; }
-    }
-    showHint('Nobody there…');
+  // how face-on the hider's flat panel is to the seeker: 1 = seen from the hide angle (blends), ~0 = side-on (sticks out)
+  function foreOf(i){ const dx=pX[i]-cx2, dy=pY[i]-cy2; const d=Math.hypot(dx,dy)||0.001; const nx=-Math.cos(pDir[i]), ny=-Math.sin(pDir[i]); return clamp(Math.abs(dx/d*nx+dy/d*ny),0.14,1); }
+  function doFind(p){ let best=-1, bestY=1e9;
+    for(let i=0;i<nPlayers;i++){ if(pFound[i]) continue; const pr=projectSprite(pX[i],pY[i], POSE_SH[pPose[i]], Math.max(0.06,POSE_SH[pPose[i]]*0.72*foreOf(i))); if(!pr) continue;
+      if(p.x>=pr.leftX && p.x<=pr.leftX+pr.spW && p.y>=pr.topY && p.y<=pr.topY+pr.spH){ const col=clamp((p.x/W*RW)|0,0,RW-1); if(pr.tY<zbuf[col]+0.05 && pr.tY<bestY){ best=i; bestY=pr.tY; } } }
+    if(best>=0){ pFound[best]=true; showHint('✅ '+names[best]+' found!'); if(pFound.every(Boolean)) setTimeout(()=>{ if(phase==='seek'){ phase='done'; finishScores(); } }, 700); }
+    else showHint('Nobody there…');
   }
+  function projectSprite(wx,wy,sh,sw){ const pr=project(wx,wy); if(!pr) return null; const spH=pr.lineH*sh, spW=pr.lineH*sw; const bottomY=H/2+pr.lineH/2; return {screenX:pr.screenX, tY:pr.tY, leftX:pr.screenX-spW/2, topY:bottomY-spH, spW, spH}; }
+  // projection helper used by found-markers/labels (screen rect)
+  function projectRect(wx,wy,i){ return projectSprite(wx,wy, POSE_SH[pPose[i]], POSE_SH[pPose[i]]*0.72); }
 
-  // ---------- timer + render ----------
+  // ---------- timer + loop ----------
   function nowSec(){ return performance.now()/1000; }
-  function fmt(s){ s=Math.max(0,Math.ceil(s)); const m=Math.floor(s/60); const ss=s%60; return m+':'+(ss<10?'0':'')+ss; }
+  function fmt(s){ s=Math.max(0,Math.ceil(s)); const m=Math.floor(s/60), ss=s%60; return m+':'+(ss<10?'0':'')+ss; }
   function showHint(t){ const h=document.getElementById('hintpill'); h.textContent=t; h.hidden=false; }
+  function update(dt){ let mv=0,tn=0; if(moveDir.up)mv+=1; if(moveDir.down)mv-=1; if(moveDir.left)tn-=1; if(moveDir.right)tn+=1;
+    if(tn) dir+=tn*TURN*dt;
+    if(mv){ const nx=px+dirX*mv*MOVE*dt, ny=py+dirY*mv*MOVE*dt; if(mapAt(nx,py)===0) px=nx; if(mapAt(px,ny)===0) py=ny; }
+    updateCamera(); }
+  let last=0;
+  function frame(ts){ requestAnimationFrame(frame); if(!last) last=ts; let dt=(ts-last)/1000; last=ts; if(dt>0.05)dt=0.05;
+    if(phase==='hide'||phase==='seek'){ update(dt); render();
+      const left=endAt-nowSec(); const tEl=document.getElementById('timer'); tEl.textContent=fmt(left); tEl.classList.toggle('warn', left<=10);
+      if(left<=0){ if(phase==='hide') endHide(); else { phase='done'; finishScores(); } }
+    } else { ctx.fillStyle='#0a0e1c'; ctx.fillRect(0,0,W,H); }
+  }
+  // override projectSprite found-marker to use per-player pose (fix label rect)
+  // (render uses projectRect via project for markers)
 
-  function labelAbove(i, text, color){
-    const R = rectOf(i); const x = pfx[i], y = R.y-6;
-    ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign='center'; ctx.textBaseline='bottom';
-    const w = ctx.measureText(text).width + 14;
-    ctx.fillStyle='rgba(10,14,28,0.8)'; ctx.beginPath(); ctx.roundRect(x-w/2, y-18, w, 17, 8); ctx.fill();
-    ctx.fillStyle=color; ctx.fillText(text, x, y-3);
-  }
-  function drawPersonAt(i, ps){            // contact shadow + grey ghost + painted body, depth-scaled
-    const R = rectOf(i);
-    ctx.fillStyle='rgba(0,0,0,0.26)'; ctx.beginPath(); ctx.ellipse(pfx[i], pfy[i]-2, R.w*0.34, R.w*0.12, 0,0,Math.PI*2); ctx.fill();
-    ctx.globalAlpha=0.9; ctx.drawImage(ps.ghost, R.x, R.y, R.w, R.h); ctx.globalAlpha=1;
-    buildComp(pPaint[i], ps.mask); ctx.drawImage(comp, R.x, R.y, R.w, R.h);
-    return R;
-  }
-  function render(){
-    ctx.clearRect(0,0,W,H);
-    if (phase==='setup' || phase==='done' || phase==='handoff'){ ctx.drawImage(bg,0,0); requestAnimationFrame(render); return; }
-    ctx.drawImage(bg,0,0);
-    if (phase==='hide'){
-      // third-person walk on the floor (depth changes size)
-      const sp = WALK;
-      if (moveDir.up) pfy[cur]-=sp; if (moveDir.down) pfy[cur]+=sp;
-      if (moveDir.left) pfx[cur]-=sp; if (moveDir.right) pfx[cur]+=sp;
-      if (moveDir.up||moveDir.down||moveDir.left||moveDir.right) clampFoot(cur);
-      drawPersonAt(cur, poseOf(cur));
-    } else if (phase==='seek'){
-      const pulse = 0.5 + 0.5*Math.sin(performance.now()/150);
-      // draw in depth order (far first) so nearer people overlap correctly
-      const order = names.map((n,i)=>i).sort((a,b)=>pfy[a]-pfy[b]);
-      for (const i of order){
-        const ps = poseOf(i);
-        const R = drawPersonAt(i, ps);
-        if (pFound[i]){ ctx.save(); ctx.translate(R.x,R.y); ctx.scale(R.s,R.s); drawTinted(ps.outl, 0, 0, '#6fe26f', 0.5+0.45*pulse); ctx.restore(); labelAbove(i, names[i], '#6fe26f'); }
-      }
-    }
-    if (phase==='hide' || phase==='seek'){
-      const left = endAt - nowSec(); const tEl=document.getElementById('timer'); tEl.textContent=fmt(left); tEl.classList.toggle('warn', left<=10);
-      if (left<=0){ if (phase==='hide') endHide(); else { phase='done'; finishScores(); } }
-    }
-    requestAnimationFrame(render);
-  }
-  refreshBrush(); requestAnimationFrame(render);
-
-  // ---------- walking: arrow keys + on-screen d-pad ----------
-  const KEYDIR = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right',
-                   KeyW:'up', KeyS:'down', KeyA:'left', KeyD:'right' };
-  window.addEventListener('keydown', e=>{ const d=KEYDIR[e.code]; if (d && phase==='hide'){ moveDir[d]=true; e.preventDefault(); } });
-  window.addEventListener('keyup',   e=>{ const d=KEYDIR[e.code]; if (d){ moveDir[d]=false; } });
-  document.querySelectorAll('.dbtn').forEach(b=>{ const d=b.dataset.dir;
-    const on=e=>{ e.preventDefault(); moveDir[d]=true; }; const off=e=>{ e.preventDefault(); moveDir[d]=false; };
-    b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off); b.addEventListener('pointerleave',off); b.addEventListener('pointercancel',off);
-  });
+  // ---------- walking input (arrows / WASD / d-pad) ----------
+  const KEYDIR={ ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', KeyW:'up', KeyS:'down', KeyA:'left', KeyD:'right' };
+  window.addEventListener('keydown', e=>{ const d=KEYDIR[e.code]; if(d && (phase==='hide'||phase==='seek')){ moveDir[d]=true; e.preventDefault(); } });
+  window.addEventListener('keyup', e=>{ const d=KEYDIR[e.code]; if(d){ moveDir[d]=false; } });
+  document.querySelectorAll('.dbtn').forEach(b=>{ const d=b.dataset.dir; const on=e=>{ e.preventDefault(); moveDir[d]=true; }; const off=e=>{ e.preventDefault(); moveDir[d]=false; };
+    b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off); b.addEventListener('pointerleave',off); b.addEventListener('pointercancel',off); });
 
   // ---------- wiring ----------
   document.querySelectorAll('.count-btn').forEach(b=> b.addEventListener('click', ()=>{ nPlayers=+b.dataset.n; document.querySelectorAll('.count-btn').forEach(x=>x.classList.toggle('sel', x===b)); }));
   document.getElementById('startBtn').addEventListener('click', startGame);
-  document.getElementById('doneBtn').addEventListener('click', ()=>{ if (phase==='hide') endHide(); });
+  document.getElementById('doneBtn').addEventListener('click', ()=>{ if(phase==='hide') endHide(); });
   document.getElementById('rematchBtn').addEventListener('click', ()=>{ document.getElementById('finalOv').hidden=true; phase='setup'; document.getElementById('setupOv').hidden=false; });
+
+  resize(); refreshBrush(); requestAnimationFrame(frame);
 })();
 </script>
 </body>

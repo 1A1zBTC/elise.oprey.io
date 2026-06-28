@@ -304,9 +304,9 @@
             if (a.t < MAX_T) {
               const nt = a.t + 1;
               const nf = makeFruit(nt, mx, my);
-              // inherit a little momentum + a pop animation
-              nf.ox = mx - ((a.x - a.ox) + (b.x - b.ox)) / 2;
-              nf.oy = my - ((a.y - a.oy) + (b.y - b.oy)) / 2;
+              // stay in place: no inherited momentum (ox/oy == x/y → zero velocity),
+              // just a pop animation so the merge reads visually
+              nf.ox = mx; nf.oy = my;
               nf.pop = 0.18; nf.age = 0.71;
               fruits.push(nf);
               if (nt === MAX_T) {

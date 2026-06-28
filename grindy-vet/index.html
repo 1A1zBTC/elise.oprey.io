@@ -89,6 +89,32 @@
       color: #9a6713; font-size: 0.78rem; font-weight: 900;
     }
 
+    /* Skills bar (top), mirrors the shop bar. Sits just below the title topbar. */
+    .skillbar {
+      position: fixed;
+      top: 44px; left: 0; right: 0;
+      z-index: 9;
+      display: flex; gap: 10px;
+      padding: 6px 10px;
+      pointer-events: none;          /* let canvas drag through the gaps */
+    }
+    .skill-items { display: flex; gap: 10px; }
+    .skill-item {
+      pointer-events: auto;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 6px 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.12s ease, transform 0.1s ease;
+    }
+    .skill-item:hover { border-color: #2f6fd0; transform: translateY(-2px); }
+    .skill-item.disabled { opacity: 0.4; filter: grayscale(0.8); cursor: not-allowed; transform: none; border-color: #0f3460; }
+    .skill-item .nm { color: #fff; font-weight: 800; font-size: 0.72rem; }
+    .skill-item .vl { color: #7fe0a0; font-weight: 900; font-size: 0.95rem; margin-top: 1px; }
+    .skill-item .pr { color: #ffd86b; font-weight: 900; font-size: 0.74rem; margin-top: 1px; }
+
     /* Shop bar (bottom). */
     .shopbar {
       position: fixed;
@@ -127,7 +153,7 @@
     .shop-item:hover { border-color: #2f6fd0; transform: translateY(-2px); }
     .shop-item.selected { border-color: #4cc46a; box-shadow: 0 0 14px rgba(76,196,106,0.4); }
     .shop-item.disabled { opacity: 0.4; filter: grayscale(0.8); cursor: not-allowed; transform: none; border-color: #0f3460; }
-    .shop-item canvas { display: block; width: 84px; height: 56px; margin: 0 auto; }
+    .shop-item .ic { font-size: 2.1rem; line-height: 1; height: 42px; display: flex; align-items: center; justify-content: center; }
     .shop-item .nm { color: #fff; font-weight: 800; font-size: 0.72rem; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .shop-item .pr { color: #ffd86b; font-weight: 900; font-size: 0.78rem; margin-top: 1px; }
     body.placing { cursor: crosshair; }
@@ -141,11 +167,17 @@
     <span class="coin"><span class="disc">$</span><span id="moneyCount">0</span></span>
   </div>
 
+  <div class="skillbar" id="skillbar">
+    <div class="skill-items" id="skillItems"></div>
+  </div>
+
   <canvas id="game"></canvas>
 
   <div class="shopbar" id="shopbar">
     <div class="shop-tabs">
+      <button class="shop-tab" data-tab="rooms">Rooms</button>
       <button class="shop-tab active" data-tab="reception">Reception</button>
+      <button class="shop-tab" data-tab="staff">Staff</button>
     </div>
     <div class="shop-items" id="shopItems"></div>
   </div>
@@ -169,9 +201,10 @@
     var DOOR_H = WALL_H;                    // doors rise to full ceiling height (side walls are only cut low for visibility)
 
     // ---- Game state (small + extendable) ---------------------------------
+    var BASE_SPEED = 3.3;                   // player's base movement (Speed skill adds to it)
     var vet = {
       x: ROOM / 2 - 0.5, y: ROOM / 2 - 0.5,  // float grid position (tile units)
-      speed: 3.3, dir: 'SE', moving: false, walkPhase: 0
+      speed: BASE_SPEED, dir: 'SE', moving: false, walkPhase: 0
     };
     var input = { up: false, down: false, left: false, right: false };
     var touchInput = { active: false, dx: 0, dy: 0 };
@@ -186,13 +219,40 @@
     // grid waypoints; `wait` parks them at a spot inside the clinic.
     var frq = 30;                          // seconds between arrivals
     var wait = 50;                         // seconds a client waits before storming off
-    var spawnTimer = frq;                  // first one arrives after `frq` seconds
+    var spawnTimer = 0;                    // first visitor arrives immediately, then every `frq` seconds
     var visitors = [];
     var visitorSeq = 0;
-    var WAIT_SPOTS = [                      // inside-the-clinic spots to queue at
-      { x: 1.4, y: 5.4 }, { x: 1.4, y: 4.2 }, { x: 1.4, y: 3.0 },
-      { x: 2.6, y: 5.4 }, { x: 2.6, y: 4.2 }, { x: 2.6, y: 3.0 }
+    // Visitors queue in two lines in front of the reception desk (one per desk
+    // tile). queue[0] / queue[1] are ordered arrays of visitors; index 0 = front.
+    var queue = [[], []];
+    // "Front" (customer-facing) grid direction for each rotation 0/90/180/270°.
+    var FRONT = [{ x: 0, y: 1 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: -1, y: 0 }];
+
+    // Vet skills (top bar). Both start at 1.0 and upgrade +0.5 at a time; the
+    // price starts at 10 coins and doubles per purchase, per skill.
+    //  - Processing: multiplier on desk/task speed. Reception takes 0.5s ×
+    //    (10 / processing) per client → 5s at 1.0, 2.5s at 2.0, …
+    //  - Speed: additive to the vet's movement (BASE_SPEED + (speed - 1.0)).
+    var skills = {
+      speed:      { val: 1.0, cost: 10 },
+      processing: { val: 1.0, cost: 10 }
+    };
+    function procTime() { return 0.5 * (10 / skills.processing.val); }
+    var floaters = [];                     // floating "+10" coin pop-ups
+    // After being served, clients step aside to one of these spots and wait.
+    var SIDE_SPOTS = [
+      { x: 6, y: 5 }, { x: 6, y: 6 }, { x: 5, y: 6 },
+      { x: 6, y: 4 }, { x: 5, y: 5 }, { x: 6, y: 3 }
     ];
+    function sideSpot() {
+      for (var i = 0; i < SIDE_SPOTS.length; i++) {
+        var s = SIDE_SPOTS[i];
+        if (occupied[s.x + ',' + s.y]) continue;
+        if (visitors.some(function (v) { return v.sideIdx === i; })) continue;
+        return { idx: i, x: s.x, y: s.y };
+      }
+      return { idx: -1, x: SIDE_SPOTS[0].x, y: SIDE_SPOTS[0].y };
+    }
     // Visitor look-up tables (cycled by arrival order).
     var V_SHIRT = ['#e0683c', '#d94f6e', '#5a8fd6', '#e0a93c', '#7d5bbe', '#3aa686'];
     var V_LEGS  = ['#3a4760', '#42506a', '#5a4636', '#384a44'];
@@ -200,6 +260,78 @@
     var V_HAIR  = ['#3a2c22', '#6b4a32', '#241a14', '#8a6a3a', '#2b2b33'];
     var PETS    = ['dog-s', 'dog-m', 'dog-l', 'cat'];      // arrival cycle
     var CARRIER = ['#e0683c', '#3d8fd0', '#7d5bbe', '#3bb1a2', '#e0a93c', '#d94f6e'];
+
+    // ---- Economy + build / placement -------------------------------------
+    var money = 150;                       // player's cash
+    var placed = [];                       // [{id, gx, gy}] furniture in the room
+    var occupied = {};                     // "gx,gy" -> true (a placed footprint tile)
+    var staff = [];                        // [{type:'receptionist', line}] hired staff at desk circles
+    var placing = null;                    // { item } while positioning a purchase
+    var pointer = { gx: 0, gy: 0, on: false }; // snapped tile under the cursor
+
+    // ---- Rooms / corridors -----------------------------------------------
+    // The clinic is the fixed ROOM×ROOM grid. The player can also buy
+    // "corridors": lines of grass squares (outside the clinic) turned into
+    // floor, walled in, and joined to whatever room they touch via a doorway.
+    // Stored as a set of "gx,gy" keys lying outside the clinic bounds.
+    var corridor = {};                     // "gx,gy" -> true (a built corridor tile)
+    var corridorDrag = null;               // { sx, sy } while dragging out a line
+
+    function isClinic(x, y) { return x >= 0 && y >= 0 && x < ROOM && y < ROOM; }
+    function isCorridor(x, y) { return !!corridor[x + ',' + y]; }
+    function isRoomFloor(x, y) { return isClinic(x, y) || isCorridor(x, y); }
+    // The non-grass surfaces out front (entrance path + sidewalk/road band).
+    function onPath(x, y) { return (x === 3 || x === 4) && y >= ROOM && y <= ROOM + 4; }
+    function onRoadZone(x, y) { return y >= ROOM + 5 && y <= ROOM + 10; }
+    // A square you may turn into corridor: plain grass, nothing already on it.
+    function isGrassBuildable(x, y) {
+      return !isRoomFloor(x, y) && !onPath(x, y) && !onRoadZone(x, y) && !occupied[x + ',' + y];
+    }
+    function adjacentToRoom(x, y) {
+      return isRoomFloor(x - 1, y) || isRoomFloor(x + 1, y) ||
+             isRoomFloor(x, y - 1) || isRoomFloor(x, y + 1);
+    }
+    // Validate a click-drag into a straight, contiguous line of buildable grass.
+    // The line follows whichever axis the drag favours; the start tile must touch
+    // an existing room, and the run stops at the first non-grass tile or once the
+    // wallet (at $10/square) runs out. Returns { tiles, cost }.
+    function corridorLineTiles(sx, sy, ex, ey) {
+      if (!isGrassBuildable(sx, sy) || !adjacentToRoom(sx, sy)) return { tiles: [], cost: 0 };
+      var dx = ex - sx, dy = ey - sy, stepx = 0, stepy = 0, n;
+      if (Math.abs(dx) >= Math.abs(dy)) { stepx = dx > 0 ? 1 : dx < 0 ? -1 : 0; n = Math.abs(dx); }
+      else { stepy = dy > 0 ? 1 : dy < 0 ? -1 : 0; n = Math.abs(dy); }
+      var budget = Math.floor(money / 10), tiles = [], cx = sx, cy = sy;
+      for (var i = 0; i <= n; i++) {
+        if (!isGrassBuildable(cx, cy)) break;
+        if (tiles.length >= budget) break;     // can't afford another square
+        tiles.push({ x: cx, y: cy });
+        if (stepx === 0 && stepy === 0) break;  // single square
+        cx += stepx; cy += stepy;
+      }
+      return { tiles: tiles, cost: tiles.length * 10 };
+    }
+    function commitCorridor(sx, sy, ex, ey) {
+      var res = corridorLineTiles(sx, sy, ex, ey);
+      if (!res.tiles.length) return;
+      res.tiles.forEach(function (t) { corridor[t.x + ',' + t.y] = true; });
+      money -= res.cost;
+      renderStatic();                        // walls / floor / doorways changed
+      renderMoney();
+    }
+
+    // Catalog: the single source for the shop rows AND placement. `cat` picks the
+    // shop tab; `kind:'staff'` items snap to a desk action-circle instead of a tile.
+    // (drawChair/drawDesk are function declarations, hoisted, so usable here.)
+    var FURNITURE = [
+      { id: 'chair', name: 'Chair',          cost: 20,  w: 1, h: 1, icon: '🪑', cat: 'reception', draw: drawChair, interact: chairInteractTiles },
+      { id: 'desk',  name: 'Reception Desk', cost: 100, w: 2, h: 1, icon: '🛎️', cat: 'reception', draw: drawDesk, interact: deskInteractTiles },
+      { id: 'tv',    name: 'TV',             cost: 150, w: 1, h: 1, icon: '📺', cat: 'reception', draw: drawTV },
+      { id: 'receptionist', name: 'Receptionist', cost: 500, w: 1, h: 1, icon: '🧑‍💼', cat: 'staff', kind: 'staff' },
+      { id: 'corridor', name: 'Corridor', cost: 10, icon: '🚪', cat: 'rooms', kind: 'corridor', perSquare: true }
+    ].sort(function (a, b) { return a.cost - b.cost; });
+    var FURN_BY_ID = {};
+    FURNITURE.forEach(function (f) { FURN_BY_ID[f.id] = f; });
+    var activeTab = 'reception';            // current shop tab
 
     // ---- Canvas + offscreen layers ---------------------------------------
     // Everything static (grass, path, floor, back walls) is cached in `bg`;
@@ -209,13 +341,14 @@
     var camera = { x: 0, y: 0 };
     var bg = document.createElement('canvas'), bgx = bg.getContext('2d');
     var fg = document.createElement('canvas'), fgx = fg.getContext('2d');
+    var ghostC = document.createElement('canvas'), ghostCtx = ghostC.getContext('2d'); // for tinting the placement preview
 
     function resize() {
       var rect = canvas.getBoundingClientRect();
       var dpr = Math.min(window.devicePixelRatio || 1, 2);
       view.w = rect.width; view.h = rect.height; view.dpr = dpr;
-      canvas.width = bg.width = fg.width = Math.round(rect.width * dpr);
-      canvas.height = bg.height = fg.height = Math.round(rect.height * dpr);
+      canvas.width = bg.width = fg.width = ghostC.width = Math.round(rect.width * dpr);
+      canvas.height = bg.height = fg.height = ghostC.height = Math.round(rect.height * dpr);
       // Centre the room; nudge up so the front path has room below.
       var c = isoRaw(ROOM / 2 - 0.5, ROOM / 2 - 0.5);
       camera.x = view.w / 2 - c.x;
@@ -251,26 +384,92 @@
       c.closePath();
     }
 
+    // Scatter `n` tiny flecks inside the current tile (caller has already clipped
+    // to the diamond). `pick(t)` returns a fill colour from a 0..1 sample.
+    function fleck(c, s, gx, gy, n, spread, sz, pick) {
+      for (var i = 0; i < n; i++) {
+        var fx = hash(gx * 13 + i * 7 + 5, gy * 17 - i * 5 + 2);
+        var fy = hash(gx * 5 - i * 11 + 9, gy * 23 + i * 3 + 1);
+        c.fillStyle = pick(hash(i * 3 + gx, i * 9 + gy));
+        c.fillRect(s.x + (fx - 0.5) * TILE_W * spread, s.y + (fy - 0.5) * TILE_H * spread, sz, sz);
+      }
+    }
+
     var GRASS = ['#7cc15f', '#74ba56', '#82c766', '#6fb551'];
+    var GRASS_FLECK = ['rgba(122,184,94,0.55)', 'rgba(96,160,74,0.5)', 'rgba(62,118,52,0.42)'];
+
+    // Bevelled rim inside a diamond tile: light along the two upper edges, shadow
+    // along the two lower edges — makes slabs/tiles read as raised blocks.
+    function bevel(c, s, inset, light, dark) {
+      var hw = TILE_HW - inset, hh = TILE_HH - inset;
+      c.lineWidth = 1.2;
+      c.strokeStyle = light;
+      c.beginPath(); c.moveTo(s.x - hw, s.y); c.lineTo(s.x, s.y - hh); c.lineTo(s.x + hw, s.y); c.stroke();
+      c.strokeStyle = dark;
+      c.beginPath(); c.moveTo(s.x - hw, s.y); c.lineTo(s.x, s.y + hh); c.lineTo(s.x + hw, s.y); c.stroke();
+    }
+    // Occasional hairline crack scribbled across a tile (only ~22% of tiles).
+    function crack(c, s, gx, gy, seed, col) {
+      if (hash(gx * 31 + seed, gy * 17 + seed) < 0.78) return;
+      var x = s.x + (hash(gx + seed, gy) - 0.5) * TILE_W * 0.4;
+      var y = s.y + (hash(gx, gy + seed) - 0.5) * TILE_H * 0.4;
+      c.strokeStyle = col; c.lineWidth = 0.8;
+      c.beginPath(); c.moveTo(x, y);
+      for (var k = 1; k <= 3; k++) {
+        x += (hash(gx * 7 + k + seed, gy * 5 - k) - 0.5) * 11;
+        y += (hash(gx - k, gy + k + seed) - 0.5) * 5.5;
+        c.lineTo(x, y);
+      }
+      c.stroke();
+    }
+
     function grassTile(c, gx, gy) {
       var s = iso(gx, gy), h = hash(gx, gy);
+      // griddy base: each cell keeps one flat turf colour
       diamondPath(c, s.x, s.y);
       c.fillStyle = GRASS[(h * GRASS.length) | 0];
       c.fill();
-      // a few darker blades for texture on ~30% of tiles
-      if (h > 0.7) {
-        c.strokeStyle = 'rgba(60,120,50,0.55)';
-        c.lineWidth = 1.4;
-        for (var i = 0; i < 3; i++) {
-          var hx = hash(gx * 7 + i, gy * 13 - i);
-          var bx = s.x + (hx - 0.5) * TILE_W * 0.5;
-          var by = s.y + (hash(gx - i, gy + i) - 0.5) * TILE_H * 0.5;
-          c.beginPath();
-          c.moveTo(bx, by);
-          c.lineTo(bx + (hx - 0.5) * 4, by - 5);
-          c.stroke();
-        }
+      c.save();
+      diamondPath(c, s.x, s.y); c.clip();
+      // coarse patch mottling (spans several cells) for a natural lawn
+      var ph = hash((gx >> 1) + 200, (gy >> 1) + 200);
+      if (ph > 0.62) { c.fillStyle = 'rgba(156,204,116,0.16)'; c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H); }
+      else if (ph < 0.36) { c.fillStyle = 'rgba(46,96,46,0.14)'; c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H); }
+      // mottled flecks so the cell reads as turf rather than flat colour
+      fleck(c, s, gx, gy, 9, 0.86, 1.6, function (t) { return GRASS_FLECK[(t * GRASS_FLECK.length) | 0]; });
+      // scattered blades (a couple of shades, varied height), denser on rougher cells
+      var blades = 4 + ((h * 4) | 0);
+      for (var b = 0; b < blades; b++) {
+        var bxh = hash(gx * 7 + b, gy * 13 - b);
+        var byh = hash(gx - b * 3, gy + b * 5);
+        var bx = s.x + (bxh - 0.5) * TILE_W * 0.7;
+        var by = s.y + (byh - 0.5) * TILE_H * 0.7;
+        c.strokeStyle = bxh > 0.5 ? 'rgba(58,112,48,0.5)' : 'rgba(150,196,108,0.55)';
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(bx, by);
+        c.lineTo(bx + (bxh - 0.5) * 3, by - 4 - bxh * 4);
+        c.stroke();
       }
+      // rare daisy cluster or a pebble for landscaping detail
+      if (hash(gx * 3 + 1, gy * 3 + 2) > 0.9) {
+        var dx = s.x + (hash(gx + 4, gy) - 0.5) * TILE_W * 0.4;
+        var dy = s.y + (hash(gx, gy + 4) - 0.5) * TILE_H * 0.4;
+        c.fillStyle = '#f6f8ee';
+        for (var p = 0; p < 5; p++) {
+          var ang = p / 5 * Math.PI * 2;
+          c.beginPath(); c.arc(dx + Math.cos(ang) * 2, dy + Math.sin(ang) * 1.4, 1.1, 0, Math.PI * 2); c.fill();
+        }
+        c.fillStyle = '#f2c84b'; c.beginPath(); c.arc(dx, dy, 1.2, 0, Math.PI * 2); c.fill();
+      } else if (hash(gx * 5 + 7, gy * 5 + 3) > 0.92) {
+        var qx = s.x + (hash(gx + 2, gy + 6) - 0.5) * TILE_W * 0.4;
+        var qy = s.y + (hash(gx + 6, gy + 2) - 0.5) * TILE_H * 0.4;
+        c.fillStyle = 'rgba(118,118,114,0.7)';
+        c.beginPath(); c.ellipse(qx, qy, 2.4, 1.6, 0, 0, Math.PI * 2); c.fill();
+        c.fillStyle = 'rgba(172,172,166,0.6)';
+        c.beginPath(); c.ellipse(qx - 0.5, qy - 0.5, 1.1, 0.7, 0, 0, Math.PI * 2); c.fill();
+      }
+      c.restore();
     }
 
     function pathTile(c, gx, gy) {
@@ -278,9 +477,19 @@
       diamondPath(c, s.x, s.y);
       c.fillStyle = h > 0.5 ? '#d9cfb8' : '#d0c5ac';
       c.fill();
-      c.strokeStyle = 'rgba(150,138,110,0.45)';
+      c.save();
+      diamondPath(c, s.x, s.y); c.clip();
+      // concrete aggregate: light + dark grit specks, plus the odd crack
+      fleck(c, s, gx, gy, 11, 0.9, 1.5, function (t) {
+        return t > 0.5 ? 'rgba(120,108,84,0.35)' : 'rgba(247,242,230,0.45)';
+      });
+      crack(c, s, gx, gy, 13, 'rgba(110,98,76,0.4)');
+      c.restore();
+      // bevelled paver edge + joint groove
+      bevel(c, s, 1.5, 'rgba(255,250,235,0.5)', 'rgba(120,108,84,0.4)');
+      c.strokeStyle = 'rgba(150,138,110,0.5)';
       c.lineWidth = 1;
-      c.stroke();
+      diamondPath(c, s.x, s.y); c.stroke();
     }
 
     function roadTile(c, gx, gy) {
@@ -288,6 +497,22 @@
       diamondPath(c, s.x, s.y);
       c.fillStyle = h > 0.5 ? '#5c636c' : '#565d66';
       c.fill();
+      c.save();
+      diamondPath(c, s.x, s.y); c.clip();
+      // asphalt grit: bright + dark aggregate flecks
+      fleck(c, s, gx, gy, 14, 0.94, 1.6, function (t) {
+        return t > 0.62 ? 'rgba(152,158,166,0.32)' : t < 0.32 ? 'rgba(28,32,38,0.42)' : 'rgba(110,116,124,0.24)';
+      });
+      // occasional oil stain blotch
+      if (hash(gx * 9 + 2, gy * 11 + 5) > 0.86) {
+        var ox = s.x + (hash(gx + 3, gy) - 0.5) * TILE_W * 0.4;
+        var oy = s.y + (hash(gx, gy + 3) - 0.5) * TILE_H * 0.4;
+        var og = c.createRadialGradient(ox, oy, 1, ox, oy, 11);
+        og.addColorStop(0, 'rgba(20,22,28,0.4)'); og.addColorStop(1, 'rgba(20,22,28,0)');
+        c.fillStyle = og; c.fillRect(ox - 12, oy - 12, 24, 24);
+      }
+      crack(c, s, gx, gy, 21, 'rgba(20,22,26,0.45)');
+      c.restore();
     }
 
     function sidewalkTile(c, gx, gy) {
@@ -295,7 +520,18 @@
       diamondPath(c, s.x, s.y);
       c.fillStyle = h > 0.5 ? '#c4c8cd' : '#bcc0c6';
       c.fill();
-      c.strokeStyle = 'rgba(140,144,150,0.5)'; c.lineWidth = 1; c.stroke();
+      c.save();
+      diamondPath(c, s.x, s.y); c.clip();
+      // fine concrete speckle + the odd hairline crack
+      fleck(c, s, gx, gy, 10, 0.9, 1.4, function (t) {
+        return t > 0.5 ? 'rgba(150,154,160,0.3)' : 'rgba(228,231,235,0.42)';
+      });
+      crack(c, s, gx, gy, 17, 'rgba(120,124,130,0.4)');
+      c.restore();
+      // bevelled slab + expansion joint
+      bevel(c, s, 1.5, 'rgba(236,239,243,0.55)', 'rgba(150,154,160,0.45)');
+      c.strokeStyle = 'rgba(140,144,150,0.55)'; c.lineWidth = 1;
+      diamondPath(c, s.x, s.y); c.stroke();
     }
 
     function floorTile(c, gx, gy) {
@@ -305,12 +541,30 @@
       diamondPath(c, s.x, s.y);
       c.fillStyle = light ? '#eaf3f6' : '#dde9ee';
       c.fill();
-      // faint per-tile shade variance for subtle texture
+      c.save();
+      diamondPath(c, s.x, s.y); c.clip();
+      // faint per-tile shade variance
       c.fillStyle = 'rgba(120,150,170,' + (0.03 + h * 0.05).toFixed(3) + ')';
-      c.fill();
-      c.strokeStyle = 'rgba(150,180,196,0.5)';
+      c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
+      // glossy vinyl sheen sweeping down from the top corner
+      var hg = c.createLinearGradient(s.x, s.y - TILE_HH, s.x, s.y + TILE_HH);
+      hg.addColorStop(0, 'rgba(255,255,255,0.30)');
+      hg.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = hg;
+      c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
+      // a few mineral specks + the occasional scuff mark
+      fleck(c, s, gx, gy, 5, 0.7, 1.2, function () { return 'rgba(150,180,196,0.22)'; });
+      if (hash(gx * 7 + 5, gy * 7 + 9) > 0.9) {
+        c.strokeStyle = 'rgba(120,140,155,0.25)'; c.lineWidth = 1.4;
+        c.beginPath(); c.arc(s.x + (h - 0.5) * 14, s.y + (h - 0.4) * 7, 4, 0.2, 2.2); c.stroke();
+      }
+      c.restore();
+      // bevelled polished tile + grout
+      bevel(c, s, 1, 'rgba(255,255,255,0.32)', 'rgba(150,180,196,0.35)');
+      c.strokeStyle = 'rgba(150,180,196,0.55)';
       c.lineWidth = 1;
-      c.stroke();
+      diamondPath(c, s.x, s.y); c.stroke();
     }
 
     // Vertical wall face rising height `H` from base segment a→b.
@@ -327,6 +581,41 @@
       c.closePath();
       c.fillStyle = grad;
       c.fill();
+      // subtle wall texture (clipped to the face): vertical panel seams, a
+      // chair-rail moulding line, and faint vertical streaks for a painted look.
+      c.save();
+      c.beginPath();
+      c.moveTo(a.x, a.y - H); c.lineTo(b.x, b.y - H);
+      c.lineTo(b.x, b.y); c.lineTo(a.x, a.y); c.closePath();
+      c.clip();
+      var dlen = Math.hypot(b.x - a.x, b.y - a.y);
+      var ry = H * 0.42;   // chair-rail height = top of the lower wainscot
+      // lower wainscot: a faintly cooler tiled band from baseboard up to the rail
+      c.fillStyle = 'rgba(214,228,236,0.32)';
+      c.beginPath();
+      c.moveTo(a.x, a.y - ry); c.lineTo(b.x, b.y - ry);
+      c.lineTo(b.x, b.y); c.lineTo(a.x, a.y); c.closePath(); c.fill();
+      var segs = Math.max(2, Math.round(dlen / (TILE_W * 0.5)));   // ~one seam per ½ tile
+      for (var wi = 1; wi < segs; wi++) {
+        var wt = wi / segs;
+        var lx = a.x + (b.x - a.x) * wt, ly = a.y + (b.y - a.y) * wt;
+        c.strokeStyle = 'rgba(120,150,165,0.12)'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(lx, ly - H); c.lineTo(lx, ly); c.stroke();
+        c.strokeStyle = 'rgba(255,255,255,0.10)';
+        c.beginPath(); c.moveTo(lx + 1, ly - H); c.lineTo(lx + 1, ly); c.stroke();
+      }
+      // horizontal grout lines through the wainscot to complete the tile grid
+      [0.34, 0.67].forEach(function (gf) {
+        var gyy = ry * gf;
+        c.strokeStyle = 'rgba(120,150,165,0.12)'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(a.x, a.y - gyy); c.lineTo(b.x, b.y - gyy); c.stroke();
+      });
+      // chair-rail moulding at the top of the wainscot (shadow + highlight)
+      c.strokeStyle = 'rgba(92,122,138,0.2)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(a.x, a.y - ry); c.lineTo(b.x, b.y - ry); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(a.x, a.y - ry + 2); c.lineTo(b.x, b.y - ry + 2); c.stroke();
+      c.restore();
       // coloured baseboard trim along the bottom
       if (trimCol) {
         c.beginPath();
@@ -355,6 +644,45 @@
       c.moveTo(a.x, a.y - hTop); c.lineTo(b.x, b.y - hTop);
       c.lineTo(b.x, b.y - hBot); c.lineTo(a.x, a.y - hBot); c.closePath();
       c.fillStyle = fill; c.fill();
+    }
+
+    // A filled band on ANY wall edge a→b (grid corner coords), between
+    // screen-heights hBot..hTop above the floor line. (wallQuad, but generic.)
+    function edgeQuad(c, ax, ay, bx, by, hTop, hBot, fill) {
+      var a = iso(ax, ay), b = iso(bx, by);
+      c.beginPath();
+      c.moveTo(a.x, a.y - hTop); c.lineTo(b.x, b.y - hTop);
+      c.lineTo(b.x, b.y - hBot); c.lineTo(a.x, a.y - hBot); c.closePath();
+      c.fillStyle = fill; c.fill();
+    }
+    // A doorway opening on a wall edge a→b at height H: two jambs + a lintel,
+    // leaving the middle clear so the connected floor shows through.
+    function drawDoorOpening(c, ax, ay, bx, by, H) {
+      var frame = '#d6dfe4', jw = 0.18;
+      var lx = ax + (bx - ax) * jw, ly = ay + (by - ay) * jw;       // inner edge of left jamb
+      var rx = ax + (bx - ax) * (1 - jw), ry = ay + (by - ay) * (1 - jw); // inner edge of right jamb
+      edgeQuad(c, ax, ay, lx, ly, H, 0, frame);                    // left jamb
+      edgeQuad(c, rx, ry, bx, by, H, 0, frame);                    // right jamb
+      edgeQuad(c, ax, ay, bx, by, H, H - 9, frame);                // lintel
+      edgeQuad(c, ax, ay, bx, by, H - 9, H - 11, '#37b3a3');       // teal accent stripe
+    }
+    // Walls around every bought corridor square: an edge gets a wall wherever it
+    // borders something that is NOT room floor. Back-facing edges (toward −gx/−gy)
+    // are tall and cached behind the actors (bgx); front-facing edges (+gx/+gy)
+    // are short and cached in front (fgx) — matching the clinic's own walls.
+    function corridorWalls() {
+      for (var key in corridor) {
+        if (!corridor.hasOwnProperty(key)) continue;
+        var p = key.split(','), x = +p[0], y = +p[1];
+        if (!isRoomFloor(x - 1, y)) // back-left, tall
+          wallFace(bgx, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+        if (!isRoomFloor(x, y - 1)) // back-right, tall
+          wallFace(bgx, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+        if (!isRoomFloor(x + 1, y)) // front-right, short
+          wallFace(fgx, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
+        if (!isRoomFloor(x, y + 1)) // front-left, short
+          wallFace(fgx, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
+      }
     }
 
     // Static frame (jambs + lintel + sign) around the sliding doors.
@@ -441,6 +769,12 @@
         roadTile(bgx, rgx, laneN0); roadTile(bgx, rgx, laneN1);
         roadTile(bgx, rgx, laneF0); roadTile(bgx, rgx, laneF1);
       }
+      // faint tyre-wear strips running along each lane (under the road markings)
+      bgx.strokeStyle = 'rgba(28,32,38,0.16)'; bgx.lineWidth = 5;
+      [laneN0 + 0.3, laneN1 - 0.3, laneF0 + 0.3, laneF1 - 0.3].forEach(function (ty) {
+        var t1 = iso(minGx - 0.5, ty), t2 = iso(maxGx + 0.5, ty);
+        bgx.beginPath(); bgx.moveTo(t1.x, t1.y); bgx.lineTo(t2.x, t2.y); bgx.stroke();
+      });
       // light curb line along each sidewalk/lane boundary
       bgx.strokeStyle = 'rgba(232,234,237,0.6)'; bgx.lineWidth = 2;
       [swNear + 0.5, swFar - 0.5].forEach(function (cy) {
@@ -463,10 +797,14 @@
         bgx.strokeStyle = 'rgba(120,50,45,0.55)'; bgx.lineWidth = 1; bgx.stroke();
       });
 
-      // 3) clinic floor
+      // 3) clinic floor (+ any bought corridor squares)
       for (var fy = 0; fy < ROOM; fy++)
         for (var fx = 0; fx < ROOM; fx++)
           floorTile(bgx, fx, fy);
+      for (var ckey in corridor) {
+        if (!corridor.hasOwnProperty(ckey)) continue;
+        var cc = ckey.split(','); floorTile(bgx, +cc[0], +cc[1]);
+      }
       // soft warm light pool, clipped to the floor diamond
       (function () {
         var ctr = iso(ROOM / 2 - 0.5, ROOM / 2 - 0.5);
@@ -483,21 +821,81 @@
         bgx.restore();
       })();
 
-      // 4) tall back walls (behind the vet) → bg
+      // 4) tall back walls (behind the vet) → bg. Segmented per tile so a corridor
+      //    joining on that side punches a doorway instead of a solid wall.
       // back-left along gx = -0.5 (lit)
-      wallFace(bgx, -0.5, -0.5, -0.5, ROOM - 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+      for (var bgy = 0; bgy < ROOM; bgy++) {
+        if (isCorridor(-1, bgy)) drawDoorOpening(bgx, -0.5, bgy - 0.5, -0.5, bgy + 0.5, WALL_H);
+        else wallFace(bgx, -0.5, bgy - 0.5, -0.5, bgy + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+      }
       // back-right along gy = -0.5 (shaded)
-      wallFace(bgx, -0.5, -0.5, ROOM - 0.5, -0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+      for (var bgx2 = 0; bgx2 < ROOM; bgx2++) {
+        if (isCorridor(bgx2, -1)) drawDoorOpening(bgx, bgx2 - 0.5, -0.5, bgx2 + 0.5, -0.5, WALL_H);
+        else wallFace(bgx, bgx2 - 0.5, -0.5, bgx2 + 0.5, -0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+      }
+
+      // ---- decorations billboarded onto the tall back-wall planes ----------
+      (function () {
+        // rect on the back-right wall plane (gy = -0.5), centred at gx = cx
+        function rRB(cx, dw, hLo, hHi, fill, stroke, lw) {
+          var p0 = iso(cx - dw, -0.5), p1 = iso(cx + dw, -0.5);
+          bgx.beginPath();
+          bgx.moveTo(p0.x, p0.y - hHi); bgx.lineTo(p1.x, p1.y - hHi);
+          bgx.lineTo(p1.x, p1.y - hLo); bgx.lineTo(p0.x, p0.y - hLo); bgx.closePath();
+          if (fill) { bgx.fillStyle = fill; bgx.fill(); }
+          if (stroke) { bgx.strokeStyle = stroke; bgx.lineWidth = lw || 2; bgx.stroke(); }
+        }
+        // rect on the back-left wall plane (gx = -0.5), centred at gy = cy
+        function rLB(cy, dw, hLo, hHi, fill, stroke, lw) {
+          var p0 = iso(-0.5, cy - dw), p1 = iso(-0.5, cy + dw);
+          bgx.beginPath();
+          bgx.moveTo(p0.x, p0.y - hHi); bgx.lineTo(p1.x, p1.y - hHi);
+          bgx.lineTo(p1.x, p1.y - hLo); bgx.lineTo(p0.x, p0.y - hLo); bgx.closePath();
+          if (fill) { bgx.fillStyle = fill; bgx.fill(); }
+          if (stroke) { bgx.strokeStyle = stroke; bgx.lineWidth = lw || 2; bgx.stroke(); }
+        }
+
+        // back-left wall: a window with sky, glazing bars and a sill
+        rLB(2.5, 0.95, 30, 52, '#cfe8f5', '#9fb4c0', 3);
+        var wm = iso(-0.5, 2.5);
+        bgx.strokeStyle = 'rgba(255,255,255,0.75)'; bgx.lineWidth = 2;
+        bgx.beginPath(); bgx.moveTo(wm.x, wm.y - 52); bgx.lineTo(wm.x, wm.y - 30); bgx.stroke();
+        var wl = iso(-0.5, 2.5 - 0.95), wr = iso(-0.5, 2.5 + 0.95);
+        bgx.beginPath(); bgx.moveTo(wl.x, wl.y - 41); bgx.lineTo(wr.x, wr.y - 41); bgx.stroke();
+        rLB(2.5, 1.05, 28, 30, '#eef4f7', null);             // sill
+        // back-left wall: a framed certificate
+        rLB(5.2, 0.5, 35, 49, '#f3ead2', '#9a7b46', 3);
+
+        // back-right wall: a round wall clock
+        var cl = iso(2.0, -0.5), clY = cl.y - 45;
+        bgx.fillStyle = '#f7fbfc'; bgx.beginPath(); bgx.arc(cl.x, clY, 8, 0, Math.PI * 2); bgx.fill();
+        bgx.strokeStyle = '#5a6b76'; bgx.lineWidth = 2; bgx.stroke();
+        bgx.strokeStyle = '#2a3640'; bgx.lineWidth = 1.5; bgx.lineCap = 'round';
+        bgx.beginPath(); bgx.moveTo(cl.x, clY); bgx.lineTo(cl.x, clY - 5); bgx.stroke();
+        bgx.beginPath(); bgx.moveTo(cl.x, clY); bgx.lineTo(cl.x + 4, clY + 1); bgx.stroke();
+        bgx.lineCap = 'butt';
+        // back-right wall: a framed poster with a vet cross
+        rRB(4.7, 0.95, 30, 52, '#ffffff', '#37b3a3', 3);
+        var pc = iso(4.7, -0.5), pcY = pc.y - 41;
+        bgx.fillStyle = '#e0563f';
+        bgx.fillRect(pc.x - 2.5, pcY - 7, 5, 14);
+        bgx.fillRect(pc.x - 7, pcY - 2.5, 14, 5);
+      })();
 
       // 5) short front walls (occlude the vet) → fg
-      // front-right along gx = ROOM-0.5
-      wallFace(fgx, ROOM - 0.5, -0.5, ROOM - 0.5, ROOM - 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
-      // front-left along gy = ROOM-0.5, segmented to leave the doorway (tiles 3 & 4)
+      // front-right along gx = ROOM-0.5 (segmented for corridor doorways)
+      for (var fgy = 0; fgy < ROOM; fgy++) {
+        if (isCorridor(ROOM, fgy)) drawDoorOpening(fgx, ROOM - 0.5, fgy - 0.5, ROOM - 0.5, fgy + 0.5, FRONT_WALL_H);
+        else wallFace(fgx, ROOM - 0.5, fgy - 0.5, ROOM - 0.5, fgy + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
+      }
+      // front-left along gy = ROOM-0.5, segmented to leave the entrance (tiles 3 & 4)
       for (var dx = 0; dx < ROOM; dx++) {
-        if (dx === 3 || dx === 4) continue;   // doorway opening
+        if (dx === 3 || dx === 4) continue;   // main entrance opening
+        if (isCorridor(dx, ROOM)) { drawDoorOpening(fgx, dx - 0.5, ROOM - 0.5, dx + 0.5, ROOM - 0.5, FRONT_WALL_H); continue; }
         wallFace(fgx, dx - 0.5, ROOM - 0.5, dx + 0.5, ROOM - 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
       }
       drawDoorFrame(fgx);                       // static jambs + lintel around the doors
+      corridorWalls();                          // walls around every bought corridor square
     }
 
     // ---- The vet character (clean flat-iso style) ------------------------
@@ -618,14 +1016,26 @@
     var DOG_COLOR = { 'dog-s': '#cba36e', 'dog-m': '#9c6b43', 'dog-l': '#5b4a3a' };
 
     function drawVisitor(v) {
-      var s = iso(v.x, v.y);
-      var p = (v.phase === 'waiting') ? v.patience / wait : 1;
-      var angry = v.phase === 'waiting' && p < 0.34;
+      var seated = v.phase === 'seated';
+      // When seated, draw a little toward the seat front so the chair's backrest
+      // stays visible behind the figure (otherwise the body covers the chair).
+      var dgx = v.x, dgy = v.y;
+      if (seated && v.chair) {
+        dgx += (v.chair.fx - v.chair.gx) * 0.3;
+        dgy += (v.chair.fy - v.chair.gy) * 0.3;
+      }
+      var s = iso(dgx, dgy);
+      var waiting = (v.phase === 'queuing' || v.phase === 'idle' || seated);
+      var maxWait = (seated ? 2 : 1) * baseWait();   // TV doubles the room's base; seated doubles again
+      var p = waiting ? v.patience / maxWait : 1;
+      var angry = waiting && p < 0.34;
       var jit = angry ? Math.sin(animT * 26) * 0.8 : 0;
       var bob = v.moving ? Math.sin(v.walkPhase) * 2.3 : 0;
       var step = v.moving ? Math.sin(v.walkPhase) : 0;
       var front = (v.dir === 'SE' || v.dir === 'SW');
       var mirror = (v.dir === 'SW' || v.dir === 'NW') ? -1 : 1;
+      // Sitting raises the hips onto the ~13px-high seat, so the body stays at
+      // about standing height — only the legs fold (handled below). No big lift.
       var baseY = s.y - bob;
       var cx = s.x + jit;
 
@@ -635,20 +1045,33 @@
       ctx.fillStyle = sh;
       ctx.beginPath(); ctx.ellipse(s.x, s.y, 15, 7, 0, 0, Math.PI * 2); ctx.fill();
 
-      // a dog walks alongside; draw it first if it's "behind" (waiting/leaving facing camera)
+      // a dog walks alongside; draw it first if it's "behind" (waiting/leaving facing
+      // camera). When seated the pet is placed in front of the owner instead (below).
       var isDog = v.pet.charAt(0) === 'd';
-      if (isDog && front) drawDog(v, cx - 17 * mirror, s.y + 3, mirror > 0);
+      if (isDog && front && !seated) drawDog(v, cx - 17 * mirror, s.y + 3, mirror > 0);
 
       ctx.save();
       ctx.translate(cx, baseY);
 
       // legs + shoes
-      ctx.fillStyle = v.legs;
-      ctx.fillRect(-6, -14, 5, 14 + step * 1.4);
-      ctx.fillRect(1, -14, 5, 14 - step * 1.4);
-      ctx.fillStyle = '#2a2a30';
-      ctx.fillRect(-7, -2 + step * 1.4, 6, 3);
-      ctx.fillRect(1, -2 - step * 1.4, 6, 3);
+      if (seated) {
+        // sitting pose: thighs rest forward on the seat, shins drop to the floor
+        // in front, so the figure reads as sitting in (not standing on) the chair.
+        ctx.fillStyle = v.legs;
+        roundRect(ctx, -7, -13, 14, 7, 3); ctx.fill();   // lap / thighs on the seat
+        ctx.fillRect(-6, -7, 5, 8);                      // left shin
+        ctx.fillRect(1, -7, 5, 8);                       // right shin
+        ctx.fillStyle = '#2a2a30';
+        ctx.fillRect(-7, 0, 6, 3);                       // shoes on the floor in front
+        ctx.fillRect(1, 0, 6, 3);
+      } else {
+        ctx.fillStyle = v.legs;
+        ctx.fillRect(-6, -14, 5, 14 + step * 1.4);
+        ctx.fillRect(1, -14, 5, 14 - step * 1.4);
+        ctx.fillStyle = '#2a2a30';
+        ctx.fillRect(-7, -2 + step * 1.4, 6, 3);
+        ctx.fillRect(1, -2 - step * 1.4, 6, 3);
+      }
 
       // torso (shirt)
       var bodyTop = -40;
@@ -702,10 +1125,16 @@
       }
       ctx.restore();
 
-      // cat carrier held in front of the body
-      if (!isDog) drawCarrier(cx, baseY - 14, v.carrier, mirror);
-      // dog drawn after the body when it should appear in front (walking up, back to us)
-      if (isDog && !front) drawDog(v, cx - 16 * mirror, s.y + 4, mirror > 0);
+      if (seated) {
+        // pet set down on the floor in front of the seated owner (at their feet)
+        if (isDog) drawDog(v, cx + 9, s.y + 13, false);
+        else drawCarrier(cx, s.y + 2, v.carrier, mirror);
+      } else {
+        // cat carrier held in front of the body
+        if (!isDog) drawCarrier(cx, baseY - 14, v.carrier, mirror);
+        // dog drawn after the body when it should appear in front (walking up, back to us)
+        if (isDog && !front) drawDog(v, cx - 16 * mirror, s.y + 4, mirror > 0);
+      }
 
       // anger steam puffs
       if (angry) {
@@ -716,14 +1145,24 @@
         }
       }
 
-      // patience progress bar above the head (only while waiting)
-      if (v.phase === 'waiting') {
+      // patience progress bar above the head (while waiting in line or aside)
+      if (waiting) {
         var bw = 24, bx = cx - bw / 2, by = baseY - 64;
         ctx.fillStyle = 'rgba(15,20,30,0.65)';
         roundRect(ctx, bx - 1.5, by - 1.5, bw + 3, 7, 3); ctx.fill();
         var col = p > 0.6 ? '#4cc46a' : p > 0.33 ? '#e8c34a' : '#e0563f';
         ctx.fillStyle = col;
         roundRect(ctx, bx, by, Math.max(0, bw * p), 4, 2); ctx.fill();
+      }
+
+      // processing bar — fills 0 → 1 while the vet is serving this client
+      if ((v.procT || 0) > 0 && v.phase === 'queuing') {
+        var prog = Math.min(1, v.procT / procTime());
+        var pw = 24, px = cx - pw / 2, py = baseY - 74;
+        ctx.fillStyle = 'rgba(15,20,30,0.65)';
+        roundRect(ctx, px - 1.5, py - 1.5, pw + 3, 7, 3); ctx.fill();
+        ctx.fillStyle = v.processing ? '#36b3f5' : '#6f7d8a'; // dim/grey if paused (vet away)
+        roundRect(ctx, px, py, Math.max(0, pw * prog), 4, 2); ctx.fill();
       }
     }
 
@@ -806,27 +1245,414 @@
       return 'rgb(' + r + ',' + g + ',' + b + ')';
     }
 
-    // ---- Visitors ---------------------------------------------------------
-    function freeSpot() {
-      // first wait-spot not targeted by an active (non-leaving) visitor
-      for (var i = 0; i < WAIT_SPOTS.length; i++) {
-        var taken = visitors.some(function (v) { return v.spot === i && v.phase !== 'leaving'; });
-        if (!taken) return i;
+    // ---- Furniture rendering ---------------------------------------------
+    // A solid isometric box over the grid rect [gx0..gx1] x [gy0..gy1], height h.
+    function isoBox(c, gx0, gy0, gx1, gy1, h, topCol, leftCol, rightCol) {
+      var T = iso(gx0, gy0), R = iso(gx1, gy0), F = iso(gx1, gy1), L = iso(gx0, gy1);
+      function up(p) { return { x: p.x, y: p.y - h }; }
+      var Tu = up(T), Ru = up(R), Fu = up(F), Lu = up(L);
+      c.fillStyle = rightCol;          // right face (gx1 edge)
+      c.beginPath(); c.moveTo(Ru.x, Ru.y); c.lineTo(Fu.x, Fu.y); c.lineTo(F.x, F.y); c.lineTo(R.x, R.y); c.closePath(); c.fill();
+      c.fillStyle = leftCol;           // left face (gy1 edge)
+      c.beginPath(); c.moveTo(Lu.x, Lu.y); c.lineTo(Fu.x, Fu.y); c.lineTo(F.x, F.y); c.lineTo(L.x, L.y); c.closePath(); c.fill();
+      c.fillStyle = topCol;            // top face
+      c.beginPath(); c.moveTo(Tu.x, Tu.y); c.lineTo(Ru.x, Ru.y); c.lineTo(Fu.x, Fu.y); c.lineTo(Lu.x, Lu.y); c.closePath(); c.fill();
+    }
+
+    function furnShadow(c, gx0, gy0, gx1, gy1) {
+      var cx = (iso(gx0, gy0).x + iso(gx1, gy1).x) / 2;
+      var cy = (iso(gx0, gy0).y + iso(gx1, gy1).y) / 2;
+      c.fillStyle = 'rgba(20,40,30,0.18)';
+      c.beginPath(); c.ellipse(cx, cy + 6, (gx1 - gx0 + 1) * 16, (gy1 - gy0 + 1) * 9, 0, 0, Math.PI * 2); c.fill();
+    }
+
+    // Single waiting-room chair on tile (gx,gy); backrest sits on the back side
+    // (opposite the rotation's "front"), so the seat faces outward.
+    function drawChair(c, gx, gy, rot) {
+      rot = rot || 0;
+      furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
+      isoBox(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34, 13, '#5bb3d6', '#3f93b8', '#357fa0'); // seat
+      var bx0 = gx - 0.34, by0 = gy - 0.34, bx1 = gx + 0.34, by1 = gy + 0.34;
+      if (rot === 0) by1 = gy - 0.16;       // back at -gy
+      else if (rot === 2) by0 = gy + 0.16;  // back at +gy
+      else if (rot === 1) bx1 = gx - 0.16;  // back at -gx
+      else bx0 = gx + 0.16;                 // back at +gx
+      isoBox(c, bx0, by0, bx1, by1, 30, '#69bdde', '#3f93b8', '#357fa0'); // backrest
+    }
+
+    // Reception desk: a 2x1 counter (white top, teal front) with a computer.
+    function drawDesk(c, gx, gy, rot) {
+      rot = rot || 0;
+      var H = 26, ew = (rot & 1) ? 1 : 2, eh = (rot & 1) ? 2 : 1;
+      var x0 = gx - 0.5, y0 = gy - 0.5, x1 = gx + ew - 0.5, y1 = gy + eh - 0.5;
+      furnShadow(c, x0, y0, x1, y1);
+      isoBox(c, x0, y0, x1, y1, H, '#f4f7f9', '#2f9e90', '#268a7e');
+      // counter-top lip along the two front edges of the top face
+      var L = iso(x0, y1), F = iso(x1, y1), R = iso(x1, y0);
+      c.strokeStyle = '#dfe8ee'; c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(L.x, L.y - H); c.lineTo(F.x, F.y - H); c.lineTo(R.x, R.y - H);
+      c.stroke();
+      // one computer per station tile (one per queue line), nudged to the back
+      var f = FRONT[rot];
+      var tiles = (rot & 1) ? [[gx, gy], [gx, gy + 1]] : [[gx, gy], [gx + 1, gy]];
+      tiles.forEach(function (t) { drawComputer(c, t[0] - f.x * 0.1, t[1] - f.y * 0.1, H, rot); });
+    }
+
+    // A monitor + keyboard on the desk. The screen faces the staff (-front) side
+    // and the keyboard sits on that side too, so by default (rot 0) we see the
+    // BACK of the screen; rotating the desk turns it around to reveal the screen.
+    function drawComputer(c, gx, gy, deskH, rot) {
+      rot = rot || 0;
+      var f = FRONT[rot];
+      var showScreen = (f.x + f.y) < 0;       // staff side faces the camera → screen visible
+      var m = iso(gx, gy), topY = m.y - deskH;
+      var kb = iso(gx - f.x * 0.32, gy - f.y * 0.32), kbY = kb.y - deskH; // keyboard on the staff side
+
+      function keyboard() {
+        c.fillStyle = '#cdd6dd';
+        c.beginPath();
+        c.moveTo(kb.x - 8, kbY + 2); c.lineTo(kb.x + 4, kbY + 6);
+        c.lineTo(kb.x + 11, kbY + 2); c.lineTo(kb.x - 1, kbY - 2); c.closePath(); c.fill();
+        c.strokeStyle = 'rgba(90,100,110,0.45)'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(kb.x - 3, kbY + 1.5); c.lineTo(kb.x + 7, kbY + 2); c.stroke();
       }
-      return visitorSeq % WAIT_SPOTS.length;
+
+      if (!showScreen) keyboard();            // staff far → keyboard behind the monitor
+      c.fillStyle = '#3a444e'; c.fillRect(m.x - 1, topY - 6, 3, 7);                  // stand
+      c.fillStyle = '#2a323b'; roundRect(c, m.x - 11, topY - 21, 22, 16, 2.5); c.fill(); // body
+      if (showScreen) {                       // glowing screen face (the front)
+        var sg = c.createLinearGradient(0, topY - 20, 0, topY - 6);
+        sg.addColorStop(0, '#6fd4e6'); sg.addColorStop(1, '#3b9fd0');
+        c.fillStyle = sg; roundRect(c, m.x - 9, topY - 19, 18, 12, 1.5); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.7)';
+        c.fillRect(m.x - 6, topY - 16, 9, 1.6); c.fillRect(m.x - 6, topY - 13, 12, 1.6);
+      } else {                                // plain back panel (the back of the screen)
+        c.fillStyle = '#39434d'; roundRect(c, m.x - 9, topY - 19, 18, 12, 1.5); c.fill();
+        c.strokeStyle = 'rgba(255,255,255,0.09)'; c.lineWidth = 1;
+        for (var i = 0; i < 3; i++) { var yy = topY - 17 + i * 3.5; c.beginPath(); c.moveTo(m.x - 6, yy); c.lineTo(m.x + 6, yy); c.stroke(); }
+        c.fillStyle = 'rgba(255,255,255,0.16)'; c.beginPath(); c.arc(m.x, topY - 12, 1.6, 0, Math.PI * 2); c.fill();
+      }
+      if (showScreen) keyboard();             // staff camera-side → keyboard in front of the monitor
+    }
+
+    // A flat-panel TV on a low media console. Decorative, but a room with one
+    // keeps clients entertained (doubles their wait). The screen faces the camera.
+    function drawTV(c, gx, gy, rot) {
+      furnShadow(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34);
+      var H = 14;
+      isoBox(c, gx - 0.42, gy - 0.32, gx + 0.42, gy + 0.32, H, '#46505b', '#2b333c', '#232a31'); // media console
+      var m = iso(gx, gy), topY = m.y - H;
+      // stand neck + foot, then the bezel
+      c.fillStyle = '#1b2127'; c.fillRect(m.x - 2, topY - 7, 4, 8);
+      c.fillStyle = '#11161b'; c.fillRect(m.x - 8, topY - 1, 16, 2.5);
+      c.fillStyle = '#14181d'; roundRect(c, m.x - 19, topY - 35, 38, 29, 3); c.fill();
+      // screen
+      var sx = m.x - 16, sy = topY - 32, sw = 32, sh = 23;
+      var sg = c.createLinearGradient(0, sy, 0, sy + sh);
+      sg.addColorStop(0, '#86d8ea'); sg.addColorStop(1, '#54a7d8');
+      c.fillStyle = sg; roundRect(c, sx, sy, sw, sh, 2); c.fill();
+      // a cheery broadcast: sun, green ground, a red vet cross, plus a glass sheen
+      c.save();
+      roundRect(c, sx, sy, sw, sh, 2); c.clip();
+      c.fillStyle = '#ffe07a'; c.beginPath(); c.arc(sx + 7, sy + 6, 3.2, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#74ba56'; c.fillRect(sx, sy + sh - 8, sw, 8);
+      c.fillStyle = '#e0563f';
+      c.fillRect(m.x - 1.6, sy + 7, 3.2, 11);
+      c.fillRect(m.x - 5, sy + 10.4, 12, 3.2);
+      c.fillStyle = 'rgba(255,255,255,0.14)';
+      c.beginPath(); c.moveTo(sx, sy); c.lineTo(sx + 11, sy); c.lineTo(sx, sy + 11); c.closePath(); c.fill();
+      c.restore();
+      // power LED
+      c.fillStyle = '#5fe08a'; c.beginPath(); c.arc(m.x + 16, topY - 9, 1, 0, Math.PI * 2); c.fill();
+    }
+
+    // ---- Placement -------------------------------------------------------
+    // Footprint tiles for an item at (gx,gy) with rotation rot (0..3). A 90°/270°
+    // turn swaps width and height; the anchor stays the min (top-left) corner.
+    function footprintTiles(item, gx, gy, rot) {
+      var ew = (rot & 1) ? item.h : item.w, eh = (rot & 1) ? item.w : item.h, t = [];
+      for (var dy = 0; dy < eh; dy++)
+        for (var dx = 0; dx < ew; dx++) t.push({ x: gx + dx, y: gy + dy });
+      return t;
+    }
+    // Interaction tiles: floor squares a person must be able to stand on to use
+    // the item. Each is tagged with a `kind`: 'customer' (visitors' side, where
+    // the queue forms) or 'staff' (the vet/user's side, behind the counter).
+    // They are validated at placement — every one must be in-bounds and clear —
+    // so the item can't be shoved against a wall or other furniture that would
+    // block either side. Unlike footprint tiles they are NOT marked occupied;
+    // people still walk and stand on them. Items without interactions return [].
+    function deskInteractTiles(gx, gy, rot) {
+      var f = FRONT[rot || 0], tiles = [];
+      deskLineTiles({ gx: gx, gy: gy, rot: rot || 0 }).forEach(function (t) {
+        tiles.push({ x: t.x + f.x, y: t.y + f.y, kind: 'customer' }); // visitor side
+        tiles.push({ x: t.x - f.x, y: t.y - f.y, kind: 'staff' });    // vet/user side
+      });
+      return tiles;
+    }
+    // A chair seats one visitor: the tile in front of the seat (FRONT side) must
+    // stay clear so they can reach and sit on it.
+    function chairInteractTiles(gx, gy, rot) {
+      var f = FRONT[rot || 0];
+      return [{ x: gx + f.x, y: gy + f.y, kind: 'customer' }];
+    }
+    function interactTiles(item, gx, gy, rot) {
+      return item.interact ? item.interact(gx, gy, rot) : [];
+    }
+    function canPlace(item, gx, gy, rot) {
+      var vtx = Math.round(vet.x), vty = Math.round(vet.y);   // tile the player stands on
+      var tiles = footprintTiles(item, gx, gy, rot);
+      for (var i = 0; i < tiles.length; i++) {
+        var t = tiles[i];
+        if (t.x < 0 || t.y < 0 || t.x >= ROOM || t.y >= ROOM) return false;
+        if (occupied[t.x + ',' + t.y]) return false;
+        if (t.x === vtx && t.y === vty) return false;          // can't drop on the player
+      }
+      // every interaction square must be clear floor inside the room, too
+      var it = interactTiles(item, gx, gy, rot);
+      for (var j = 0; j < it.length; j++) {
+        var u = it[j];
+        if (u.x < 0 || u.y < 0 || u.x >= ROOM || u.y >= ROOM) return false;
+        if (occupied[u.x + ',' + u.y]) return false;
+      }
+      return true;
+    }
+
+    // Ghost for hiring staff: highlight the targeted desk circle + a preview figure.
+    function drawStaffGhost() {
+      var st = nearestStation();
+      if (!st) return;                       // no desk → nowhere to stand
+      var s = iso(st.x, st.y);
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, TILE_HW * 0.62, TILE_HH * 0.62, 0, 0, Math.PI * 2);
+      ctx.fillStyle = st.ok ? 'rgba(76,196,106,0.32)' : 'rgba(224,86,63,0.40)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = st.ok ? 'rgba(70,205,120,1)' : 'rgba(224,86,63,0.95)'; ctx.stroke();
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      drawReceptionist(ghostCtx, st.x, st.y);
+      if (!st.ok) {
+        ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop';
+        ghostCtx.fillStyle = 'rgba(222,58,44,0.62)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
+    // Preview for the corridor brush: the validated line of squares (green) with
+    // a running cost, or a single red square if the start tile isn't valid.
+    function drawCorridorGhost() {
+      var s = corridorDrag || { sx: pointer.gx, sy: pointer.gy };
+      var res = corridorLineTiles(s.sx, s.sy, pointer.gx, pointer.gy);
+      ctx.save();
+      if (res.tiles.length) {
+        res.tiles.forEach(function (t) {
+          var p = iso(t.x, t.y); diamondPath(ctx, p.x, p.y);
+          ctx.fillStyle = 'rgba(76,196,106,0.42)'; ctx.fill();
+          ctx.strokeStyle = 'rgba(76,196,106,0.95)'; ctx.lineWidth = 2; ctx.stroke();
+        });
+        var lp = iso(pointer.gx, pointer.gy);
+        ctx.font = '800 15px Nunito, sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,0.55)';
+        ctx.strokeText('$' + res.cost, lp.x, lp.y - 18);
+        ctx.fillStyle = '#ffd24a'; ctx.fillText('$' + res.cost, lp.x, lp.y - 18);
+      } else {
+        var p2 = iso(pointer.gx, pointer.gy); diamondPath(ctx, p2.x, p2.y);
+        ctx.fillStyle = 'rgba(224,86,63,0.40)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(224,86,63,0.9)'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawGhost() {
+      if (!placing) return;
+      var item = placing.item, rot = placing.rot || 0;
+      if (item.kind === 'corridor') { if (pointer.on || corridorDrag) drawCorridorGhost(); return; }
+      if (!pointer.on) return;
+      if (item.kind === 'staff') { drawStaffGhost(); return; }
+      var ok = canPlace(item, pointer.gx, pointer.gy, rot);
+      // footprint tint on the floor (green = ok, red = blocked)
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.40)' : 'rgba(224,86,63,0.42)';
+      footprintTiles(item, pointer.gx, pointer.gy, rot).forEach(function (t) {
+        var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill();
+      });
+      // interaction tiles (where people stand to use it) — must stay clear.
+      // Shape differentiates the side: blue diamonds = the customer side, green
+      // circles = the user/vet's side. Red = blocked / out of bounds.
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      interactTiles(item, pointer.gx, pointer.gy, rot).forEach(function (t) {
+        var clear = t.x >= 0 && t.y >= 0 && t.x < ROOM && t.y < ROOM &&
+                    !occupied[t.x + ',' + t.y];
+        var staff = t.kind === 'staff';
+        var hue = staff ? '76,196,106' : '70,170,235';   // green | blue
+        var s = iso(t.x, t.y);
+        if (staff) { ctx.beginPath(); ctx.ellipse(s.x, s.y, TILE_HW * 0.58, TILE_HH * 0.58, 0, 0, Math.PI * 2); }
+        else diamondPath(ctx, s.x, s.y);
+        ctx.fillStyle = clear ? 'rgba(' + hue + ',0.30)' : 'rgba(224,86,63,0.42)';
+        ctx.fill();
+        ctx.strokeStyle = clear ? 'rgba(' + hue + ',0.95)' : 'rgba(224,86,63,0.95)';
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      ctx.restore();
+      // the item preview itself — rendered to an offscreen buffer so we can wash
+      // it red when the spot is invalid (otherwise drawn in normal colours).
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      item.draw(ghostCtx, pointer.gx, pointer.gy, rot);
+      if (!ok) {
+        ghostCtx.save();
+        ghostCtx.globalCompositeOperation = 'source-atop';
+        ghostCtx.fillStyle = 'rgba(222,58,44,0.62)';
+        ghostCtx.fillRect(0, 0, view.w, view.h);
+        ghostCtx.restore();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 0.72;
+      ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
+    function tryPlace() {
+      if (!placing) return;
+      var item = placing.item, rot = placing.rot || 0;
+      if (item.kind === 'staff') {          // hire onto a desk station circle
+        var st = nearestStation();
+        if (pointer.on && st && st.ok) {
+          staff.push({ type: item.id, line: st.line });
+          money -= item.cost; renderMoney();
+          cancelPlacing();
+        }
+        return;
+      }
+      if (pointer.on && canPlace(item, pointer.gx, pointer.gy, rot)) {
+        placed.push({ id: item.id, gx: pointer.gx, gy: pointer.gy, rot: rot });
+        footprintTiles(item, pointer.gx, pointer.gy, rot).forEach(function (t) {
+          occupied[t.x + ',' + t.y] = true;
+        });
+        money -= item.cost;
+        renderMoney();
+        cancelPlacing();                   // place one, then back to the shop
+      }
+      // clicking an invalid spot just keeps you in placement mode
+    }
+
+    function cancelPlacing() {
+      placing = null;
+      document.body.classList.remove('placing');
+      renderShop();
+    }
+
+    // ---- Money + shop DOM ------------------------------------------------
+    var moneyEl = document.getElementById('moneyCount');
+    var shopItemsEl = document.getElementById('shopItems');
+    var skillItemsEl = document.getElementById('skillItems');
+
+    function renderMoney() {
+      moneyEl.textContent = money;
+      renderShop();                        // affordability may have changed
+      renderSkills();
+    }
+
+    var SKILL_DEFS = [
+      { key: 'speed',      name: 'Speed' },
+      { key: 'processing', name: 'Processing' }
+    ];
+
+    function renderSkills() {
+      skillItemsEl.innerHTML = '';
+      SKILL_DEFS.forEach(function (def) {
+        var s = skills[def.key];
+        var afford = money >= s.cost;
+        var card = document.createElement('div');
+        card.className = 'skill-item' + (afford ? '' : ' disabled');
+        card.innerHTML = '<div class="nm">' + def.name + '</div>' +
+                         '<div class="vl">' + s.val.toFixed(1) + '</div>' +
+                         '<div class="pr">+0.5  $' + s.cost + '</div>';
+        card.addEventListener('click', function () {
+          if (money < s.cost) return;
+          money -= s.cost;
+          s.val += 0.5;
+          s.cost *= 2;                     // price doubles per purchase, per skill
+          renderMoney();                   // repaints money + shop + skills
+        });
+        skillItemsEl.appendChild(card);
+      });
+    }
+
+    function renderShop() {
+      shopItemsEl.innerHTML = '';
+      FURNITURE.filter(function (item) { return (item.cat || 'reception') === activeTab; }).forEach(function (item) {
+        var afford = money >= item.cost;
+        var card = document.createElement('div');
+        card.className = 'shop-item' + (afford ? '' : ' disabled') +
+                         (placing && placing.item.id === item.id ? ' selected' : '');
+        card.innerHTML = '<div class="ic">' + item.icon + '</div>' +
+                         '<div class="nm">' + item.name + '</div>' +
+                         '<div class="pr">$' + item.cost + (item.perSquare ? '/sq' : '') + '</div>';
+        card.addEventListener('click', function () {
+          if (money < item.cost) return;
+          placing = (placing && placing.item.id === item.id) ? null : { item: item, rot: 0 };
+          corridorDrag = null;
+          document.body.classList.toggle('placing', !!placing);
+          renderShop();
+        });
+        shopItemsEl.appendChild(card);
+      });
+    }
+
+    // Shop tabs switch the visible category. Switching cancels any in-progress
+    // placement so a half-selected item doesn't linger across tabs.
+    Array.prototype.forEach.call(document.querySelectorAll('.shop-tab'), function (btn) {
+      btn.addEventListener('click', function () {
+        activeTab = btn.getAttribute('data-tab');
+        Array.prototype.forEach.call(document.querySelectorAll('.shop-tab'), function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+        if (placing) cancelPlacing(); else renderShop();
+      });
+    });
+
+    // ---- Visitors ---------------------------------------------------------
+    // The reception desk visitors queue at (first placed desk, or a back-of-room
+    // fallback before one is bought). Two lines form on its front (+gy) side.
+    function deskAnchor() {
+      for (var i = 0; i < placed.length; i++) if (placed[i].id === 'desk') return placed[i];
+      return { gx: 3, gy: 1, rot: 0 };
+    }
+    // The two desk tiles (one per queue line), accounting for rotation.
+    function deskLineTiles(d) {
+      var rot = d.rot || 0;
+      return (rot & 1)
+        ? [{ x: d.gx, y: d.gy }, { x: d.gx, y: d.gy + 1 }]   // vertical desk
+        : [{ x: d.gx, y: d.gy }, { x: d.gx + 1, y: d.gy }];  // horizontal desk
+    }
+    // A visitor's target tile in its line: front of its desk tile + its position back.
+    function slotPos(v) {
+      var d = deskAnchor(), f = FRONT[d.rot || 0];
+      var base = deskLineTiles(d)[v.line], idx = queue[v.line].indexOf(v);
+      if (idx < 0) idx = 0;
+      var sx = base.x + f.x * (1 + idx), sy = base.y + f.y * (1 + idx);
+      return { x: Math.max(0, Math.min(ROOM - 1, sx)), y: Math.max(0, Math.min(ROOM - 1, sy)) };
     }
 
     function spawnVisitor() {
       var seq = visitorSeq++;
-      var si = freeSpot();
-      var spot = WAIT_SPOTS[si];
+      // join the shorter line (random on a tie)
+      var line = queue[0].length < queue[1].length ? 0
+               : queue[1].length < queue[0].length ? 1
+               : (Math.random() < 0.5 ? 0 : 1);
       var v = {
-        id: seq, spot: si,
+        id: seq, line: line,
         x: ROOM + 5, y: ROOM + 5,          // start on the near sidewalk, off to the side
         speed: 1.7 + (seq % 3) * 0.12,
         dir: 'NE', moving: true, walkPhase: (seq % 2) * Math.PI,
-        phase: 'arriving',                 // arriving → waiting → leaving
-        patience: wait,                    // seconds left before storming off
+        phase: 'arriving',                 // arriving → queuing → leaving
+        patience: baseWait(),              // seconds left (ticks once queuing); a TV doubles it
         shirt: V_SHIRT[seq % V_SHIRT.length],
         legs: V_LEGS[seq % V_LEGS.length],
         skin: V_SKIN[seq % V_SKIN.length],
@@ -837,15 +1663,21 @@
       v.path = [
         { x: DOOR_MID, y: ROOM + 5 },      // walk along the sidewalk to the path foot
         { x: DOOR_MID, y: ROOM + 0.2 },    // up the path, approach the doors
-        { x: DOOR_MID, y: ROOM - 1.4 },    // step inside
-        { x: spot.x, y: spot.y }           // settle at the wait spot
+        { x: DOOR_MID, y: ROOM - 1.4 }     // step inside, then head to the queue slot
       ];
       v.wp = 0;
+      queue[line].push(v);
       visitors.push(v);
     }
 
     function leaveOutbound(v) {
       v.phase = 'leaving';
+      v.sideIdx = -1;                      // release any side spot
+      if (v.chair) {                       // stand up off the seat onto its clear front tile
+        v.x = v.chair.fx; v.y = v.chair.fy; v.seated = false; v.chair = null;
+      }
+      var qi = queue[v.line].indexOf(v);   // drop out of the queue so others advance
+      if (qi >= 0) queue[v.line].splice(qi, 1);
       v.path = [
         { x: DOOR_MID, y: ROOM - 1.4 },    // back to the doors
         { x: DOOR_MID, y: ROOM + 0.2 },    // out through the doors
@@ -855,33 +1687,197 @@
       v.wp = 0;
     }
 
+    // Collision: any tile holding a placed item is off-limits to people.
+    function tileBlocked(x, y) { return !!occupied[Math.round(x) + ',' + Math.round(y)]; }
+    // The vet may roam any room floor (clinic + corridors) but not step off it.
+    function vetBlocked(x, y) { return tileBlocked(x, y) || !isRoomFloor(Math.round(x), Math.round(y)); }
+    // Axis-separated move so actors slide along furniture instead of stopping dead.
+    // `blocked` defaults to furniture-only (visitors walk the path/road too).
+    function moveActor(a, nx, ny, blocked) {
+      blocked = blocked || tileBlocked;
+      if (!blocked(nx, a.y)) a.x = nx;
+      if (!blocked(a.x, ny)) a.y = ny;
+    }
+
+    // Move a visitor toward a target tile; returns true once essentially there.
+    function stepToward(v, tx, ty, dt, eps) {
+      var dx = tx - v.x, dy = ty - v.y, dist = Math.hypot(dx, dy);
+      if (dist < (eps || 0.05)) return true;
+      var ux = dx / dist, uy = dy / dist;
+      moveActor(v, v.x + ux * v.speed * dt, v.y + uy * v.speed * dt);
+      v.dir = chooseDir(ux, uy); v.walkPhase += dt * 9; v.moving = true;
+      return false;
+    }
+
+    function hasDesk() { return placed.some(function (f) { return f.id === 'desk'; }); }
+
+    // The action-circle tile behind the desk for a queue line (where the vet must
+    // stand to process that line), and whether the vet is standing on it.
+    function stationTile(line) {
+      var d = deskAnchor(), f = FRONT[d.rot || 0], t = deskLineTiles(d)[line];
+      return { x: t.x - f.x, y: t.y - f.y };
+    }
+    function vetAtStation(line) {
+      if (!hasDesk()) return false;
+      var s = stationTile(line);
+      return Math.round(vet.x) === s.x && Math.round(vet.y) === s.y;
+    }
+    // A hired receptionist permanently mans a line's station.
+    function staffAtStation(line) { return staff.some(function (s) { return s.line === line; }); }
+    // The desk station nearest the cursor (for placing a receptionist), with validity.
+    function nearestStation() {
+      if (!hasDesk()) return null;
+      var best = null, bd = 1e9;
+      for (var L = 0; L < 2; L++) {
+        var s = stationTile(L), d = Math.abs(pointer.gx - s.x) + Math.abs(pointer.gy - s.y);
+        if (d < bd) { bd = d; best = { line: L, x: s.x, y: s.y }; }
+      }
+      best.ok = best.x >= 0 && best.y >= 0 && best.x < ROOM && best.y < ROOM && !staffAtStation(best.line);
+      return best;
+    }
+
+    // A receptionist figure (headset + name badge) standing at a desk station.
+    function drawReceptionist(c, gx, gy) {
+      var s = iso(gx, gy);
+      var f = FRONT[deskAnchor().rot || 0];
+      var dir = chooseDir(f.x, f.y);              // face the customers
+      var front = (dir === 'SE' || dir === 'SW');
+      var mirror = (dir === 'SW' || dir === 'NW') ? -1 : 1;
+      c.fillStyle = 'rgba(20,40,30,0.26)';
+      c.beginPath(); c.ellipse(s.x, s.y, 13, 6, 0, 0, Math.PI * 2); c.fill();
+      c.save(); c.translate(s.x, s.y);
+      c.fillStyle = '#33405a'; c.fillRect(-6, -14, 5, 14); c.fillRect(1, -14, 5, 14); // legs
+      c.fillStyle = '#23262d'; c.fillRect(-7, -2, 6, 3); c.fillRect(1, -2, 6, 3);      // shoes
+      var bt = -40;                                                                    // torso (purple top)
+      var g = c.createLinearGradient(0, bt, 0, -12);
+      g.addColorStop(0, '#9b80e0'); g.addColorStop(1, '#6f53c0');
+      c.fillStyle = g; roundRect(c, -11, bt, 22, 28, 7); c.fill();
+      c.fillStyle = '#6149b3'; roundRect(c, -14, bt + 2, 5, 13, 2.5); c.fill(); roundRect(c, 9, bt + 2, 5, 13, 2.5); c.fill();
+      c.fillStyle = '#f0c8a4'; c.fillRect(-14, bt + 14, 5, 4); c.fillRect(9, bt + 14, 5, 4); // hands
+      c.fillStyle = '#fff'; c.fillRect(4, bt + 6, 5, 4);                                // name badge
+      c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                            // neck
+      var hy = bt - 13;
+      c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#3a2c22'; c.beginPath(); c.arc(0, hy - 1, 8.5, Math.PI * (front ? 1.02 : 0.05), Math.PI * (front ? 1.98 : 0.95), false); c.fill();
+      if (front) {
+        c.fillStyle = '#2b2b33';
+        c.beginPath(); c.arc(-3 * mirror, hy, 1.3, 0, Math.PI * 2); c.arc(3 * mirror, hy, 1.3, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#9a5f44'; c.lineWidth = 1.2;
+        c.beginPath(); c.arc(0, hy + 3, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      }
+      c.strokeStyle = '#2b2b33'; c.lineWidth = 1.6;                                     // headset band
+      c.beginPath(); c.arc(0, hy - 1, 9, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+      c.fillStyle = '#2b2b33'; c.beginPath(); c.arc(-8 * mirror, hy + 1, 2, 0, Math.PI * 2); c.fill(); // earpiece
+      if (front) { c.lineWidth = 1.2; c.beginPath(); c.moveTo(-8 * mirror, hy + 1); c.quadraticCurveTo(-6 * mirror, hy + 7, -2 * mirror, hy + 6); c.stroke(); } // mic
+      c.restore();
+    }
+
+    // An empty waiting-room chair (one no other visitor has claimed), or null.
+    function freeChair() {
+      for (var i = 0; i < placed.length; i++) {
+        var p = placed[i];
+        if (p.id !== 'chair') continue;
+        var taken = visitors.some(function (v) {
+          return v.chair && v.chair.gx === p.gx && v.chair.gy === p.gy;
+        });
+        if (!taken) return p;
+      }
+      return null;
+    }
+
+    // Base wait before a client storms off. A room with a TV keeps them
+    // entertained, so the whole room's wait time is doubled.
+    function roomHasTV() { return placed.some(function (p) { return p.id === 'tv'; }); }
+    function baseWait() { return wait * (roomHasTV() ? 2 : 1); }
+
+    // A reception client is served: pay out, pop a +10, give a fresh wait bar so
+    // the queue advances. If a chair is free they head over to sit; otherwise
+    // they step aside to a side spot as before.
+    function serveVisitor(v) {
+      money += 10; renderMoney();
+      floaters.push({ v: v, t: 0 });
+      var qi = queue[v.line].indexOf(v); if (qi >= 0) queue[v.line].splice(qi, 1);
+      v.procT = 0; v.patience = baseWait();
+      var chair = freeChair();
+      if (chair) {                           // go sit in an empty chair
+        var f = chairInteractTiles(chair.gx, chair.gy, chair.rot || 0)[0];
+        v.chair = { gx: chair.gx, gy: chair.gy, fx: f.x, fy: f.y };
+        v.sideIdx = -1; v.seated = false; v.phase = 'toChair';
+      } else {                               // no chair free → step aside
+        var s = sideSpot();
+        v.phase = 'served'; v.sideIdx = s.idx; v.sideX = s.x; v.sideY = s.y;
+      }
+    }
+
     function updateVisitor(v, dt) {
-      if (v.phase === 'waiting') {
-        v.moving = false; v.walkPhase = 0;
+      if (v.phase === 'queuing') {
+        var t = slotPos(v);
+        var reached = stepToward(v, t.x, t.y, dt);
+        if (reached) {
+          var f = FRONT[(deskAnchor().rot || 0)];
+          v.x = t.x; v.y = t.y; v.moving = false; v.dir = chooseDir(-f.x, -f.y); // face the desk
+        }
+        v.patience -= dt;                  // tick down while in line
+        if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); return; }
+        // the front-of-line client is processed while the vet stands on the desk's
+        // action circle for that line, OR a hired receptionist mans it; bar fills.
+        v.processing = (reached && queue[v.line][0] === v && (vetAtStation(v.line) || staffAtStation(v.line)));
+        if (v.processing) {
+          v.procT = (v.procT || 0) + dt;     // pauses (keeps progress) if the vet steps away
+          if (v.procT >= procTime()) serveVisitor(v);
+        }
+        return;
+      }
+      if (v.phase === 'served') {          // walk aside after being served
+        if (stepToward(v, v.sideX, v.sideY, dt)) {
+          v.x = v.sideX; v.y = v.sideY; v.moving = false; v.dir = 'SE';
+          v.phase = 'idle'; v.patience = baseWait();  // bar resets and starts again
+        }
+        return;
+      }
+      if (v.phase === 'idle') {            // standing aside, fresh wait bar
+        var openChair = freeChair();
+        if (openChair) {                   // a seat opened up (e.g. player built one) → go sit
+          var cf = chairInteractTiles(openChair.gx, openChair.gy, openChair.rot || 0)[0];
+          v.chair = { gx: openChair.gx, gy: openChair.gy, fx: cf.x, fy: cf.y };
+          v.sideIdx = -1; v.seated = false; v.phase = 'toChair';
+          return;
+        }
+        v.moving = false;
         v.patience -= dt;
         if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
         return;
       }
-      var tgt = v.path[v.wp];
-      var dx = tgt.x - v.x, dy = tgt.y - v.y, dist = Math.hypot(dx, dy);
-      if (dist < 0.06) {
-        v.wp++;
-        if (v.wp >= v.path.length) {
-          if (v.phase === 'arriving') { v.phase = 'waiting'; v.x = tgt.x; v.y = tgt.y; v.moving = false; v.dir = 'SE'; }
-          else { v.dead = true; }          // finished leaving → remove
+      if (v.phase === 'toChair') {         // walk over, then drop into the seat
+        if (stepToward(v, v.chair.fx, v.chair.fy, dt)) {
+          v.x = v.chair.gx; v.y = v.chair.gy; v.moving = false; v.seated = true;
+          v.dir = chooseDir(v.chair.fx - v.chair.gx, v.chair.fy - v.chair.gy); // face outward
+          v.patience *= 2;                 // seated: double the remaining wait
+          v.phase = 'seated';
         }
         return;
       }
-      var ux = dx / dist, uy = dy / dist;
-      v.x += ux * v.speed * dt; v.y += uy * v.speed * dt;
-      v.dir = chooseDir(ux, uy);
-      v.walkPhase += dt * 9;
-      v.moving = true;
+      if (v.phase === 'seated') {          // sitting comfortably, doubled wait bar
+        v.moving = false;
+        v.patience -= dt;
+        if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
+        return;
+      }
+      // arriving / leaving: follow the fixed waypoint list
+      var tgt = v.path[v.wp];
+      if (stepToward(v, tgt.x, tgt.y, dt, 0.06)) {
+        v.wp++;
+        if (v.wp >= v.path.length) {
+          if (v.phase === 'arriving') { v.phase = 'queuing'; v.moving = false; }
+          else { v.dead = true; }          // finished leaving → remove
+        }
+      }
     }
 
     // ---- Update -----------------------------------------------------------
     function update(dt) {
       animT += dt;
+      vet.speed = BASE_SPEED + (skills.speed.val - 1.0);  // Speed skill: additive movement
       var mx = 0, my = 0;
       if (touchInput.active) { mx = touchInput.dx; my = touchInput.dy; }
       else {
@@ -892,16 +1888,13 @@
       vet.moving = len > 0.01;
       if (vet.moving) {
         mx /= len; my /= len;
-        vet.x += mx * vet.speed * dt;
-        vet.y += my * vet.speed * dt;
+        // vetBlocked confines the vet to room floor (clinic + corridors).
+        moveActor(vet, vet.x + mx * vet.speed * dt, vet.y + my * vet.speed * dt, vetBlocked);
         vet.dir = chooseDir(mx, my);
         vet.walkPhase += dt * 10;
       } else {
         vet.walkPhase = 0;
       }
-      var pad = 0.4;
-      vet.x = Math.max(pad, Math.min(ROOM - 1 - pad, vet.x));
-      vet.y = Math.max(pad, Math.min(ROOM - 1 - pad, vet.y));
 
       // visitors: spawn on a timer, then step each one along its path
       spawnTimer -= dt;
@@ -909,6 +1902,11 @@
       for (var i = visitors.length - 1; i >= 0; i--) {
         updateVisitor(visitors[i], dt);
         if (visitors[i].dead) visitors.splice(i, 1);
+      }
+      // advance + retire the +10 coin pops
+      for (var fi = floaters.length - 1; fi >= 0; fi--) {
+        floaters[fi].t += dt;
+        if (floaters[fi].t > 1.2) floaters.splice(fi, 1);
       }
 
       // automatic doors open when the vet or any visitor is near the doorway
@@ -928,6 +1926,42 @@
       return my > 0 ? 'SW' : 'NE';
     }
 
+    // Processing-station rings drawn on the floor behind the desk — one per line
+    // that has someone waiting, on that line's side.
+    function drawDeskCircles() {
+      if (!hasDesk()) return;
+      var d = deskAnchor(), f = FRONT[d.rot || 0], tiles = deskLineTiles(d);
+      for (var L = 0; L < 2; L++) {
+        if (!queue[L].some(function (v) { return v.phase === 'queuing'; })) continue;
+        var s = iso(tiles[L].x - f.x, tiles[L].y - f.y);   // one tile behind the desk
+        var on = vetAtStation(L);          // vet standing on this station's circle
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y, TILE_HW * 0.6, TILE_HH * 0.6, 0, 0, Math.PI * 2);
+        ctx.fillStyle = on ? 'rgba(80,210,130,0.32)' : 'rgba(60,190,165,0.20)'; ctx.fill();
+        ctx.lineWidth = on ? 4 : 3;
+        ctx.strokeStyle = on ? 'rgba(70,205,120,1)' : 'rgba(55,179,163,0.95)'; ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Floating "+10" coin pop-ups above served clients.
+    function drawFloaters() {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '800 16px Nunito, sans-serif';
+      floaters.forEach(function (fl) {
+        if (!fl.v) return;
+        var s = iso(fl.v.x, fl.v.y), y = s.y - 48 - fl.t * 34;
+        ctx.globalAlpha = Math.max(0, 1 - fl.t / 1.2);
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,0.55)';
+        ctx.strokeText('+10', s.x, y);
+        ctx.fillStyle = '#ffd24a';
+        ctx.fillText('+10', s.x, y);
+      });
+      ctx.restore();
+    }
+
     // ---- Render -----------------------------------------------------------
     function draw() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -938,9 +1972,18 @@
       // road are in front of them. Each group is depth-sorted by gx+gy.
       var inside = [{ d: vet.x + vet.y, fn: drawVet }];
       var outside = [];
+      placed.forEach(function (f) {
+        var def = FURN_BY_ID[f.id];
+        var ew = ((f.rot || 0) & 1) ? def.h : def.w, eh = ((f.rot || 0) & 1) ? def.w : def.h;
+        inside.push({ d: (f.gx + (ew - 1) / 2) + (f.gy + (eh - 1) / 2), fn: function () { def.draw(ctx, f.gx, f.gy, f.rot || 0); } });
+      });
       visitors.forEach(function (v) {
         var item = { d: v.x + v.y, fn: function () { drawVisitor(v); } };
         (v.y <= ROOM - 0.5 ? inside : outside).push(item);
+      });
+      if (hasDesk()) staff.forEach(function (st) {       // receptionists at their stations
+        var p = stationTile(st.line);
+        inside.push({ d: p.x + p.y, fn: function () { drawReceptionist(ctx, p.x, p.y); } });
       });
       var byDepth = function (a, b) { return a.d - b.d; };
       inside.sort(byDepth);
@@ -948,11 +1991,14 @@
 
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       inside.forEach(function (a) { a.fn(); });
+      drawDeskCircles();                    // station rings behind the desk (drawn on top so the counter doesn't hide them)
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(fg, 0, 0);
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       drawSlidingDoors(ctx, door.open);
       outside.forEach(function (a) { a.fn(); });
+      drawGhost();                          // placement preview floats on top
+      drawFloaters();                       // +10 coin pops on top of everyone
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       // gentle vignette for focus
@@ -990,8 +2036,30 @@
     // ---- Input: drag-anywhere virtual joystick ----------------------------
     var origin = null;
     function getPoint(e) { var t = e.touches ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; }
-    function dragStart(e) { origin = getPoint(e); touchInput.active = true; touchInput.dx = 0; touchInput.dy = 0; e.preventDefault(); }
+    function setPointer(clientX, clientY) {
+      var rect = canvas.getBoundingClientRect();
+      var g = screenToGrid(clientX - rect.left, clientY - rect.top);
+      pointer.gx = Math.round(g.gx); pointer.gy = Math.round(g.gy); pointer.on = true;
+    }
+    function dragStart(e) {
+      if (placing && placing.item.kind === 'corridor') {  // corridor brush: drag a line
+        var cp = getPoint(e); setPointer(cp.x, cp.y);
+        corridorDrag = { sx: pointer.gx, sy: pointer.gy };
+        e.preventDefault(); return;
+      }
+      if (placing) {                       // build mode: position the ghost (and, for a
+        var pp = getPoint(e); setPointer(pp.x, pp.y);  // mouse click, drop it right away;
+        if (!e.touches) tryPlace();        // touch positions now and drops on lift)
+        e.preventDefault(); return;
+      }
+      origin = getPoint(e); touchInput.active = true; touchInput.dx = 0; touchInput.dy = 0; e.preventDefault();
+    }
     function dragMove(e) {
+      if (placing && placing.item.kind === 'corridor') {
+        if (corridorDrag) { var cp = getPoint(e); setPointer(cp.x, cp.y); }
+        e.preventDefault(); return;
+      }
+      if (placing) { var pp = getPoint(e); setPointer(pp.x, pp.y); e.preventDefault(); return; }
       if (!touchInput.active || !origin) return;
       var p = getPoint(e);
       var sx = p.x - origin.x, sy = p.y - origin.y;
@@ -1003,7 +2071,14 @@
       else { var mag = Math.min(len / 1.2, 1); touchInput.dx = gx / len * mag; touchInput.dy = gy / len * mag; }
       e.preventDefault();
     }
-    function dragEnd(e) { touchInput.active = false; touchInput.dx = 0; touchInput.dy = 0; origin = null; if (e && e.preventDefault) e.preventDefault(); }
+    function dragEnd(e) {
+      if (placing && placing.item.kind === 'corridor') {
+        if (corridorDrag) { commitCorridor(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy); corridorDrag = null; }
+        if (e && e.preventDefault) e.preventDefault(); return;
+      }
+      if (placing) { if (e && e.changedTouches) tryPlace(); if (e && e.preventDefault) e.preventDefault(); return; }
+      touchInput.active = false; touchInput.dx = 0; touchInput.dy = 0; origin = null; if (e && e.preventDefault) e.preventDefault();
+    }
     canvas.addEventListener('touchstart', dragStart, { passive: false });
     canvas.addEventListener('touchmove', dragMove, { passive: false });
     canvas.addEventListener('touchend', dragEnd, { passive: false });
@@ -1012,10 +2087,40 @@
     window.addEventListener('mousemove', dragMove);
     window.addEventListener('mouseup', dragEnd);
 
+    // Hover (mouse) tracks the tile under the cursor for the placement ghost.
+    window.addEventListener('mousemove', function (e) {
+      if (e.target.closest && e.target.closest('#shopbar')) { pointer.on = false; return; }
+      setPointer(e.clientX, e.clientY);
+    });
+    // Esc / right-click cancels an in-progress placement.
+    window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && placing) cancelPlacing(); });
+    window.addEventListener('contextmenu', function (e) { if (placing) { e.preventDefault(); cancelPlacing(); } });
+    // Mouse wheel rotates the item being placed by 90°.
+    window.addEventListener('wheel', function (e) {
+      if (!placing) return;
+      placing.rot = (placing.rot + (e.deltaY > 0 ? 1 : 3)) % 4;
+      e.preventDefault();
+    }, { passive: false });
+
     // ---- Boot -------------------------------------------------------------
     window.addEventListener('resize', resize);
     resize();
+    renderMoney();                          // paint money + shop cards
     requestAnimationFrame(frame);
+    window.__t = {
+      draw: draw,
+      step: function (n) { for (var i = 0; i < (n || 1); i++) update(1 / 30); },
+      money: function () { return money; },
+      spawn: spawnVisitor,
+      place: function (id, gx, gy, r) { placed.push({ id: id, gx: gx, gy: gy, rot: r || 0 }); footprintTiles(FURN_BY_ID[id], gx, gy, r || 0).forEach(function (t) { occupied[t.x + ',' + t.y] = true; }); },
+      placeDesk: function (gx, gy, r) { window.__t.place('desk', gx, gy, r); },
+      placeChair: function (gx, gy, r) { window.__t.place('chair', gx, gy, r); },
+      vet: function (x, y) { if (x != null) { vet.x = x; vet.y = y; } return { x: vet.x, y: vet.y }; },
+      visitors: function () { return visitors.map(function (v) { return { phase: v.phase, seated: !!v.seated, pet: v.pet, patience: Math.round(v.patience * 10) / 10, x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100, chair: v.chair || null }; }); },
+      buildCorridor: function (sx, sy, ex, ey) { commitCorridor(sx, sy, ex, ey); return Object.keys(corridor); },
+      corridors: function () { return Object.keys(corridor); },
+      setInput: function (k, v) { input[k] = v; }
+    };
   })();
   </script>
 
