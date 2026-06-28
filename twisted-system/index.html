@@ -97,7 +97,7 @@
     <div class="overlay" id="setup">
       <div class="panel">
         <h2>Twisted Critters</h2>
-        <div class="sub">Spinning bars sweep around the pole &mdash; <b class="cy" style="color:#36e0ff">jump</b> the low one, <b class="pk" style="color:#ff4d9d">duck</b> the high one! Each bar re-rolls behind the pillar, so watch what comes out. It starts slow then speeds up &mdash; last critter standing wins. 🌀</div>
+        <div class="sub">Line up by the pillar! Spinning bars sweep around &mdash; <b class="cy" style="color:#36e0ff">jump</b> the low one, <b class="pk" style="color:#ff4d9d">duck</b> the high one. Each bar re-rolls behind the pillar, so watch what comes out. Every miss costs a <b style="color:#ff5a6e">❤</b> and knocks you back &mdash; <b style="color:#ffe8b0">8 hits</b> and you're off the edge! Last critter standing wins. 🌀</div>
 
         <div class="count-label">Players</div>
         <div class="count" id="count">
@@ -162,9 +162,12 @@
     const OMEGA_BASE = 34;      // deg/sec at the start (nice and slow)
     const OMEGA_RAMP = 17;      // every this-many seconds adds another OMEGA_BASE of speed
 
-    // ---- line layout (critters stand in a straight row across the front) ----
-    const LINE_Y = 430;         // baseline y for every critter
-    const LINE_SCALE = 1.04;    // uniform size — they're all the same depth
+    // ---- lanes & lives (critters line up radially out from the pillar) ----
+    const LIVES = 8;            // hits each critter can take before falling off
+    const LANE_LO = 60, LANE_HI = 120;   // angular spread of the lanes (front of the disc)
+    const RF_START = 0.40;      // radius factor at full lives (bunched near the pillar)
+    const RF_EDGE = 1.06;       // radius factor at 0 lives (out at the rim → tumble off)
+    const RF_STEP = (RF_EDGE - RF_START) / LIVES;   // how far each hit knocks you back
 
     let state = 'setup';        // 'setup' | 'count' | 'playing' | 'over'
     let players = [];
@@ -238,15 +241,16 @@
     // ---------- round lifecycle ----------
     function startRound() {
       players = [];
-      // even spread across the front arc (35°..145°) so every animal is clearly visible
-      const lo = 35, hi = 145;
+      // each critter gets its own lane fanning out from the pillar; they all start
+      // bunched near the pole (a line down from the centre) and get knocked outward.
       for (let i = 0; i < numPlayers; i++) {
         const a = ANIMALS[i];
-        const ang = numPlayers === 1 ? 90 : lo + (hi - lo) * (i / (numPlayers - 1));
+        const ang = numPlayers === 1 ? 90 : LANE_LO + (LANE_HI - LANE_LO) * (i / (numPlayers - 1));
         players.push({
           idx: i, emoji: a.emoji, color: a.color, dark: a.dark, name: playerName(i, a.name),
           jumpKey: a.jump, duckKey: a.duck, angle: ang,
           alive: true, jumpT: 0, duckHeld: false, score: 0,
+          lives: LIVES, rfCur: RF_START, knockT: 0,
           deadT: 0, spin: 0, flash: 0, bob: Math.random() * 6.28
         });
       }
@@ -265,12 +269,11 @@
       let winner = null, draw = false;
       if (alive.length === 1) winner = alive[0];
       else if (alive.length === 0) {
-        // simultaneous knockout — highest score takes it
-        const top = players.slice().sort(function (a, b) { return b.score - a.score; });
-        if (top.length && (top.length < 2 || top[0].score !== top[1].score)) winner = top[0]; else draw = true;
-      } else { // ran out of time? (shouldn't happen) — highest score
-        const top = alive.slice().sort(function (a, b) { return b.score - a.score; });
-        winner = top[0];
+        // simultaneous knockout — the critter that hung on longest (fell off last) wins
+        if (order.length) winner = players.find(function (p) { return p.idx === order[order.length - 1]; });
+        else draw = true;
+      } else { // more than one left (shouldn't happen) — most lives wins
+        winner = alive.slice().sort(function (a, b) { return b.lives - a.lives; })[0];
       }
 
       const best = Math.max(loadBest(), Math.floor(elapsed));
@@ -280,16 +283,13 @@
       document.getElementById('over-sub').textContent = 'Survived ' + elapsed.toFixed(1) + 's' +
         (Math.floor(elapsed) >= best && elapsed > 0 ? ' — new record! 🏆' : ' · best ' + best + 's');
 
-      // results board, best score first
+      // results board — survivors first, then whoever lasted longest before falling off
       const res = document.getElementById('results'); res.innerHTML = '';
-      players.slice().sort(function (a, b) {
-        const ra = order.indexOf(a.idx), rb = order.indexOf(b.idx);
-        const sa = a.alive ? 1e9 : ra, sb = b.alive ? 1e9 : rb;  // alive ranks above eliminated
-        return sb - sa;
-      }).forEach(function (p) {
+      function rank(p) { return p.alive ? 1e6 + p.lives : order.indexOf(p.idx); }
+      players.slice().sort(function (a, b) { return rank(b) - rank(a); }).forEach(function (p, i) {
         const row = document.createElement('div'); row.className = 'r';
         row.innerHTML = '<span class="em">' + p.emoji + '</span><span class="nm" style="color:' + p.color + '">' + p.name +
-          (p.alive ? ' 👑' : '') + '</span><span class="sc">' + p.score + ' pts</span>';
+          (i === 0 && !draw ? ' 👑' : '') + '</span><span class="sc">' + (p.alive ? p.lives + ' ❤' : 'OUT') + '</span>';
         res.appendChild(row);
       });
 
@@ -330,6 +330,12 @@
       order.push(p.idx);
       pops.push({ x: 0, y: 0, p: p, txt: 'OUT!', color: '#ff5a6e', t: 0, big: true });
     }
+    // a clean miss: lose a life and get knocked one step toward the rim; off the end → out
+    function hit(p) {
+      p.lives--; p.flash = 0.3; p.knockT = 0.4;
+      if (p.lives <= 0) { eliminate(p); }
+      else pops.push({ x: 0, y: 0, p: p, txt: '−1 ❤', color: '#ff5a6e', t: 0 });
+    }
 
     function update() {
       // floating score pops
@@ -348,11 +354,14 @@
       const prev = phi;
       phi = mod360(phi + delta);
 
-      // tick player timers up front
+      // tick player timers + ease each critter toward its knockback distance
       for (const p of players) {
         if (p.jumpT > 0) p.jumpT = Math.max(0, p.jumpT - dt);
         if (p.flash > 0) p.flash -= dt;
+        if (p.knockT > 0) p.knockT -= dt;
         if (!p.alive) p.deadT += dt;
+        const rfTarget = p.alive ? RF_START + (LIVES - p.lives) * RF_STEP : RF_EDGE + 0.15;
+        p.rfCur += (rfTarget - p.rfCur) * Math.min(1, dt * 9);
       }
 
       // advance each arm; re-roll its type the instant it slips behind the pole (270°)
@@ -366,8 +375,8 @@
           if (!p.alive) continue;
           if (!swept(p.angle, prevA, delta)) continue;
           const safe = wantDuck ? isDucking(p) : isAirborne(p);
-          if (safe) { p.score++; p.flash = 0.3; pops.push({ x: 0, y: 0, p: p, txt: '+1', color: popColor, t: 0 }); }
-          else eliminate(p);
+          if (safe) { p.score++; p.flash = 0.3; pops.push({ x: 0, y: 0, p: p, txt: '✓', color: popColor, t: 0 }); }
+          else hit(p);
         }
       }
 
@@ -380,12 +389,14 @@
     }
 
     // ---------- drawing ----------
-    function playerPos(angle) {
-      // critters stand in a straight horizontal row: x still tracks the sweep
-      // angle (so the bar passes each one in turn) but y and size are constant.
-      const r = rad(angle);
-      const x = ECX + ERX * Math.cos(r);
-      return { x: x, y: LINE_Y, scale: LINE_SCALE };
+    function playerPos(p) {
+      // each critter sits on its lane radial, `rfCur` out from the disc centre.
+      // farther out (knocked back) = lower on screen and bigger (nearer the camera).
+      const r = rad(p.angle), rf = p.rfCur;
+      const x = ECX + ERX * rf * Math.cos(r);
+      const y = ECY + ERY * rf * Math.sin(r);
+      const scale = 0.6 + 0.62 * rf * (0.45 + 0.55 * Math.max(Math.sin(r), 0));
+      return { x: x, y: y, scale: scale };
     }
     function barEnd(angle, lift) {
       const r = rad(angle);
@@ -473,7 +484,7 @@
     }
 
     function drawPlayer(p) {
-      const pos = playerPos(p.angle);
+      const pos = playerPos(p);
       const sc = pos.scale;
       const jh = jumpHeight(p) * sc;
       const ducking = isDucking(p);
@@ -500,11 +511,11 @@
         ctx.font = size + "px 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
         ctx.fillText(p.emoji, 0, 0);
       } else {
-        // knocked out — tumble away and fade
-        const t = p.deadT;
-        ctx.globalAlpha = Math.max(0, 1 - t * 0.7);
-        ctx.translate(pos.x + p.spin * t * 70, pos.y + 4 - Math.sin(Math.min(t, 1) * Math.PI) * 90 + t * t * 40);
-        ctx.rotate(p.spin * t * 7);
+        // knocked off the end — fly outward along the lane and tumble off the platform
+        const t = p.deadT, rr = rad(p.angle);
+        ctx.globalAlpha = Math.max(0, 1 - t * 0.55);
+        ctx.translate(pos.x + Math.cos(rr) * t * 90 + p.spin * t * 24, pos.y + Math.sin(rr) * t * 45 + t * t * 130);
+        ctx.rotate(p.spin * t * 6);
         ctx.font = size + "px 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
         ctx.fillText(p.emoji, 0, 0);
       }
@@ -543,7 +554,7 @@
         ctx.font = "16px 'Segoe UI Emoji', sans-serif";
         ctx.fillText(p.emoji, x + 8, y + 12);
         ctx.fillStyle = p.alive ? '#fff' : '#8a93a8'; ctx.font = "800 14px 'Nunito', sans-serif";
-        ctx.fillText(p.alive ? String(p.score) : 'OUT', x + 30, y + 13);
+        ctx.fillText(p.alive ? ('❤ ' + p.lives) : 'OUT', x + 30, y + 13);
         ctx.globalAlpha = 1;
         x += bw + 14;
       }
@@ -563,7 +574,7 @@
     function drawPops() {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       for (const pp of pops) {
-        const pos = playerPos(pp.p.angle);
+        const pos = playerPos(pp.p);
         const yy = pos.y - 40 - pp.t * 36;
         ctx.globalAlpha = Math.max(0, 1 - pp.t);
         ctx.fillStyle = pp.color;
@@ -613,7 +624,7 @@
       if (!poleDrawn) drawPole();   // both arms were behind the pole
 
       // players, sorted back-to-front so nearer animals overlap farther ones
-      players.slice().sort(function (a, b) { return playerPos(a.angle).y - playerPos(b.angle).y; })
+      players.slice().sort(function (a, b) { return playerPos(a).y - playerPos(b).y; })
         .forEach(drawPlayer);
 
       drawPops();
@@ -637,7 +648,8 @@
         players = [0, 1].map(function (i) {
           const a = ANIMALS[i];
           return { idx: i, emoji: a.emoji, color: a.color, dark: a.dark, name: '', jumpKey: '', duckKey: '',
-            angle: 55 + i * 60, alive: true, jumpT: 0, duckHeld: false, score: 0, deadT: 0, spin: 0, flash: 0, bob: i };
+            angle: 72 + i * 36, alive: true, jumpT: 0, duckHeld: false, score: 0,
+            lives: LIVES, rfCur: RF_START, knockT: 0, deadT: 0, spin: 0, flash: 0, bob: i };
         });
       }
     })();

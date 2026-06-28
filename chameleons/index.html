@@ -342,120 +342,154 @@
     for (let j=0;j<=n;j++){ const s=j/n; const f=lerpP(FL,FR,s), b=lerpP(BL,BR,s); bgx.beginPath(); bgx.moveTo(f[0],f[1]); bgx.lineTo(b[0],b[1]); bgx.stroke(); } }
   function clipPoly(pts, fn){ bgx.save(); bgx.beginPath(); bgx.moveTo(pts[0][0],pts[0][1]); for (let i=1;i<pts.length;i++) bgx.lineTo(pts[i][0],pts[i][1]); bgx.closePath(); bgx.clip(); fn(); bgx.restore(); }
   function rr(x,y,w,h,r){ if (bgx.roundRect){ bgx.beginPath(); bgx.roundRect(x,y,w,h,r); bgx.fill(); } else bgx.fillRect(x,y,w,h); }
-  // furniture you can stand/sit/lie against and try to blend into (solid colour blocks)
-  function drawObstacles(){
-    const cc = pick(['#c2554d','#3f7e8c','#7a6cae','#caa15f','#4f8a5c','#b5683a']);
-    const cxp=rnd(W*0.16,W*0.30), cyp=rnd(H*0.74,H*0.84), cw=180, ch=58;            // couch
-    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(cxp, cyp+10, cw*0.55, 16, 0,0,Math.PI*2); bgx.fill();
-    bgx.fillStyle=jit(cc,1.12); bgx.fillRect(cxp-cw/2, cyp-ch-30, cw, 36);          // backrest
-    bgx.fillStyle=cc; rr(cxp-cw/2, cyp-ch, cw, ch, 12);                             // seat
-    bgx.fillStyle=jit(cc,0.85); rr(cxp-cw/2-14, cyp-ch-26, 24, ch+30, 8); rr(cxp+cw/2-10, cyp-ch-26, 24, ch+30, 8); // arms
-    const tx=rnd(W*0.68,W*0.82), ty=rnd(H*0.66,H*0.76), tw=150, th=92;             // TV + cabinet
-    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(tx, ty+34, 86, 14, 0,0,Math.PI*2); bgx.fill();
-    bgx.fillStyle='#9a7b46'; bgx.fillRect(tx-64, ty+th-30, 128, 40);                // cabinet
-    bgx.fillStyle='#15171c'; rr(tx-tw/2, ty-th, tw, th, 6);                          // bezel
-    bgx.fillStyle=jit('#22323f', rnd(0.85,1.3)); bgx.fillRect(tx-tw/2+8, ty-th+8, tw-16, th-16); // screen glow
-    const px=rnd(W*0.42,W*0.58), py=rnd(H*0.70,H*0.80);                              // potted plant
-    bgx.fillStyle='#8a5a32'; bgx.fillRect(px-13, py-16, 26, 22);
-    bgx.fillStyle=jit('#3c8e4f',rnd(0.85,1.15)); bgx.beginPath(); bgx.arc(px,py-30,26,0,Math.PI*2); bgx.fill();
-    bgx.fillStyle=jit('#48a85c',rnd(0.85,1.15)); bgx.beginPath(); bgx.arc(px-14,py-22,16,0,Math.PI*2); bgx.arc(px+14,py-24,15,0,Math.PI*2); bgx.fill();
+  function rrp(x,y,w,h,r){ if (bgx.roundRect){ bgx.beginPath(); bgx.roundRect(x,y,w,h,r);} else { bgx.beginPath(); bgx.rect(x,y,w,h);} }   // path only
+  function quadFill(p0,p1,p2,p3){ bgx.beginPath(); bgx.moveTo(p0[0],p0[1]); bgx.lineTo(p1[0],p1[1]); bgx.lineTo(p2[0],p2[1]); bgx.lineTo(p3[0],p3[1]); bgx.closePath(); bgx.fill(); }
+  function vGrad(x,y,h,c0,c1){ const g=bgx.createLinearGradient(x,y,x,y+h); g.addColorStop(0,c0); g.addColorStop(1,c1); return g; }
+  function hGrad(x0,x1,y,c0,c1){ const g=bgx.createLinearGradient(x0,y,x1,y); g.addColorStop(0,c0); g.addColorStop(1,c1); return g; }
+
+  // a framed artwork you can stand in front of and blend into (multi-colour)
+  function drawPainting(x,y,w,h){
+    bgx.save();
+    bgx.fillStyle='rgba(0,0,0,0.25)'; bgx.fillRect(x+5,y+6,w,h);                      // drop shadow
+    const fr=pick(['#caa14a','#7a5a32','#b8b2a6','#2b2b30']);                          // frame
+    bgx.fillStyle=jit(fr,1.1); bgx.fillRect(x-6,y-6,w+12,h+12);
+    bgx.fillStyle=jit(fr,0.8); bgx.fillRect(x-2,y-2,w+4,h+4);
+    bgx.save(); rrp(x,y,w,h,2); bgx.clip();
+    const pals=[['#e8554d','#f2a93b','#f5e06b'],['#2f7fb0','#6fc3d8','#bfe9f2'],['#7a4bb0','#c86fb0','#f0b6d6'],['#2f8f5c','#8fd06a','#e7e36b'],['#e0712e','#c23b54','#3a2f6b']];
+    const pal=pick(pals);
+    const bgrd=bgx.createLinearGradient(x,y,x+w,y+h); bgrd.addColorStop(0,pal[0]); bgrd.addColorStop(0.5,pal[1]); bgrd.addColorStop(1,pal[2]);
+    bgx.fillStyle=bgrd; bgx.fillRect(x,y,w,h);
+    for (let s=0;s<5;s++){ bgx.globalAlpha=rnd(0.4,0.8); bgx.fillStyle=jit(pick(pal),rnd(0.7,1.3));
+      if (s%2){ bgx.beginPath(); bgx.arc(x+rnd(0,w), y+rnd(0,h), rnd(w*0.08,w*0.24), 0, Math.PI*2); bgx.fill(); }
+      else { bgx.beginPath(); bgx.moveTo(x+rnd(0,w),y+rnd(0,h)); bgx.lineTo(x+rnd(0,w),y+rnd(0,h)); bgx.lineTo(x+rnd(0,w),y+rnd(0,h)); bgx.closePath(); bgx.fill(); } }
+    bgx.globalAlpha=1; bgx.restore(); bgx.restore();
+  }
+  // realistic gradient couch
+  function drawCouch(cx,cy,cw,ch,base){
+    bgx.fillStyle='rgba(0,0,0,0.26)'; bgx.beginPath(); bgx.ellipse(cx, cy+8, cw*0.56, 16, 0,0,Math.PI*2); bgx.fill();
+    bgx.fillStyle=vGrad(cx, cy-ch-40, 44, jit(base,1.18), jit(base,0.92)); rr(cx-cw/2, cy-ch-40, cw, 46, 14);   // backrest
+    bgx.fillStyle=vGrad(cx, cy-ch, ch+8, jit(base,1.05), jit(base,0.7)); rr(cx-cw/2, cy-ch, cw, ch+8, 14);      // seat base
+    const n=3, sw=(cw-16)/n;                                                                                    // cushions
+    for (let i=0;i<n;i++){ const sx=cx-cw/2+8+i*sw; bgx.fillStyle=vGrad(sx, cy-ch+4, ch-6, jit(base,1.22), jit(base,0.95)); rr(sx+3, cy-ch+4, sw-6, ch-10, 9);
+      bgx.strokeStyle='rgba(0,0,0,0.12)'; bgx.lineWidth=1.5; rrp(sx+3, cy-ch+4, sw-6, ch-10, 9); bgx.stroke(); }
+    bgx.fillStyle=vGrad(cx, cy-ch-30, ch+34, jit(base,1.0), jit(base,0.62)); rr(cx-cw/2-16, cy-ch-30, 26, ch+38, 10); rr(cx+cw/2-10, cy-ch-30, 26, ch+38, 10); // arms
+  }
+  function drawTV(tx,ty,tw,th){
+    bgx.fillStyle='rgba(0,0,0,0.24)'; bgx.beginPath(); bgx.ellipse(tx, ty+44, 96, 15, 0,0,Math.PI*2); bgx.fill();
+    bgx.fillStyle=vGrad(tx, ty+th-4, 46, '#8a6a3e', '#5e4628'); bgx.fillRect(tx-72, ty+th-4, 144, 46);          // cabinet
+    bgx.fillStyle='#0c0e12'; rr(tx-tw/2, ty-th, tw, th, 7);                                                     // bezel
+    const sg=bgx.createLinearGradient(tx-tw/2, ty-th, tx+tw/2, ty); sg.addColorStop(0,'#26303c'); sg.addColorStop(1,'#10161d');
+    bgx.fillStyle=sg; bgx.fillRect(tx-tw/2+7, ty-th+7, tw-14, th-14);                                           // screen
+    bgx.fillStyle='rgba(255,255,255,0.10)'; bgx.beginPath(); bgx.moveTo(tx-tw/2+7,ty-th+7); bgx.lineTo(tx-tw/2+40,ty-th+7); bgx.lineTo(tx-tw/2+10,ty-7); bgx.lineTo(tx-tw/2+7,ty-7); bgx.closePath(); bgx.fill(); // reflection
+  }
+  function drawRug(cx,cy,rw,rh,col){
+    const g=bgx.createRadialGradient(cx,cy,8,cx,cy,rw); g.addColorStop(0,jit(col,1.2)); g.addColorStop(1,jit(col,0.8));
+    bgx.fillStyle=g; bgx.beginPath(); bgx.ellipse(cx,cy,rw,rh,0,0,Math.PI*2); bgx.fill();
+    bgx.strokeStyle=jit(col,0.6); bgx.lineWidth=5; bgx.beginPath(); bgx.ellipse(cx,cy,rw*0.86,rh*0.86,0,0,Math.PI*2); bgx.stroke();
+  }
+  function drawPlant(px,py){
+    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(px,py+4,30,9,0,0,Math.PI*2); bgx.fill();
+    bgx.fillStyle=vGrad(px,py-20,28,'#c98a55','#7a4f2a'); rr(px-16,py-20,32,28,4);                              // pot
+    for (let k=0;k<9;k++){ const a=-Math.PI/2+rnd(-1.1,1.1), len=rnd(26,46); bgx.save(); bgx.translate(px,py-20); bgx.rotate(a);
+      bgx.fillStyle=jit(pick(['#2f8f4c','#3faf5c','#57c06a','#247a40']),rnd(0.9,1.1)); bgx.beginPath(); bgx.ellipse(0,-len/2,7,len/2,0,0,Math.PI*2); bgx.fill(); bgx.restore(); }
+  }
+  function drawShelf(x,yBase,w,h){
+    bgx.fillStyle=vGrad(x,yBase-h,h,'#7a5630','#553a1e'); bgx.fillRect(x,yBase-h,w,h);                          // frame
+    const rows=4, rh=(h-8)/rows;
+    for (let r=0;r<rows;r++){ const sy=yBase-h+6+r*rh; bgx.fillStyle='#3a2814'; bgx.fillRect(x+4, sy+rh-5, w-8, 5);   // shelf board
+      let bx=x+7; while (bx < x+w-10){ const bw2=rnd(6,12), bh2=rnd(rh*0.5,rh*0.82);
+        bgx.fillStyle=vGrad(bx,sy+rh-5-bh2,bh2, jit(pick(['#c23b54','#2f7fb0','#3c8e4f','#caa14a','#7a4bb0','#e0712e','#d8d2c4']),1.15), jit(pick(['#a02d44','#256490','#2f7340','#a8842f']),0.9));
+        bgx.fillRect(bx, sy+rh-5-bh2, bw2, bh2); bx+=bw2+1; } }
+  }
+  function drawLamp(x,floorY){
+    const top=floorY-180;
+    bgx.strokeStyle='#4a4a52'; bgx.lineWidth=5; bgx.beginPath(); bgx.moveTo(x,floorY); bgx.lineTo(x,top+30); bgx.stroke();
+    const g=bgx.createRadialGradient(x,top+40,4,x,top+120,150); g.addColorStop(0,'rgba(255,238,180,0.5)'); g.addColorStop(1,'rgba(255,238,180,0)');
+    bgx.fillStyle=g; bgx.beginPath(); bgx.ellipse(x,top+150,120,150,0,0,Math.PI*2); bgx.fill();                 // warm glow
+    bgx.fillStyle=vGrad(x-26,top,40,'#f3e2a6','#d8b96a'); bgx.beginPath(); bgx.moveTo(x-26,top+40); bgx.lineTo(x+26,top+40); bgx.lineTo(x+16,top); bgx.lineTo(x-16,top); bgx.closePath(); bgx.fill(); // shade
+  }
+  function drawBench(cx,cy,bw2){
+    bgx.fillStyle='rgba(0,0,0,0.22)'; bgx.beginPath(); bgx.ellipse(cx,cy+6,bw2*0.55,12,0,0,Math.PI*2); bgx.fill();
+    bgx.fillStyle=vGrad(cx,cy-26,30,'#3a3f4a','#23272f'); rr(cx-bw2/2,cy-26,bw2,26,6);
+    bgx.fillStyle='#1b1e24'; bgx.fillRect(cx-bw2/2+6,cy,8,18); bgx.fillRect(cx+bw2/2-14,cy,8,18);
   }
 
-  const THEMES = ['backrooms','poolrooms','lounge','office'];
+  let roomBackY = H*0.66;                     // floor depth reference (back wall bottom), set per scene
+  const THEMES = ['lounge','gallery'];
   function genScene(){
     const theme = pick(THEMES);
-    const vx = W*rnd(0.44,0.56), vy = H*rnd(0.42,0.47);
-    const bw = W*0.42, bh = H*0.48;          // bigger back wall = shallower, cosier (medium-small) room
+    const vx = W*rnd(0.46,0.54), vy = H*rnd(0.40,0.45);
+    const bw = W*0.46, bh = H*0.50;          // shallow, cosy (medium-small) room
     const bL=vx-bw/2, bR=vx+bw/2, bT=vy-bh/2, bB=vy+bh/2;
+    roomBackY = bB;
     const FTL=[0,0], FTR=[W,0], FBL=[0,H], FBR=[W,H];
     const BTL=[bL,bT], BTR=[bR,bT], BBL=[bL,bB], BBR=[bR,bB];
-    const floorQ=[FBL,FBR,BBR,BBL], ceilQ=[FTL,FTR,BTR,BTL];
+    const floorQ=[FBL,FBR,BBR,BBL];
 
-    if (theme === 'backrooms'){
-      // liminal mono-yellow office: damp carpet, wallpaper, drop ceiling + buzzing lights
-      bgx.fillStyle='#b89a3a'; bgx.fillRect(0,0,W,H);
-      quadP(FTL,BTL,BBL,FBL, '#b39633'); quadP(FTR,BTR,BBR,FBR, '#c2a23c');         // side walls
-      transLines(FTL,BTL,FBL,BBL, 8, 4, 'rgba(0,0,0,0.10)', 1.2);                    // wallpaper seams
-      transLines(FTR,BTR,FBR,BBR, 8, 4, 'rgba(0,0,0,0.10)', 1.2);
-      tiled(FTL,FTR,BTR,BTL, 12,7, 5, '#d8c684','#cdbb77', (i,j)=> (i%2===0 && j%3===1)?'#fbf6d8':null); // ceiling tiles+lights
-      quadP(FBL,FBR,BBR,BBL, '#b09134');                                             // carpet
-      clipPoly(floorQ, ()=>{ for (let k=0;k<130;k++){ bgx.fillStyle=jit('#b09134', rnd(0.8,1.08)); bgx.globalAlpha=rnd(0.12,0.4);
-        bgx.beginPath(); bgx.ellipse(rnd(0,W), rnd(vy,H), rnd(8,32), rnd(4,15), 0,0,Math.PI*2); bgx.fill(); } bgx.globalAlpha=1; });
-      bgx.fillStyle='#9c7f2c'; bgx.fillRect(bL,bT,bw,bh);                            // back wall
-      bgx.fillStyle='#7a6320'; bgx.fillRect(bL+bw*0.4, bT+bh*0.25, bw*0.2, bh*0.75); // far doorway
+    // ---- room shell (gradient lit) ----
+    const pal = theme==='gallery'
+      ? { ceil0:'#fbfbfd', ceil1:'#e7e8ee', wall0:'#ececf1', wall1:'#cfd0d8', wallSide:'#d6d7df', floor0:'#cdc6ba', floor1:'#8f877a', plank:'rgba(80,70,55,0.18)' }
+      : { ceil0:'#f4ecd9', ceil1:'#e0d5bd', wall0:'#ecdcbe', wall1:'#cdb88f', wallSide:'#d8c39b', floor0:'#a8743f', floor1:'#5a3a1d', plank:'rgba(50,28,10,0.30)' };
+    bgx.fillStyle=vGrad(0,0,vy,pal.ceil0,pal.ceil1); quadFill(FTL,FTR,BTR,BTL);                 // ceiling
+    bgx.fillStyle=hGrad(0,bL,0,jit(pal.wallSide,0.86),pal.wallSide); quadFill(FTL,BTL,BBL,FBL); // left wall (AO toward back)
+    bgx.fillStyle=hGrad(W,bR,0,jit(pal.wallSide,0.86),pal.wallSide); quadFill(FTR,BTR,BBR,FBR); // right wall
+    bgx.fillStyle=vGrad(bT,0,bh,pal.wall0,pal.wall1); bgx.fillRect(bL,bT,bw,bh);                 // back wall
+    // floor with light pool
+    bgx.fillStyle=vGrad(bB,0,H-bB,jit(pal.floor1,1.05),pal.floor1); quadFill(FBL,FBR,BBR,BBL);
+    const fp=bgx.createRadialGradient(W/2,H*0.98,30,W/2,H*0.62,W*0.66); fp.addColorStop(0,'rgba(255,245,220,0.30)'); fp.addColorStop(1,'rgba(255,245,220,0)');
+    clipPoly(floorQ, ()=>{ if (theme==='lounge') longLines(FBL,FBR,BBL,BBR,16,pal.plank,1.4); else { longLines(FBL,FBR,BBL,BBR,10,'rgba(0,0,0,0.08)',1); }
+      bgx.fillStyle=fp; bgx.fillRect(0,bB,W,H-bB); });
+    bgx.strokeStyle='rgba(0,0,0,0.28)'; bgx.lineWidth=3; bgx.beginPath(); bgx.moveTo(BBL[0],BBL[1]); bgx.lineTo(BBR[0],BBR[1]); bgx.stroke(); // baseboard line
+    // corner ambient occlusion
+    bgx.fillStyle='rgba(0,0,0,0.10)'; quadP(BTL,[bL+18,bT],[bL+18,bB],BBL); quadP(BTR,[bR-18,bT],[bR-18,bB],BBR);
+
+    if (theme === 'gallery'){
+      // art gallery: several paintings to blend into + a bench, polished floor reflections
+      drawPainting(bL+bw*0.10, bT+bh*0.30, bw*0.32, bh*0.50);
+      drawPainting(bL+bw*0.56, bT+bh*0.22, bw*0.34, bh*0.42);
+      drawPainting(W*0.06, vy*0.7, 70, 150);                       // left wall art (foreshortened-ish)
+      drawPainting(W*0.84, vy*0.7, 70, 150);
+      drawBench(W*0.5, H*0.84, 150);
+      drawPlant(W*0.16, H*0.80);
+    } else {
+      // cosy living room
+      drawPainting(bL+bw*0.30, bT+bh*0.18, bw*0.42, bh*0.46);      // big wall art (blend target)
+      drawRug(W*0.52, H*0.86, 230, 56, pick(['#b5683a','#3f6e8c','#7a6cae','#4f8a5c']));
+      drawShelf(W*0.04, H*0.80, 110, 150);
+      drawTV(W*0.80, H*0.66, 150, 92);
+      drawCouch(W*0.46, H*0.82, 240, 64, pick(['#c2554d','#3f7e8c','#7a6cae','#4f8a5c','#caa15f']));
+      drawPlant(W*0.66, H*0.74);
+      drawLamp(W*0.12, H*0.78);
     }
-    else if (theme === 'poolrooms'){
-      // wet tiled rooms, aqua + white
-      bgx.fillStyle='#bfe6ea'; bgx.fillRect(0,0,W,H);
-      tiled(FTL,FBL,BBL,BTL, 6,7, 4, '#d6f1f3','#bfe3e8', null);                     // left wall tiles
-      tiled(FTR,FBR,BBR,BTR, 6,7, 4, '#d6f1f3','#bfe3e8', null);                     // right wall tiles
-      tiled(FTL,FTR,BTR,BTL, 12,7, 5, '#eafafa','#d6eef0', (i,j)=> (i%3===1 && j%4===2)?'#ffffff':null); // ceiling
-      tiled(FBL,FBR,BBR,BBL, 12,8, 5, '#9fd6dd','#86c4cd', null);                    // pool floor tiles
-      clipPoly(floorQ, ()=>{ for (let k=0;k<60;k++){ bgx.strokeStyle='rgba(255,255,255,0.18)'; bgx.lineWidth=1.5;
-        bgx.beginPath(); bgx.arc(rnd(0,W), rnd(vy,H), rnd(6,18), 0, Math.PI*2); bgx.stroke(); } });
-      tiled([bL,bT],[bR,bT],[bR,bB],[bL,bB], 5,5, 99, '#cdeef0','#b6dfe4', null);    // back wall tiles
-    }
-    else if (theme === 'lounge'){
-      // generic cosy living room: wood floor, warm walls, window, couch, rug
-      bgx.fillStyle='#e7d6b6'; bgx.fillRect(0,0,W,H);
-      quadP(FTL,BTL,BBL,FBL, '#dcc8a2'); quadP(FTR,BTR,BBR,FBR, '#e3d0aa');          // side walls
-      quadP(FTL,FTR,BTR,BTL, '#f0e6cf');                                             // ceiling
-      quadP(FBL,FBR,BBR,BBL, '#8a5a32');                                             // wood floor
-      longLines(FBL,FBR,BBL,BBR, 14, 'rgba(60,30,10,0.35)', 1.4);                    // plank seams to VP
-      bgx.fillStyle='#cdb78d'; bgx.fillRect(bL,bT,bw,bh);                            // back wall
-      const wx=bL+bw*0.16, wy=bT+bh*0.16, ww=bw*0.68, wh=bh*0.5;                     // window
-      const wg=bgx.createLinearGradient(wx,wy,wx,wy+wh); wg.addColorStop(0,'#bfe0f5'); wg.addColorStop(1,'#7fb3d8');
-      bgx.fillStyle=wg; bgx.fillRect(wx,wy,ww,wh);
-      bgx.strokeStyle='#6b4a28'; bgx.lineWidth=4; bgx.strokeRect(wx,wy,ww,wh); bgx.beginPath(); bgx.moveTo(wx+ww/2,wy); bgx.lineTo(wx+ww/2,wy+wh); bgx.moveTo(wx,wy+wh/2); bgx.lineTo(wx+ww,wy+wh/2); bgx.stroke();
-      bgx.fillStyle='#9a8050'; bgx.fillRect(W*0.12,vy+8,46,30); bgx.fillStyle='#b6452f'; bgx.fillRect(W*0.80,vy+2,40,30); // wall pictures
-      bgx.fillStyle='#6b4a28'; bgx.beginPath(); bgx.ellipse(W*0.5, H*0.86, 230, 60, 0,0,Math.PI*2); bgx.fill();         // rug shadow
-      bgx.fillStyle='#c98a3a'; bgx.beginPath(); bgx.ellipse(W*0.5, H*0.86, 210, 50, 0,0,Math.PI*2); bgx.fill();         // rug
-      const cx2=W*0.5, cy2=H*0.78, cw=250, ch=70;                                    // couch
-      bgx.fillStyle='#2f8f8a'; if (bgx.roundRect){ bgx.beginPath(); bgx.roundRect(cx2-cw/2, cy2-ch, cw, ch, 16); bgx.fill(); } else bgx.fillRect(cx2-cw/2,cy2-ch,cw,ch);
-      bgx.fillStyle='#3aa39d'; bgx.fillRect(cx2-cw/2, cy2-ch-34, cw, 40);            // backrest
-      bgx.fillStyle='#267a76'; bgx.fillRect(cx2-cw/2-14, cy2-ch-30, 22, ch+24); bgx.fillRect(cx2+cw/2-8, cy2-ch-30, 22, ch+24); // arms
-    }
-    else {
-      // open-plan office: carpet, cubicle panels, drop ceiling + lights, desks
-      bgx.fillStyle='#7d8a99'; bgx.fillRect(0,0,W,H);
-      quadP(FTL,BTL,BBL,FBL, '#8a96a3'); quadP(FTR,BTR,BBR,FBR, '#929daa'); // side walls
-      tiled(FTL,FTR,BTR,BTL, 12,7, 5, '#dfe4ea','#cfd6df', (i,j)=> (i%2===0 && j%4===2)?'#f6f9fc':null);  // ceiling+lights
-      tiled(FBL,FBR,BBR,BBL, 14,9, 5, '#5f6b7a','#586474', null);                    // carpet tiles
-      bgx.fillStyle='#b8bdc4'; bgx.fillRect(bL,bT,bw,bh);                            // back wall
-      // cubicle partitions + desks on floor (foreground)
-      const part=['#3c8e4f','#2f7fb0','#c98a3a','#b56fb0'];
-      clipPoly(floorQ, ()=>{ for (let k=0;k<5;k++){ const x=W*(0.12+k*0.18), y=H*(0.6+rnd(-0.05,0.12));
-        bgx.fillStyle=jit(pick(part),rnd(0.9,1.1)); bgx.fillRect(x-46,y-60,92,60);   // partition
-        bgx.fillStyle='#caa15f'; bgx.fillRect(x-40,y,80,16);                          // desk
-        bgx.fillStyle='#1b2330'; bgx.fillRect(x-14,y-26,28,20); } });                 // monitor
-    }
-    if (theme !== 'lounge') drawObstacles();   // couch / TV / plant to blend into
   }
 
   // ---------- game state ----------
   let nPlayers = 2, names = [], scores = [];
   let cur = 0;                             // current hider during hide phase
   let phase = 'setup';
-  let pPaint = [], pox = [], poy = [], pCamo = [], pFound = [], pPose = [];   // per-player layers/positions/poses
+  let pPaint = [], pfx = [], pfy = [], pCamo = [], pFound = [], pPose = [];   // per-player layers / FOOT positions / poses
   let activeColor = PALETTE[1], matched = false, tool = 'paint', brushR = 11;
   let endAt = 0, painting = false, lastPt = null, lastTapMsg = '';
   const moveDir = { up:false, down:false, left:false, right:false };   // third-person walk
-  const WALK = 3.4;
+  const WALK = 3.2, SC_MIN = 0.5, SC_MAX = 1.28;
 
   function sampleBg(x,y){ x=Math.max(0,Math.min(W-1,x|0)); y=Math.max(0,Math.min(H-1,y|0)); const d=bgx.getImageData(x,y,1,1).data; return [d[0],d[1],d[2]]; }
   function rgbStr(a){ return 'rgb('+a[0]+','+a[1]+','+a[2]+')'; }
   function poseOf(i){ return poseSet[pPose[i]] || poseSet.stand; }
-  function clampPos(i){ pox[i]=Math.max(4,Math.min(W-BW-4,pox[i])); poy[i]=Math.max(Math.round(H*0.28),Math.min(H-BH-4,poy[i])); }
+  // depth scale: further back (smaller y) = smaller; near camera (large y) = bigger
+  function scaleAt(fy){ const t=(fy-roomBackY)/(H-roomBackY); return SC_MIN + (SC_MAX-SC_MIN)*Math.max(0,Math.min(1,t)); }
+  function rectOf(i){ const s=scaleAt(pfy[i]); const w=BW*s, h=BH*s; return { s:s, w:w, h:h, x:pfx[i]-w/2, y:pfy[i]-h }; }
+  function clampFoot(i){ pfy[i]=Math.max(roomBackY+4, Math.min(H-4, pfy[i])); const hw=BW*scaleAt(pfy[i])/2; pfx[i]=Math.max(hw, Math.min(W-hw, pfx[i])); }
 
   // ---------- turn flow ----------
   function startGame(){
-    names = []; scores = []; pPaint = []; pox = []; poy = []; pCamo = []; pFound = []; pPose = [];
-    genScene();                            // ONE shared map for everyone
+    names = []; scores = []; pPaint = []; pfx = []; pfy = []; pCamo = []; pFound = []; pPose = [];
+    genScene();                            // ONE shared 3D room for everyone
     for (let i=0;i<nPlayers;i++){
       names.push(pname(i,'Player '+(i+1))); scores.push(0); pCamo.push(0); pFound.push(false); pPose.push('stand');
       const c = document.createElement('canvas'); c.width=BW; c.height=BH; pPaint.push(c);
-      // spread starting spots around the map; players can walk from here
-      pox.push(Math.round(rnd(20, W-BW-20))); poy.push(Math.round(rnd(H*0.40, H-BH-12)));
+      // spread starting foot positions on the floor; players walk from here
+      pfx.push(Math.round(rnd(W*0.2, W*0.8))); pfy.push(Math.round(rnd(roomBackY+30, H-20)));
     }
     cur = 0; document.getElementById('setupOv').hidden = true; hideHandoff();
   }
@@ -506,7 +540,7 @@
     phase='seek'; endAt = nowSec()+60; lastTapMsg='';
     document.getElementById('phasebar').hidden = false;
     document.getElementById('whoLabel').textContent = '🔍 Find the ' + nPlayers + ' hidden people!';
-    showHint('Watch for a faint shimmer — tap a hidden person to reveal them');
+    showHint('Look for an out-of-place shape — tap a hidden person to reveal them');
   }
   function finishScores(){
     for (let i=0;i<nPlayers;i++) scores[i] = Math.round(pCamo[i]*0.4) + (pFound[i] ? 0 : 50);
@@ -514,17 +548,22 @@
   }
 
   function computeCamo(i){
-    const ps = poseOf(i);
+    const ps = poseOf(i), R = rectOf(i);
     buildComp(pPaint[i], ps.mask);
     const pd = cctx.getImageData(0,0,BW,BH).data;
     const md = ps.mctx.getImageData(0,0,BW,BH).data;
-    const bd = bgx.getImageData(pox[i],poy[i],BW,BH).data;
+    const w = Math.max(1,Math.round(R.w)), h = Math.max(1,Math.round(R.h));
+    const bx = Math.max(0,Math.min(W-w,Math.round(R.x))), by = Math.max(0,Math.min(H-h,Math.round(R.y)));
+    const bd = bgx.getImageData(bx,by,w,h).data;
     let total=0, count=0;
     for (let y=0;y<BH;y+=2){ for (let x=0;x<BW;x+=2){ const k=(y*BW+x)*4;
       if (md[k+3] < 40) continue;
       count++;
-      if (pd[k+3] < 30){ total += 0; continue; }
-      const d = Math.sqrt((pd[k]-bd[k])**2 + (pd[k+1]-bd[k+1])**2 + (pd[k+2]-bd[k+2])**2);
+      if (pd[k+3] < 30){ continue; }                                  // unpainted = exposed (0)
+      let sx=Math.round(R.x + x*R.s - bx), sy=Math.round(R.y + y*R.s - by);
+      sx=Math.max(0,Math.min(w-1,sx)); sy=Math.max(0,Math.min(h-1,sy));
+      const b=(sy*w+sx)*4;
+      const d = Math.sqrt((pd[k]-bd[b])**2 + (pd[k+1]-bd[b+1])**2 + (pd[k+2]-bd[b+2])**2);
       total += Math.max(0, 1 - d/150);
     }}
     return count ? Math.round(total/count*100) : 0;
@@ -571,25 +610,26 @@
   function fillBody(){ const g=pPaint[cur].getContext('2d'); g.globalCompositeOperation='source-over'; g.fillStyle=activeColor; g.fillRect(0,0,BW,BH); }
 
   function toLogical(e){ const r=cv.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H }; }
+  function toNative(p){ const R=rectOf(cur); return { x:(p.x-R.x)/R.s, y:(p.y-R.y)/R.s }; }
   function applyDown(p){
     if (tool==='match'){ activeColor=rgbStr(sampleBg(p.x,p.y)); matched=true; refreshActive(); refreshBrush(); return; }
     if (tool==='fill'){ fillBody(); return; }
-    painting=true; const bp={x:p.x-pox[cur],y:p.y-poy[cur]}; dab(bp.x,bp.y); lastPt=bp;
+    painting=true; const bp=toNative(p); dab(bp.x,bp.y); lastPt=bp;
   }
   cv.addEventListener('pointerdown', e=>{ e.preventDefault(); const p=toLogical(e);
     if (phase==='hide'){ try { cv.setPointerCapture(e.pointerId); } catch(err){} applyDown(p); }
     else if (phase==='seek'){ doFind(p); } });
   cv.addEventListener('pointermove', e=>{ if (phase!=='hide') return;
-    if (painting && tool==='paint'){ const p=toLogical(e); const bp={x:p.x-pox[cur],y:p.y-poy[cur]}; strokeTo(lastPt,bp); lastPt=bp; } });
+    if (painting && tool==='paint'){ const bp=toNative(toLogical(e)); strokeTo(lastPt,bp); lastPt=bp; } });
   function stopPaint(){ painting=false; lastPt=null; }
   cv.addEventListener('pointerup', stopPaint); cv.addEventListener('pointercancel', stopPaint);
 
   function maskAlphaAt(mctx2,px,py){ if(px<0||py<0||px>=BW||py>=BH) return 0; return mctx2.getImageData(px,py,1,1).data[3]; }
   function doFind(p){
-    // find the nearest not-yet-found person whose silhouette is under the tap
+    // find the nearest not-yet-found person whose (scaled) silhouette is under the tap
     for (let i=0;i<nPlayers;i++){ if (pFound[i]) continue;
-      const m=poseOf(i).mctx; const px=p.x-pox[i], py=p.y-poy[i]; let hit=false;
-      for (let a=0;a<9 && !hit;a++){ const ang=a/9*Math.PI*2, rr=(a===0?0:9); if (maskAlphaAt(m, Math.round(px+Math.cos(ang)*rr), Math.round(py+Math.sin(ang)*rr))>40) hit=true; }
+      const m=poseOf(i).mctx, R=rectOf(i); const px=(p.x-R.x)/R.s, py=(p.y-R.y)/R.s; const rr=10/R.s; let hit=false;
+      for (let a=0;a<9 && !hit;a++){ const ang=a/9*Math.PI*2, d=(a===0?0:rr); if (maskAlphaAt(m, Math.round(px+Math.cos(ang)*d), Math.round(py+Math.sin(ang)*d))>40) hit=true; }
       if (hit){ pFound[i]=true; showHint('✅ '+names[i]+' found!');
         if (pFound.every(Boolean)) setTimeout(()=>{ if (phase==='seek') { phase='done'; finishScores(); } }, 700);
         return; }
@@ -603,37 +643,38 @@
   function showHint(t){ const h=document.getElementById('hintpill'); h.textContent=t; h.hidden=false; }
 
   function labelAbove(i, text, color){
-    const x = pox[i]+BW/2, y = poy[i]-6;
+    const R = rectOf(i); const x = pfx[i], y = R.y-6;
     ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign='center'; ctx.textBaseline='bottom';
     const w = ctx.measureText(text).width + 14;
     ctx.fillStyle='rgba(10,14,28,0.8)'; ctx.beginPath(); ctx.roundRect(x-w/2, y-18, w, 17, 8); ctx.fill();
     ctx.fillStyle=color; ctx.fillText(text, x, y-3);
+  }
+  function drawPersonAt(i, ps){            // contact shadow + grey ghost + painted body, depth-scaled
+    const R = rectOf(i);
+    ctx.fillStyle='rgba(0,0,0,0.26)'; ctx.beginPath(); ctx.ellipse(pfx[i], pfy[i]-2, R.w*0.34, R.w*0.12, 0,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=0.9; ctx.drawImage(ps.ghost, R.x, R.y, R.w, R.h); ctx.globalAlpha=1;
+    buildComp(pPaint[i], ps.mask); ctx.drawImage(comp, R.x, R.y, R.w, R.h);
+    return R;
   }
   function render(){
     ctx.clearRect(0,0,W,H);
     if (phase==='setup' || phase==='done' || phase==='handoff'){ ctx.drawImage(bg,0,0); requestAnimationFrame(render); return; }
     ctx.drawImage(bg,0,0);
     if (phase==='hide'){
-      // third-person walk
-      if (moveDir.up) poy[cur]-=WALK; if (moveDir.down) poy[cur]+=WALK;
-      if (moveDir.left) pox[cur]-=WALK; if (moveDir.right) pox[cur]+=WALK;
-      if (moveDir.up||moveDir.down||moveDir.left||moveDir.right) clampPos(cur);
-      const ps = poseOf(cur);
-      buildComp(pPaint[cur], ps.mask);
-      ctx.globalAlpha=0.85; ctx.drawImage(ps.ghost, pox[cur], poy[cur]); ctx.globalAlpha=1;   // unpainted skin shows grey
-      ctx.drawImage(comp, pox[cur], poy[cur]);
+      // third-person walk on the floor (depth changes size)
+      const sp = WALK;
+      if (moveDir.up) pfy[cur]-=sp; if (moveDir.down) pfy[cur]+=sp;
+      if (moveDir.left) pfx[cur]-=sp; if (moveDir.right) pfx[cur]+=sp;
+      if (moveDir.up||moveDir.down||moveDir.left||moveDir.right) clampFoot(cur);
+      drawPersonAt(cur, poseOf(cur));
     } else if (phase==='seek'){
-      const t = performance.now();
-      const pulse = 0.5 + 0.5*Math.sin(t/150);
-      for (let i=0;i<nPlayers;i++){
+      const pulse = 0.5 + 0.5*Math.sin(performance.now()/150);
+      // draw in depth order (far first) so nearer people overlap correctly
+      const order = names.map((n,i)=>i).sort((a,b)=>pfy[a]-pfy[b]);
+      for (const i of order){
         const ps = poseOf(i);
-        // unfound people gently sway + shimmer so a sharp seeker can spot them (no hard outline)
-        const dx = pFound[i] ? 0 : Math.sin(t/520 + i*2.1)*1.6;
-        const dy = pFound[i] ? 0 : Math.sin(t/610 + i*1.3)*0.8;
-        ctx.drawImage(ps.ghost, pox[i]+dx, poy[i]+dy);
-        buildComp(pPaint[i], ps.mask); ctx.drawImage(comp, pox[i]+dx, poy[i]+dy);
-        if (pFound[i]){ drawTinted(ps.outl, pox[i], poy[i], '#6fe26f', 0.5+0.45*pulse); labelAbove(i, names[i], '#6fe26f'); }
-        else { const sh = 0.06 + 0.13*(0.5+0.5*Math.sin(t/360 + i*1.9)); drawTinted(ps.mask, pox[i]+dx, poy[i]+dy, '#ffffff', sh); }
+        const R = drawPersonAt(i, ps);
+        if (pFound[i]){ ctx.save(); ctx.translate(R.x,R.y); ctx.scale(R.s,R.s); drawTinted(ps.outl, 0, 0, '#6fe26f', 0.5+0.45*pulse); ctx.restore(); labelAbove(i, names[i], '#6fe26f'); }
       }
     }
     if (phase==='hide' || phase==='seek'){
