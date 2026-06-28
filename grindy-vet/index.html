@@ -291,24 +291,29 @@
       return isRoomFloor(x - 1, y) || isRoomFloor(x + 1, y) ||
              isRoomFloor(x, y - 1) || isRoomFloor(x, y + 1);
     }
-    // Validate a click-drag into a straight, contiguous line of buildable grass.
-    // The line follows whichever axis the drag favours; the start tile must touch
-    // an existing room, and the run stops at the first non-grass tile or once the
-    // wallet (at $10/square) runs out. Returns { tiles, cost }.
+    // Validate a click-drag into a straight, TWO-wide line of buildable grass.
+    // The line follows whichever axis the drag favours; each step lays a 2×1 rung
+    // (the tile + its perpendicular neighbour) costing $10. The start tile must
+    // touch an existing room, and the run stops at the first rung that isn't clear
+    // grass or once the wallet (at $10 per 2×1) runs out. Returns { tiles, cost }.
     function corridorLineTiles(sx, sy, ex, ey) {
       if (!isGrassBuildable(sx, sy) || !adjacentToRoom(sx, sy)) return { tiles: [], cost: 0 };
-      var dx = ex - sx, dy = ey - sy, stepx = 0, stepy = 0, n;
-      if (Math.abs(dx) >= Math.abs(dy)) { stepx = dx > 0 ? 1 : dx < 0 ? -1 : 0; n = Math.abs(dx); }
-      else { stepy = dy > 0 ? 1 : dy < 0 ? -1 : 0; n = Math.abs(dy); }
-      var budget = Math.floor(money / 10), tiles = [], cx = sx, cy = sy;
+      var dx = ex - sx, dy = ey - sy, stepx = 0, stepy = 0, n, perpx, perpy;
+      if (Math.abs(dx) >= Math.abs(dy)) { stepx = dx > 0 ? 1 : dx < 0 ? -1 : 0; n = Math.abs(dx); perpx = 0; perpy = 1; }
+      else { stepy = dy > 0 ? 1 : dy < 0 ? -1 : 0; n = Math.abs(dy); perpx = 1; perpy = 0; }
+      // Widen onto whichever perpendicular side is open grass at the start.
+      if (!isGrassBuildable(sx + perpx, sy + perpy)) { perpx = -perpx; perpy = -perpy; }
+      var budget = Math.floor(money / 10), tiles = [], rungs = 0, cx = sx, cy = sy;
       for (var i = 0; i <= n; i++) {
-        if (!isGrassBuildable(cx, cy)) break;
-        if (tiles.length >= budget) break;     // can't afford another square
+        if (!isGrassBuildable(cx, cy) || !isGrassBuildable(cx + perpx, cy + perpy)) break;
+        if (rungs >= budget) break;            // can't afford another 2×1 rung
         tiles.push({ x: cx, y: cy });
-        if (stepx === 0 && stepy === 0) break;  // single square
+        tiles.push({ x: cx + perpx, y: cy + perpy });
+        rungs++;
+        if (stepx === 0 && stepy === 0) break;  // single rung
         cx += stepx; cy += stepy;
       }
-      return { tiles: tiles, cost: tiles.length * 10 };
+      return { tiles: tiles, cost: rungs * 10 };
     }
     function commitCorridor(sx, sy, ex, ey) {
       var res = corridorLineTiles(sx, sy, ex, ey);
@@ -319,6 +324,37 @@
       renderMoney();
     }
 
+    // ---- Restrooms -------------------------------------------------------
+    // A 2×3 outdoor building placed on grass that touches a corridor. One visitor
+    // uses it at a time; they reach it via the `door` tile (the adjacent corridor).
+    var restrooms = [];                    // [{gx,gy,rot,door:{x,y},occupant}]
+    var puddles = [];                      // [{x,y}] accidents left on the floor
+
+    function isAdjacentToCorridor(x, y) {
+      return isCorridor(x - 1, y) || isCorridor(x + 1, y) || isCorridor(x, y - 1) || isCorridor(x, y + 1);
+    }
+    // The corridor tile a placed restroom opens onto (or null if it touches none).
+    function restroomDoor(gx, gy, rot) {
+      var tiles = footprintTiles(FURN_BY_ID.restroom, gx, gy, rot);
+      for (var i = 0; i < tiles.length; i++) {
+        var t = tiles[i], n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (var j = 0; j < n.length; j++) {
+          var dx = t.x + n[j][0], dy = t.y + n[j][1];
+          if (isCorridor(dx, dy)) return { x: dx, y: dy };
+        }
+      }
+      return null;
+    }
+    function canPlaceRestroom(gx, gy, rot) {
+      var tiles = footprintTiles(FURN_BY_ID.restroom, gx, gy, rot);
+      for (var i = 0; i < tiles.length; i++) if (!isGrassBuildable(tiles[i].x, tiles[i].y)) return false;
+      return !!restroomDoor(gx, gy, rot);    // must open onto a corridor
+    }
+    function freeRestroom() {
+      for (var i = 0; i < restrooms.length; i++) if (!restrooms[i].occupant) return restrooms[i];
+      return null;
+    }
+
     // Catalog: the single source for the shop rows AND placement. `cat` picks the
     // shop tab; `kind:'staff'` items snap to a desk action-circle instead of a tile.
     // (drawChair/drawDesk are function declarations, hoisted, so usable here.)
@@ -327,7 +363,8 @@
       { id: 'desk',  name: 'Reception Desk', cost: 100, w: 2, h: 1, icon: '🛎️', cat: 'reception', draw: drawDesk, interact: deskInteractTiles },
       { id: 'tv',    name: 'TV',             cost: 150, w: 1, h: 1, icon: '📺', cat: 'reception', draw: drawTV },
       { id: 'receptionist', name: 'Receptionist', cost: 500, w: 1, h: 1, icon: '🧑‍💼', cat: 'staff', kind: 'staff' },
-      { id: 'corridor', name: 'Corridor', cost: 10, icon: '🚪', cat: 'rooms', kind: 'corridor', perSquare: true }
+      { id: 'corridor', name: 'Corridor', cost: 10, icon: '🚪', cat: 'rooms', kind: 'corridor', perSquare: true },
+      { id: 'restroom', name: 'Restroom', cost: 120, w: 2, h: 3, icon: '🚻', cat: 'rooms', kind: 'restroom', draw: drawRestroom }
     ].sort(function (a, b) { return a.cost - b.cost; });
     var FURN_BY_ID = {};
     FURNITURE.forEach(function (f) { FURN_BY_ID[f.id] = f; });
