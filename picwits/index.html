@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>PicWits</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,14 +15,13 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
       background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
       min-height: 100vh;
       display: flex; flex-direction: column; align-items: center;
       padding: 16px;
+      justify-content: flex-start; touch-action: auto; /* leak-reset: orig had neither; shared sets center/none */
       user-select: none; -webkit-user-select: none;
     }
 
@@ -30,9 +30,6 @@
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 8px;
     }
-    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
 
     /* ---------- scoreboard (3 players + roles) ---------- */
     .roles { width: 100%; max-width: 480px; display: flex; gap: 8px; margin: 6px 0 12px; }
@@ -116,7 +113,6 @@
       position: fixed; inset: 0; background: rgba(10,14,28,0.92); backdrop-filter: blur(5px);
       display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20;
     }
-    .overlay[hidden] { display: none; }
     .panel {
       width: 100%; max-width: 380px; background: #16213e; border: 2px solid #0f3460;
       border-radius: 24px; padding: 26px 22px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
@@ -165,12 +161,10 @@
     </div>
   </div>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
-    function playerName(i, fallback) {
-      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
-      catch (e) { return fallback; }
-    }
+    const playerName = EL.playerName;
     // Hand-picked silly pictures (chosen via picker.html). Each is a SPECIFIC LoremFlickr
     // image locked by [subject-query, lock]. These are the cards players choose from.
     const PICKS = [

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Battleship</title>
 <link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/shared/game.css">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#16213e">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -15,7 +16,8 @@
 <script src="/pwa.js" defer></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  /* leak-reset: neutralize shared body's justify-content/touch-action/user-select (orig had none) */
+  body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px; justify-content: flex-start; touch-action: auto; user-select: auto; -webkit-user-select: auto; }
   @media (min-width: 768px) { body { justify-content: center; } }
   h1 { font-family: 'Pacifico', cursive; font-size: 2.2rem; margin-bottom: 10px; color: #fff; font-weight: 400; }
   #status { font-size: 1.1rem; margin-bottom: 16px; min-height: 1.4em; color: #ffd54f; }
@@ -79,8 +81,6 @@
   .fleet-cell { width: 16px; height: 16px; border: 1px solid #1e3a5f; display: inline-block; background: #37474f; }
   .fleet-row.sunk-ship .fleet-cell { background: #8b0000; }
   .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
-  .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
 </style>
 </head>
 <body>
@@ -129,11 +129,9 @@
   </div>
 </div>
 
+<script src="/shared/game.js"></script>
 <script>
-function playerName(i, fallback) {
-  try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
-  catch (e) { return fallback; }
-}
+const playerName=EL.playerName;
 const SHIPS = [
   { name: 'Carrier', size: 5 },
   { name: 'Battleship', size: 4 },

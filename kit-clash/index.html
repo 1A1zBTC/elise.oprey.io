@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kit Clash</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,7 +15,6 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; }
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
@@ -25,6 +25,7 @@
       flex-direction: column;
       align-items: center;
       padding: 14px;
+      justify-content: flex-start; /* leak-reset: shared body sets center; orig was top-aligned */
       touch-action: manipulation;
       user-select: none;
       -webkit-user-select: none;
@@ -43,7 +44,6 @@
       display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 12px;
       transition: color 0.15s ease, background 0.15s ease;
     }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
     .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.5rem; line-height: 1; }
 
     .wrap { width: 100%; max-width: 720px; flex: 1; display: flex; flex-direction: column; }
@@ -105,7 +105,6 @@
       position: fixed; inset: 0; background: rgba(10,14,28,0.9); backdrop-filter: blur(4px);
       display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20;
     }
-    .overlay[hidden] { display: none; }
     .panel {
       width: 100%; max-width: 400px; background: #16213e; border: 2px solid #0f3460;
       border-radius: 24px; padding: 26px 22px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
@@ -121,12 +120,6 @@
     .champ-art.has-photo .photo { opacity: 1; }
     .champ-flag { font-size: 2.2rem; }
     .champ-name { font-weight: 800; font-size: 1.4rem; color: #fff; margin: 2px 0 2px; }
-    .start-btn {
-      margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem;
-      color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer;
-      box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease;
-    }
-    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
   </style>
 </head>
 <body>
@@ -179,6 +172,7 @@
     </div>
   </div>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     // ---- Teams: name, ISO code (flag), seed rank (top 16 get a bye), kit pattern + colours
@@ -248,10 +242,7 @@
       if (code === 'SCT') return '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}';
       return code.replace(/./g, function (c) { return String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65); });
     }
-    function shuffle(a) {
-      for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = a[i]; a[i] = a[j]; a[j] = t; }
-      return a;
-    }
+    const shuffle = EL.shuffle;
 
     // A simple shirt silhouette filled with the team's kit colours/pattern (fallback if no photo).
     const SHIRT = 'M38,20 L24,15 L8,36 L23,49 L35,41 L35,113 Q35,119 41,119 L79,119 Q85,119 85,113 L85,41 L97,49 L112,36 L96,15 L82,20 Q60,33 38,20 Z';

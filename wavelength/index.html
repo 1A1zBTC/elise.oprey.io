@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Wavelength</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,7 +15,6 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
       background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
@@ -23,14 +23,10 @@
       padding: 12px; touch-action: none; user-select: none; -webkit-user-select: none;
     }
     .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
     .stage {
       position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
       box-shadow: 0 12px 40px rgba(0,0,0,0.5); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
     }
-    canvas { display: block; width: 100%; height: 100%; }
 
     /* bottom action bar (shown over the dial during target/guess/result phases) */
     #bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px; display: none;
@@ -49,10 +45,8 @@
 
     .overlay { position: absolute; inset: 0; background: rgba(10,14,28,0.92); backdrop-filter: blur(3px);
       display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
-    .overlay[hidden] { display: none; }
     .panel { width: 100%; max-width: 440px; background: #16213e; border: 2px solid #0f3460; border-radius: 22px;
       padding: 22px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
-    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
     .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 12px; line-height: 1.45; }
     .panel .big-emoji { font-size: 2.6rem; margin-bottom: 6px; }
 
@@ -77,7 +71,6 @@
 
     .start-btn { margin-top: 14px; width: 100%; }
     .hint { margin-top: 10px; color: #a0a8c0; font-size: 0.8rem; text-align: center; max-width: 560px; line-height: 1.5; }
-    .hint b { color: #ffe8b0; }
   </style>
 </head>
 <body>
@@ -153,6 +146,7 @@
     Pass the device to the <b>Psychic</b> &nbsp;·&nbsp; they peek &amp; say a <b>clue</b> aloud &nbsp;·&nbsp; the team <b>drags the dial</b> &nbsp;·&nbsp; the other team calls <b>left/right</b> for a bonus
   </p>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     const canvas = document.getElementById('game');
@@ -231,9 +225,9 @@
     const setupEl = $('setup'), revealEl = $('reveal'), lrEl = $('leftright'), overEl = $('over');
     const barEl = $('bar'), barMsg = $('bar-msg'), barBtns = $('bar-btns');
 
-    function playerName(i, fb) { try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fb; } catch (e) { return fb; } }
-    function rnd(a, b) { return a + Math.random() * (b - a); }
-    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+    const playerName = EL.playerName;
+    const rnd = EL.rnd;
+    const clamp = EL.clamp;
 
     // ---- bar helper ----
     function showBar(msg, buttons) {
