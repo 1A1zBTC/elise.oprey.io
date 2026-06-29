@@ -2177,7 +2177,8 @@
       // themed scenery props (z-buffer occluded, lit by distance)
       for (const p of props) {
         const d = Math.hypot(p.x - px, p.y - py);
-        sprites.push({ img: p.img, x: p.x, y: p.y, sh: p.sh, sw: p.sw, bob: 0, bright: clamp(ambient * (1.2 - d * 0.04) + 0.12, 0.22, 1) });
+        if (d > 17) continue;                                     // cull distant props (3D fills are costlier than billboards)
+        sprites.push({ fu: true, boxes: p._boxes || (p._boxes = boxesFor(p)), x: p.x, y: p.y, bright: clamp(ambient * (1.2 - d * 0.04) + 0.12, 0.3, 1) });
       }
       // furniture phasing through the walls — flickers, no occlusion so it pokes through
       for (const gl of glitches) {
@@ -2198,7 +2199,7 @@
       for (const s of sprites) { const sx = s.x - px, sy = s.y - py; const invDet = 1 / (planeX * dirY - dirX * planeY);
         s.tY = invDet * (-planeY * sx + planeX * sy); }
       sprites.sort((a, b) => b.tY - a.tY);
-      for (const s of sprites) drawSprite(s);
+      for (const s of sprites) { if (s.fu) drawFurn(s); else drawSprite(s); }
 
       // vignette (stronger in the dark)
       const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.22, W / 2, H / 2, H * 0.72);
@@ -2249,6 +2250,95 @@
         }
       }
       ctx.globalAlpha = 1;
+    }
+
+    // ---------- real 3D box props (you see different sides as you move) ----------
+    function shadeC(hex, f) {
+      const n = parseInt(hex.slice(1), 16);
+      const r = Math.min(255, ((n >> 16) & 255) * f) | 0, gg = Math.min(255, ((n >> 8) & 255) * f) | 0, b = Math.min(255, (n & 255) * f) | 0;
+      return 'rgb(' + r + ',' + gg + ',' + b + ')';
+    }
+    function camDepth(wx, wy) { const sx = wx - px, sy = wy - py, invDet = 1 / (planeX * dirY - dirX * planeY); return invDet * (-planeY * sx + planeX * sy); }
+    function projP(wx, wy, z) {
+      const sx = wx - px, sy = wy - py, invDet = 1 / (planeX * dirY - dirX * planeY);
+      const tX = invDet * (dirY * sx - dirX * sy), tY = invDet * (-planeY * sx + planeX * sy);
+      if (tY <= 0.06) return null; const lineH = H / tY; return { x: (W / 2) * (1 + tX / tY), y: H / 2 + lineH / 2 - z * lineH };
+    }
+    function fillFace(pts, fill, edge) {
+      for (const p of pts) if (!p) return;
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.closePath();
+      ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = edge; ctx.lineWidth = 1; ctx.stroke();
+    }
+    function drawBox(fx, fy, b, B) {
+      const x0 = fx + b.x0, x1 = fx + b.x1, y0 = fy + b.y0, y1 = fy + b.y1, z0 = b.z0, z1 = b.z1, col = b.col;
+      const sides = [];
+      if (px < x0) sides.push({ c: [[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]], sh: 0.62, d: camDepth(x0, (y0 + y1) / 2) });
+      if (px > x1) sides.push({ c: [[x1, y1, z0], [x1, y0, z0], [x1, y0, z1], [x1, y1, z1]], sh: 0.62, d: camDepth(x1, (y0 + y1) / 2) });
+      if (py < y0) sides.push({ c: [[x1, y0, z0], [x0, y0, z0], [x0, y0, z1], [x1, y0, z1]], sh: 0.8, d: camDepth((x0 + x1) / 2, y0) });
+      if (py > y1) sides.push({ c: [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], sh: 0.8, d: camDepth((x0 + x1) / 2, y1) });
+      sides.sort((a, b) => b.d - a.d);
+      for (const s of sides) fillFace(s.c.map(q => projP(q[0], q[1], q[2])), shadeC(col, s.sh * B), shadeC(col, s.sh * B * 0.55));
+      fillFace([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]].map(q => projP(q[0], q[1], q[2])), shadeC(col, 1.08 * B), shadeC(col, 0.7 * B));   // top face
+    }
+    function drawFurn(f) {
+      const B = f.bright == null ? 1 : f.bright, dN = camDepth(f.x, f.y);
+      if (dN <= 0.1) return;
+      let minX = 1e9, maxX = -1e9, topZ = 0;
+      for (const b of f.boxes) if (b.z1 > topZ) topZ = b.z1;
+      for (const ox of [-0.46, 0.46]) for (const oy of [-0.46, 0.46]) for (const z of [0, topZ]) {
+        const p = projP(f.x + ox, f.y + oy, z); if (!p) continue; if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      }
+      if (maxX < 0 || minX > W) return;
+      const xr = RW / W, near = dN - 0.46;
+      ctx.save(); ctx.beginPath();                       // clip to columns where the prop is in front of the wall
+      let run = -1; const lo = Math.max(0, minX | 0), hi = Math.min(W - 1, Math.ceil(maxX));
+      for (let x = lo; x <= hi; x++) {
+        const vis = near < zbuf[(x * xr) | 0];
+        if (vis && run < 0) run = x;
+        if (!vis && run >= 0) { ctx.rect(run, 0, x - run, H); run = -1; }
+      }
+      if (run >= 0) ctx.rect(run, 0, hi - run + 1, H);
+      ctx.clip();
+      const sc = [projP(f.x - 0.4, f.y - 0.4, 0), projP(f.x + 0.4, f.y - 0.4, 0), projP(f.x + 0.4, f.y + 0.4, 0), projP(f.x - 0.4, f.y + 0.4, 0)];
+      if (sc.every(Boolean)) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.moveTo(sc[0].x, sc[0].y); for (let i = 1; i < 4; i++) ctx.lineTo(sc[i].x, sc[i].y); ctx.closePath(); ctx.fill(); }
+      const bs = f.boxes.map(b => ({ b, d: camDepth(f.x + (b.x0 + b.x1) / 2, f.y + (b.y0 + b.y1) / 2) })).sort((a, b) => b.d - a.d);
+      for (const o of bs) drawBox(f.x, f.y, o.b, B);
+      ctx.restore();
+    }
+    // Box geometry per prop type (keyed by the prop's billboard image). Colours are
+    // sampled from the art so the box matches; unknown props fall back to one box.
+    const _propCol = new Map();
+    function rgbToHex(s) { const m = s.match(/\d+/g); return '#' + ((1 << 24) + (+m[0] << 16) + (+m[1] << 8) + (+m[2])).toString(16).slice(1); }
+    function propColor(img) {
+      if (_propCol.has(img)) return _propCol.get(img);
+      let hex = '#7a7a72';
+      try {
+        const tc = makeCanvas(1, 1), tg = tc.getContext('2d');
+        tg.drawImage(img, img.width * 0.35, img.height * 0.3, img.width * 0.3, img.height * 0.3, 0, 0, 1, 1);
+        const d = tg.getImageData(0, 0, 1, 1).data;
+        if (d[3] > 40) hex = rgbToHex('rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')');
+      } catch (e) {}
+      _propCol.set(img, hex); return hex;
+    }
+    function boxesFor(p) {
+      const A = PA, c = propColor(p.img);
+      if (p.img === A.pine) return [{ x0: -0.06, y0: -0.06, x1: 0.06, y1: 0.06, z0: 0, z1: 0.52, col: '#3a2a18' }, { x0: -0.3, y0: -0.3, x1: 0.3, y1: 0.3, z0: 0.42, z1: 0.64, col: '#274d28' }, { x0: -0.22, y0: -0.22, x1: 0.22, y1: 0.22, z0: 0.6, z1: 0.8, col: '#2f5a32' }, { x0: -0.12, y0: -0.12, x1: 0.12, y1: 0.12, z0: 0.78, z1: 0.96, col: '#356a36' }];
+      if (p.img === A.lockers) return [{ x0: -0.42, y0: -0.16, x1: 0.42, y1: 0.16, z0: 0, z1: 0.86, col: '#2f6ea0' }];
+      if (p.img === A.desk) return [{ x0: -0.3, y0: -0.04, x1: 0.3, y1: 0.2, z0: 0.26, z1: 0.34, col: '#7a5a30' }, { x0: -0.22, y0: -0.24, x1: 0.1, y1: -0.08, z0: 0, z1: 0.46, col: '#34404a' }];
+      if (p.img === A.chalkboard) return [{ x0: -0.4, y0: -0.08, x1: 0.4, y1: 0.06, z0: 0.28, z1: 0.78, col: '#2f4a36' }];
+      if (p.img === A.gurney) return [{ x0: -0.4, y0: -0.18, x1: 0.4, y1: 0.18, z0: 0.18, z1: 0.27, col: '#cfe0e6' }, { x0: -0.4, y0: -0.18, x1: -0.32, y1: 0.18, z0: 0, z1: 0.18, col: '#7a8086' }];
+      if (p.img === A.shelf) return [{ x0: -0.42, y0: -0.18, x1: 0.42, y1: 0.18, z0: 0, z1: 0.82, col: '#9aa0a4' }];
+      if (p.img === A.freezer) return [{ x0: -0.36, y0: -0.18, x1: 0.36, y1: 0.18, z0: 0, z1: 0.86, col: '#9fcfdc' }];
+      if (p.img === A.car) return [{ x0: -0.46, y0: -0.22, x1: 0.46, y1: 0.22, z0: 0.05, z1: 0.26, col: '#5a2424' }, { x0: -0.2, y0: -0.18, x1: 0.22, y1: 0.18, z0: 0.26, z1: 0.42, col: '#2a3640' }];
+      if (p.img === A.cubicle) return [{ x0: -0.42, y0: -0.08, x1: 0.42, y1: 0.06, z0: 0, z1: 0.5, col: '#b9ad8c' }, { x0: -0.3, y0: 0.04, x1: 0.3, y1: 0.24, z0: 0.26, z1: 0.34, col: '#7a6a44' }];
+      if (p.img === A.gumvat) return [{ x0: -0.26, y0: -0.26, x1: 0.26, y1: 0.26, z0: 0, z1: 0.72, col: '#c07aa0' }];
+      if (p.img === A.bench) return [{ x0: -0.3, y0: -0.12, x1: 0.3, y1: 0.12, z0: 0.16, z1: 0.24, col: '#7c5a34' }, { x0: -0.3, y0: -0.12, x1: -0.22, y1: 0.12, z0: 0, z1: 0.16, col: '#5a6068' }];
+      if (p.img === A.column) return [{ x0: -0.17, y0: -0.17, x1: 0.17, y1: 0.17, z0: 0, z1: 1.0, col: '#b0b4ba' }];
+      if (p.img === A.train || p.img === A.traindoor) return [{ x0: -0.5, y0: -0.26, x1: 0.5, y1: 0.26, z0: 0, z1: 0.92, col: '#aab0b8' }];
+      if (p.img === A.turnstile) return [{ x0: -0.1, y0: -0.1, x1: 0.1, y1: 0.1, z0: 0, z1: 0.42, col: '#2a2e33' }];
+      if (p.img === A.partytable) return [{ x0: -0.32, y0: -0.14, x1: 0.32, y1: 0.14, z0: 0.2, z1: 0.28, col: '#b03a5a' }];
+      const h = clamp(p.sh * 0.62, 0.18, 0.95), w = clamp(p.sw * 0.5, 0.12, 0.42);   // generic single box
+      return [{ x0: -w, y0: -w, x1: w, y1: w, z0: 0, z1: h, col: c }];
     }
 
     function drawHUD() {
