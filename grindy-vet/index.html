@@ -482,27 +482,9 @@
       return isCorridor(x - 1, y) || isCorridor(x + 1, y) || isCorridor(x, y - 1) || isCorridor(x, y + 1);
     }
     // The corridor tile a placed restroom opens onto (or null if it touches none).
-    function restroomDoor(gx, gy, rot) {
-      var tiles = footprintTiles(FURN_BY_ID.restroom, gx, gy, rot);
-      for (var i = 0; i < tiles.length; i++) {
-        var t = tiles[i], n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-        for (var j = 0; j < n.length; j++) {
-          var dx = t.x + n[j][0], dy = t.y + n[j][1];
-          if (isOpenAdj(dx, dy)) return { x: dx, y: dy };
-        }
-      }
-      return null;
-    }
-    function canPlaceRestroom(gx, gy, rot) {
-      var tiles = footprintTiles(FURN_BY_ID.restroom, gx, gy, rot);
-      for (var i = 0; i < tiles.length; i++) if (!isGrassBuildable(tiles[i].x, tiles[i].y)) return false;
-      if (adjacentToWalledRoom(tiles)) return false;   // keep rooms apart, not wall-to-wall
-      return !!restroomDoor(gx, gy, rot);    // must open onto a corridor or blank room
-    }
-    function freeRestroom() {
-      for (var i = 0; i < restrooms.length; i++) if (!restrooms[i].occupant) return restrooms[i];
-      return null;
-    }
+    function restroomDoor(gx, gy, rot) { return roomDoorFor(footprintTiles(FURN_BY_ID.restroom, gx, gy, rot)); }
+    function canPlaceRestroom(gx, gy, rot) { return canPlaceRoom('restroom', gx, gy, rot); }
+    function freeRestroom() { return freeRoom('restroom'); }
     // Interior layout of a restroom: the doorway tile it opens onto, the room tile
     // just inside it (entry), the toilet (deepest tile from the entry) and the
     // stand tile in front of the toilet the user faces while using it.
@@ -525,14 +507,7 @@
     // Build the restroom as a walled room: its footprint joins the corridor floor
     // (so renderStatic walls it in and opens a doorway onto the connecting corridor)
     // and the toilet tile becomes a solid fixture. Mirrors placeExam.
-    function placeRestroom(gx, gy, rot) {
-      rot = rot || 0;
-      var L = restroomLayout(gx, gy, rot);
-      footprintTiles(FURN_BY_ID.restroom, gx, gy, rot).forEach(function (t) { corridor[t.x + ',' + t.y] = true; });
-      occupied[L.toilet.x + ',' + L.toilet.y] = true;
-      restrooms.push({ gx: gx, gy: gy, rot: rot, door: L.door, entry: L.entry, toilet: L.toilet, stand: L.stand, face: L.face, occupant: null });
-      renderStatic();                        // floor + walls around the new room
-    }
+    function placeRestroom(gx, gy, rot) { return placeRoom('restroom', gx, gy, rot); }
 
     // ---- Exam rooms ------------------------------------------------------
     // A 3×3 room (corridor-class floor so the vet can walk in) holding a desk and
@@ -556,31 +531,10 @@
       for (var j = 0; j < 3; j++) for (var i = 0; i < 3; i++) t.push({ x: gx + i, y: gy + j });
       return t;
     }
-    function examDoor(gx, gy) {            // a corridor tile the room touches
-      var tiles = examTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (var i = 0; i < tiles.length; i++)
-        for (var j = 0; j < n.length; j++)
-          if (isOpenAdj(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
-      return null;
-    }
-    function canPlaceExam(gx, gy) {
-      var tiles = examTiles(gx, gy);
-      for (var i = 0; i < tiles.length; i++) if (!isGrassBuildable(tiles[i].x, tiles[i].y)) return false;
-      if (adjacentToWalledRoom(tiles)) return false;   // keep rooms apart, not wall-to-wall
-      return !!examDoor(gx, gy);           // must connect to a corridor or blank room
-    }
-    function placeExam(gx, gy, rot) {
-      rot = rot || 0;
-      var k = examKeyTiles(gx, gy, rot), door = examDoor(gx, gy);  // door before tiles join corridor
-      examTiles(gx, gy).forEach(function (t) { corridor[t.x + ',' + t.y] = true; }); // walkable room floor
-      occupied[k.table.x + ',' + k.table.y] = true;        // the exam table blocks movement (desk removed)
-      examRooms.push({ gx: gx, gy: gy, rot: rot, occupant: null, examT: 0, door: door });
-      renderStatic();                      // floor + walls around the new room
-    }
-    function freeExamRoom() {
-      for (var i = 0; i < examRooms.length; i++) if (!examRooms[i].occupant) return examRooms[i];
-      return null;
-    }
+    function examDoor(gx, gy) { return roomDoorFor(examTiles(gx, gy)); }
+    function canPlaceExam(gx, gy) { return canPlaceRoom('exam', gx, gy); }
+    function placeExam(gx, gy, rot) { return placeRoom('exam', gx, gy, rot); }
+    function freeExamRoom() { return freeRoom('exam'); }
 
     // ---- X-ray rooms -----------------------------------------------------
     // A 3×4 room (corridor-class floor) with an X-ray bed + control desk. After an
@@ -594,32 +548,10 @@
       for (var j = 0; j < 4; j++) for (var i = 0; i < 3; i++) t.push({ x: gx + i, y: gy + j });
       return t;
     }
-    function xrayDoor(gx, gy) {            // a corridor tile the room touches
-      var tiles = xrayTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (var i = 0; i < tiles.length; i++)
-        for (var j = 0; j < n.length; j++)
-          if (isOpenAdj(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
-      return null;
-    }
-    function canPlaceXray(gx, gy) {
-      var tiles = xrayTiles(gx, gy);
-      for (var i = 0; i < tiles.length; i++) if (!isGrassBuildable(tiles[i].x, tiles[i].y)) return false;
-      if (adjacentToWalledRoom(tiles)) return false;   // keep rooms apart, not wall-to-wall
-      return !!xrayDoor(gx, gy);
-    }
-    function placeXray(gx, gy, rot) {
-      rot = rot || 0;
-      var k = examKeyTiles(gx, gy, rot), door = xrayDoor(gx, gy);   // bed + desk reuse exam key tiles
-      xrayTiles(gx, gy).forEach(function (t) { corridor[t.x + ',' + t.y] = true; });
-      occupied[k.table.x + ',' + k.table.y] = true;
-      occupied[k.desk.x + ',' + k.desk.y] = true;
-      xrayRooms.push({ gx: gx, gy: gy, rot: rot, occupant: null, xrayT: 0, door: door, vet: false });
-      renderStatic();
-    }
-    function freeXrayRoom() {
-      for (var i = 0; i < xrayRooms.length; i++) if (!xrayRooms[i].occupant) return xrayRooms[i];
-      return null;
-    }
+    function xrayDoor(gx, gy) { return roomDoorFor(xrayTiles(gx, gy)); }
+    function canPlaceXray(gx, gy) { return canPlaceRoom('xray', gx, gy); }
+    function placeXray(gx, gy, rot) { return placeRoom('xray', gx, gy, rot); }
+    function freeXrayRoom() { return freeRoom('xray'); }
 
     // ---- Pharmacy --------------------------------------------------------
     // A 4-wide × 3-deep room with 2 counter sections; at each, a patient stands on
@@ -645,31 +577,86 @@
         };
       });
     }
-    function pharmDoor(gx, gy) {
-      var tiles = pharmTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (var i = 0; i < tiles.length; i++)
-        for (var j = 0; j < n.length; j++)
-          if (isOpenAdj(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
-      return null;
-    }
-    function canPlacePharmacy(gx, gy) {
-      var tiles = pharmTiles(gx, gy);
-      for (var i = 0; i < tiles.length; i++) if (!isGrassBuildable(tiles[i].x, tiles[i].y)) return false;
-      if (adjacentToWalledRoom(tiles)) return false;   // keep rooms apart, not wall-to-wall
-      return !!pharmDoor(gx, gy);
-    }
-    function placePharmacy(gx, gy, rot) {
-      rot = rot || 0;
-      var door = pharmDoor(gx, gy), st = pharmStations(gx, gy, rot);
-      pharmTiles(gx, gy).forEach(function (t) { corridor[t.x + ',' + t.y] = true; });
-      st.forEach(function (s) { occupied[s.counter.x + ',' + s.counter.y] = true; });
-      pharmacies.push({ gx: gx, gy: gy, rot: rot, door: door, stations: [{ patient: null, procT: 0, pharm: false }, { patient: null, procT: 0, pharm: false }] });
-      renderStatic();
-    }
+    function pharmDoor(gx, gy) { return roomDoorFor(pharmTiles(gx, gy)); }
+    function canPlacePharmacy(gx, gy) { return canPlaceRoom('pharmacy', gx, gy); }
+    function placePharmacy(gx, gy, rot) { return placeRoom('pharmacy', gx, gy, rot); }
     function freePharmStation() {
       for (var i = 0; i < pharmacies.length; i++)
         for (var j = 0; j < pharmacies[i].stations.length; j++)
           if (!pharmacies[i].stations[j].patient) return { ph: pharmacies[i], idx: j };
+      return null;
+    }
+
+    // ---- Room registry ---------------------------------------------------
+    // One descriptor per walled-room type drives the (previously duplicated)
+    // place / canPlace / free / door logic. Each declares: its `list` array, a
+    // `tiles(gx,gy,rot)` footprint, and `make(gx,gy,rot,door)` which returns the
+    // room object to store plus the tiles that become solid (block movement).
+    // The per-type place*/canPlace*/free*/`*Door` functions below are now thin
+    // wrappers over the generics, so adding a room type means adding a descriptor.
+    var ROOM_TYPES = {
+      restroom: {
+        list: restrooms,
+        tiles: function (gx, gy, rot) { return footprintTiles(FURN_BY_ID.restroom, gx, gy, rot); },
+        make: function (gx, gy, rot, door) {
+          var L = restroomLayout(gx, gy, rot);
+          return { room: { gx: gx, gy: gy, rot: rot, door: L.door, entry: L.entry, toilet: L.toilet, stand: L.stand, face: L.face, occupant: null }, solid: [L.toilet] };
+        }
+      },
+      exam: {
+        list: examRooms,
+        tiles: function (gx, gy) { return examTiles(gx, gy); },
+        make: function (gx, gy, rot, door) {
+          var k = examKeyTiles(gx, gy, rot);
+          return { room: { gx: gx, gy: gy, rot: rot, occupant: null, examT: 0, door: door }, solid: [k.table] };
+        }
+      },
+      xray: {
+        list: xrayRooms,
+        tiles: function (gx, gy) { return xrayTiles(gx, gy); },
+        make: function (gx, gy, rot, door) {
+          var k = examKeyTiles(gx, gy, rot);
+          return { room: { gx: gx, gy: gy, rot: rot, occupant: null, xrayT: 0, door: door, vet: false }, solid: [k.table, k.desk] };
+        }
+      },
+      pharmacy: {
+        list: pharmacies,
+        tiles: function (gx, gy) { return pharmTiles(gx, gy); },
+        make: function (gx, gy, rot, door) {
+          var st = pharmStations(gx, gy, rot);
+          return { room: { gx: gx, gy: gy, rot: rot, door: door, stations: [{ patient: null, procT: 0, pharm: false }, { patient: null, procT: 0, pharm: false }] }, solid: st.map(function (s) { return s.counter; }) };
+        }
+      }
+    };
+    // The corridor tile a room's footprint opens onto, or null.
+    function roomDoorFor(tiles) {
+      var n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (var i = 0; i < tiles.length; i++)
+        for (var j = 0; j < 4; j++) {
+          var dx = tiles[i].x + n[j][0], dy = tiles[i].y + n[j][1];
+          if (isOpenAdj(dx, dy)) return { x: dx, y: dy };
+        }
+      return null;
+    }
+    function canPlaceRoom(type, gx, gy, rot) {
+      var ts = ROOM_TYPES[type].tiles(gx, gy, rot || 0);
+      for (var i = 0; i < ts.length; i++) if (!isGrassBuildable(ts[i].x, ts[i].y)) return false;
+      if (adjacentToWalledRoom(ts)) return false;          // keep rooms apart, not wall-to-wall
+      return !!roomDoorFor(ts);                            // must open onto a corridor or blank room
+    }
+    function placeRoom(type, gx, gy, rot) {
+      rot = rot || 0;
+      var d = ROOM_TYPES[type], ts = d.tiles(gx, gy, rot), door = roomDoorFor(ts);
+      var m = d.make(gx, gy, rot, door);
+      ts.forEach(function (t) { corridor[t.x + ',' + t.y] = true; });   // walkable room floor
+      m.solid.forEach(function (t) { occupied[t.x + ',' + t.y] = true; }); // fixtures block movement
+      d.list.push(m.room);
+      renderStatic();                                       // floor + walls around the new room
+      return m.room;
+    }
+    function freeRoom(type) {                                // occupant-based rooms (not pharmacy)
+      var L = ROOM_TYPES[type].list;
+      for (var i = 0; i < L.length; i++) if (!L[i].occupant) return L[i];
       return null;
     }
 
@@ -4314,6 +4301,11 @@
       placeExam: function (gx, gy, rot) { placeExam(gx, gy, rot); return examKeyTiles(gx, gy, rot || 0); },
       placeXray: function (gx, gy, rot) { placeXray(gx, gy, rot); return examKeyTiles(gx, gy, rot || 0); },
       exams: function () { return examRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet, examT: Math.round((r.examT||0)*10)/10 }; }); },
+      xrays: function () { return xrayRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet }; }); },
+      pharms: function () { return pharmacies.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, stations: r.stations.map(function (s) { return { pharm: !!s.pharm, busy: !!s.patient }; }) }; }); },
+      placePharm: function (gx, gy, rot) { if (!canPlacePharmacy(gx, gy)) return false; placePharmacy(gx, gy, rot || 0); return pharmacies[pharmacies.length - 1]; },
+      save: function (name) { return buildSave(name || 'test'); },
+      load: function (d) { return applySave(d); },
       corridors: function () { return Object.keys(corridor); },
       setInput: function (k, v) { input[k] = v; },
       can: function (id, gx, gy, rot) { return canPlace(FURN_BY_ID[id], gx, gy, rot || 0); },
