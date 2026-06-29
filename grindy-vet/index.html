@@ -379,6 +379,20 @@
       return isRoomFloor(x - 1, y) || isRoomFloor(x + 1, y) ||
              isRoomFloor(x, y - 1) || isRoomFloor(x, y + 1);
     }
+    // A "plain corridor" is a corridor tile that is NOT part of any built room
+    // (exam/X-ray/pharmacy/blank/restroom) — an actual passage. Room doors may only
+    // open onto these, never onto another room.
+    function inRoomFootprint(x, y) {
+      if (openRoom[x + ',' + y]) return true;
+      if (examRooms.some(function (rm) { return x >= rm.gx && x < rm.gx + 3 && y >= rm.gy && y < rm.gy + 3; })) return true;
+      if (xrayRooms.some(function (rm) { return x >= rm.gx && x < rm.gx + 3 && y >= rm.gy && y < rm.gy + 4; })) return true;
+      if (pharmacies.some(function (ph) { return x >= ph.gx && x < ph.gx + 4 && y >= ph.gy && y < ph.gy + 4; })) return true;
+      if (restrooms.some(function (rm) { return footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot).some(function (t) { return t.x === x && t.y === y; }); })) return true;
+      return false;
+    }
+    function isPlainCorridor(x, y) { return isCorridor(x, y) && !inRoomFootprint(x, y); }
+    // Open rooms (blank rooms + the clinic) join corridors with no wall/door.
+    function isOpenAdj(x, y) { return isPlainCorridor(x, y) || !!openRoom[x + ',' + y]; }
     // Validate a click-drag into a straight, TWO-wide line of buildable grass.
     // The line follows whichever axis the drag favours; each step lays a 2×1 rung
     // (the tile + its perpendicular neighbour) costing $10. The start tile must
@@ -453,7 +467,7 @@
         var t = tiles[i], n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
         for (var j = 0; j < n.length; j++) {
           var dx = t.x + n[j][0], dy = t.y + n[j][1];
-          if (isCorridor(dx, dy)) return { x: dx, y: dy };
+          if (isPlainCorridor(dx, dy)) return { x: dx, y: dy };
         }
       }
       return null;
@@ -524,7 +538,7 @@
       var tiles = examTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       for (var i = 0; i < tiles.length; i++)
         for (var j = 0; j < n.length; j++)
-          if (isCorridor(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
+          if (isPlainCorridor(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
       return null;
     }
     function canPlaceExam(gx, gy) {
@@ -561,7 +575,7 @@
       var tiles = xrayTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       for (var i = 0; i < tiles.length; i++)
         for (var j = 0; j < n.length; j++)
-          if (isCorridor(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
+          if (isPlainCorridor(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
       return null;
     }
     function canPlaceXray(gx, gy) {
@@ -604,7 +618,7 @@
       var tiles = pharmTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       for (var i = 0; i < tiles.length; i++)
         for (var j = 0; j < n.length; j++)
-          if (isCorridor(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
+          if (isPlainCorridor(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
       return null;
     }
     function canPlacePharmacy(gx, gy) {
@@ -1068,26 +1082,16 @@
       // clinic perimeter, segmented per tile so a corridor run punches one doorway.
       // Collected here (not drawn directly) so it depth-sorts with corridor/exam
       // walls — otherwise a corridor behind the clinic draws over the back wall.
-      var pL = function (i) { return isCorridor(-1, i); };
-      for (var pby = 0; pby < ROOM; pby++) {
-        if (firstOfRun(pL, pby)) D(true, -0.5, pby - 0.5, -0.5, pby + 0.5, WALL_H, null);
-        else W(true, -0.5, pby - 0.5, -0.5, pby + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
-      }
-      var pR = function (i) { return isCorridor(i, -1); };
-      for (var pbx = 0; pbx < ROOM; pbx++) {
-        if (firstOfRun(pR, pbx)) D(true, pbx - 0.5, -0.5, pbx + 0.5, -0.5, WALL_H, null);
-        else W(true, pbx - 0.5, -0.5, pbx + 0.5, -0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
-      }
-      var pFR = function (i) { return isCorridor(ROOM, i); };
-      for (var pfy = 0; pfy < ROOM; pfy++) {
-        if (firstOfRun(pFR, pfy)) D(false, ROOM - 0.5, pfy - 0.5, ROOM - 0.5, pfy + 0.5, FRONT_WALL_H, null);
-        else W(false, ROOM - 0.5, pfy - 0.5, ROOM - 0.5, pfy + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
-      }
-      var pFL = function (i) { return (i === 3 || i === 4) ? false : isCorridor(i, ROOM); };
+      // Open (no wall/door) where a plain corridor or a blank room abuts; else wall.
+      for (var pby = 0; pby < ROOM; pby++)
+        if (!isOpenAdj(-1, pby)) W(true, -0.5, pby - 0.5, -0.5, pby + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+      for (var pbx = 0; pbx < ROOM; pbx++)
+        if (!isOpenAdj(pbx, -1)) W(true, pbx - 0.5, -0.5, pbx + 0.5, -0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+      for (var pfy = 0; pfy < ROOM; pfy++)
+        if (!isOpenAdj(ROOM, pfy)) W(false, ROOM - 0.5, pfy - 0.5, ROOM - 0.5, pfy + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
       for (var pdx = 0; pdx < ROOM; pdx++) {
         if (pdx === 3 || pdx === 4) continue;   // main entrance opening
-        if (firstOfRun(pFL, pdx)) D(false, pdx - 0.5, ROOM - 0.5, pdx + 0.5, ROOM - 0.5, FRONT_WALL_H, null);
-        else W(false, pdx - 0.5, ROOM - 0.5, pdx + 0.5, ROOM - 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
+        if (!isOpenAdj(pdx, ROOM)) W(false, pdx - 0.5, ROOM - 0.5, pdx + 0.5, ROOM - 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
       }
       // corridor squares: wall every edge that borders non-room-floor
       for (var key in corridor) {

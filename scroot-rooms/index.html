@@ -156,7 +156,8 @@
     // ---------- level generation ----------
     // Recursive-backtracker maze, then knock out extra walls to open it into
     // backrooms-style rooms. even/even intersections stay solid -> regular pillars.
-    const THEME_NAMES = { yellow: 'The Yellow Halls', pool: 'The Poolrooms', subway: 'The Subway Station', haunted: 'The Haunted House', sewer: 'The Sewers', forest: 'The Forest' };
+    const THEME_NAMES = { yellow: 'The Yellow Halls', pool: 'The Poolrooms', subway: 'The Subway Station', haunted: 'The Haunted House', sewer: 'The Sewers', forest: 'The Forest',
+      school: 'The Abandoned School', hospital: 'The Empty Hospital', grocery: 'The Supermarket', factory: 'The Bubblegum Factory', party: 'Level Fun =)', office: 'The Office', garage: 'The Parking Garage' };
     function genLevel(lvl, theme) {
       themeName = (theme && THEMES[theme]) ? theme : 'yellow';
       curTheme = THEMES[themeName];
@@ -241,7 +242,7 @@
       }
 
       // doors you can open -> each leads to a different kind of level
-      const destPool = ['pool', 'subway', 'haunted', 'sewer', 'forest', 'yellow', 'pool', 'subway', 'forest'];
+      const destPool = ['pool', 'subway', 'school', 'forest', 'hospital', 'grocery', 'haunted', 'party', 'sewer', 'office', 'factory', 'garage', 'forest', 'subway', 'yellow'];
       doors = [];
       const dCount = lvl >= 4 ? 3 : 2;
       const far = reach.length ? reach[0].d : 1;
@@ -415,21 +416,53 @@
       ceil: poolTile('#eef6f7', 'rgba(150,180,188,0.45)'),
       base: -0.06, fogTint: null
     };
-    // ---- subway station: grey tiled walls, concrete platform, dark ceiling ----
+    // ---- subway station: glossy white-over-teal brick tile, grimy, dark vault ceiling ----
     const T_SUBWAY = {
-      wall: poolTile('#9aa0a6', 'rgba(40,44,50,0.6)'),
+      wall: texData(function (g) {
+        // upper band: glossy off-white brick-laid subway tile; lower band: institutional teal
+        for (let y = 0; y < TH; y += 8) {
+          const lower = y >= 40;
+          const base = lower ? '#1f5f62' : '#e8ece8';
+          const off = ((y / 8) % 2) ? 8 : 0;                       // running-bond offset
+          for (let x = -8; x < TW; x += 16) {
+            g.fillStyle = base; g.fillRect(x + off, y, 14, 6);
+          }
+        }
+        g.fillStyle = 'rgba(20,40,42,0.65)';                       // dark grout fill behind
+        g.fillRect(0, 0, TW, TH);
+        // re-draw tiles on top of grout so grout shows as thin lines
+        for (let y = 0; y < TH; y += 8) {
+          const lower = y >= 40;
+          const off = ((y / 8) % 2) ? 8 : 0;
+          for (let x = -8; x < TW; x += 16) {
+            const grd = g.createLinearGradient(0, y, 0, y + 6);
+            if (lower) { grd.addColorStop(0, '#2a787c'); grd.addColorStop(1, '#164a4d'); }
+            else { grd.addColorStop(0, '#f2f5f1'); grd.addColorStop(1, '#cdd4cd'); }
+            g.fillStyle = grd; g.fillRect(x + off, y, 14, 6);
+          }
+        }
+        g.fillStyle = 'rgba(20,40,42,0.85)'; g.fillRect(0, 39, TW, 2);   // band divider
+        g.fillStyle = 'rgba(40,60,62,0.18)';                       // grime streaks
+        for (let i = 0; i < 5; i++) { g.fillRect((Math.random() * TW) | 0, 0, 1, TH); }
+        nz(g, 200, 0.16);
+      }),
       floor: texData(function (g) {
         g.fillStyle = '#3d4044'; g.fillRect(0, 0, TW, TH); speck(g, 900, [70, 74, 80], 30, 0.5);
-        g.fillStyle = '#c7a52e'; g.fillRect(0, 54, TW, 6);          // yellow platform-edge stripe
-        g.fillStyle = 'rgba(20,22,24,0.5)'; g.fillRect(0, 60, TW, 4);
+        g.fillStyle = '#c7a52e'; g.fillRect(0, 50, TW, 7);          // yellow tactile platform-edge stripe
+        g.fillStyle = 'rgba(0,0,0,0.35)';                          // bumps on tactile strip
+        for (let x = 2; x < TW; x += 8) g.fillRect(x, 52, 3, 3);
+        g.fillStyle = 'rgba(20,22,24,0.5)'; g.fillRect(0, 58, TW, 6);
         nz(g, 300, 0.3);
       }),
       ceil: texData(function (g) {
         g.fillStyle = '#23262b'; g.fillRect(0, 0, TW, TH); speck(g, 300, [40, 44, 50], 16, 0.4);
-        g.fillStyle = '#d7e0ea'; g.fillRect(8, 30, 48, 4);          // light strip
-        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(0, 0, TW, 2); g.fillRect(0, 62, TW, 2); nz(g, 160, 0.3);
+        g.fillStyle = 'rgba(0,0,0,0.5)';                            // riveted I-beams
+        g.fillRect(0, 12, TW, 5); g.fillRect(0, 46, TW, 5);
+        g.fillStyle = '#d7e0ea'; g.fillRect(8, 28, 48, 5);          // hanging cage light
+        g.fillStyle = 'rgba(255,250,220,0.5)'; g.fillRect(10, 29, 44, 2);
+        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(0, 0, TW, 2); nz(g, 160, 0.3);
       }),
-      base: 0.22, fogTint: null
+      base: 0.24, fogTint: null
     };
     // ---- haunted house: dark wood boards + wainscot, creaky plank floor ----
     const T_HAUNTED = {
@@ -490,14 +523,196 @@
         nz(g, 220, 0.3);
       }),
       floor: texData(function (g) {
-        g.fillStyle = '#2c2414'; g.fillRect(0, 0, TW, TH); speck(g, 1000, [54, 46, 26], 30, 0.5);
-        g.fillStyle = 'rgba(60,80,40,0.4)';                          // scattered leaves
-        for (let i = 0; i < 40; i++) { g.beginPath(); g.ellipse(Math.random() * TW, Math.random() * TH, 2, 1, Math.random() * 3, 0, 6.29); g.fill(); }
-        nz(g, 300, 0.34);
+        // mossy forest floor: dark earth, patchy grass tufts, leaf litter, roots
+        g.fillStyle = '#23301a'; g.fillRect(0, 0, TW, TH); speck(g, 900, [44, 56, 30], 28, 0.5);
+        g.fillStyle = 'rgba(70,98,44,0.5)';                          // grass clumps
+        for (let i = 0; i < 70; i++) { g.beginPath(); g.ellipse(Math.random() * TW, Math.random() * TH, 1.4, 3, Math.random() * 3, 0, 6.29); g.fill(); }
+        g.fillStyle = 'rgba(120,90,46,0.45)';                        // fallen leaves
+        for (let i = 0; i < 28; i++) { g.beginPath(); g.ellipse(Math.random() * TW, Math.random() * TH, 2.4, 1.2, Math.random() * 3, 0, 6.29); g.fill(); }
+        g.strokeStyle = 'rgba(36,26,14,0.55)'; g.lineWidth = 2;      // a root
+        g.beginPath(); g.moveTo(0, 20); g.bezierCurveTo(20, 26, 40, 12, TW, 30); g.stroke();
+        nz(g, 240, 0.3);
       }),
-      ceil: null, outdoor: true, base: 0.22, fogTint: [20, 28, 40]
+      ceil: null, outdoor: true, base: 0.2, fogTint: [16, 24, 34]
     };
-    const THEMES = { yellow: T_YELLOW, pool: T_POOL, subway: T_SUBWAY, haunted: T_HAUNTED, sewer: T_SEWER, forest: T_FOREST };
+    // ---- school: lockers / cinderblock dado, terrazzo floor, drop-tile ceiling ----
+    const T_SCHOOL = {
+      wall: texData(function (g) {
+        g.fillStyle = '#e7e2d2'; g.fillRect(0, 0, TW, TH);            // off-white upper
+        const grd = g.createLinearGradient(0, 40, 0, TH);
+        grd.addColorStop(0, '#7fae8e'); grd.addColorStop(1, '#5e8e71'); // pale green dado
+        g.fillStyle = grd; g.fillRect(0, 40, TW, TH - 40);
+        g.fillStyle = 'rgba(40,60,48,0.6)'; g.fillRect(0, 38, TW, 3); // chair rail
+        g.fillStyle = 'rgba(0,0,0,0.06)'; for (let x = 0; x < TW; x += 8) g.fillRect(x, 0, 1, 38);  // cinderblock seams
+        for (let y = 8; y < 38; y += 10) g.fillRect(0, y, TW, 1);
+        nz(g, 180, 0.12);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#cfc8b6'; g.fillRect(0, 0, TW, TH);            // speckled terrazzo
+        speck(g, 1400, [120, 110, 96], 90, 0.5);
+        for (let i = 0; i < 60; i++) { g.fillStyle = ['rgba(70,80,90,0.5)','rgba(120,60,50,0.4)','rgba(40,40,40,0.4)'][i % 3]; g.beginPath(); g.arc(Math.random() * TW, Math.random() * TH, Math.random() * 2 + 1, 0, 6.29); g.fill(); }
+        g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(0, 0, TW, 6);  // sheen
+        nz(g, 120, 0.1);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#d7d5c8'; g.fillRect(0, 0, TW, TH); speck(g, 300, [200, 198, 186], 24, 0.3);
+        g.fillStyle = 'rgba(60,60,52,0.4)'; g.fillRect(0, 0, TW, 2); g.fillRect(0, 31, TW, 2); g.fillRect(0, 0, 2, TH); g.fillRect(31, 0, 2, TH);
+        g.fillStyle = '#fbfbf2'; g.fillRect(38, 8, 20, 16);          // fluorescent troffer
+        nz(g, 140, 0.1);
+      }),
+      base: 0.05, fogTint: null
+    };
+    // ---- hospital: sterile mint drywall + handrail, polished vinyl, strip-light ceiling ----
+    const T_HOSPITAL = {
+      wall: texData(function (g) {
+        const grd = g.createLinearGradient(0, 0, 0, TH);
+        grd.addColorStop(0, '#dff0e8'); grd.addColorStop(0.5, '#cfe7dd'); grd.addColorStop(1, '#bcd9cf');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#9fb7af'; g.fillRect(0, 34, TW, 4);           // handrail/dado
+        g.fillStyle = 'rgba(120,140,132,0.5)'; g.fillRect(0, 33, TW, 1); g.fillRect(0, 38, TW, 1);
+        g.fillStyle = 'rgba(160,180,172,0.4)'; g.fillRect(0, 52, TW, 3);   // bumper strip
+        nz(g, 90, 0.06);
+      }),
+      floor: texData(function (g) {
+        const grd = g.createLinearGradient(0, 0, TW, TH);
+        grd.addColorStop(0, '#c4d2cc'); grd.addColorStop(1, '#aebeb8');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#7fb0c8'; g.fillRect(24, 0, 5, TH);           // colored wayfinding stripe
+        g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(0, 4, TW, 8);   // reflective sheen
+        speck(g, 200, [180, 196, 190], 20, 0.25); nz(g, 100, 0.08);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#eef3f0'; g.fillRect(0, 0, TW, TH); speck(g, 200, [220, 228, 224], 16, 0.3);
+        g.fillStyle = '#fcfffe'; g.fillRect(6, 12, 52, 8);           // long boxed light
+        g.fillStyle = 'rgba(120,140,134,0.4)'; g.fillRect(0, 0, TW, 2); g.fillRect(0, 30, TW, 2); nz(g, 100, 0.08);
+      }),
+      base: 0.02, fogTint: [40, 70, 60]
+    };
+    // ---- grocery / supermarket: bright white block, glossy lino, truss+fluorescent ceiling ----
+    const T_GROCERY = {
+      wall: texData(function (g) {
+        g.fillStyle = '#eef0ee'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = 'rgba(0,0,0,0.05)'; for (let y = 0; y < TH; y += 11) g.fillRect(0, y, TW, 1);  // block courses
+        for (let x = 0; x < TW; x += 16) g.fillRect(x, 0, 1, TH);
+        g.fillStyle = '#d23c3c'; g.fillRect(8, 14, 48, 9);           // faded department sign
+        g.fillStyle = '#f7f7f2'; g.font = 'bold 7px Nunito'; g.textAlign = 'center'; g.fillText('SALE', 32, 21);
+        nz(g, 120, 0.08);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#e3ded2'; g.fillRect(0, 0, TW, TH);           // glossy beige lino
+        g.fillStyle = 'rgba(0,0,0,0.05)'; for (let k = 0; k <= TW; k += 16) { g.fillRect(k, 0, 1, TH); g.fillRect(0, k, TW, 1); }
+        g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(0, 2, TW, 10);   // long highlight reflection
+        speck(g, 160, [205, 200, 188], 16, 0.2); nz(g, 90, 0.06);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#cfd3d0'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = 'rgba(40,46,44,0.5)'; g.fillRect(0, 8, TW, 3); g.fillRect(0, 40, TW, 3);  // trusses
+        g.fillStyle = '#ffffff'; g.fillRect(0, 24, TW, 6);          // long fluorescent row
+        g.fillStyle = 'rgba(255,255,240,0.6)'; g.fillRect(0, 25, TW, 2);
+        nz(g, 90, 0.08);
+      }),
+      base: -0.06, fogTint: null
+    };
+    // ---- bubblegum factory: glossy pink, sticky drips, candy ceiling ----
+    const T_FACTORY = {
+      wall: texData(function (g) {
+        const grd = g.createLinearGradient(0, 0, 0, TH);
+        grd.addColorStop(0, '#ff9ed1'); grd.addColorStop(0.5, '#f86fbb'); grd.addColorStop(1, '#d84c9e');
+        g.fillStyle = grd; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = 'rgba(255,255,255,0.22)';                      // glossy vertical sheen
+        g.fillRect(10, 0, 4, TH); g.fillRect(40, 0, 2, TH);
+        g.strokeStyle = 'rgba(180,40,110,0.5)'; g.lineWidth = 2; g.lineCap = 'round';  // gum drips
+        for (let i = 0; i < 7; i++) { const x = Math.random() * TW; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + (Math.random() * 4 - 2), 10 + Math.random() * 40); g.stroke(); }
+        speck(g, 120, [255, 180, 220], 30, 0.2); nz(g, 90, 0.08);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#c84f96'; g.fillRect(0, 0, TW, TH); speck(g, 500, [220, 110, 170], 40, 0.4);
+        g.fillStyle = 'rgba(255,170,210,0.5)';                       // sticky puddles
+        for (let i = 0; i < 6; i++) { g.beginPath(); g.ellipse(Math.random() * TW, Math.random() * TH, Math.random() * 8 + 4, Math.random() * 5 + 3, 0, 0, 6.29); g.fill(); }
+        g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(0, 2, TW, 6);
+        nz(g, 120, 0.1);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#f58fc4'; g.fillRect(0, 0, TW, TH); speck(g, 200, [255, 190, 222], 24, 0.3);
+        g.fillStyle = '#ffb8dd'; g.lineCap = 'round'; g.strokeStyle = '#ffb8dd'; g.lineWidth = 4;
+        for (let i = 0; i < 6; i++) { const x = 6 + i * 11; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 6 + Math.random() * 10); g.stroke(); }  // sugar stalactites
+        nz(g, 90, 0.08);
+      }),
+      base: -0.02, fogTint: [60, 20, 50]
+    };
+    // ---- Level Fun =) party: striped wallpaper + smiley scrawls, confetti floor, streamers ----
+    const T_PARTY = {
+      wall: texData(function (g) {
+        for (let x = 0; x < TW; x += 10) { g.fillStyle = ((x / 10) % 2) ? '#f4d9a6' : '#e7b6c8'; g.fillRect(x, 0, 10, TH); }  // pastel stripes
+        g.strokeStyle = 'rgba(40,30,20,0.55)'; g.lineWidth = 1.4; g.lineCap = 'round';   // crude crayon smiley
+        g.beginPath(); g.arc(20, 20, 9, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();       // smile
+        g.beginPath(); g.arc(15, 13, 1.4, 0, 6.29); g.moveTo(27, 13); g.arc(25, 13, 1.4, 0, 6.29); g.fill();  // eyes
+        g.fillStyle = 'rgba(200,40,60,0.7)'; g.beginPath(); g.arc(48, 40, 6, 0, 6.29); g.fill();   // balloon
+        g.fillStyle = 'rgba(40,120,180,0.6)'; g.beginPath(); g.arc(52, 18, 5, 0, 6.29); g.fill();
+        nz(g, 120, 0.12);
+      }),
+      floor: texData(function (g) {
+        for (let y = 0; y < TH; y += 16) for (let x = 0; x < TW; x += 16) { g.fillStyle = (((x + y) / 16) % 2) ? '#caa6c8' : '#a68ec0'; g.fillRect(x, y, 16, 16); }  // checker
+        for (let i = 0; i < 90; i++) { g.fillStyle = ['#e85d6e','#5dc0e8','#f0d24a','#6ee08a'][i % 4]; g.fillRect((Math.random() * TW) | 0, (Math.random() * TH) | 0, 2, 4); }  // confetti
+        nz(g, 120, 0.12);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#3a2a3e'; g.fillRect(0, 0, TW, TH); speck(g, 200, [70, 50, 74], 20, 0.3);
+        g.strokeStyle = '#e85d6e'; g.lineWidth = 2;                  // draped streamers
+        for (let i = 0; i < 4; i++) { const y = 6 + i * 8; g.strokeStyle = ['#e85d6e','#5dc0e8','#f0d24a','#6ee08a'][i]; g.beginPath(); g.moveTo(0, y); g.quadraticCurveTo(TW / 2, y + 8, TW, y); g.stroke(); }
+        nz(g, 120, 0.12);
+      }),
+      base: 0.06, fogTint: null
+    };
+    // ---- office: beige cubicle fabric panels, grey carpet tiles, drop-tile fluorescent ----
+    const T_OFFICE = {
+      wall: texData(function (g) {
+        g.fillStyle = '#cdbf9e'; g.fillRect(0, 0, TW, TH);           // fabric cubicle panel
+        speck(g, 1600, [150, 140, 116], 40, 0.4);                   // woven fabric mottle
+        g.fillStyle = 'rgba(90,80,58,0.5)'; g.fillRect(0, 0, TW, 3); g.fillRect(0, TH - 4, TW, 4);   // trim rails
+        g.fillStyle = 'rgba(120,110,86,0.4)'; g.fillRect(0, 30, TW, 2);
+        nz(g, 140, 0.1);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#6b6f70'; g.fillRect(0, 0, TW, TH);           // grey carpet tiles
+        speck(g, 2000, [96, 100, 102], 30, 0.4);
+        g.fillStyle = 'rgba(40,42,44,0.4)'; for (let k = 0; k <= TW; k += 32) { g.fillRect(k, 0, 1, TH); g.fillRect(0, k, TW, 1); }  // tile seams
+        nz(g, 200, 0.16);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#cdc79a'; g.fillRect(0, 0, TW, TH); speck(g, 400, [206, 200, 158], 26, 0.3);  // drop tile
+        g.fillStyle = 'rgba(40,36,20,0.5)'; g.fillRect(0, 0, TW, 2); g.fillRect(0, 31, TW, 2); g.fillRect(0, 0, 2, TH); g.fillRect(31, 0, 2, TH);
+        g.fillStyle = '#f2f0d2'; g.fillRect(38, 6, 20, 20); g.strokeStyle = 'rgba(50,44,24,0.5)'; g.strokeRect(38, 6, 20, 20);
+        nz(g, 160, 0.12);
+      }),
+      base: 0.06, fogTint: null
+    };
+    // ---- parking garage: bare concrete pillars + lane stripes, oil-stained floor, low ceiling ----
+    const T_GARAGE = {
+      wall: texData(function (g) {
+        g.fillStyle = '#8c8f92'; g.fillRect(0, 0, TW, TH); speck(g, 700, [110, 113, 116], 24, 0.4);  // concrete
+        g.fillStyle = 'rgba(40,42,44,0.4)'; for (let i = 0; i < 5; i++) { const x = Math.random() * TW; g.fillRect(x, 0, 1, TH); }  // form lines
+        g.fillStyle = '#d8c24a'; g.fillRect(0, 44, TW, 8);          // yellow painted band
+        g.fillStyle = 'rgba(20,22,24,0.3)'; g.fillRect(0, 52, TW, TH - 52);
+        nz(g, 240, 0.22);
+      }),
+      floor: texData(function (g) {
+        g.fillStyle = '#4a4d50'; g.fillRect(0, 0, TW, TH); speck(g, 900, [70, 73, 76], 24, 0.4);
+        g.fillStyle = '#d8d8d2'; g.fillRect(28, 0, 4, TH);          // faded parking bay line
+        g.fillStyle = 'rgba(10,10,12,0.45)'; g.beginPath(); g.ellipse(44, 40, 14, 9, 0, 0, 6.29); g.fill();  // oil stain
+        nz(g, 320, 0.3);
+      }),
+      ceil: texData(function (g) {
+        g.fillStyle = '#3a3d40'; g.fillRect(0, 0, TW, TH); speck(g, 300, [56, 59, 62], 16, 0.4);
+        g.fillStyle = 'rgba(20,22,24,0.6)'; g.fillRect(0, 14, TW, 4);  // conduit
+        g.fillStyle = '#ffd27a'; g.fillRect(20, 28, 24, 4);        // sodium cage lamp
+        g.fillStyle = 'rgba(255,200,120,0.4)'; g.fillRect(18, 27, 28, 1);
+        nz(g, 180, 0.3);
+      }),
+      base: 0.34, fogTint: [40, 30, 16]
+    };
+    const THEMES = { yellow: T_YELLOW, pool: T_POOL, subway: T_SUBWAY, haunted: T_HAUNTED, sewer: T_SEWER, forest: T_FOREST,
+      school: T_SCHOOL, hospital: T_HOSPITAL, grocery: T_GROCERY, factory: T_FACTORY, party: T_PARTY, office: T_OFFICE, garage: T_GARAGE };
     let curTheme = T_YELLOW;
 
     // night sky for outdoor (forest) levels — drawn once, blitted as the "ceiling"
@@ -742,48 +957,72 @@
       g.restore();
     }
 
-    // The Bacteria — a tall, very skinny, glossy-black blob with long spindly
-    // arms that reach. It skitters out of the dark.
-    const BW = 120, BH = 470;
-    function bacGloss(g, x, y, ry) {
-      const grd = g.createRadialGradient(x - ry * 0.18, y - ry * 0.45, 2, x, y, ry * 1.25);
-      grd.addColorStop(0, '#2c2c34'); grd.addColorStop(0.5, '#131316'); grd.addColorStop(1, '#040405');
-      return grd;
-    }
+    // The Bacteria — an eyeless, faceless gloopy blob built entirely from thin
+    // twisted strands, like wet pipe-cleaners tangled into a wobbling vertical
+    // mass, with gloopy drips sliding off it. Sickly translucent green-grey.
+    const BW = 130, BH = 470;
+    // blobby half-width down the body (fat middle, tapered ends) + a per-height wobble
+    function bacHW(t, phase) { return BW * 0.42 * Math.sin(clamp(t, 0, 1) * Math.PI) * (0.82 + 0.18 * Math.sin(t * 8.5 + phase * 2)); }
+    function bacCx(cx, t, phase) { return cx + Math.sin(phase) * 6 * Math.sin(t * 3 + phase) + Math.sin(t * 5 + phase * 1.4) * 4; }
     function drawBacteriaBody(g, phase) {
-      const cx = BW / 2, sway = Math.sin(phase), sk = Math.sin(phase * 2);
+      const cx = BW / 2, sk = Math.sin(phase * 2);
       g.lineCap = 'round'; g.lineJoin = 'round';
-      // long spindly arms reaching down (sway, skitter)
-      g.strokeStyle = '#080809'; g.lineWidth = BW * 0.055;
-      g.beginPath(); g.moveTo(cx - 8, BH * 0.30);
-      g.quadraticCurveTo(cx - 40 + sway * 12, BH * 0.5, cx - 26 + sk * 14, BH * 0.9); g.stroke();
-      g.beginPath(); g.moveTo(cx + 8, BH * 0.30);
-      g.quadraticCurveTo(cx + 40 - sway * 12, BH * 0.52, cx + 28 - sk * 14, BH * 0.92); g.stroke();
-      // claw fingers
-      g.lineWidth = BW * 0.022;
-      for (const [hx, hy] of [[cx - 26 + sk * 14, BH * 0.9], [cx + 28 - sk * 14, BH * 0.92]]) {
-        for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + i * 8, hy + 22); g.stroke(); }
+
+      // 1) soft gloopy mass behind the strands so it reads as a blob, not a wire ball
+      for (let s = 0; s < 26; s++) {
+        const t = 0.05 + s / 26 * 0.92, w = bacHW(t, phase), x = bacCx(cx, t, phase), y = BH * t;
+        const grd = g.createRadialGradient(x - w * 0.3, y - 5, 1, x, y, w * 1.25);
+        grd.addColorStop(0, 'rgba(108,134,98,0.16)'); grd.addColorStop(1, 'rgba(28,44,30,0.07)');
+        g.fillStyle = grd; g.beginPath(); g.ellipse(x, y, w, BH * 0.055, 0, 0, 6.29); g.fill();
       }
-      // skinny vertical blob body
-      g.fillStyle = bacGloss(g, cx, BH * 0.52, BH * 0.36);
-      g.beginPath();
-      g.moveTo(cx, BH * 0.10);
-      g.bezierCurveTo(cx + BW * 0.27, BH * 0.20, cx + BW * 0.20, BH * 0.72, cx + BW * 0.13 + sway * 4, BH * 0.92);
-      g.bezierCurveTo(cx + BW * 0.05, BH * 0.99, cx - BW * 0.05, BH * 0.99, cx - BW * 0.13 + sway * 4, BH * 0.92);
-      g.bezierCurveTo(cx - BW * 0.20, BH * 0.72, cx - BW * 0.27, BH * 0.20, cx, BH * 0.10);
-      g.fill();
-      // wet gloss highlight
-      g.fillStyle = 'rgba(130,130,150,0.16)';
-      g.beginPath(); g.ellipse(cx - 7, BH * 0.34, 5, BH * 0.12, 0, 0, 6.29); g.fill();
-      // head bulge + uneven glowing pale eyes
-      g.fillStyle = bacGloss(g, cx, BH * 0.15, BW * 0.24);
-      g.beginPath(); g.ellipse(cx, BH * 0.145, BW * 0.21, BW * 0.25, 0, 0, 6.29); g.fill();
-      g.fillStyle = '#dfe6da';
-      g.beginPath(); g.arc(cx - 11, BH * 0.135, 4.2, 0, 6.29); g.fill();
-      g.beginPath(); g.arc(cx + 12, BH * 0.152, 3.2, 0, 6.29); g.fill();
-      g.fillStyle = '#080808';
-      g.beginPath(); g.arc(cx - 11, BH * 0.135, 1.7, 0, 6.29); g.fill();
-      g.beginPath(); g.arc(cx + 12, BH * 0.152, 1.4, 0, 6.29); g.fill();
+
+      // 2) the pipe-cleaner strands — thin wavy lines twisting top→bottom through the mass
+      const N = 26;
+      for (let i = 0; i < N; i++) {
+        const u = (i / (N - 1) - 0.5) * 2, ip = i * 0.83;
+        const dark = i % 4 === 0;
+        g.strokeStyle = dark ? 'rgba(30,46,32,0.7)' : 'rgba(86,116,80,' + (0.45 + 0.3 * Math.sin(i * 1.7)) + ')';
+        g.lineWidth = 1.3 + (i % 3) * 0.6;
+        g.beginPath();
+        const steps = 16;
+        for (let k = 0; k <= steps; k++) {
+          const t = 0.04 + k / steps * 0.93, w = bacHW(t, phase);
+          const wob = Math.sin(t * 7 + ip + phase * 2.2) * w * 0.55;
+          const x = bacCx(cx, t, phase) + u * w * 0.66 + wob, y = BH * t;
+          if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+
+      // 3) a few brighter wet-sheen strands catching the light
+      g.strokeStyle = 'rgba(180,214,170,0.4)'; g.lineWidth = 1.1;
+      for (let i = 0; i < 5; i++) {
+        const ip = i * 1.6 + 0.5;
+        g.beginPath();
+        for (let k = 0; k <= 12; k++) {
+          const t = 0.1 + k / 12 * 0.7, w = bacHW(t, phase);
+          const x = bacCx(cx, t, phase) + Math.sin(t * 6 + ip + phase * 2) * w * 0.4, y = BH * t;
+          if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+
+      // 4) gloopy drips sliding off the underside, each a strand + a fat bead
+      for (let d = 0; d < 6; d++) {
+        const dx = cx + (d - 2.5) * (BW * 0.13) + sk * 3;
+        const len = BH * 0.03 + (d % 3) * BH * 0.025 + Math.abs(Math.sin(phase * 1.5 + d)) * BH * 0.03;
+        const top = BH * (0.84 + (d % 2) * 0.05);
+        g.strokeStyle = 'rgba(70,96,64,0.7)'; g.lineWidth = 2.6 + (d % 2) * 1.8;
+        g.beginPath(); g.moveTo(dx, top); g.quadraticCurveTo(dx + sk * 3, top + len * 0.6, dx + sk * 4, top + len); g.stroke();
+        const bg = g.createRadialGradient(dx + sk * 4 - 1, top + len - 1, 0.5, dx + sk * 4, top + len, 5 + (d % 2) * 2);
+        bg.addColorStop(0, 'rgba(150,186,140,0.7)'); bg.addColorStop(1, 'rgba(50,74,46,0.55)');
+        g.fillStyle = bg; g.beginPath(); g.arc(dx + sk * 4, top + len, 4.2 + (d % 2) * 1.8, 0, 6.29); g.fill();
+      }
+
+      // 5) two thin reaching tendrils (no claws, no eyes — just gloopy feelers)
+      g.strokeStyle = 'rgba(60,84,56,0.65)'; g.lineWidth = 3.2;
+      g.beginPath(); g.moveTo(cx - 6, BH * 0.34); g.quadraticCurveTo(cx - 44 + sk * 12, BH * 0.55, cx - 30 + sk * 16, BH * 0.86); g.stroke();
+      g.beginPath(); g.moveTo(cx + 6, BH * 0.32); g.quadraticCurveTo(cx + 44 - sk * 12, BH * 0.54, cx + 32 - sk * 16, BH * 0.88); g.stroke();
     }
     const BACTERIA_FRAMES = (function () {
       const N = 12, arr = [];
@@ -791,28 +1030,33 @@
       return arr;
     })();
 
-    // Bacteria jumpscare face: a glossy black mass, scattered pale eyes, a
-    // vertical gaping maw that tears open.
+    // Bacteria jumpscare: a faceless gloopy tangle of strands radiating out, no
+    // eyes, just a dripping vertical maw tearing open at the centre.
     function drawBacteriaFace(g, cx, cy, S, open, t) {
       g.save(); g.translate(cx, cy); g.scale(S, S);
-      const grd = g.createRadialGradient(-40, -50, 20, 0, 0, 250);
-      grd.addColorStop(0, '#26262c'); grd.addColorStop(0.5, '#121215'); grd.addColorStop(1, '#020203');
-      g.fillStyle = grd; g.beginPath(); g.ellipse(0, 0, 170, 215, 0, 0, 6.29); g.fill();
-      g.fillStyle = 'rgba(150,150,170,0.12)'; g.beginPath(); g.ellipse(-60, -40, 30, 120, 0.3, 0, 6.29); g.fill();
-      // scattered pale eyes
-      for (const [ex, ey, r] of [[-78, -70, 20], [44, -96, 15], [86, -8, 22], [-30, 24, 17], [-96, 60, 13], [54, 70, 16]]) {
-        g.fillStyle = '#e6ece0'; g.beginPath(); g.arc(ex, ey, r * (1 + open * 0.2), 0, 6.29); g.fill();
-        g.fillStyle = '#070707'; g.beginPath(); g.arc(ex + r * 0.15, ey + r * 0.1, r * 0.42, 0, 6.29); g.fill();
+      // gloopy translucent mass
+      const grd = g.createRadialGradient(-30, -30, 10, 0, 0, 250);
+      grd.addColorStop(0, 'rgba(96,124,86,0.95)'); grd.addColorStop(0.5, 'rgba(46,68,42,0.95)'); grd.addColorStop(1, 'rgba(14,24,14,0.95)');
+      g.fillStyle = grd; g.beginPath(); g.ellipse(0, 0, 180, 220, 0, 0, 6.29); g.fill();
+      // radiating pipe-cleaner strands all over the face
+      g.lineCap = 'round';
+      for (let i = 0; i < 40; i++) {
+        const a = i / 40 * 6.2832, r0 = 30 + (i % 5) * 12, r1 = 150 + (i % 7) * 18;
+        const wob = Math.sin(i * 2 + t * 0.01) * 22;
+        g.strokeStyle = i % 3 === 0 ? 'rgba(28,44,30,0.8)' : 'rgba(120,156,108,0.6)';
+        g.lineWidth = 2 + (i % 3);
+        g.beginPath(); g.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+        g.quadraticCurveTo(Math.cos(a) * (r0 + r1) / 2 + wob, Math.sin(a) * (r0 + r1) / 2 - wob, Math.cos(a) * r1, Math.sin(a) * r1);
+        g.stroke();
       }
-      // vertical gaping maw
-      const mh = 60 + open * 150;
-      const mg = g.createRadialGradient(0, 110, 6, 0, 110, mh);
-      mg.addColorStop(0, '#160505'); mg.addColorStop(0.6, '#070303'); mg.addColorStop(1, '#000');
-      g.fillStyle = mg; g.beginPath(); g.ellipse(0, 110, 40, mh, 0, 0, 6.29); g.fill();
-      g.fillStyle = '#cfcabb';
-      for (let i = -3; i <= 3; i++) {
-        g.beginPath(); g.moveTo(i * 11 - 4, 110 - mh + 4); g.lineTo(i * 11 + 4, 110 - mh + 4); g.lineTo(i * 11, 110 - mh + 20); g.closePath(); g.fill();
-      }
+      // dripping vertical maw
+      const mh = 60 + open * 160;
+      const mg = g.createRadialGradient(0, 90, 6, 0, 90, mh);
+      mg.addColorStop(0, '#0a1408'); mg.addColorStop(0.6, '#050a04'); mg.addColorStop(1, '#000');
+      g.fillStyle = mg; g.beginPath(); g.ellipse(0, 90, 44, mh, 0, 0, 6.29); g.fill();
+      // gloopy strands strung across the maw
+      g.strokeStyle = 'rgba(150,186,140,0.5)'; g.lineWidth = 2;
+      for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(i * 12, 90 - mh + 10); g.quadraticCurveTo(i * 12 + 6, 90, i * 12, 90 + mh - 10); g.stroke(); }
       g.restore();
     }
 
@@ -824,7 +1068,14 @@
       subway: { glow: 'rgba(150,180,255,0.9)', frame: '#0a1020', slab: '#1c2c50', panel: '#13203c', text: '#cfdcff', label: 'SUBWAY' },
       haunted: { glow: 'rgba(200,140,255,0.85)', frame: '#180a22', slab: '#341a44', panel: '#22122e', text: '#ecd6ff', label: 'HOUSE' },
       sewer: { glow: 'rgba(150,230,150,0.85)', frame: '#0c1a0c', slab: '#1e3a1e', panel: '#142814', text: '#d2ffce', label: 'SEWER' },
-      forest: { glow: 'rgba(160,255,170,0.85)', frame: '#0a1c0e', slab: '#1c3e22', panel: '#122a16', text: '#d6ffd8', label: 'FOREST' }
+      forest: { glow: 'rgba(160,255,170,0.85)', frame: '#0a1c0e', slab: '#1c3e22', panel: '#122a16', text: '#d6ffd8', label: 'FOREST' },
+      school: { glow: 'rgba(150,235,180,0.85)', frame: '#10231a', slab: '#244a36', panel: '#163022', text: '#d6ffe6', label: 'SCHOOL' },
+      hospital: { glow: 'rgba(190,255,235,0.9)', frame: '#0e2420', slab: '#1f4a42', panel: '#143230', text: '#dffff6', label: 'WARD' },
+      grocery: { glow: 'rgba(255,235,150,0.9)', frame: '#231f0c', slab: '#4a421c', panel: '#322a14', text: '#fff6cd', label: 'MARKET' },
+      factory: { glow: 'rgba(255,160,220,0.9)', frame: '#2a0c20', slab: '#5a1c46', panel: '#3c1430', text: '#ffd6f2', label: 'CANDY' },
+      party: { glow: 'rgba(255,200,120,0.92)', frame: '#241608', slab: '#5a3a18', panel: '#3c2610', text: '#ffe6c0', label: 'FUN =)' },
+      office: { glow: 'rgba(200,210,160,0.85)', frame: '#1c1c12', slab: '#3a3a24', panel: '#262617', text: '#eef0d6', label: 'OFFICE' },
+      garage: { glow: 'rgba(255,200,120,0.85)', frame: '#231a0c', slab: '#4a3a1c', panel: '#322614', text: '#ffe6bd', label: 'GARAGE' }
     };
     function buildDoor(s) {
       const c = makeCanvas(84, 132), g = c.getContext('2d');
@@ -1315,7 +1566,7 @@
     requestAnimationFrame(frame);
 
     // brief "sliding down" transition: dark vignette closing in + downward streaks
-    const SLIDE_THEMES = ['sewer', 'subway', 'forest', 'haunted', 'pool', 'yellow'];
+    const SLIDE_THEMES = ['sewer', 'subway', 'school', 'garage', 'hospital', 'grocery', 'forest', 'office', 'factory', 'party', 'haunted', 'pool', 'yellow'];
     function drawSlide() {
       const p = 1 - clamp(slideT / 1.0, 0, 1);
       ctx.fillStyle = 'rgba(0,0,0,' + (0.3 + p * 0.6) + ')'; ctx.fillRect(0, 0, W, H);
