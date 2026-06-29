@@ -428,14 +428,19 @@
       // deep levels get an extra roaming Hound
       if (lvl >= 5 && T !== 'party' && T !== 'forest' && Math.random() < 0.4) spawnHunter('hound', 3.0 + lvl * 0.05);
 
-      // dead people in yellow hazmat suits
+      // dead people in hazmat suits, slumped against the walls
       corpses = [];
       const wantC = 2 + Math.floor(lvl / 2);
-      for (let g = 0; g < 400 && corpses.length < wantC; g++) {
-        const bx = rint(1, mapW - 2) + 0.5, by = rint(1, mapH - 2) + 0.5;
-        if (map[Math.floor(by)][Math.floor(bx)] !== 0) continue;
-        if (Math.hypot(bx - px, by - py) < 2.5) continue;
-        corpses.push({ x: bx, y: by });
+      for (let g = 0; g < 700 && corpses.length < wantC; g++) {
+        const bx = rint(1, mapW - 2), by = rint(1, mapH - 2);
+        if (map[by][bx] !== 0) continue;
+        if (Math.hypot(bx + 0.5 - px, by + 0.5 - py) < 3) continue;
+        let wd = null;                                   // need a wall to slump against
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (map[by + dy] && map[by + dy][bx + dx] === 1) { wd = [dx, dy]; break; }
+        if (!wd) continue;
+        const cxp = bx + 0.5 + wd[0] * 0.36, cyp = by + 0.5 + wd[1] * 0.36;
+        if (corpses.some(function (k) { return Math.hypot(k.x - cxp, k.y - cyp) < 1.6; })) continue;
+        corpses.push({ x: cxp, y: cyp });
       }
 
       marks = [];   // fresh trail each level
@@ -495,6 +500,19 @@
         var sc = Math.min(W / img.width, H / img.height) * 0.92;
         ctx.drawImage(img, (W - img.width * sc) / 2, (H - img.height * sc) / 2, img.width * sc, img.height * sc);
         return { type: type, frames: def.frames.length };
+      },
+      corpseInfo: function () {
+        return corpses.map(function (b) {
+          var bx = Math.floor(b.x), by = Math.floor(b.y), nearWall = false;
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { if (map[by + d[1]] && map[by + d[1]][bx + d[0]] === 1) nearWall = true; });
+          return { x: Math.round(b.x * 100) / 100, y: Math.round(b.y * 100) / 100, againstWall: nearWall };
+        });
+      },
+      showCorpse: function () {
+        ctx.fillStyle = '#15140a'; ctx.fillRect(0, 0, W, H);
+        var sc = Math.min(W / hazmatImg.width, H / hazmatImg.height) * 0.92;
+        ctx.drawImage(hazmatImg, (W - hazmatImg.width * sc) / 2, (H - hazmatImg.height * sc) / 2, hazmatImg.width * sc, hazmatImg.height * sc);
+        return { w: hazmatImg.width, h: hazmatImg.height };
       }
     };
 
@@ -1675,29 +1693,53 @@
     // A dead body in a yellow hazmat suit, slumped on the floor in a pool of
     // blood — the other people who didn't make it out of the backrooms.
     const hazmatImg = (function () {
-      const c = makeCanvas(140, 150), g = c.getContext('2d');
-      // blood pool
-      g.fillStyle = 'rgba(70,6,5,0.85)'; g.beginPath(); g.ellipse(74, 140, 56, 13, 0, 0, 6.29); g.fill();
-      g.fillStyle = 'rgba(110,10,8,0.7)'; g.beginPath(); g.ellipse(48, 143, 30, 7, 0, 0, 6.29); g.fill();
-      // sprawled legs
-      g.fillStyle = '#bd9c26'; g.lineCap = 'round';
-      g.strokeStyle = '#bd9c26'; g.lineWidth = 17;
-      g.beginPath(); g.moveTo(70, 110); g.lineTo(108, 132); g.stroke();
-      g.beginPath(); g.moveTo(70, 110); g.lineTo(40, 134); g.stroke();
-      // slumped torso
-      let tg = g.createLinearGradient(34, 60, 110, 130);
-      tg.addColorStop(0, '#ead033'); tg.addColorStop(1, '#9c7e1c');
-      g.fillStyle = tg; g.beginPath(); g.ellipse(70, 92, 40, 44, 0.18, 0, 6.29); g.fill();
-      // suit folds
-      g.strokeStyle = 'rgba(110,88,18,0.5)'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(52, 66); g.lineTo(62, 122); g.stroke();
-      g.beginPath(); g.moveTo(90, 64); g.lineTo(84, 122); g.stroke();
-      // hood/helmet lolling to one side (dead)
-      g.fillStyle = '#d7bb31'; g.beginPath(); g.ellipse(54, 50, 27, 29, -0.3, 0, 6.29); g.fill();
-      g.fillStyle = '#12100a'; g.beginPath(); g.ellipse(50, 52, 16, 18, -0.3, 0, 6.29); g.fill();   // dark visor
-      g.fillStyle = 'rgba(150,170,180,0.22)'; g.beginPath(); g.ellipse(44, 46, 5, 8, -0.3, 0, 6.29); g.fill();
-      // blood smear up the suit
-      g.fillStyle = 'rgba(120,12,9,0.7)'; g.beginPath(); g.ellipse(72, 98, 9, 13, 0, 0, 6.29); g.fill();
+      const c = makeCanvas(150, 210), g = c.getContext('2d');
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      function hsh(x, y) { let n = (x | 0) * 374761393 + (y | 0) * 668265263; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967295; }
+      function suit(x0, y0, x1, y1) { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, '#d6bd35'); gr.addColorStop(0.5, '#a4861e'); gr.addColorStop(1, '#6a5412'); return gr; }
+      // dried blood pool spreading on the floor
+      g.fillStyle = 'rgba(56,5,4,0.9)'; g.beginPath(); g.ellipse(72, 200, 60, 13, 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(92,8,6,0.7)'; g.beginPath(); g.ellipse(44, 202, 32, 8, 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(120,12,9,0.45)'; g.beginPath(); g.ellipse(98, 198, 22, 6, 0, 0, 6.29); g.fill();
+      // legs sprawled forward (foreshortened) + boots
+      g.strokeStyle = suit(50, 150, 110, 200); g.lineWidth = 23;
+      g.beginPath(); g.moveTo(70, 150); g.lineTo(52, 178); g.lineTo(40, 196); g.stroke();
+      g.beginPath(); g.moveTo(80, 150); g.lineTo(98, 176); g.lineTo(108, 194); g.stroke();
+      g.fillStyle = '#181610'; g.beginPath(); g.ellipse(38, 197, 12, 7, -0.3, 0, 6.29); g.fill(); g.beginPath(); g.ellipse(110, 195, 12, 7, 0.3, 0, 6.29); g.fill();
+      // hips + slumped torso (leaning, head lolling right)
+      g.fillStyle = suit(45, 70, 105, 160);
+      g.beginPath();
+      g.moveTo(48, 150); g.quadraticCurveTo(40, 110, 50, 80);
+      g.quadraticCurveTo(62, 58, 86, 62); g.quadraticCurveTo(104, 70, 102, 110);
+      g.quadraticCurveTo(100, 140, 92, 152); g.quadraticCurveTo(70, 160, 48, 150); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(58,44,10,0.42)'; g.beginPath(); g.ellipse(93, 120, 14, 42, -0.1, 0, 6.29); g.fill();     // right-side AO
+      g.fillStyle = 'rgba(255,244,170,0.16)'; g.beginPath(); g.ellipse(57, 92, 12, 30, 0.1, 0, 6.29); g.fill();    // left highlight
+      g.strokeStyle = 'rgba(38,30,8,0.7)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(72, 70); g.lineTo(70, 150); g.stroke();   // zipper
+      g.strokeStyle = 'rgba(180,160,90,0.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(73.5, 70); g.lineTo(71.5, 150); g.stroke();
+      g.strokeStyle = 'rgba(58,44,10,0.5)'; g.lineWidth = 2.4;                                                     // suit folds
+      for (const f of [[54, 84, 60, 140], [88, 78, 90, 146], [62, 120, 84, 130]]) { g.beginPath(); g.moveTo(f[0], f[1]); g.quadraticCurveTo((f[0] + f[2]) / 2 + 3, (f[1] + f[3]) / 2, f[2], f[3]); g.stroke(); }
+      for (let i = 0; i < 54; i++) { const h = hsh(i * 11 + 3, i * 17), ax = 46 + h * 58, ay = 64 + ((i * 29) % 92); g.fillStyle = (h < 0.5 ? 'rgba(28,22,6,' : 'rgba(40,58,30,') + (0.1 + h * 0.24) + ')'; g.beginPath(); g.arc(ax, ay, 1 + h * 2, 0, 6.29); g.fill(); }   // grime
+      g.fillStyle = 'rgba(94,8,6,0.8)'; g.beginPath(); g.ellipse(78, 104, 13, 24, 0.2, 0, 6.29); g.fill();          // chest blood
+      g.fillStyle = '#090703'; g.beginPath(); g.moveTo(60, 110); g.lineTo(66, 112); g.lineTo(62, 130); g.lineTo(56, 125); g.closePath(); g.fill();   // ripped tear
+      // limp arms + dark gloves
+      g.strokeStyle = suit(40, 80, 70, 150); g.lineWidth = 14;
+      g.beginPath(); g.moveTo(52, 82); g.lineTo(40, 120); g.lineTo(44, 150); g.stroke();
+      g.beginPath(); g.moveTo(98, 82); g.lineTo(96, 120); g.lineTo(80, 146); g.stroke();
+      g.fillStyle = '#15130d'; g.beginPath(); g.arc(44, 152, 7, 0, 6.29); g.fill(); g.beginPath(); g.arc(80, 148, 7, 0, 6.29); g.fill();
+      // hood/helmet lolling, cracked visor, a dead face inside
+      const hx = 58, hy = 48;
+      g.fillStyle = '#c7ab2b'; g.beginPath(); g.ellipse(hx, hy, 28, 30, -0.35, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(58,44,10,0.4)'; g.beginPath(); g.ellipse(hx + 10, hy + 6, 10, 22, -0.35, 0, 6.29); g.fill();
+      g.save(); g.translate(hx - 2, hy + 2); g.rotate(-0.35);
+      g.fillStyle = '#0b0d0f'; g.beginPath(); g.ellipse(0, 0, 17, 20, 0, 0, 6.29); g.fill();                       // dark visor
+      g.fillStyle = 'rgba(150,140,120,0.28)'; g.beginPath(); g.ellipse(0, -1, 11, 15, 0, 0, 6.29); g.fill();        // pale dead face
+      g.fillStyle = 'rgba(0,0,0,0.72)'; g.beginPath(); g.ellipse(-4, -4, 2.4, 3.4, 0, 0, 6.29); g.fill(); g.beginPath(); g.ellipse(4, -4, 2.4, 3.4, 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(0, 6, 2.4, 4, 0, 0, 6.29); g.fill();                                                 // open mouth
+      g.fillStyle = 'rgba(160,180,190,0.16)'; g.beginPath(); g.moveTo(-12, -10); g.lineTo(-4, -12); g.lineTo(-8, 8); g.lineTo(-15, 4); g.closePath(); g.fill();   // visor reflection
+      g.strokeStyle = 'rgba(220,225,230,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(6, -14); g.lineTo(2, 0); g.lineTo(8, 6); g.lineTo(3, 14); g.stroke();      // crack
+      g.restore();
+      g.fillStyle = '#39392f'; g.beginPath(); g.arc(hx + 20, hy + 12, 6, 0, 6.29); g.fill(); g.fillStyle = '#19190f'; g.beginPath(); g.arc(hx + 20, hy + 12, 3, 0, 6.29); g.fill();   // respirator filter
+      g.fillStyle = 'rgba(108,10,8,0.7)'; g.beginPath(); g.moveTo(hx - 6, hy + 22); g.quadraticCurveTo(hx - 10, hy + 42, hx - 4, hy + 60); g.quadraticCurveTo(hx, hy + 42, hx + 2, hy + 24); g.closePath(); g.fill();   // blood from the hood
       return c;
     })();
 
@@ -2097,7 +2139,7 @@
       for (const m of marks) sprites.push({ img: markImg, x: m.x, y: m.y, sh: 0.22, sw: 0.22, bob: 0, bright: 0.9, foot: 1 });
       for (const b of corpses) {
         const d = Math.hypot(b.x - px, b.y - py);
-        sprites.push({ img: hazmatImg, x: b.x, y: b.y, sh: 0.5, sw: 0.5, bob: 0, bright: clamp(ambient * (1.25 - d * 0.05) + 0.08, 0.2, 1) });
+        sprites.push({ img: hazmatImg, x: b.x, y: b.y, sh: 0.72, sw: 0.52, bob: 0, bright: clamp(ambient * (1.25 - d * 0.05) + 0.08, 0.2, 1) });
       }
       // themed scenery props (z-buffer occluded, lit by distance)
       for (const p of props) {
