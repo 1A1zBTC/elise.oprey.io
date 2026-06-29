@@ -957,13 +957,19 @@
       g.moveTo(Q(83), P(298)); g.lineTo(Q(91), P(298));
       g.lineTo(Q(pegX + 3), P(360)); g.lineTo(Q(pegX), P(420)); g.lineTo(Q(pegX - 3), P(360)); g.closePath(); g.fill();
 
-      // --- bluish-green sleeves (arms), swing opposite the legs ---
-      let ag = g.createLinearGradient(Q(18), 0, Q(58), 0);
-      ag.addColorStop(0, '#164a44'); ag.addColorStop(0.5, '#2f8d7c'); ag.addColorStop(1, '#123e38');
-      g.strokeStyle = ag; g.lineWidth = Q(12);
+      // --- billowy teal pirate sleeves (arms), swing opposite the legs ---
+      let ag = g.createLinearGradient(Q(16), 0, Q(60), 0);
+      ag.addColorStop(0, '#185049'); ag.addColorStop(0.5, '#3aa492'); ag.addColorStop(1, '#123e38');
+      g.strokeStyle = ag; g.lineWidth = Q(15);
       const lh = 270 + armA * 12, rh = 276 - armA * 12;   // long arms reaching down
-      g.beginPath(); g.moveTo(Q(44), P(166)); g.lineTo(Q(28 - armA * 4), P(216)); g.lineTo(Q(28), P(lh)); g.stroke();
-      g.beginPath(); g.moveTo(Q(106), P(166)); g.lineTo(Q(122 + armA * 4), P(220)); g.lineTo(Q(122), P(rh)); g.stroke();
+      g.beginPath(); g.moveTo(Q(46), P(168)); g.lineTo(Q(26 - armA * 4), P(218)); g.lineTo(Q(28), P(lh)); g.stroke();
+      g.beginPath(); g.moveTo(Q(104), P(168)); g.lineTo(Q(124 + armA * 4), P(222)); g.lineTo(Q(122), P(rh)); g.stroke();
+      g.fillStyle = ag;                                   // puffy billowing shoulder caps
+      g.beginPath(); g.ellipse(Q(42), P(174), Q(15), P(20), 0.2, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(108), P(174), Q(15), P(20), -0.2, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,210,196,0.18)';            // sheen on the puffs
+      g.beginPath(); g.ellipse(Q(38), P(170), Q(5), P(9), 0.2, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(112), P(170), Q(5), P(9), -0.2, 0, 6.29); g.fill();
       // dark (Black) hands + gangly fingers
       g.fillStyle = '#28190f';
       g.beginPath(); g.ellipse(Q(28), P(lh), Q(6), P(8), 0, 0, 6.29); g.fill();
@@ -988,25 +994,31 @@
       g.beginPath(); g.moveTo(Q(52 + lean), P(150)); g.lineTo(Q(75), P(178)); g.lineTo(Q(98 + lean), P(150)); g.closePath(); g.fill();
       g.strokeStyle = 'rgba(120,90,16,0.7)'; g.lineWidth = Q(2);
       g.beginPath(); g.moveTo(Q(75 + lean / 2), P(178)); g.lineTo(Q(75), P(302)); g.stroke();
-      // brass buttons down the waistcoat
-      for (let b = 0; b < 6; b++) {
-        const byv = 188 + b * 18;
+      // brass buttons down the waistcoat (stop above the sash)
+      for (let b = 0; b < 4; b++) {
+        const byv = 186 + b * 15;
         g.fillStyle = '#c9a13a'; g.beginPath(); g.arc(Q(75), P(byv), Q(2.6), 0, 6.29); g.fill();
         g.fillStyle = 'rgba(255,240,180,0.7)'; g.beginPath(); g.arc(Q(74), P(byv - 0.8), Q(1), 0, 6.29); g.fill();
       }
 
-      // --- dark belt + buckle at the waist ---
-      g.fillStyle = '#1f1610'; g.fillRect(Q(33), P(250), Q(84), P(14));
-      g.fillStyle = '#7a6128'; g.fillRect(Q(70), P(251), Q(12), P(12));
-
-      // --- purple cloth dangling from the belt (sways) ---
+      // --- wide purple sash wrapped around the waist (sways at the tail) ---
       const sway = Math.sin(phase * 1.3) * 5;
-      let dg = g.createLinearGradient(0, P(258), 0, P(338));
-      dg.addColorStop(0, '#6a2f86'); dg.addColorStop(1, '#3a1850');
-      g.fillStyle = dg;
+      let sg = g.createLinearGradient(0, P(246), 0, P(282));
+      sg.addColorStop(0, '#7c3c98'); sg.addColorStop(0.5, '#5a2578'); sg.addColorStop(1, '#371648');
+      g.fillStyle = sg;
       g.beginPath();
-      g.moveTo(Q(46), P(258)); g.lineTo(Q(66), P(258));
-      g.lineTo(Q(62 + sway), P(326)); g.lineTo(Q(54 + sway), P(338)); g.lineTo(Q(48 + sway), P(324)); g.closePath(); g.fill();
+      g.moveTo(Q(31), P(248)); g.lineTo(Q(119), P(248)); g.lineTo(Q(119), P(276)); g.lineTo(Q(31), P(279)); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(28,10,42,0.5)'; g.lineWidth = Q(1.4);              // cloth folds
+      for (let i = 0; i < 5; i++) { const sx = 40 + i * 18; g.beginPath(); g.moveTo(Q(sx), P(249)); g.lineTo(Q(sx - 3), P(278)); g.stroke(); }
+      g.fillStyle = sg;                                                       // dangling sash tail
+      g.beginPath(); g.moveTo(Q(40), P(274)); g.lineTo(Q(56), P(274)); g.lineTo(Q(52 + sway), P(330)); g.lineTo(Q(44 + sway), P(342)); g.lineTo(Q(38 + sway), P(326)); g.closePath(); g.fill();
+      // --- big brass belt buckle over the sash ---
+      g.fillStyle = '#2a1f12'; g.fillRect(Q(33), P(259), Q(84), P(8));         // leather belt strip
+      const bkx = 67, bkw = 17;
+      g.fillStyle = '#a8842a'; g.fillRect(Q(bkx), P(255), Q(bkw), P(17));      // buckle plate
+      g.fillStyle = '#e8c860'; g.fillRect(Q(bkx + 1.5), P(256.5), Q(bkw - 3), P(14));
+      g.fillStyle = '#6f5618'; g.fillRect(Q(bkx + 4.5), P(259.5), Q(bkw - 9), P(8));   // centre slot
+      g.fillStyle = 'rgba(255,248,210,0.7)'; g.fillRect(Q(bkx + 1.5), P(256.5), Q(2), P(14));   // highlight
 
       // --- blood soaked down the waistcoat (heavy, from the collar) ---
       g.fillStyle = 'rgba(110,10,7,0.8)';
@@ -1180,72 +1192,49 @@
       g.restore();
     }
 
-    // The Bacteria — an eyeless, faceless gloopy blob built entirely from thin
-    // twisted strands, like wet pipe-cleaners tangled into a wobbling vertical
-    // mass, with gloopy drips sliding off it. Sickly translucent green-grey.
+    // The Bacteria — the classic Backrooms entity: a tall, emaciated, near-black
+    // humanoid silhouette with extremely long, thin, spindly limbs and a smooth,
+    // utterly featureless dark head. It looms out of the gloom rather than gloops.
     const BW = 130, BH = 470;
-    // blobby half-width down the body (fat middle, tapered ends) + a per-height wobble
-    function bacHW(t, phase) { return BW * 0.42 * Math.sin(clamp(t, 0, 1) * Math.PI) * (0.82 + 0.18 * Math.sin(t * 8.5 + phase * 2)); }
-    function bacCx(cx, t, phase) { return cx + Math.sin(phase) * 6 * Math.sin(t * 3 + phase) + Math.sin(t * 5 + phase * 1.4) * 4; }
     function drawBacteriaBody(g, phase) {
-      const cx = BW / 2, sk = Math.sin(phase * 2);
+      const cx = BW / 2;
+      const legA = Math.sin(phase), armA = Math.sin(phase + Math.PI), bob = Math.abs(Math.sin(phase));
+      const sway = Math.sin(phase * 0.5) * 3;
       g.lineCap = 'round'; g.lineJoin = 'round';
-
-      // 1) soft gloopy mass behind the strands so it reads as a blob, not a wire ball
-      for (let s = 0; s < 26; s++) {
-        const t = 0.05 + s / 26 * 0.92, w = bacHW(t, phase), x = bacCx(cx, t, phase), y = BH * t;
-        const grd = g.createRadialGradient(x - w * 0.3, y - 5, 1, x, y, w * 1.25);
-        grd.addColorStop(0, 'rgba(108,134,98,0.16)'); grd.addColorStop(1, 'rgba(28,44,30,0.07)');
-        g.fillStyle = grd; g.beginPath(); g.ellipse(x, y, w, BH * 0.055, 0, 0, 6.29); g.fill();
+      // long thin legs (uneven gait), bony feet
+      g.strokeStyle = '#141518'; g.lineWidth = BW * 0.07;
+      g.beginPath(); g.moveTo(cx - 6, BH * 0.55); g.lineTo(cx - 9 + legA * 8, BH * 0.77); g.lineTo(cx - 11 + legA * 15, BH * 0.97); g.stroke();
+      g.beginPath(); g.moveTo(cx + 6, BH * 0.55); g.lineTo(cx + 9 - legA * 8, BH * 0.77); g.lineTo(cx + 12 - legA * 15, BH * 0.97); g.stroke();
+      g.fillStyle = '#0c0d0f';
+      g.beginPath(); g.ellipse(cx - 11 + legA * 15, BH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 12 - legA * 15, BH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
+      // emaciated tapering torso, faint rib shading
+      const tg = g.createLinearGradient(cx - 18, 0, cx + 18, 0);
+      tg.addColorStop(0, '#0b0c0e'); tg.addColorStop(0.5, '#242629'); tg.addColorStop(1, '#090a0c');
+      g.fillStyle = tg;
+      g.beginPath();
+      g.moveTo(cx - 14, BH * 0.27); g.lineTo(cx + 14, BH * 0.27);
+      g.quadraticCurveTo(cx + 10, BH * 0.44, cx + 7, BH * 0.57); g.lineTo(cx - 7, BH * 0.57);
+      g.quadraticCurveTo(cx - 10, BH * 0.44, cx - 14, BH * 0.27); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(120,124,130,0.10)'; g.lineWidth = 1.5;
+      for (let i = 0; i < 4; i++) { const ry = BH * (0.33 + i * 0.05); g.beginPath(); g.moveTo(cx - 8, ry); g.quadraticCurveTo(cx, ry + 4, cx + 8, ry); g.stroke(); }
+      // extremely long spindly arms hanging past the hips, thin fingers
+      g.strokeStyle = '#141518'; g.lineWidth = BW * 0.05;
+      const lh = BH * (0.74 + armA * 0.02), rh = BH * (0.74 - armA * 0.02);
+      g.beginPath(); g.moveTo(cx - 12, BH * 0.30); g.lineTo(cx - 19 + sway, BH * 0.52); g.lineTo(cx - 15 + sway, lh); g.stroke();
+      g.beginPath(); g.moveTo(cx + 12, BH * 0.30); g.lineTo(cx + 19 - sway, BH * 0.52); g.lineTo(cx + 15 - sway, rh); g.stroke();
+      g.strokeStyle = '#0e0f11'; g.lineWidth = 2;
+      for (const f of [[cx - 15 + sway, lh, -1], [cx + 15 - sway, rh, 1]]) {
+        for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(f[0], f[1]); g.lineTo(f[0] + f[2] * (2 + i * 2), f[1] + 12 + i * 3); g.stroke(); }
       }
-
-      // 2) the pipe-cleaner strands — thin wavy lines twisting top→bottom through the mass
-      const N = 26;
-      for (let i = 0; i < N; i++) {
-        const u = (i / (N - 1) - 0.5) * 2, ip = i * 0.83;
-        const dark = i % 4 === 0;
-        g.strokeStyle = dark ? 'rgba(30,46,32,0.7)' : 'rgba(86,116,80,' + (0.45 + 0.3 * Math.sin(i * 1.7)) + ')';
-        g.lineWidth = 1.3 + (i % 3) * 0.6;
-        g.beginPath();
-        const steps = 16;
-        for (let k = 0; k <= steps; k++) {
-          const t = 0.04 + k / steps * 0.93, w = bacHW(t, phase);
-          const wob = Math.sin(t * 7 + ip + phase * 2.2) * w * 0.55;
-          const x = bacCx(cx, t, phase) + u * w * 0.66 + wob, y = BH * t;
-          if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
-        }
-        g.stroke();
-      }
-
-      // 3) a few brighter wet-sheen strands catching the light
-      g.strokeStyle = 'rgba(180,214,170,0.4)'; g.lineWidth = 1.1;
-      for (let i = 0; i < 5; i++) {
-        const ip = i * 1.6 + 0.5;
-        g.beginPath();
-        for (let k = 0; k <= 12; k++) {
-          const t = 0.1 + k / 12 * 0.7, w = bacHW(t, phase);
-          const x = bacCx(cx, t, phase) + Math.sin(t * 6 + ip + phase * 2) * w * 0.4, y = BH * t;
-          if (k === 0) g.moveTo(x, y); else g.lineTo(x, y);
-        }
-        g.stroke();
-      }
-
-      // 4) gloopy drips sliding off the underside, each a strand + a fat bead
-      for (let d = 0; d < 6; d++) {
-        const dx = cx + (d - 2.5) * (BW * 0.13) + sk * 3;
-        const len = BH * 0.03 + (d % 3) * BH * 0.025 + Math.abs(Math.sin(phase * 1.5 + d)) * BH * 0.03;
-        const top = BH * (0.84 + (d % 2) * 0.05);
-        g.strokeStyle = 'rgba(70,96,64,0.7)'; g.lineWidth = 2.6 + (d % 2) * 1.8;
-        g.beginPath(); g.moveTo(dx, top); g.quadraticCurveTo(dx + sk * 3, top + len * 0.6, dx + sk * 4, top + len); g.stroke();
-        const bg = g.createRadialGradient(dx + sk * 4 - 1, top + len - 1, 0.5, dx + sk * 4, top + len, 5 + (d % 2) * 2);
-        bg.addColorStop(0, 'rgba(150,186,140,0.7)'); bg.addColorStop(1, 'rgba(50,74,46,0.55)');
-        g.fillStyle = bg; g.beginPath(); g.arc(dx + sk * 4, top + len, 4.2 + (d % 2) * 1.8, 0, 6.29); g.fill();
-      }
-
-      // 5) two thin reaching tendrils (no claws, no eyes — just gloopy feelers)
-      g.strokeStyle = 'rgba(60,84,56,0.65)'; g.lineWidth = 3.2;
-      g.beginPath(); g.moveTo(cx - 6, BH * 0.34); g.quadraticCurveTo(cx - 44 + sk * 12, BH * 0.55, cx - 30 + sk * 16, BH * 0.86); g.stroke();
-      g.beginPath(); g.moveTo(cx + 6, BH * 0.32); g.quadraticCurveTo(cx + 44 - sk * 12, BH * 0.54, cx + 32 - sk * 16, BH * 0.88); g.stroke();
+      // long thin neck + smooth, utterly featureless dark head (faint cold sheen)
+      const headY = BH * 0.15 - bob * 3;
+      g.strokeStyle = '#191b1e'; g.lineWidth = BW * 0.045;
+      g.beginPath(); g.moveTo(cx, headY + 15); g.lineTo(cx, BH * 0.27); g.stroke();
+      const hg = g.createRadialGradient(cx - 6, headY - 8, 3, cx, headY, 25);
+      hg.addColorStop(0, '#383b40'); hg.addColorStop(0.6, '#1b1d20'); hg.addColorStop(1, '#090a0c');
+      g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 16, 22, 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,156,164,0.09)'; g.beginPath(); g.ellipse(cx - 4, headY - 2, 4, 11, 0.1, 0, 6.29); g.fill();
     }
     const BACTERIA_FRAMES = (function () {
       const N = 12, arr = [];
@@ -1257,29 +1246,17 @@
     // eyes, just a dripping vertical maw tearing open at the centre.
     function drawBacteriaFace(g, cx, cy, S, open, t) {
       g.save(); g.translate(cx, cy); g.scale(S, S);
-      // gloopy translucent mass
-      const grd = g.createRadialGradient(-30, -30, 10, 0, 0, 250);
-      grd.addColorStop(0, 'rgba(96,124,86,0.95)'); grd.addColorStop(0.5, 'rgba(46,68,42,0.95)'); grd.addColorStop(1, 'rgba(14,24,14,0.95)');
-      g.fillStyle = grd; g.beginPath(); g.ellipse(0, 0, 180, 220, 0, 0, 6.29); g.fill();
-      // radiating pipe-cleaner strands all over the face
-      g.lineCap = 'round';
-      for (let i = 0; i < 40; i++) {
-        const a = i / 40 * 6.2832, r0 = 30 + (i % 5) * 12, r1 = 150 + (i % 7) * 18;
-        const wob = Math.sin(i * 2 + t * 0.01) * 22;
-        g.strokeStyle = i % 3 === 0 ? 'rgba(28,44,30,0.8)' : 'rgba(120,156,108,0.6)';
-        g.lineWidth = 2 + (i % 3);
-        g.beginPath(); g.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
-        g.quadraticCurveTo(Math.cos(a) * (r0 + r1) / 2 + wob, Math.sin(a) * (r0 + r1) / 2 - wob, Math.cos(a) * r1, Math.sin(a) * r1);
-        g.stroke();
-      }
-      // dripping vertical maw
-      const mh = 60 + open * 160;
-      const mg = g.createRadialGradient(0, 90, 6, 0, 90, mh);
-      mg.addColorStop(0, '#0a1408'); mg.addColorStop(0.6, '#050a04'); mg.addColorStop(1, '#000');
-      g.fillStyle = mg; g.beginPath(); g.ellipse(0, 90, 44, mh, 0, 0, 6.29); g.fill();
-      // gloopy strands strung across the maw
-      g.strokeStyle = 'rgba(150,186,140,0.5)'; g.lineWidth = 2;
-      for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(i * 12, 90 - mh + 10); g.quadraticCurveTo(i * 12 + 6, 90, i * 12, 90 + mh - 10); g.stroke(); }
+      // smooth, featureless dark head looming out of the black
+      const grd = g.createRadialGradient(-40, -50, 20, 0, 0, 270);
+      grd.addColorStop(0, '#2a2d33'); grd.addColorStop(0.5, '#16181c'); grd.addColorStop(1, '#040506');
+      g.fillStyle = grd; g.beginPath(); g.ellipse(0, 0, 150, 215, 0, 0, 6.29); g.fill();
+      // faint cold vertical sheen down one side — the only feature
+      g.fillStyle = 'rgba(150,156,168,0.12)'; g.beginPath(); g.ellipse(-32, -20, 24, 92, 0.08, 0, 6.29); g.fill();
+      // as it lunges, a lightless void tears open at the centre (no eyes, no teeth)
+      const mh = 24 + open * 150;
+      const mg = g.createRadialGradient(0, 60, 4, 0, 60, mh + 24);
+      mg.addColorStop(0, '#000'); mg.addColorStop(0.7, 'rgba(0,0,0,0.85)'); mg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = mg; g.beginPath(); g.ellipse(0, 60, 26 + open * 22, mh, 0, 0, 6.29); g.fill();
       g.restore();
     }
 
@@ -1484,43 +1461,34 @@
     function drawFacelingBody(g, phase) {
       const cx = FCW / 2;
       const legA = Math.sin(phase), armA = Math.sin(phase + Math.PI), bob = Math.abs(Math.sin(phase));
-      const sway = Math.sin(phase * 0.5) * 3;
       g.lineCap = 'round'; g.lineJoin = 'round';
-      // --- the entity: tall, emaciated, near-black silhouette, spindly limbs ---
-      // long thin legs (uneven gait), bony feet
-      g.strokeStyle = '#15171a'; g.lineWidth = FCW * 0.075;
-      g.beginPath(); g.moveTo(cx - 6, FCH * 0.55); g.lineTo(cx - 10 + legA * 9, FCH * 0.78); g.lineTo(cx - 12 + legA * 16, FCH * 0.97); g.stroke();
-      g.beginPath(); g.moveTo(cx + 6, FCH * 0.55); g.lineTo(cx + 10 - legA * 9, FCH * 0.78); g.lineTo(cx + 13 - legA * 16, FCH * 0.97); g.stroke();
-      g.fillStyle = '#0e0f11';
-      g.beginPath(); g.ellipse(cx - 12 + legA * 16, FCH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
-      g.beginPath(); g.ellipse(cx + 13 - legA * 16, FCH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
-      // emaciated tapering torso with faint rib shading
-      const tg = g.createLinearGradient(cx - 20, 0, cx + 20, 0);
-      tg.addColorStop(0, '#0c0d0f'); tg.addColorStop(0.5, '#26282c'); tg.addColorStop(1, '#0a0b0d');
+      // trousers
+      g.strokeStyle = '#3a3d42'; g.lineWidth = FCW * 0.13;
+      g.beginPath(); g.moveTo(cx - 11, FCH * 0.60); g.lineTo(cx - 13 + legA * 8, FCH * 0.80); g.lineTo(cx - 15 + legA * 14, FCH * 0.95); g.stroke();
+      g.beginPath(); g.moveTo(cx + 11, FCH * 0.60); g.lineTo(cx + 13 - legA * 8, FCH * 0.80); g.lineTo(cx + 15 - legA * 14, FCH * 0.95); g.stroke();
+      g.fillStyle = '#191b1d';
+      g.beginPath(); g.ellipse(cx - 15 + legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 15 - legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
+      // shirt torso
+      const tg = g.createLinearGradient(cx - 28, 0, cx + 28, 0);
+      tg.addColorStop(0, '#3c4750'); tg.addColorStop(0.5, '#56606a'); tg.addColorStop(1, '#38424a');
       g.fillStyle = tg;
-      g.beginPath();
-      g.moveTo(cx - 15, FCH * 0.27); g.lineTo(cx + 15, FCH * 0.27);
-      g.quadraticCurveTo(cx + 11, FCH * 0.45, cx + 8, FCH * 0.58); g.lineTo(cx - 8, FCH * 0.58);
-      g.quadraticCurveTo(cx - 11, FCH * 0.45, cx - 15, FCH * 0.27); g.closePath(); g.fill();
-      g.strokeStyle = 'rgba(120,124,130,0.12)'; g.lineWidth = 1.5;
-      for (let i = 0; i < 4; i++) { const ry = FCH * (0.34 + i * 0.05); g.beginPath(); g.moveTo(cx - 9, ry); g.quadraticCurveTo(cx, ry + 4, cx + 9, ry); g.stroke(); }
-      // extremely long spindly arms hanging past the hips, with thin fingers
-      g.strokeStyle = '#15171a'; g.lineWidth = FCW * 0.055;
-      const lh = FCH * (0.72 + armA * 0.02), rh = FCH * (0.72 - armA * 0.02);
-      g.beginPath(); g.moveTo(cx - 13, FCH * 0.30); g.lineTo(cx - 20 + sway, FCH * 0.52); g.lineTo(cx - 16 + sway, lh); g.stroke();
-      g.beginPath(); g.moveTo(cx + 13, FCH * 0.30); g.lineTo(cx + 20 - sway, FCH * 0.52); g.lineTo(cx + 16 - sway, rh); g.stroke();
-      g.strokeStyle = '#101113'; g.lineWidth = 2;
-      for (const f of [[cx - 16 + sway, lh, -1], [cx + 16 - sway, rh, 1]]) {
-        for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(f[0], f[1]); g.lineTo(f[0] + f[2] * (2 + i * 2), f[1] + 12 + i * 3); g.stroke(); }
-      }
-      // long thin neck + smooth, utterly featureless dark head (faint cold sheen)
-      const headY = FCH * 0.16 - bob * 3;
-      g.strokeStyle = '#1a1c1f'; g.lineWidth = FCW * 0.05;
-      g.beginPath(); g.moveTo(cx, headY + 16); g.lineTo(cx, FCH * 0.27); g.stroke();
-      const hg = g.createRadialGradient(cx - 6, headY - 8, 3, cx, headY, 26);
-      hg.addColorStop(0, '#3a3d42'); hg.addColorStop(0.6, '#1c1e21'); hg.addColorStop(1, '#0a0b0d');
-      g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 17, 23, 0, 0, 6.29); g.fill();
-      g.fillStyle = 'rgba(150,156,164,0.10)'; g.beginPath(); g.ellipse(cx - 4, headY - 2, 4, 12, 0.1, 0, 6.29); g.fill();
+      g.beginPath(); g.moveTo(cx - 23, FCH * 0.29); g.lineTo(cx + 23, FCH * 0.29); g.lineTo(cx + 19, FCH * 0.62); g.lineTo(cx - 19, FCH * 0.62); g.closePath(); g.fill();
+      // arms
+      g.strokeStyle = '#48535c'; g.lineWidth = FCW * 0.09;
+      g.beginPath(); g.moveTo(cx - 21, FCH * 0.32); g.lineTo(cx - 27 + armA * 5, FCH * 0.46); g.lineTo(cx - 25, FCH * 0.60); g.stroke();
+      g.beginPath(); g.moveTo(cx + 21, FCH * 0.32); g.lineTo(cx + 27 - armA * 5, FCH * 0.46); g.lineTo(cx + 25, FCH * 0.60); g.stroke();
+      g.fillStyle = '#b89a7e'; g.beginPath(); g.arc(cx - 25, FCH * 0.60, 5, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 25, FCH * 0.60, 5, 0, 6.29); g.fill();
+      // neck + blank head
+      const headY = FCH * 0.18 - bob * 3;
+      g.fillStyle = '#a98d72'; g.fillRect(cx - 6, headY + 20, 12, 14);
+      const hg = g.createRadialGradient(cx - 8, headY - 8, 4, cx, headY, 30);
+      hg.addColorStop(0, '#cab08f'); hg.addColorStop(1, '#9a8064');
+      g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 22, 28, 0, 0, 6.29); g.fill();
+      // faint hollow where a face would be — but no features at all
+      g.fillStyle = 'rgba(120,98,76,0.22)'; g.beginPath(); g.ellipse(cx, headY + 4, 13, 17, 0, 0, 6.29); g.fill();
+      // hair
+      g.fillStyle = '#33291f'; g.beginPath(); g.ellipse(cx, headY - 14, 22, 13, 0, Math.PI, 2 * Math.PI); g.fill();
     }
     const FACELING_FRAMES = (function () {
       const N = 12, arr = [];
