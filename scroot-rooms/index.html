@@ -220,6 +220,17 @@
         if (Math.hypot(tx + 0.5 - px, ty + 0.5 - py) < 4) continue;
         if (addObst(tx, ty, PA.pine, 1.95, 0.72)) placed++;
       }
+      // undergrowth woven between the pines: fallen logs, ferns, bushes, boulders
+      const UV = [[PA.fern, 0.42, 0.52], [PA.bush, 0.34, 0.46], [PA.rock, 0.26, 0.42], [PA.log, 0.3, 0.82], [PA.fern, 0.42, 0.52], [PA.bush, 0.34, 0.46]];
+      const under = Math.floor(w * h * 0.07);
+      let u = 0; guard = 0;
+      while (u < under && guard < under * 16) {
+        guard++;
+        const tx = rint(2, w - 3), ty = rint(2, h - 3);
+        if (Math.hypot(tx + 0.5 - px, ty + 0.5 - py) < 3.2) continue;
+        const v = UV[rint(0, UV.length - 1)];
+        if (addObst(tx, ty, v[0], v[1], v[2])) u++;
+      }
     }
 
     function buildAisles(lvl) {                            // supermarket: long parallel shelving aisles
@@ -250,16 +261,36 @@
       function door(x, y) { if (x > 0 && y > 0 && x < mapW - 1 && y < mapH - 1) map[y][x] = 0; }
       const gymW = 9, gymX = w - 3 - gymW;
       let x = 3;
+      const doorCols = {};
       while (x < gymX - 2) {                                // classrooms / wards down both sides
         const rw = rint(5, 7), rhT = rint(4, 6), rhB = rint(4, 6);
-        carveRect(x, hallTop - 1 - rhT, rw, rhT); door(x + (rw / 2 | 0), hallTop - 1);
-        carveRect(x, hallTop + hallH + 1, rw, rhB); door(x + (rw / 2 | 0), hallTop + hallH);
-        const fimg = isSchool ? PA.desk : PA.gurney, fsh = isSchool ? 0.42 : 0.4, fsw = isSchool ? 0.56 : 0.71;
-        addObst(x + 1, hallTop - 2 - rhT + 2, fimg, fsh, fsw);
-        addObst(x + rw - 2, hallTop + hallH + rhB - 1, fimg, fsh, fsw);
+        const cx = x + (rw / 2 | 0);
+        const topY0 = hallTop - 1 - rhT, botY0 = hallTop + hallH + 1, botY1 = botY0 + rhB - 1;
+        carveRect(x, topY0, rw, rhT); door(cx, hallTop - 1);
+        carveRect(x, botY0, rw, rhB); door(cx, hallTop + hallH);
+        doorCols[cx] = 1;
+        if (isSchool) {
+          // chalkboard on each back wall + a 2x2 grid of desks (skip the door column)
+          addObst(cx, topY0, PA.chalkboard, 0.5, 0.7);
+          addObst(cx, botY1, PA.chalkboard, 0.5, 0.7);
+          for (const rx of [x + 1, x + rw - 2]) if (rx !== cx) {
+            addObst(rx, topY0 + 1, PA.desk, 0.42, 0.56); addObst(rx, topY0 + 2, PA.desk, 0.42, 0.56);
+            addObst(rx, botY1 - 1, PA.desk, 0.42, 0.56); addObst(rx, botY1 - 2, PA.desk, 0.42, 0.56);
+          }
+        } else {
+          addObst(x + 1, topY0 + 2, PA.gurney, 0.4, 0.71);
+          addObst(x + rw - 2, botY1 - 1, PA.gurney, 0.4, 0.71);
+        }
         x += rw + 1;
       }
       carveRect(gymX, 3, gymW, h - 6);                      // the gym / ward — one big open room, merged with the hall
+      if (isSchool) {                                       // lockers line the hall walls between doorways
+        for (let lx = 3; lx < gymX - 1; lx++) {
+          if (doorCols[lx] || lx % 2 !== 0) continue;
+          addObst(lx, hallTop, PA.lockers, 0.9, 0.84);
+          addObst(lx, hallTop + hallH - 1, PA.lockers, 0.9, 0.84);
+        }
+      }
     }
 
     function buildHall(theme, lvl) {                       // subway platform / office / party hall / factory floor
@@ -267,9 +298,21 @@
       blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
       px = 2.5; py = (h / 2 | 0) + 0.5; dir = 0;
       if (theme === 'subway') {
-        for (let x = 5; x < w - 4; x += 6) { map[3][x] = 1; map[h - 4][x] = 1; }            // platform pillars
-        for (let x = 4; x < w - 4; x += 5) { addObst(x, 3, PA.bench, 0.32, 0.55); addObst(x, h - 4, PA.bench, 0.32, 0.55); }
-        addObst(5, py | 0, PA.turnstile, 0.5, 0.42);
+        // Penn Station: a long island platform with a train standing at each
+        // track edge, a grand colonnade down the middle, benches + a board.
+        for (let x = 1; x < w - 1; x++) { map[1][x] = 1; map[h - 2][x] = 1; }                // tunnel walls behind each train
+        const topTrack = 2, botTrack = h - 3;
+        for (let x = 2; x < w - 2; x++) {                                                     // seamless train cars, doors every 5 tiles
+          const dr = (x % 5 === 0);
+          addObst(x, topTrack, dr ? PA.traindoor : PA.train, 1.42, 0.5);
+          addObst(x, botTrack, dr ? PA.traindoor : PA.train, 1.42, 0.5);
+        }
+        const cyA = (h / 2 | 0) - 2, cyB = (h / 2 | 0) + 2;                                   // two rows of grand columns
+        for (let x = 5; x < w - 4; x += 4) { addObst(x, cyA, PA.column, 1.7, 0.34); addObst(x, cyB, PA.column, 1.7, 0.34); }
+        for (let x = 8; x < w - 6; x += 6) addObst(x, h / 2 | 0, PA.bench, 0.32, 0.55);       // benches down the centre aisle
+        addObst(w - 6, (h / 2 | 0) - 1, PA.departures, 0.62, 0.72);                           // departures board
+        addObst(4, (py | 0), PA.turnstile, 0.5, 0.42);
+        addObst(4, (py | 0) + 1, PA.turnstile, 0.5, 0.42);
       } else if (theme === 'office') {
         for (let cy = 5; cy < h - 5; cy += 6) for (let cx = 6; cx < w - 6; cx += 8) {        // cubicle pods
           addObst(cx, cy, PA.cubicle, 0.52, 0.71); addObst(cx + 1, cy, PA.cubicle, 0.52, 0.71);
@@ -436,6 +479,17 @@
       if (level - 1 > bestLevel) { bestLevel = level - 1; saveBest(bestLevel); }
       genLevel(level, theme);
     }
+
+    // Debug/test handle: jump straight to a theme and read collision, e.g.
+    // window.__sr.gen('subway'); window.__sr.solid(x, y)
+    window.__sr = {
+      gen: function (theme, lvl) { state = 'playing'; level = lvl || 1; genLevel(level, theme); render(); return { theme: themeName, w: mapW, h: mapH, px: px, py: py }; },
+      solid: function (x, y) { return mapAt(x, y) !== 0; },
+      at: function (x, y) { return mapAt(x, y); },
+      props: function () { return (props || []).length; },
+      structs: function () { return (structProps || []).length; },
+      pos: function () { return { px: px, py: py }; }
+    };
 
     function updateCamera() {
       dirX = Math.cos(dir); dirY = Math.sin(dir);
@@ -1734,6 +1788,75 @@
         g.fillStyle = '#fff'; g.font = 'bold 22px Nunito'; g.textAlign = 'center'; g.fillText('B2', 36, 80);
         g.fillStyle = '#d8c24a'; g.fillRect(18, 160, 36, 8);                                 // yellow curb stripe
         g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(20, 8, 4, 168);
+      }),
+      // --- Penn Station: train cars (tile-seamless side panels), grand column, departures board ---
+      train: prop(120, 200, function (g) {
+        var grd = g.createLinearGradient(0, 0, 0, 200);
+        grd.addColorStop(0, '#cbcfd5'); grd.addColorStop(0.5, '#aeb4bc'); grd.addColorStop(1, '#868c94');
+        g.fillStyle = grd; g.fillRect(0, 18, 120, 174);                                       // full-width steel car side
+        g.fillStyle = '#646a72'; g.fillRect(0, 18, 120, 14);                                  // roof
+        g.fillStyle = '#c0352f'; g.fillRect(0, 150, 120, 10);                                 // red livery stripe
+        g.fillStyle = '#1f3a6a'; g.fillRect(0, 160, 120, 5);                                  // blue accent
+        g.fillStyle = '#10161c'; g.fillRect(16, 52, 88, 66);                                  // window
+        var w = g.createLinearGradient(16, 52, 104, 118);
+        w.addColorStop(0, 'rgba(150,190,220,0.5)'); w.addColorStop(0.5, 'rgba(40,60,80,0.18)'); w.addColorStop(1, 'rgba(120,160,200,0.35)');
+        g.fillStyle = w; g.fillRect(16, 52, 88, 66);
+        g.strokeStyle = '#5a6068'; g.lineWidth = 3; g.strokeRect(16, 52, 88, 66);
+        g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(0, 38, 120, 2); g.fillRect(0, 130, 120, 2);  // ribs
+        g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0, 18, 2, 174); g.fillRect(118, 18, 2, 174);       // car seams
+      }),
+      traindoor: prop(120, 200, function (g) {
+        var grd = g.createLinearGradient(0, 0, 0, 200);
+        grd.addColorStop(0, '#cbcfd5'); grd.addColorStop(0.5, '#aeb4bc'); grd.addColorStop(1, '#868c94');
+        g.fillStyle = grd; g.fillRect(0, 18, 120, 174);
+        g.fillStyle = '#646a72'; g.fillRect(0, 18, 120, 14);                                  // roof
+        g.fillStyle = '#c0352f'; g.fillRect(0, 150, 120, 10);
+        g.fillStyle = '#0a0e12'; g.fillRect(30, 40, 60, 128);                                 // open doorway (dark interior)
+        g.fillStyle = 'rgba(255,238,196,0.16)'; g.fillRect(30, 40, 60, 18);                   // interior light spill
+        g.fillStyle = '#9aa0a8'; g.fillRect(20, 40, 12, 128); g.fillRect(88, 40, 12, 128);    // retracted door leaves
+        g.strokeStyle = '#cfa23a'; g.lineWidth = 3; g.beginPath(); g.moveTo(60, 46); g.lineTo(60, 158); g.stroke();  // grab pole
+        g.fillStyle = '#3a3e44'; g.fillRect(30, 162, 60, 8);                                  // threshold
+      }),
+      column: prop(90, 240, function (g) {
+        var grd = g.createLinearGradient(0, 0, 90, 0);
+        grd.addColorStop(0, '#6a6e74'); grd.addColorStop(0.5, '#bcc0c7'); grd.addColorStop(1, '#6a6e74');
+        g.fillStyle = grd; g.fillRect(22, 18, 46, 214);                                       // shaft
+        g.strokeStyle = 'rgba(0,0,0,0.16)'; g.lineWidth = 2;
+        for (var i = 1; i < 5; i++) { g.beginPath(); g.moveTo(22 + i * 9, 18); g.lineTo(22 + i * 9, 232); g.stroke(); }  // flutes
+        g.fillStyle = '#cdd2d8'; g.fillRect(12, 8, 66, 13); g.fillRect(12, 228, 66, 13);      // capital + base
+        g.fillStyle = '#8a8f96'; g.fillRect(12, 228, 66, 4);
+      }),
+      departures: prop(170, 120, function (g) {
+        g.fillStyle = '#3a3e44'; g.fillRect(80, 96, 8, 24);                                   // hanger stem
+        g.fillStyle = '#0a0c10'; g.fillRect(8, 8, 154, 90);                                   // board
+        g.strokeStyle = '#454a52'; g.lineWidth = 3; g.strokeRect(8, 8, 154, 90);
+        g.fillStyle = '#f0b429'; g.font = 'bold 13px Nunito'; g.textAlign = 'left';
+        g.fillText('DEPARTURES', 16, 25);
+        g.font = '11px Nunito'; g.fillStyle = '#e8c860';
+        var rows = ['TRENTON     6', 'MONTAUK     9', 'BOSTON     12', 'CHICAGO    14'];
+        for (var i = 0; i < rows.length; i++) g.fillText(rows[i], 16, 42 + i * 13);
+      }),
+      // --- forest extras ---
+      log: prop(170, 70, function (g) {
+        var grd = g.createLinearGradient(0, 24, 0, 58); grd.addColorStop(0, '#6a4a2c'); grd.addColorStop(1, '#3e2a16');
+        g.fillStyle = grd; g.fillRect(14, 26, 144, 30);                                       // trunk on its side
+        g.fillStyle = '#7a5638'; g.beginPath(); g.ellipse(16, 41, 9, 15, 0, 0, 6.29); g.fill();   // cut end
+        g.strokeStyle = '#5a3e24'; g.lineWidth = 2; g.beginPath(); g.ellipse(16, 41, 5, 9, 0, 0, 6.29); g.stroke();
+        g.fillStyle = 'rgba(70,100,46,0.5)'; g.fillRect(24, 26, 124, 5);                      // moss along top
+      }),
+      fern: prop(120, 96, function (g) {
+        g.strokeStyle = '#2f5a30'; g.lineWidth = 3;
+        for (var i = 0; i < 7; i++) { var a = -1.5 + i * 0.45; g.beginPath(); g.moveTo(60, 92); g.quadraticCurveTo(60 + Math.cos(a) * 34, 44, 60 + Math.cos(a) * 50, 22 + Math.abs(i - 3) * 5); g.stroke(); }
+        g.strokeStyle = '#3a6a3a'; g.lineWidth = 1.5;
+        for (var j = 0; j < 7; j++) { var b = -1.5 + j * 0.45; g.beginPath(); g.moveTo(60, 92); g.lineTo(60 + Math.cos(b) * 26, 56); g.stroke(); }
+      }),
+      // --- school extra ---
+      chalkboard: prop(160, 96, function (g) {
+        g.fillStyle = '#7a5a30'; g.fillRect(8, 10, 144, 70);                                  // wood frame
+        g.fillStyle = '#2f4a36'; g.fillRect(14, 16, 132, 58);                                 // green board
+        g.strokeStyle = 'rgba(232,230,212,0.6)'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(24, 32); g.lineTo(80, 32); g.moveTo(24, 46); g.lineTo(124, 46); g.moveTo(24, 60); g.lineTo(64, 60); g.stroke();  // chalk scrawl
+        g.fillStyle = '#e8e2d0'; g.fillRect(20, 78, 34, 4);                                   // chalk tray
       })
     };
     // Complementary scattered props. The hero objects (shelves, trees, cars,
@@ -1779,6 +1902,7 @@
           let ox = c.x, oy = c.y;
           if (spec.place === 'wall' && c.wd) { ox += c.wd[0] * 0.34; oy += c.wd[1] * 0.34; }
           props.push({ img: spec.img, x: ox, y: oy, sh: spec.sh, sw: spec.sw });
+          map[c.y | 0][c.x | 0] = 2;          // scenery is solid: lockers/bushes/rocks/etc. block (and break line-of-sight)
           cells.splice(idx, 1); placed++;
         }
       }
