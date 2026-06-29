@@ -3797,10 +3797,18 @@
       ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
       w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right'
     };
+    // Don't steal keystrokes for movement while the player is typing in a field
+    // (e.g. naming their hospital) — let w/a/s/d type normally.
+    function typingInField(e) {
+      var t = e.target;
+      return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    }
     window.addEventListener('keydown', function (e) {
+      if (typingInField(e)) return;
       var k = KEYMAP[e.key]; if (k) { input[k] = true; e.preventDefault(); }
     });
     window.addEventListener('keyup', function (e) {
+      if (typingInField(e)) return;
       var k = KEYMAP[e.key]; if (k) { input[k] = false; e.preventDefault(); }
     });
 
@@ -4040,6 +4048,7 @@
     }
     function openSaveModal() {
       if (placing) cancelPlacing();
+      input.up = input.down = input.left = input.right = false;   // no stuck movement while typing
       saveNameEl.value = currentName || '';
       renderSaveList();
       saveModal.hidden = false;
