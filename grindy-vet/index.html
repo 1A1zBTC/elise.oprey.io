@@ -89,31 +89,20 @@
       color: #9a6713; font-size: 0.78rem; font-weight: 900;
     }
 
-    /* Skills bar (top), mirrors the shop bar. Sits just below the title topbar. */
-    .skillbar {
-      position: fixed;
-      top: 44px; left: 0; right: 0;
-      z-index: 9;
-      display: flex; gap: 10px;
-      padding: 6px 10px;
-      pointer-events: none;          /* let canvas drag through the gaps */
-    }
-    .skill-items { display: flex; gap: 10px; }
-    .skill-item {
+    /* Rating + money chips (top-right). */
+    .hudright { display: flex; align-items: center; gap: 8px; }
+    .rating-chip {
       pointer-events: auto;
-      background: #16213e;
-      border: 2px solid #0f3460;
-      border-radius: 14px;
-      padding: 6px 10px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.12s ease, transform 0.1s ease;
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 12px 6px 8px;
+      border-radius: 999px;
+      background: rgba(10,14,28,0.4);
+      color: #fff; font-weight: 800; font-size: 1.05rem;
     }
-    .skill-item:hover { border-color: #2f6fd0; transform: translateY(-2px); }
-    .skill-item.disabled { opacity: 0.4; filter: grayscale(0.8); cursor: not-allowed; transform: none; border-color: #0f3460; }
-    .skill-item .nm { color: #fff; font-weight: 800; font-size: 0.72rem; }
-    .skill-item .vl { color: #7fe0a0; font-weight: 900; font-size: 0.95rem; margin-top: 1px; }
-    .skill-item .pr { color: #ffd86b; font-weight: 900; font-size: 0.74rem; margin-top: 1px; }
+    .rating-chip .star { color: #ffd24a; font-size: 1.15rem; line-height: 1; }
+    .rating-chip .rv { color: #ffe88a; }
+    /* Skill cards reuse the shop-item layout; .vl shows the current level. */
+    .shop-item .vl { color: #7fe0a0; font-weight: 900; font-size: 0.95rem; margin-top: 1px; }
 
     /* Shop bar (bottom). */
     .shopbar {
@@ -217,21 +206,22 @@
       <span class="title">Grindy Vet</span>
       <span class="hosp" id="hospName" style="display:none"></span>
     </div>
-    <span class="coin"><span class="disc">$</span><span id="moneyCount">0</span></span>
+    <div class="hudright">
+      <span class="rating-chip" id="skillRating"><span class="star">★</span><span class="rv">1.0</span></span>
+      <span class="coin"><span class="disc">$</span><span id="moneyCount">0</span></span>
+    </div>
     <button class="savesbtn" id="savesBtn">Saves</button>
   </div>
 
-  <div class="skillbar" id="skillbar">
-    <div class="skill-items" id="skillItems"></div>
-  </div>
 
   <canvas id="game"></canvas>
 
   <div class="shopbar" id="shopbar">
     <div class="shop-tabs">
       <button class="shop-tab" data-tab="rooms">Rooms</button>
-      <button class="shop-tab active" data-tab="reception">Reception</button>
+      <button class="shop-tab active" data-tab="reception">Items</button>
       <button class="shop-tab" data-tab="staff">Staff</button>
+      <button class="shop-tab" data-tab="skills">Skills</button>
     </div>
     <div class="shop-items" id="shopItems"></div>
   </div>
@@ -362,6 +352,7 @@
     // Stored as a set of "gx,gy" keys lying outside the clinic bounds.
     var corridor = {};                     // "gx,gy" -> true (a built corridor tile)
     var corridorDrag = null;               // { sx, sy } while dragging out a line
+    var openRoom = {};                     // "gx,gy" corridor tiles that are open rooms (no lane rule)
 
     function isClinic(x, y) { return x >= 0 && y >= 0 && x < ROOM && y < ROOM; }
     function isCorridor(x, y) { return !!corridor[x + ',' + y]; }
@@ -418,6 +409,30 @@
       res.tiles.forEach(function (t) { corridor[t.x + ',' + t.y] = true; });
       money -= res.cost;
       renderStatic();                        // walls / floor / doorways changed
+      renderMoney();
+    }
+
+    // Blank room: drag a filled rectangle of clear grass that touches the existing
+    // building. Each tile is $10 and becomes open room floor (walled, no lane rule),
+    // ready for the player to furnish into a waiting/check-in area.
+    function blankRectTiles(sx, sy, ex, ey) {
+      var x0 = Math.min(sx, ex), x1 = Math.max(sx, ex), y0 = Math.min(sy, ey), y1 = Math.max(sy, ey);
+      var tiles = [], touches = false;
+      for (var y = y0; y <= y1; y++)
+        for (var x = x0; x <= x1; x++) {
+          if (!isGrassBuildable(x, y)) return { tiles: [], cost: 0, ok: false };
+          tiles.push({ x: x, y: y });
+          if (adjacentToRoom(x, y)) touches = true;
+        }
+      var cost = tiles.length * 10;
+      return { tiles: tiles, cost: cost, ok: touches && cost <= money };
+    }
+    function commitBlank(sx, sy, ex, ey) {
+      var res = blankRectTiles(sx, sy, ex, ey);
+      if (!res.ok) return;
+      res.tiles.forEach(function (t) { corridor[t.x + ',' + t.y] = true; openRoom[t.x + ',' + t.y] = true; });
+      money -= res.cost;
+      renderStatic();
       renderMoney();
     }
 
@@ -623,6 +638,7 @@
       { id: 'receptionist', name: 'Receptionist', cost: 500, w: 1, h: 1, icon: '🧑‍💼', cat: 'staff', kind: 'staff' },
       { id: 'vet', name: 'Vet', cost: 800, w: 1, h: 1, icon: '🧑‍⚕️', cat: 'staff', kind: 'examstaff' },
       { id: 'corridor', name: 'Corridor', cost: 10, icon: '🚪', cat: 'rooms', kind: 'corridor', perSquare: true },
+      { id: 'blank', name: 'Blank', cost: 10, icon: '⬜', cat: 'rooms', kind: 'blank', perSquare: true },
       { id: 'restroom', name: 'Restroom', cost: 120, w: 2, h: 3, icon: '🚻', cat: 'rooms', kind: 'restroom', draw: drawRestroom },
       { id: 'exam', name: 'Exam Room', cost: 300, w: 3, h: 3, icon: '🩺', cat: 'rooms', kind: 'exam' },
       { id: 'xray', name: 'X-Ray Room', cost: 600, w: 3, h: 4, icon: '🩻', cat: 'rooms', kind: 'xray' },
@@ -2030,8 +2046,8 @@
       var tiles = footprintTiles(item, gx, gy, rot);
       for (var i = 0; i < tiles.length; i++) {
         var t = tiles[i];
-        // must sit on clinic floor — or corridor floor, for items flagged corridorOK
-        if (!isClinic(t.x, t.y) && !(item.corridorOK && isCorridor(t.x, t.y))) return false;
+        // any furniture may sit on any room floor (clinic, corridors, blank rooms)
+        if (!isRoomFloor(t.x, t.y)) return false;
         if (occupied[t.x + ',' + t.y]) return false;
         if (t.x === vtx && t.y === vty) return false;          // can't drop on the player
       }
@@ -2046,7 +2062,7 @@
       // may not span both lanes. (Only applies to footprint tiles in a corridor.)
       for (var k = 0; k < tiles.length; k++) {
         var c = tiles[k];
-        if (!isCorridor(c.x, c.y)) continue;
+        if (!isCorridor(c.x, c.y) || openRoom[c.x + ',' + c.y]) continue;  // open rooms have no lane rule
         var across = corridorAcross(c.x, c.y);
         if (!across) continue;
         var spans = tiles.some(function (q) { return q.x === across.x && q.y === across.y; });
@@ -2097,6 +2113,29 @@
         var p2 = iso(pointer.gx, pointer.gy); diamondPath(ctx, p2.x, p2.y);
         ctx.fillStyle = 'rgba(224,86,63,0.40)'; ctx.fill();
         ctx.strokeStyle = 'rgba(224,86,63,0.9)'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Ghost for the Blank-room brush: a filled rectangle, green if buildable+affordable.
+    function drawBlankGhost() {
+      var st = corridorDrag || { sx: pointer.gx, sy: pointer.gy };
+      var res = blankRectTiles(st.sx, st.sy, pointer.gx, pointer.gy);
+      ctx.save();
+      if (res.tiles.length && res.ok) {
+        res.tiles.forEach(function (t) {
+          var p = iso(t.x, t.y); diamondPath(ctx, p.x, p.y);
+          ctx.fillStyle = 'rgba(76,196,106,0.40)'; ctx.fill();
+          ctx.strokeStyle = 'rgba(76,196,106,0.9)'; ctx.lineWidth = 2; ctx.stroke();
+        });
+        var lp = iso(pointer.gx, pointer.gy);
+        ctx.font = '800 15px Nunito, sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,0.55)';
+        ctx.strokeText('$' + res.cost, lp.x, lp.y - 18);
+        ctx.fillStyle = '#ffd24a'; ctx.fillText('$' + res.cost, lp.x, lp.y - 18);
+      } else {
+        var tiles = res.tiles.length ? res.tiles : [{ x: pointer.gx, y: pointer.gy }];
+        tiles.forEach(function (t) { var p = iso(t.x, t.y); diamondPath(ctx, p.x, p.y); ctx.fillStyle = 'rgba(224,86,63,0.38)'; ctx.fill(); ctx.strokeStyle = 'rgba(224,86,63,0.9)'; ctx.lineWidth = 2; ctx.stroke(); });
       }
       ctx.restore();
     }
@@ -2245,6 +2284,7 @@
       if (!placing) return;
       var item = placing.item, rot = placing.rot || 0;
       if (item.kind === 'corridor') { if (pointer.on || corridorDrag) drawCorridorGhost(); return; }
+      if (item.kind === 'blank') { if (pointer.on || corridorDrag) drawBlankGhost(); return; }
       if (!pointer.on) return;
       if (item.kind === 'staff') { drawStaffGhost(); return; }
       if (item.kind === 'examstaff') { drawVetStaffGhost(); return; }
@@ -2469,42 +2509,53 @@
     // ---- Money + shop DOM ------------------------------------------------
     var moneyEl = document.getElementById('moneyCount');
     var shopItemsEl = document.getElementById('shopItems');
-    var skillItemsEl = document.getElementById('skillItems');
 
     function renderMoney() {
       moneyEl.textContent = money;
-      renderShop();                        // affordability may have changed
-      renderSkills();
+      renderShop();                        // affordability may have changed (also repaints Skills tab)
+      renderRating();
+    }
+
+    // Clinic rating: derived from arrival frequency `frq` (lower frq = busier =
+    // better). Rating = 100 / frq, clamped to [1, 10], 2 decimal places.
+    var skillRatingEl = document.getElementById('skillRating');
+    function renderRating() {
+      var r = Math.max(1, Math.min(10, 100 / frq));
+      skillRatingEl.innerHTML = '<span class="star">★</span><span class="rv">' +
+        r.toFixed(1) + '</span>';
     }
 
     var SKILL_DEFS = [
-      { key: 'speed',      name: 'Speed' },
-      { key: 'processing', name: 'Processing' },
-      { key: 'cleaning',   name: 'Cleaning' }
+      { key: 'speed',      name: 'Speed',      icon: '⚡' },
+      { key: 'processing', name: 'Processing', icon: '⚙️' },
+      { key: 'cleaning',   name: 'Cleaning',   icon: '🧹' }
     ];
 
-    function renderSkills() {
-      skillItemsEl.innerHTML = '';
+    // The "Skills" shop tab: skill upgrade cards rendered into the shop strip.
+    function renderSkillCards() {
+      shopItemsEl.innerHTML = '';
       SKILL_DEFS.forEach(function (def) {
         var s = skills[def.key];
         var afford = money >= s.cost;
         var card = document.createElement('div');
-        card.className = 'skill-item' + (afford ? '' : ' disabled');
-        card.innerHTML = '<div class="nm">' + def.name + '</div>' +
-                         '<div class="vl">' + s.val.toFixed(1) + '</div>' +
+        card.className = 'shop-item' + (afford ? '' : ' disabled');
+        card.innerHTML = '<div class="ic">' + def.icon + '</div>' +
+                         '<div class="nm">' + def.name + '</div>' +
+                         '<div class="vl">Lv ' + s.val.toFixed(1) + '</div>' +
                          '<div class="pr">+0.5  $' + s.cost + '</div>';
         card.addEventListener('click', function () {
           if (money < s.cost) return;
           money -= s.cost;
           s.val += 0.5;
           s.cost *= 2;                     // price doubles per purchase, per skill
-          renderMoney();                   // repaints money + shop + skills
+          renderMoney();                   // repaints money + shop
         });
-        skillItemsEl.appendChild(card);
+        shopItemsEl.appendChild(card);
       });
     }
 
     function renderShop() {
+      if (activeTab === 'skills') { renderSkillCards(); return; }
       shopItemsEl.innerHTML = '';
       FURNITURE.filter(function (item) { return (item.cat || 'reception') === activeTab; }).forEach(function (item) {
         var afford = money >= item.cost;
@@ -2596,6 +2647,7 @@
         v.left = true;
         if (v.served && !v.peed) frq = Math.max(3, frq - 1.5);  // happy (service complete) → arrivals speed up
         else frq = Math.min(120, frq + 1);                      // unhappy (gave up / accident) → arrivals slow down
+        renderRating();                                         // arrival rate changed → refresh rating
       }
       v.phase = 'leaving';
       v.sideIdx = -1;                      // release any side spot
@@ -3075,16 +3127,28 @@
       return out;
     }
     // A free seat slot no visitor has claimed, or null.
-    function freeSeat() {
-      var seats = allSeats();
-      for (var i = 0; i < seats.length; i++) {
-        var s = seats[i];
-        var taken = visitors.some(function (v) {
-          return v.chair && v.chair.gx === s.gx && v.chair.gy === s.gy;
-        });
-        if (!taken) return s;
-      }
-      return null;
+    // The room a waiting client is queued for, as an (x,y) anchor — so they take the
+    // nearest free seat to it (nearest exam room, or pharmacy/X-ray if that's next).
+    function waitTarget(v) {
+      var rooms = [];
+      if (v.needsMeds && !v.medicated) pharmacies.forEach(function (ph) { rooms.push({ x: ph.gx + 1.5, y: ph.gy + 1.5 }); });
+      else if (v.needsXray && !v.xrayed) xrayRooms.forEach(function (rm) { rooms.push({ x: rm.gx + 1, y: rm.gy + 1.5 }); });
+      else examRooms.forEach(function (rm) { rooms.push({ x: rm.gx + 1, y: rm.gy + 1 }); });
+      if (!rooms.length) return { x: v.x, y: v.y };
+      var best = rooms[0], bd = 1e9;
+      rooms.forEach(function (r) { var d = Math.abs(r.x - v.x) + Math.abs(r.y - v.y); if (d < bd) { bd = d; best = r; } });
+      return best;
+    }
+    // The unoccupied seat closest to the room the client is waiting for.
+    function freeSeat(v) {
+      var ref = v ? waitTarget(v) : { x: 0, y: 0 }, best = null, bd = 1e9;
+      allSeats().forEach(function (s) {
+        var taken = visitors.some(function (o) { return o.chair && o.chair.gx === s.gx && o.chair.gy === s.gy; });
+        if (taken) return;
+        var d = Math.abs(s.gx - ref.x) + Math.abs(s.gy - ref.y);
+        if (d < bd) { bd = d; best = s; }
+      });
+      return best;
     }
 
     // Base wait before a client storms off. A room with a TV keeps them
@@ -3127,7 +3191,7 @@
       // it actually fires before a comfortable (seated/TV) client is examined.
       v.bladder = Math.random() < 0.55 ? 20 + Math.random() * 30 : null;
       // exam rooms are assigned centrally, in check-in order, by assignExams()
-      var seat = freeSeat();
+      var seat = freeSeat(v);
       if (seat) {                            // go sit in an empty chair / bench seat
         v.chair = { gx: seat.gx, gy: seat.gy, fx: seat.fx, fy: seat.fy, mult: seat.mult };
         headToSeat(v);
@@ -3375,7 +3439,7 @@
         return;
       }
       if (v.phase === 'idle') {            // standing aside, fresh wait bar
-        var openSeat = freeSeat();
+        var openSeat = freeSeat(v);
         if (openSeat) {                    // a seat opened up (e.g. player built one) → go sit
           v.chair = { gx: openSeat.gx, gy: openSeat.gy, fx: openSeat.fx, fy: openSeat.fy, mult: openSeat.mult };
           headToSeat(v);
@@ -3746,7 +3810,7 @@
       pointer.gx = Math.round(g.gx); pointer.gy = Math.round(g.gy); pointer.on = true;
     }
     function dragStart(e) {
-      if (placing && placing.item.kind === 'corridor') {  // corridor brush: drag a line
+      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {  // corridor/blank brush: drag
         var cp = getPoint(e); setPointer(cp.x, cp.y);
         corridorDrag = { sx: pointer.gx, sy: pointer.gy };
         e.preventDefault(); return;
@@ -3768,7 +3832,7 @@
       origin = getPoint(e); touchInput.active = true; touchInput.dx = 0; touchInput.dy = 0; e.preventDefault();
     }
     function dragMove(e) {
-      if (placing && placing.item.kind === 'corridor') {
+      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
         if (corridorDrag) { var cp = getPoint(e); setPointer(cp.x, cp.y); }
         e.preventDefault(); return;
       }
@@ -3785,8 +3849,12 @@
       e.preventDefault();
     }
     function dragEnd(e) {
-      if (placing && placing.item.kind === 'corridor') {
-        if (corridorDrag) { commitCorridor(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy); corridorDrag = null; }
+      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
+        if (corridorDrag) {
+          if (placing.item.kind === 'blank') commitBlank(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy);
+          else commitCorridor(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy);
+          corridorDrag = null;
+        }
         if (e && e.preventDefault) e.preventDefault(); return;
       }
       if (placing) { if (e && e.changedTouches) tryPlace(); if (e && e.preventDefault) e.preventDefault(); return; }
@@ -3815,11 +3883,213 @@
       e.preventDefault();
     }, { passive: false });
 
+    // ---- Save / Load (local named hospitals) -----------------------------
+    // A save captures only the persistent layout + economy; transient visitor /
+    // progress state is reset on load so the clinic resumes with fresh arrivals.
+    var LS_SAVES = 'grindyvet.saves', LS_CURRENT = 'grindyvet.current';
+    var currentName = (function () { try { return localStorage.getItem(LS_CURRENT) || ''; } catch (e) { return ''; } })();
+
+    function lsAvailable() {
+      try { var k = '__gv__'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; }
+      catch (e) { return false; }
+    }
+    function readAll() { try { return JSON.parse(localStorage.getItem(LS_SAVES) || '{}') || {}; } catch (e) { return {}; } }
+    function writeAll(map) { try { localStorage.setItem(LS_SAVES, JSON.stringify(map)); return true; } catch (e) { return false; } }
+    function listSaves() {
+      var m = readAll(), out = [];
+      for (var n in m) if (m.hasOwnProperty(n)) out.push(m[n]);
+      out.sort(function (a, b) { return (b.savedAt || 0) - (a.savedAt || 0); });
+      return out;
+    }
+    function readSave(name) { return readAll()[name] || null; }
+    function deleteSave(name) { var m = readAll(); delete m[name]; writeAll(m); }
+    function writeSave(name) {
+      var m = readAll(); m[name] = buildSave(name);
+      if (!writeAll(m)) return false;
+      currentName = name;
+      try { localStorage.setItem(LS_CURRENT, name); } catch (e) {}
+      return true;
+    }
+
+    // Snapshot of persistent state only (transient fields excluded by construction).
+    function buildSave(name) {
+      return {
+        v: 1, name: name, savedAt: Date.now(), money: money,
+        skills: {
+          speed:      { val: skills.speed.val,      cost: skills.speed.cost },
+          processing: { val: skills.processing.val, cost: skills.processing.cost }
+        },
+        placed: (placed || []).map(function (p) { return { id: p.id, gx: p.gx, gy: p.gy, rot: p.rot || 0 }; }),
+        corridor: Object.keys(corridor || {}),
+        examRooms:  (examRooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
+        xrayRooms:  (xrayRooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0, vet: !!r.vet }; }),
+        restrooms:  (restrooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
+        pharmacies: (pharmacies || []).map(function (r) {
+          return { gx: r.gx, gy: r.gy, rot: r.rot || 0,
+                   stations: (r.stations || []).map(function (s) { return { pharm: !!s.pharm }; }) };
+        }),
+        staff: (staff || []).map(function (s) { return { type: s.type, line: s.line }; }),
+        vets:  (vets || []).map(function (v) { return { x: v.x, y: v.y, speed: v.speed }; }),
+        cleaners: (cleaners || []).map(function (c) { return { x: c.x, y: c.y, speed: c.speed }; }),
+        frq: frq
+      };
+    }
+
+    // Wipe in-flight visitors / progress so a load (or new game) starts clean.
+    function resetTransient() {
+      visitors.length = 0;
+      queue.forEach(function (q) { q.length = 0; });
+      floaters.length = 0;
+      puddles.length = 0;
+      doorways.length = 0;
+      spawnTimer = 0; visitorSeq = 0; examTicketSeq = 0; animT = 0;
+      door.open = 0;
+      for (var k in doorOpen) delete doorOpen[k];
+      examRooms.forEach(function (r) { r.occupant = null; r.examT = 0; });
+      xrayRooms.forEach(function (r) { r.occupant = null; r.xrayT = 0; });
+      restrooms.forEach(function (r) { r.occupant = null; });
+      pharmacies.forEach(function (p) { (p.stations || []).forEach(function (s) { s.patient = null; s.procT = 0; }); });
+      vets.forEach(function (v) { v.room = null; v.working = false; v.moving = false; v.path = null; v.wp = 0; });
+      cleaners.forEach(function (c) { c.target = null; c.moving = false; c.path = null; c.wp = 0; });
+      placing = null; corridorDrag = null;
+      try { document.body.classList.remove('placing'); } catch (e) {}
+      vet.x = ROOM / 2 - 0.5; vet.y = ROOM / 2 - 0.5; vet.dir = 'SE'; vet.moving = false; vet.walkPhase = 0;
+    }
+
+    // Reset everything to a fresh, empty clinic.
+    function newGame() {
+      resetTransient();
+      placed.length = 0; examRooms.length = 0; xrayRooms.length = 0;
+      restrooms.length = 0; pharmacies.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0;
+      for (var k in corridor) delete corridor[k];
+      for (var k2 in occupied) delete occupied[k2];
+      money = 1000;
+      skills.speed.val = 1.0; skills.speed.cost = 10;
+      skills.processing.val = 1.0; skills.processing.cost = 10;
+      frq = 30; spawnTimer = 0;
+      currentName = '';
+      try { localStorage.removeItem(LS_CURRENT); } catch (e) {}
+      renderStatic(); renderMoney(); updateHospitalLabel();
+    }
+
+    // Rebuild the clinic from a save snapshot. Order matters: corridor before the
+    // room place-functions (their door-finders scan the corridor map), occupied
+    // cleared before furniture/rooms repopulate it.
+    function applySave(data) {
+      if (!data || data.v !== 1) return false;
+      resetTransient();
+      placed.length = 0; examRooms.length = 0; xrayRooms.length = 0;
+      restrooms.length = 0; pharmacies.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0;
+      for (var k in corridor) delete corridor[k];
+      for (var k2 in occupied) delete occupied[k2];
+
+      money = (typeof data.money === 'number') ? data.money : 1000;
+      if (data.skills) {
+        skills.speed.val = data.skills.speed.val; skills.speed.cost = data.skills.speed.cost;
+        skills.processing.val = data.skills.processing.val; skills.processing.cost = data.skills.processing.cost;
+      }
+      frq = (typeof data.frq === 'number') ? data.frq : 30;
+
+      (data.corridor || []).forEach(function (key) { corridor[key] = true; });
+      (data.placed || []).forEach(function (p) {
+        placed.push({ id: p.id, gx: p.gx, gy: p.gy, rot: p.rot || 0 });
+        var def = FURN_BY_ID[p.id];
+        if (def) footprintTiles(def, p.gx, p.gy, p.rot || 0).forEach(function (t) { occupied[t.x + ',' + t.y] = true; });
+      });
+      if (typeof placeExam === 'function')     (data.examRooms || []).forEach(function (r) { placeExam(r.gx, r.gy, r.rot || 0); });
+      if (typeof placeXray === 'function')     (data.xrayRooms || []).forEach(function (r) { placeXray(r.gx, r.gy, r.rot || 0); });
+      if (typeof placeRestroom === 'function') (data.restrooms || []).forEach(function (r) { placeRestroom(r.gx, r.gy, r.rot || 0); });
+      if (typeof placePharmacy === 'function') (data.pharmacies || []).forEach(function (r) { placePharmacy(r.gx, r.gy, r.rot || 0); });
+      // per-room persistent extras, by index (push order matches save order)
+      (data.xrayRooms || []).forEach(function (r, i) { if (xrayRooms[i]) xrayRooms[i].vet = !!r.vet; });
+      (data.pharmacies || []).forEach(function (r, i) {
+        if (pharmacies[i]) (r.stations || []).forEach(function (s, j) {
+          if (pharmacies[i].stations[j]) pharmacies[i].stations[j].pharm = !!s.pharm;
+        });
+      });
+      (data.staff || []).forEach(function (s) { staff.push({ type: s.type, line: s.line }); });
+      (data.vets || []).forEach(function (v) {
+        vets.push({ x: v.x, y: v.y, room: null, working: false, speed: v.speed || 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0 });
+      });
+      (data.cleaners || []).forEach(function (c) {
+        cleaners.push({ x: c.x, y: c.y, speed: c.speed || 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0 });
+      });
+
+      resetTransient();                       // clear anything the place-fns seeded
+      renderStatic(); renderMoney();
+      currentName = data.name || '';
+      try { localStorage.setItem(LS_CURRENT, currentName); } catch (e) {}
+      updateHospitalLabel();
+      return true;
+    }
+
+    // ---- Save / Load UI --------------------------------------------------
+    var hospEl = document.getElementById('hospName');
+    var saveModal = document.getElementById('saveModal');
+    var saveListEl = document.getElementById('saveList');
+    var saveNameEl = document.getElementById('saveName');
+
+    function updateHospitalLabel() {
+      if (!hospEl) return;
+      hospEl.textContent = currentName ? '🏥 ' + currentName : '';
+      hospEl.style.display = currentName ? '' : 'none';
+    }
+    function openSaveModal() {
+      if (placing) cancelPlacing();
+      saveNameEl.value = currentName || '';
+      renderSaveList();
+      saveModal.hidden = false;
+      try { saveNameEl.focus(); } catch (e) {}
+    }
+    function closeSaveModal() { saveModal.hidden = true; }
+    function renderSaveList() {
+      saveListEl.innerHTML = '';
+      if (!lsAvailable()) { saveListEl.innerHTML = '<div class="modal-empty">Saving is unavailable (storage blocked).</div>'; return; }
+      var saves = listSaves();
+      if (!saves.length) { saveListEl.innerHTML = '<div class="modal-empty">No saved hospitals yet.</div>'; return; }
+      saves.forEach(function (s) {
+        var rooms = (s.examRooms || []).length + (s.xrayRooms || []).length + (s.pharmacies || []).length + (s.restrooms || []).length;
+        var when = '';
+        try { when = new Date(s.savedAt || 0).toLocaleDateString(); } catch (e) {}
+        var row = document.createElement('div');
+        row.className = 'save-row' + (s.name === currentName ? ' current' : '');
+        row.innerHTML = '<div class="save-meta"><div class="nm"></div><div class="sub">$' + (s.money || 0) + ' · ' + rooms + (rooms === 1 ? ' room · ' : ' rooms · ') + when + '</div></div>' +
+                        '<button class="save-load">Load</button><button class="save-del">Delete</button>';
+        row.querySelector('.nm').textContent = s.name;
+        row.querySelector('.save-load').addEventListener('click', function () { applySave(readSave(s.name)); closeSaveModal(); });
+        row.querySelector('.save-del').addEventListener('click', function () {
+          if (confirm('Delete "' + s.name + '"? This cannot be undone.')) { deleteSave(s.name); renderSaveList(); }
+        });
+        saveListEl.appendChild(row);
+      });
+    }
+    document.getElementById('savesBtn').addEventListener('click', openSaveModal);
+    document.getElementById('saveClose').addEventListener('click', closeSaveModal);
+    saveModal.addEventListener('click', function (e) { if (e.target === saveModal) closeSaveModal(); });
+    document.getElementById('saveBtn').addEventListener('click', function () {
+      var name = (saveNameEl.value || '').trim();
+      if (!name) { try { saveNameEl.focus(); } catch (e) {} return; }
+      if (!lsAvailable() || !writeSave(name)) { alert('Could not save — storage is full or blocked.'); return; }
+      updateHospitalLabel(); renderSaveList();
+    });
+    saveNameEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') document.getElementById('saveBtn').click(); });
+    document.getElementById('newGameBtn').addEventListener('click', function () {
+      if (confirm('Start a new game? Unsaved progress in the current hospital will be lost.')) { newGame(); closeSaveModal(); }
+    });
+
     // ---- Boot -------------------------------------------------------------
     window.addEventListener('resize', resize);
     resize();
     renderMoney();                          // paint money + shop cards
     requestAnimationFrame(frame);
+    // Auto-resume the most recent hospital (prefer the last active name); the
+    // Saves panel lets the player pick another save or start a new game.
+    (function () {
+      updateHospitalLabel();
+      var data = currentName ? readSave(currentName) : null;
+      if (!data) { var all = listSaves(); if (all.length) data = all[0]; }
+      if (data) applySave(data);
+    })();
     window.__t = {
       draw: draw,
       step: function (n) { for (var i = 0; i < (n || 1); i++) update(1 / 30); },
