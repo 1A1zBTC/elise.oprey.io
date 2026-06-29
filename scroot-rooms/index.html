@@ -994,6 +994,16 @@
       g.beginPath(); g.moveTo(Q(52 + lean), P(150)); g.lineTo(Q(75), P(178)); g.lineTo(Q(98 + lean), P(150)); g.closePath(); g.fill();
       g.strokeStyle = 'rgba(120,90,16,0.7)'; g.lineWidth = Q(2);
       g.beginPath(); g.moveTo(Q(75 + lean / 2), P(178)); g.lineTo(Q(75), P(302)); g.stroke();
+      // depth: side ambient occlusion (rounds the torso) + fabric folds + hem shadow
+      g.fillStyle = 'rgba(108,80,14,0.32)';
+      g.beginPath(); g.moveTo(Q(40 + lean), P(150)); g.lineTo(Q(49 + lean), P(150)); g.lineTo(Q(40), P(302)); g.lineTo(Q(32), P(302)); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(Q(110 + lean), P(150)); g.lineTo(Q(101 + lean), P(150)); g.lineTo(Q(110), P(302)); g.lineTo(Q(118), P(302)); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(120,90,16,0.30)'; g.lineWidth = Q(1.4);
+      g.beginPath(); g.moveTo(Q(54), P(200)); g.quadraticCurveTo(Q(57), P(250), Q(50), P(298)); g.stroke();
+      g.beginPath(); g.moveTo(Q(98), P(204)); g.quadraticCurveTo(Q(99), P(252), Q(106), P(298)); g.stroke();
+      g.fillStyle = 'rgba(255,248,205,0.16)';                   // soft chest highlight (left of the blood)
+      g.beginPath(); g.ellipse(Q(58), P(196), Q(9), P(22), 0.05, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(86,64,12,0.45)'; g.fillRect(Q(33), P(297), Q(85), P(5));   // hem shadow
       // brass buttons down the waistcoat (stop above the sash)
       for (let b = 0; b < 4; b++) {
         const byv = 186 + b * 15;
