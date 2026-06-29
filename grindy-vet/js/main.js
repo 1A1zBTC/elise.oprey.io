@@ -1,21 +1,15 @@
     'use strict';
 
+    import {
+      TILE_W, TILE_H, TILE_HW, TILE_HH, WALL_H, FRONT_WALL_H, ROOM,
+      DOOR_A, DOOR_B, DOOR_MID, DOOR_H, BASE_SPEED, FRONT
+    } from './constants.js';
+    import { isoRaw, hash, diamondPath, shade, chooseDir } from './util.js';
+
     var canvas = document.getElementById('game');
     var ctx = canvas.getContext('2d');
 
-    // ---- Isometric world constants ---------------------------------------
-    var TILE_W = 64, TILE_H = 32;          // 2:1 isometric tile footprint
-    var TILE_HW = TILE_W / 2, TILE_HH = TILE_H / 2;
-    var WALL_H = 62;                       // tall back walls
-    var FRONT_WALL_H = 30;                 // short front walls (see over them)
-    var ROOM = 8;                          // floor grid is ROOM x ROOM
-    // Automatic sliding double doors centred in the front-left wall: the opening
-    // spans tiles 3 & 4 (grid gx 2.5 … 4.5, centred on gx 3.5).
-    var DOOR_A = 2.5, DOOR_B = 4.5, DOOR_MID = 3.5;
-    var DOOR_H = WALL_H;                    // doors rise to full ceiling height (side walls are only cut low for visibility)
-
     // ---- Game state (small + extendable) ---------------------------------
-    var BASE_SPEED = 3.3;                   // player's base movement (Speed skill adds to it)
     var vet = {
       x: ROOM / 2 - 0.5, y: ROOM / 2 - 0.5,  // float grid position (tile units)
       speed: BASE_SPEED, dir: 'SE', moving: false, walkPhase: 0
@@ -45,8 +39,6 @@
     // Visitors queue in two lines in front of the reception desk (one per desk
     // tile). queue[0] / queue[1] are ordered arrays of visitors; index 0 = front.
     var queue = [[], []];
-    // "Front" (customer-facing) grid direction for each rotation 0/90/180/270°.
-    var FRONT = [{ x: 0, y: 1 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: -1, y: 0 }];
 
     // Vet skills (top bar). Both start at 1.0 and upgrade +0.5 at a time; the
     // price starts at 10 coins and doubles per purchase, per skill.
@@ -477,9 +469,6 @@
       renderStatic();
     }
 
-    function isoRaw(gx, gy) {
-      return { x: (gx - gy) * TILE_HW, y: (gx + gy) * TILE_HH };
-    }
     function iso(gx, gy) {
       return { x: (gx - gy) * TILE_HW + camera.x, y: (gx + gy) * TILE_HH + camera.y };
     }
@@ -488,23 +477,7 @@
       return { gx: (a + b) / 2, gy: (b - a) / 2 };
     }
 
-    // Deterministic 0..1 hash (no Math.random — keeps texture stable on resize).
-    function hash(x, y) {
-      var n = (x | 0) * 374761393 + (y | 0) * 668265263;
-      n = (n ^ (n >> 13)) * 1274126177;
-      return ((n ^ (n >> 16)) >>> 0) / 4294967295;
-    }
-
     // ---- Tile + surface primitives (draw onto a given context) -----------
-    function diamondPath(c, cx, cy) {
-      c.beginPath();
-      c.moveTo(cx, cy - TILE_HH);
-      c.lineTo(cx + TILE_HW, cy);
-      c.lineTo(cx, cy + TILE_HH);
-      c.lineTo(cx - TILE_HW, cy);
-      c.closePath();
-    }
-
     // Scatter `n` tiny flecks inside the current tile (caller has already clipped
     // to the diamond). `pick(t)` returns a fill colour from a 0..1 sample.
     function fleck(c, s, gx, gy, n, spread, sz, pick) {
@@ -1594,14 +1567,6 @@
     }
 
     // Lighten (>1) / darken (<1) a #rrggbb colour.
-    function shade(hex, f) {
-      var n = parseInt(hex.slice(1), 16);
-      var r = Math.min(255, ((n >> 16) & 255) * f) | 0;
-      var g = Math.min(255, ((n >> 8) & 255) * f) | 0;
-      var b = Math.min(255, (n & 255) * f) | 0;
-      return 'rgb(' + r + ',' + g + ',' + b + ')';
-    }
-
     // ---- Furniture rendering ---------------------------------------------
     // A solid isometric box over the grid rect [gx0..gx1] x [gy0..gy1], height h.
     function isoBox(c, gx0, gy0, gx1, gy1, h, topCol, leftCol, rightCol) {
@@ -3449,11 +3414,6 @@
 
     function isNearDoor(x, y) {
       return Math.hypot(x - DOOR_MID, y - (ROOM - 0.5)) < 2.0;
-    }
-
-    function chooseDir(mx, my) {
-      if (Math.abs(mx) > Math.abs(my)) return mx > 0 ? 'SE' : 'NW';
-      return my > 0 ? 'SW' : 'NE';
     }
 
     // Processing-station rings drawn on the floor behind the desk — one per line
