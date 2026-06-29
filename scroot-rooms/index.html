@@ -937,6 +937,8 @@
       const headY = 96 - bob * 5;
       const lean = legA * 3;
       g.lineCap = 'round'; g.lineJoin = 'round';
+      // deterministic 0..1 hash for grain/grime (no Math.random -> frames don't flicker)
+      function hsh(x, y) { let n = (x | 0) * 374761393 + (y | 0) * 668265263; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967295; }
 
       // --- real leg: brown pants, white sock, brown boot (swings) ---
       const rFoot = 60 + legA * 12;
@@ -959,7 +961,7 @@
 
       // --- billowy teal pirate sleeves (arms), swing opposite the legs ---
       let ag = g.createLinearGradient(Q(16), 0, Q(60), 0);
-      ag.addColorStop(0, '#185049'); ag.addColorStop(0.5, '#3aa492'); ag.addColorStop(1, '#123e38');
+      ag.addColorStop(0, '#123330'); ag.addColorStop(0.5, '#2a6359'); ag.addColorStop(1, '#0c2723');
       g.strokeStyle = ag; g.lineWidth = Q(15);
       const lh = 270 + armA * 12, rh = 276 - armA * 12;   // long arms reaching down
       g.beginPath(); g.moveTo(Q(46), P(168)); g.lineTo(Q(26 - armA * 4), P(218)); g.lineTo(Q(28), P(lh)); g.stroke();
@@ -982,13 +984,19 @@
         }
       }
 
-      // --- yellow raincoat (torso) ---
+      // --- filthy mustard waistcoat (torso) — faded, grimy, blood-stained ---
       let cg = g.createLinearGradient(Q(32), 0, Q(118), 0);
-      cg.addColorStop(0, '#b08416'); cg.addColorStop(0.45, '#f0cf3c'); cg.addColorStop(0.6, '#f7da57'); cg.addColorStop(1, '#9c7814');
+      cg.addColorStop(0, '#4e3c0e'); cg.addColorStop(0.45, '#8a7029'); cg.addColorStop(0.6, '#95792f'); cg.addColorStop(1, '#3e2f0a');
       g.fillStyle = cg;
       g.beginPath();
       g.moveTo(Q(40 + lean), P(150)); g.lineTo(Q(110 + lean), P(150));
       g.lineTo(Q(118), P(302)); g.lineTo(Q(32), P(302)); g.closePath(); g.fill();
+      // ground-in grime + water stains (deterministic blotches)
+      for (let gi = 0; gi < 22; gi++) {
+        const gh = hsh(gi * 17 + 5, gi * 31 + 2), gx = 40 + ((gi * 29) % 70), gy = 156 + ((gi * 53) % 142);
+        g.fillStyle = (gh < 0.55 ? 'rgba(28,20,6,' : 'rgba(60,48,18,') + (0.1 + gh * 0.28) + ')';
+        g.beginPath(); g.ellipse(Q(gx), P(gy), Q(3 + gh * 7), P(4 + gh * 9), gh * 3, 0, 6.29); g.fill();
+      }
       // collar + centre seam
       g.fillStyle = '#caa826';
       g.beginPath(); g.moveTo(Q(52 + lean), P(150)); g.lineTo(Q(75), P(178)); g.lineTo(Q(98 + lean), P(150)); g.closePath(); g.fill();
@@ -1014,7 +1022,7 @@
       // --- wide purple sash wrapped around the waist (sways at the tail) ---
       const sway = Math.sin(phase * 1.3) * 5;
       let sg = g.createLinearGradient(0, P(246), 0, P(282));
-      sg.addColorStop(0, '#7c3c98'); sg.addColorStop(0.5, '#5a2578'); sg.addColorStop(1, '#371648');
+      sg.addColorStop(0, '#43285a'); sg.addColorStop(0.5, '#301a44'); sg.addColorStop(1, '#1c0f2a');
       g.fillStyle = sg;
       g.beginPath();
       g.moveTo(Q(31), P(248)); g.lineTo(Q(119), P(248)); g.lineTo(Q(119), P(276)); g.lineTo(Q(31), P(279)); g.closePath(); g.fill();
@@ -1043,67 +1051,100 @@
       g.fillStyle = 'rgba(70,6,4,0.6)';                                            // dried drips reaching the belt
       for (const dx of [62, 78, 90]) { g.beginPath(); g.moveTo(Q(dx), P(244)); g.lineTo(Q(dx - 1), P(250)); g.lineTo(Q(dx + 1), P(250)); g.closePath(); g.fill(); }
 
-      // --- head: gaunt dark-skinned face, sculpted with detailed shading ---
-      const fg = g.createRadialGradient(Q(62), P(headY - 18), P(5), Q(78), P(headY + 6), P(56));
-      fg.addColorStop(0, '#6e5642'); fg.addColorStop(0.45, '#3e2d1e'); fg.addColorStop(1, '#140c06');
-      g.fillStyle = fg;
-      g.beginPath(); g.ellipse(cx, P(headY), Q(24), P(46), 0, 0, 6.29); g.fill();
-      // temple/jaw shadow + cheekbone highlights for a hollow, gaunt look
-      g.fillStyle = 'rgba(10,6,3,0.5)';
-      g.beginPath(); g.ellipse(Q(54), P(headY + 6), Q(7), P(22), 0.15, 0, 6.29); g.fill();
-      g.beginPath(); g.ellipse(Q(96), P(headY + 6), Q(7), P(22), -0.15, 0, 6.29); g.fill();
-      g.fillStyle = 'rgba(150,120,86,0.16)';
-      g.beginPath(); g.ellipse(Q(68), P(headY + 9), Q(8), P(7), 0, 0, 6.29); g.fill();
-      g.beginPath(); g.ellipse(Q(86), P(headY + 15), Q(7), P(6), 0, 0, 6.29); g.fill();
-      // forehead wrinkles
-      g.strokeStyle = 'rgba(12,7,3,0.4)'; g.lineWidth = Q(0.9);
-      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(Q(60), P(headY - 30 + i * 4)); g.quadraticCurveTo(Q(75), P(headY - 33 + i * 4), Q(90), P(headY - 30 + i * 4)); g.stroke(); }
-      // brow ridges over each eye
-      g.fillStyle = 'rgba(8,5,2,0.55)';
-      g.beginPath(); g.ellipse(Q(64), P(headY - 18), Q(9), P(4), 0, 0, 6.29); g.fill();
-      g.beginPath(); g.ellipse(Q(89), P(headY - 4), Q(8), P(4), 0, 0, 6.29); g.fill();
-      // nose: bridge highlight + nostril shadow
-      g.fillStyle = 'rgba(150,120,86,0.15)'; g.beginPath(); g.ellipse(Q(76), P(headY + 2), Q(3), P(14), 0, 0, 6.29); g.fill();
-      g.fillStyle = 'rgba(8,5,2,0.5)'; g.beginPath(); g.ellipse(Q(78), P(headY + 16), Q(4.5), P(4), 0, 0, 6.29); g.fill();
-      // sunken sockets, then detailed wet eyes (uneven: left higher than right)
-      for (const e of [[63, headY - 13, 8.6, 8], [89, headY - 3, 8, 7.4]]) {
-        const ex = e[0], ey = e[1], rx = e[2], ry = e[3];
-        const so = g.createRadialGradient(Q(ex), P(ey), P(1), Q(ex), P(ey), P(rx + 6));
-        so.addColorStop(0, 'rgba(6,4,2,0.85)'); so.addColorStop(1, 'rgba(6,4,2,0)');
-        g.fillStyle = so; g.beginPath(); g.ellipse(Q(ex), P(ey), Q(rx + 4), P(ry + 5), 0, 0, 6.29); g.fill();
-        g.fillStyle = '#cfc6ad'; g.beginPath(); g.ellipse(Q(ex), P(ey), Q(rx), P(ry), 0, 0, 6.29); g.fill();   // sclera
-        g.strokeStyle = 'rgba(150,24,14,0.55)'; g.lineWidth = Q(0.7);                                          // bloodshot
-        g.beginPath(); g.moveTo(Q(ex - rx + 1), P(ey + 1)); g.lineTo(Q(ex + rx - 1), P(ey)); g.stroke();
-        g.fillStyle = '#3a2410'; g.beginPath(); g.arc(Q(ex + 0.6), P(ey + 0.6), Q(rx * 0.55), 0, 6.29); g.fill();   // iris
-        g.fillStyle = '#070402'; g.beginPath(); g.arc(Q(ex + 0.6), P(ey + 0.6), Q(rx * 0.3), 0, 6.29); g.fill();    // pupil
-        g.fillStyle = 'rgba(255,252,240,0.9)'; g.beginPath(); g.arc(Q(ex - rx * 0.3), P(ey - ry * 0.4), Q(rx * 0.2), 0, 6.29); g.fill();  // wet catchlight
-        g.strokeStyle = 'rgba(6,4,2,0.55)'; g.lineWidth = Q(0.8);                                              // lower lid
-        g.beginPath(); g.ellipse(Q(ex), P(ey + ry * 0.5), Q(rx), P(ry * 0.7), 0, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();
+      // ===================== head: decayed, screaming, real =====================
+      function shd(x, y, rx, ry, rot, a) {                 // soft black ambient-occlusion blot
+        const R = P(Math.max(rx, ry) + 3);
+        const s = g.createRadialGradient(Q(x), P(y), 1, Q(x), P(y), R);
+        s.addColorStop(0, 'rgba(5,3,1,' + a + ')'); s.addColorStop(1, 'rgba(5,3,1,0)');
+        g.fillStyle = s; g.beginPath(); g.ellipse(Q(x), P(y), Q(rx + 3), P(ry + 3), rot, 0, 6.29); g.fill();
       }
-      // --- big black bushy beard around the jaw (drawn under the mouth) ---
-      g.fillStyle = '#0a0807';
+      // sickly desaturated flesh, lit front-low with a deep falloff into shadow
+      const fg = g.createRadialGradient(Q(70), P(headY - 6), P(4), Q(76), P(headY + 12), P(62));
+      fg.addColorStop(0, '#917a5c'); fg.addColorStop(0.4, '#5c4836'); fg.addColorStop(0.72, '#2c2013'); fg.addColorStop(1, '#090603');
+      g.fillStyle = fg;
+      g.beginPath(); g.ellipse(cx, P(headY), Q(24), P(47), 0, 0, 6.29); g.fill();
+      // gaunt structure: hollow temples/cheeks, deep brows, under-jaw
+      shd(53, headY + 6, 8, 27, 0.12, 0.6); shd(97, headY + 6, 8, 27, -0.12, 0.6);
+      shd(75, headY + 42, 17, 12, 0, 0.55); shd(62, headY - 21, 10, 7, 0, 0.42); shd(90, headY - 21, 10, 7, 0, 0.42);
+      // clammy highlights on the high points
+      g.fillStyle = 'rgba(196,172,134,0.18)';
+      g.beginPath(); g.ellipse(Q(74), P(headY - 25), Q(13), P(7), 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(62), P(headY + 5), Q(7), P(5), 0.2, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(90), P(headY + 7), Q(7), P(5), -0.2, 0, 6.29); g.fill();
+      // grime + blemish speckle (deterministic so frames don't flicker)
+      for (let i = 0; i < 64; i++) {
+        const h = hsh(i * 13 + 7, i * 29 + 3), ax = 56 + ((i * 37) % 40), ay = headY - 32 + ((i * 53) % 74);
+        g.fillStyle = (h < 0.5 ? 'rgba(16,9,4,' : 'rgba(150,120,86,') + (0.05 + h * 0.16) + ')';
+        g.beginPath(); g.arc(Q(ax), P(ay), Q(0.5 + h), 0, 6.29); g.fill();
+      }
+      // deep forehead furrows + a grimy gash
+      g.strokeStyle = 'rgba(8,5,2,0.5)'; g.lineWidth = Q(1.1);
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(Q(60), P(headY - 30 + i * 5)); g.quadraticCurveTo(Q(75), P(headY - 34 + i * 5), Q(90), P(headY - 30 + i * 5)); g.stroke(); }
+      g.strokeStyle = 'rgba(96,12,8,0.6)'; g.lineWidth = Q(1.5); g.beginPath(); g.moveTo(Q(84), P(headY - 34)); g.lineTo(Q(93), P(headY - 20)); g.stroke();
+      // gaunt nose with deep nostril pits
+      g.fillStyle = 'rgba(196,172,134,0.14)'; g.beginPath(); g.ellipse(Q(75), P(headY + 2), Q(3.4), P(15), 0, 0, 6.29); g.fill();
+      shd(75, headY + 18, 7, 5, 0, 0.7);
+      g.fillStyle = '#0a0604'; g.beginPath(); g.ellipse(Q(71), P(headY + 17), Q(2), P(3), 0.3, 0, 6.29); g.fill(); g.beginPath(); g.ellipse(Q(79), P(headY + 17), Q(2), P(3), -0.3, 0, 6.29); g.fill();
+      // EYES — bulging, wet, bloodshot, sunk in black sockets (the terror)
+      for (const e of [[62, headY - 11, 9, 8.4, 0.05], [90, headY - 1, 8.4, 7.8, -0.04]]) {
+        const ex = e[0], ey = e[1], rx = e[2], ry = e[3], gz = e[4];
+        const so = g.createRadialGradient(Q(ex), P(ey + 1), P(1), Q(ex), P(ey), P(rx + 8));
+        so.addColorStop(0, 'rgba(2,1,0,0.96)'); so.addColorStop(0.7, 'rgba(2,1,0,0.72)'); so.addColorStop(1, 'rgba(2,1,0,0)');
+        g.fillStyle = so; g.beginPath(); g.ellipse(Q(ex), P(ey), Q(rx + 6), P(ry + 7), 0, 0, 6.29); g.fill();
+        const eg = g.createRadialGradient(Q(ex - rx * 0.3), P(ey - ry * 0.3), P(1), Q(ex), P(ey), P(rx + 1));
+        eg.addColorStop(0, '#efe8d0'); eg.addColorStop(0.6, '#cdc29f'); eg.addColorStop(1, '#8c8158');   // wet bulging sclera
+        g.fillStyle = eg; g.beginPath(); g.ellipse(Q(ex), P(ey), Q(rx), P(ry), 0, 0, 6.29); g.fill();
+        g.lineWidth = Q(0.5);                                                                            // bloodshot veins
+        for (let v = 0; v < 7; v++) { const a = v / 7 * 6.28 + gz, hh = hsh(v + ex, ey | 0); g.strokeStyle = 'rgba(150,20,12,' + (0.3 + hh * 0.4) + ')';
+          g.beginPath(); g.moveTo(Q(ex + Math.cos(a) * rx), P(ey + Math.sin(a) * ry)); g.lineTo(Q(ex + Math.cos(a) * rx * 0.45), P(ey + Math.sin(a) * ry * 0.45)); g.stroke(); }
+        const irx = ex + 1 + gz * 10, iry = ey + 1;                                                      // iris + tiny crazed pupil
+        const ig = g.createRadialGradient(Q(irx), P(iry), P(0.5), Q(irx), P(iry), Q(rx * 0.5));
+        ig.addColorStop(0, '#5a3a18'); ig.addColorStop(1, '#1c1006');
+        g.fillStyle = ig; g.beginPath(); g.arc(Q(irx), P(iry), Q(rx * 0.5), 0, 6.29); g.fill();
+        g.fillStyle = '#050302'; g.beginPath(); g.arc(Q(irx), P(iry), Q(rx * 0.2), 0, 6.29); g.fill();
+        g.fillStyle = 'rgba(255,255,250,0.95)'; g.beginPath(); g.arc(Q(irx - rx * 0.3), P(iry - ry * 0.4), Q(rx * 0.16), 0, 6.29); g.fill();
+        g.strokeStyle = 'rgba(4,2,1,0.7)'; g.lineWidth = Q(1.7);                                         // heavy upper lid
+        g.beginPath(); g.ellipse(Q(ex), P(ey - ry * 0.2), Q(rx + 1), P(ry + 1), 0, 1.05 * Math.PI, 1.95 * Math.PI); g.stroke();
+        g.strokeStyle = 'rgba(120,60,40,0.5)'; g.lineWidth = Q(0.8);                                     // wet lower waterline
+        g.beginPath(); g.ellipse(Q(ex), P(ey + ry * 0.55), Q(rx), P(ry * 0.6), 0, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();
+      }
+      // --- matted black beard framing the scream (drawn before the mouth) ---
+      const bdg = g.createLinearGradient(0, P(headY + 2), 0, P(headY + 58));
+      bdg.addColorStop(0, '#15110d'); bdg.addColorStop(1, '#050403');
+      g.fillStyle = bdg;
       g.beginPath();
-      g.moveTo(Q(52), P(headY + 4));
-      g.quadraticCurveTo(Q(46), P(headY + 34), Q(60), P(headY + 52));
-      g.quadraticCurveTo(Q(75), P(headY + 60), Q(90), P(headY + 52));
-      g.quadraticCurveTo(Q(104), P(headY + 34), Q(98), P(headY + 4));
-      g.quadraticCurveTo(Q(88), P(headY + 20), Q(75), P(headY + 18));   // cheek line under the eyes
-      g.quadraticCurveTo(Q(62), P(headY + 20), Q(52), P(headY + 4));
+      g.moveTo(Q(51), P(headY + 2));
+      g.quadraticCurveTo(Q(44), P(headY + 36), Q(60), P(headY + 56));
+      g.quadraticCurveTo(Q(75), P(headY + 64), Q(90), P(headY + 56));
+      g.quadraticCurveTo(Q(106), P(headY + 36), Q(99), P(headY + 2));
+      g.quadraticCurveTo(Q(88), P(headY + 20), Q(75), P(headY + 17));
+      g.quadraticCurveTo(Q(62), P(headY + 20), Q(51), P(headY + 2));
       g.closePath(); g.fill();
-      g.strokeStyle = 'rgba(46,38,30,0.55)'; g.lineWidth = Q(1);                  // strand texture (deterministic)
-      for (let i = 0; i < 11; i++) { const bx = 56 + i * 3.6, j = ((i * 7) % 5) - 2; g.beginPath(); g.moveTo(Q(bx), P(headY + 22)); g.lineTo(Q(bx + j), P(headY + 50 - (i % 3) * 4)); g.stroke(); }
-
-      // mouth: dark, cracked lips, a couple of teeth, drool of blood
-      g.fillStyle = '#150a07'; g.beginPath(); g.ellipse(cx, P(headY + 28), Q(8), P(6), 0, 0, 6.29); g.fill();
-      g.strokeStyle = 'rgba(90,60,46,0.6)'; g.lineWidth = Q(1);
-      g.beginPath(); g.moveTo(Q(67), P(headY + 28)); g.quadraticCurveTo(Q(75), P(headY + 30), Q(83), P(headY + 28)); g.stroke();
-      g.fillStyle = 'rgba(190,180,150,0.55)'; g.fillRect(Q(72), P(headY + 25), Q(2), P(3)); g.fillRect(Q(77), P(headY + 25), Q(2), P(3));
-      g.fillStyle = 'rgba(150,14,8,0.85)';
-      g.beginPath(); g.moveTo(Q(73), P(headY + 33)); g.lineTo(Q(77), P(headY + 33)); g.lineTo(Q(75), P(headY + 50)); g.closePath(); g.fill();
-      // mustache over the upper lip (two tufts)
+      g.lineWidth = Q(0.8);                                                                              // matted strands
+      for (let i = 0; i < 22; i++) { const hh = hsh(i * 9 + 1, i * 17), bx = 54 + (i % 11) * 4 + hh * 2, by = headY + 18 + (i % 3) * 3;
+        g.strokeStyle = (hh < 0.5 ? 'rgba(40,34,28,' : 'rgba(4,3,2,') + (0.4 + hh * 0.4) + ')';
+        g.beginPath(); g.moveTo(Q(bx), P(by)); g.quadraticCurveTo(Q(bx - 2 + hh * 4), P(by + 18), Q(bx - 3 + hh * 6), P(headY + 52)); g.stroke(); }
+      // --- MOUTH: a dark gaping scream — black void, dark gums, broken teeth, drool ---
+      const my = headY + 31;
+      g.save();
+      g.beginPath(); g.ellipse(cx, P(my), Q(9.5), P(12), 0, 0, 6.29); g.clip();
+      g.fillStyle = '#070302'; g.fillRect(Q(60), P(my - 16), Q(30), P(32));
+      g.fillStyle = '#3a0c0a'; g.fillRect(Q(60), P(my - 16), Q(30), P(6));
+      g.fillStyle = '#280807'; g.fillRect(Q(60), P(my + 9), Q(30), P(7));
+      for (let i = 0; i < 7; i++) { const hh = hsh(i + 3, 11), tx = 62 + i * 3.6;                       // uneven yellow teeth
+        g.fillStyle = (hh < 0.35 ? 'rgba(110,88,36,0.95)' : 'rgba(200,184,142,0.95)');
+        if (hh > 0.2) g.fillRect(Q(tx), P(my - 14), Q(2.6), P(3 + hh * 4));
+        if (hh < 0.8) g.fillRect(Q(tx + 1), P(my + 11 - (2 + hh * 4)), Q(2.4), P(2 + hh * 4));
+      }
+      g.restore();
+      g.strokeStyle = 'rgba(8,4,2,0.7)'; g.lineWidth = Q(1.4); g.beginPath(); g.ellipse(cx, P(my), Q(9.5), P(12), 0, 0, 6.29); g.stroke();   // lip rim
+      g.fillStyle = 'rgba(120,8,6,0.85)';                                                                // blood drool
+      g.beginPath(); g.moveTo(Q(72), P(my + 9)); g.lineTo(Q(76), P(my + 9)); g.lineTo(Q(74), P(my + 28)); g.closePath(); g.fill();
+      g.beginPath(); g.arc(Q(74), P(my + 29), Q(1.7), 0, 6.29); g.fill();
+      // mustache (drooping, matted) over the upper lip
       g.fillStyle = '#0c0a08';
-      g.beginPath(); g.moveTo(Q(75), P(headY + 22)); g.quadraticCurveTo(Q(64), P(headY + 19), Q(58), P(headY + 26)); g.quadraticCurveTo(Q(67), P(headY + 26), Q(75), P(headY + 24)); g.closePath(); g.fill();
-      g.beginPath(); g.moveTo(Q(75), P(headY + 22)); g.quadraticCurveTo(Q(86), P(headY + 19), Q(92), P(headY + 26)); g.quadraticCurveTo(Q(83), P(headY + 26), Q(75), P(headY + 24)); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(Q(75), P(headY + 21)); g.quadraticCurveTo(Q(62), P(headY + 18), Q(55), P(headY + 28)); g.quadraticCurveTo(Q(66), P(headY + 25), Q(75), P(headY + 24)); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(Q(75), P(headY + 21)); g.quadraticCurveTo(Q(88), P(headY + 18), Q(95), P(headY + 28)); g.quadraticCurveTo(Q(84), P(headY + 25), Q(75), P(headY + 24)); g.closePath(); g.fill();
       // tricorn pirate hat (three upturned points), weathered brown leather
       let hg = g.createLinearGradient(0, P(18), 0, P(60));
       hg.addColorStop(0, '#4a3318'); hg.addColorStop(0.5, '#2c1e0e'); hg.addColorStop(1, '#0c0805');
@@ -1211,40 +1252,59 @@
       const legA = Math.sin(phase), armA = Math.sin(phase + Math.PI), bob = Math.abs(Math.sin(phase));
       const sway = Math.sin(phase * 0.5) * 3;
       g.lineCap = 'round'; g.lineJoin = 'round';
-      // long thin legs (uneven gait), bony feet
-      g.strokeStyle = '#141518'; g.lineWidth = BW * 0.07;
-      g.beginPath(); g.moveTo(cx - 6, BH * 0.55); g.lineTo(cx - 9 + legA * 8, BH * 0.77); g.lineTo(cx - 11 + legA * 15, BH * 0.97); g.stroke();
-      g.beginPath(); g.moveTo(cx + 6, BH * 0.55); g.lineTo(cx + 9 - legA * 8, BH * 0.77); g.lineTo(cx + 12 - legA * 15, BH * 0.97); g.stroke();
-      g.fillStyle = '#0c0d0f';
+      function limb(x0, y0, x1, y1, x2, y2, w) {                        // wet sinewy limb: dark bone + a thin sheen
+        g.strokeStyle = '#0f1012'; g.lineWidth = w;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+        g.strokeStyle = 'rgba(122,130,140,0.16)'; g.lineWidth = w * 0.3;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      }
+      // long thin legs + knee knobs + bony feet
+      limb(cx - 6, BH * 0.55, cx - 9 + legA * 8, BH * 0.77, cx - 11 + legA * 15, BH * 0.97, BW * 0.07);
+      limb(cx + 6, BH * 0.55, cx + 9 - legA * 8, BH * 0.77, cx + 12 - legA * 15, BH * 0.97, BW * 0.07);
+      g.fillStyle = '#15171a'; g.beginPath(); g.arc(cx - 9 + legA * 8, BH * 0.77, BW * 0.045, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 9 - legA * 8, BH * 0.77, BW * 0.045, 0, 6.29); g.fill();
+      g.fillStyle = '#0a0b0d';
       g.beginPath(); g.ellipse(cx - 11 + legA * 15, BH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
       g.beginPath(); g.ellipse(cx + 12 - legA * 15, BH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
-      // emaciated tapering torso, faint rib shading
+      // emaciated tapering torso
       const tg = g.createLinearGradient(cx - 18, 0, cx + 18, 0);
-      tg.addColorStop(0, '#0b0c0e'); tg.addColorStop(0.5, '#242629'); tg.addColorStop(1, '#090a0c');
+      tg.addColorStop(0, '#090a0c'); tg.addColorStop(0.5, '#23252a'); tg.addColorStop(1, '#070809');
       g.fillStyle = tg;
       g.beginPath();
       g.moveTo(cx - 14, BH * 0.27); g.lineTo(cx + 14, BH * 0.27);
       g.quadraticCurveTo(cx + 10, BH * 0.44, cx + 7, BH * 0.57); g.lineTo(cx - 7, BH * 0.57);
       g.quadraticCurveTo(cx - 10, BH * 0.44, cx - 14, BH * 0.27); g.closePath(); g.fill();
-      g.strokeStyle = 'rgba(120,124,130,0.10)'; g.lineWidth = 1.5;
-      for (let i = 0; i < 4; i++) { const ry = BH * (0.33 + i * 0.05); g.beginPath(); g.moveTo(cx - 8, ry); g.quadraticCurveTo(cx, ry + 4, cx + 8, ry); g.stroke(); }
-      // extremely long spindly arms hanging past the hips, thin fingers
-      g.strokeStyle = '#141518'; g.lineWidth = BW * 0.05;
+      // sunken sternum hollow + collarbone + visible ribs with under-shadows
+      const sht = g.createRadialGradient(cx, BH * 0.40, 2, cx, BH * 0.40, 26);
+      sht.addColorStop(0, 'rgba(0,0,0,0.55)'); sht.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = sht; g.beginPath(); g.ellipse(cx, BH * 0.42, 9, 30, 0, 0, 6.29); g.fill();
+      g.strokeStyle = 'rgba(150,156,166,0.14)'; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(cx - 12, BH * 0.285); g.quadraticCurveTo(cx, BH * 0.30, cx + 12, BH * 0.285); g.stroke();
+      for (let i = 0; i < 4; i++) { const ry = BH * (0.33 + i * 0.052);
+        g.strokeStyle = 'rgba(140,146,156,0.12)'; g.lineWidth = 1.3; g.beginPath(); g.moveTo(cx - 8, ry); g.quadraticCurveTo(cx, ry + 5, cx + 8, ry); g.stroke();
+        g.strokeStyle = 'rgba(0,0,0,0.4)'; g.beginPath(); g.moveTo(cx - 8, ry + 2); g.quadraticCurveTo(cx, ry + 7, cx + 8, ry + 2); g.stroke(); }
+      // extremely long spindly arms + elbow knobs + long fingers
       const lh = BH * (0.74 + armA * 0.02), rh = BH * (0.74 - armA * 0.02);
-      g.beginPath(); g.moveTo(cx - 12, BH * 0.30); g.lineTo(cx - 19 + sway, BH * 0.52); g.lineTo(cx - 15 + sway, lh); g.stroke();
-      g.beginPath(); g.moveTo(cx + 12, BH * 0.30); g.lineTo(cx + 19 - sway, BH * 0.52); g.lineTo(cx + 15 - sway, rh); g.stroke();
-      g.strokeStyle = '#0e0f11'; g.lineWidth = 2;
+      limb(cx - 12, BH * 0.30, cx - 19 + sway, BH * 0.52, cx - 15 + sway, lh, BW * 0.05);
+      limb(cx + 12, BH * 0.30, cx + 19 - sway, BH * 0.52, cx + 15 - sway, rh, BW * 0.05);
+      g.fillStyle = '#13151a'; g.beginPath(); g.arc(cx - 19 + sway, BH * 0.52, BW * 0.034, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 19 - sway, BH * 0.52, BW * 0.034, 0, 6.29); g.fill();
+      g.strokeStyle = '#0c0d0f'; g.lineWidth = 2;
       for (const f of [[cx - 15 + sway, lh, -1], [cx + 15 - sway, rh, 1]]) {
-        for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(f[0], f[1]); g.lineTo(f[0] + f[2] * (2 + i * 2), f[1] + 12 + i * 3); g.stroke(); }
+        for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(f[0], f[1]); g.lineTo(f[0] + f[2] * (2 + i * 2), f[1] + 14 + i * 4); g.stroke(); }
       }
-      // long thin neck + smooth, utterly featureless dark head (faint cold sheen)
+      // long thin neck + gaunt head with a FAINT emerging face (hollow eyes + mouth)
       const headY = BH * 0.15 - bob * 3;
       g.strokeStyle = '#191b1e'; g.lineWidth = BW * 0.045;
       g.beginPath(); g.moveTo(cx, headY + 15); g.lineTo(cx, BH * 0.27); g.stroke();
-      const hg = g.createRadialGradient(cx - 6, headY - 8, 3, cx, headY, 25);
-      hg.addColorStop(0, '#383b40'); hg.addColorStop(0.6, '#1b1d20'); hg.addColorStop(1, '#090a0c');
+      const hg = g.createRadialGradient(cx - 6, headY - 8, 3, cx, headY, 26);
+      hg.addColorStop(0, '#34373c'); hg.addColorStop(0.55, '#191b1e'); hg.addColorStop(1, '#070809');
       g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 16, 22, 0, 0, 6.29); g.fill();
-      g.fillStyle = 'rgba(150,156,164,0.09)'; g.beginPath(); g.ellipse(cx - 4, headY - 2, 4, 11, 0.1, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(0,0,0,0.62)';                                 // hollow eye pits
+      g.beginPath(); g.ellipse(cx - 6, headY - 2, 3.6, 5.2, 0.1, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 6, headY - 1, 3.6, 5.2, -0.1, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,156,164,0.42)'; g.beginPath(); g.arc(cx - 6, headY - 1, 0.8, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 6, headY, 0.8, 0, 6.29); g.fill();  // dim wet glint deep in the pits
+      g.fillStyle = 'rgba(0,0,0,0.7)';                                  // gaping silent-scream maw (NOT a smile)
+      g.beginPath(); g.ellipse(cx, headY + 12, 2.8, 5.5, 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,156,164,0.08)'; g.beginPath(); g.ellipse(cx - 5, headY - 4, 3.5, 9, 0.1, 0, 6.29); g.fill();   // faint cheek sheen
     }
     const BACTERIA_FRAMES = (function () {
       const N = 12, arr = [];
