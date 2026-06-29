@@ -2901,18 +2901,32 @@
       return Math.round(vet.x) === k.circle.x && Math.round(vet.y) === k.circle.y;
     }
 
-    // True if a step between adjacent tiles a->b crosses an exam-room wall (any of
-    // the room's perimeter edges except its door), so visitors only use the door.
-    function examWallEdge(ax, ay, bx, by) {
-      for (var i = 0; i < examRooms.length; i++) {
-        var rm = examRooms[i];
-        var aIn = ax >= rm.gx && ax < rm.gx + 3 && ay >= rm.gy && ay < rm.gy + 3;
-        var bIn = bx >= rm.gx && bx < rm.gx + 3 && by >= rm.gy && by < rm.gy + 3;
-        if (aIn === bIn) continue;             // not crossing this room's perimeter
-        var d = rm.door;
-        var doorStep = d && ((aIn && bx === d.x && by === d.y) || (bIn && ax === d.x && ay === d.y));
-        if (!doorStep) return true;            // crossing a wall, not the door
+    // True if a step between adjacent tiles a->b crosses ANY walled room's wall
+    // (exam / X-ray / pharmacy / restroom) — i.e. a perimeter edge that isn't the
+    // door — so visitors and the vet can only enter/leave a room through its door.
+    function roomWallEdge(ax, ay, bx, by) {
+      // Crossing a room perimeter (inA != inB) is a wall unless it's the door step.
+      function crosses(door, inA, inB) {
+        if (inA === inB) return false;
+        var ds = door && ((inA && bx === door.x && by === door.y) ||
+                          (inB && ax === door.x && ay === door.y));
+        return !ds;
       }
+      var i, rm, fp, inA, inB;
+      for (i = 0; i < examRooms.length; i++) { rm = examRooms[i];
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + 3 && ay >= rm.gy && ay < rm.gy + 3,
+                             bx >= rm.gx && bx < rm.gx + 3 && by >= rm.gy && by < rm.gy + 3)) return true; }
+      for (i = 0; i < xrayRooms.length; i++) { rm = xrayRooms[i];
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + 3 && ay >= rm.gy && ay < rm.gy + 4,
+                             bx >= rm.gx && bx < rm.gx + 3 && by >= rm.gy && by < rm.gy + 4)) return true; }
+      for (i = 0; i < pharmacies.length; i++) { rm = pharmacies[i];
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + 4 && ay >= rm.gy && ay < rm.gy + 4,
+                             bx >= rm.gx && bx < rm.gx + 4 && by >= rm.gy && by < rm.gy + 4)) return true; }
+      for (i = 0; i < restrooms.length; i++) { rm = restrooms[i];
+        fp = footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot);
+        inA = fp.some(function (t) { return t.x === ax && t.y === ay; });
+        inB = fp.some(function (t) { return t.x === bx && t.y === by; });
+        if (crosses(rm.door, inA, inB)) return true; }
       return false;
     }
 
@@ -2932,7 +2946,7 @@
         if (c.x === tx && c.y === ty) break;
         for (var i = 0; i < 4; i++) {
           var nx = c.x + dirs[i][0], ny = c.y + dirs[i][1], kk = key(nx, ny);
-          if (kk in came || !pass(nx, ny) || examWallEdge(c.x, c.y, nx, ny)) continue;
+          if (kk in came || !pass(nx, ny) || roomWallEdge(c.x, c.y, nx, ny)) continue;
           came[kk] = { x: c.x, y: c.y }; q.push({ x: nx, y: ny });
         }
       }
