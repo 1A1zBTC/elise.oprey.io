@@ -617,7 +617,14 @@
         waiting: function (v) {
           return v.served && !v.examined && !v.examRoom &&
             (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
-        }
+        },
+        // in-room service (see toRoomGeneric/inRoomGeneric): operated by the
+        // player on the circle (full rate) or a roaming hired Vet (half rate).
+        inPhase: 'inExam', waitField: 'examWait', duration: 3, payout: 100,
+        operator: function (rm) { return vetAtExam(rm) || roomVetWorking(rm); },
+        fullRate: function (rm) { return vetAtExam(rm) ? 1 : 0.5; },
+        release: function (v) { releaseExam(v); },
+        onDone: function (v) { v.examined = true; releaseExam(v); examFollowUp(v); }
       },
       xray: {
         list: xrayRooms,
@@ -630,7 +637,13 @@
         waiting: function (v) {
           return v.needsXray && !v.xrayed && !v.xrayRoom &&
             (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
-        }
+        },
+        // X-ray takes 2x an exam (6x procTime) and pays 200; happy-leaves on done.
+        inPhase: 'inXray', waitField: 'xrayWait', duration: 6, payout: 200,
+        operator: function (rm) { return vetAtXray(rm) || roomVetWorking(rm); },
+        fullRate: function (rm) { return vetAtXray(rm) ? 1 : 0.5; },
+        release: function (v) { releaseXray(v); },
+        onDone: function (v) { v.xrayed = true; v.happy = true; releaseXray(v); leaveOutbound(v); }
       },
       pharmacy: {
         list: pharmacies,
@@ -3337,6 +3350,78 @@
         puddles.push({ x: lx, y: ly, clean: 0, kind: 'litter' });
     }
 
+    // ---- Generic occupant-room care (exam / X-ray) ----------------------
+    // Walk to the room's owner-side tile; on arrival, stand and face the
+    // table/bed and start the "waiting to be seen" timer. Drain patience en
+    // route; give up (releasing the room) if it runs out.
+    function toRoomGeneric(v, dt, type) {
+      var d = ROOM_TYPES[type], t = v.path[v.wp];
+      if (stepToward(v, t.x, t.y, dt, 0.06)) {
+        v.wp++;
+        if (v.wp >= v.path.length) {
+          v.x = t.x; v.y = t.y; v.moving = false; v.phase = d.inPhase;
+          v.patience = baseWait(); v[d.waitField] = baseWait();   // fresh "waiting to be seen" timer
+          var rm = v[d.vRoom], k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+          v.dir = chooseDir(k.table.x - v.x, k.table.y - v.y);    // face the table/bed
+        }
+      }
+      v.patience -= dt * drainMult(v);
+      if (v.patience <= 0) { d.release(v); leaveOutbound(v); }
+    }
+    // At the table/bed: the player on the circle (full rate) or a roaming hired
+    // Vet (half) works; the timer fills to duration×procTime, pays out, then the
+    // descriptor's onDone decides what happens next (exam → follow-up roll;
+    // X-ray → leave happy). With no operator, the wait timer drains and they go.
+    function inRoomGeneric(v, dt, type) {
+      var d = ROOM_TYPES[type];
+      v.moving = false;
+      var rm = v[d.vRoom];
+      v.processing = d.operator(rm);
+      if (v.processing) {
+        rm[d.timer] = (rm[d.timer] || 0) + dt * d.fullRate(rm);
+        if (rm[d.timer] >= d.duration * procTime()) {
+          money += d.payout; renderMoney();
+          floaters.push({ v: v, t: 0, amt: d.payout });
+          d.onDone(v);
+        }
+      } else {
+        if (v[d.waitField] == null) v[d.waitField] = baseWait();
+        v[d.waitField] -= dt * drainMult(v);
+        if (v[d.waitField] <= 0) { d.release(v); leaveOutbound(v); return; }
+      }
+    }
+    // "Loiter until a room frees up" (waitXray / waitMeds): drift along the path
+    // to a side spot, draining patience; leave if it expires.
+    function waitRoomGeneric(v, dt) {
+      if (v.path && v.wp < v.path.length) { var wt = v.path[v.wp]; if (stepToward(v, wt.x, wt.y, dt, 0.08)) v.wp++; }
+      else { v.moving = false; }
+      v.patience -= dt * drainMult(v);
+      if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
+    }
+    // After an exam the pet may need follow-up care, rolled regardless of whether
+    // that room exists yet — if none is free, the client waits and eventually
+    // leaves unhappy, pressuring you to build it. (Roll order is load-bearing for
+    // determinism — keep the 0.2 then 0.4 sequence.)
+    function examFollowUp(v) {
+      if (Math.random() < 0.2) {             // 20% need an X-ray
+        v.needsXray = true;
+        if (!claimXray(v)) {                 // no free X-ray room → go wait for one
+          var ss = sideSpot();
+          v.path = examRoute(v.x, v.y, ss.x, ss.y);
+          v.wp = 0; v.phase = 'waitXray'; v.patience = baseWait();
+        }
+      } else if (Math.random() < 0.4) {      // 40% of the rest need medicine
+        v.needsMeds = true;
+        if (!claimPharmacy(v)) {             // no free pharmacy counter → wait for one
+          var ps = sideSpot();
+          v.path = examRoute(v.x, v.y, ps.x, ps.y);
+          v.wp = 0; v.phase = 'waitMeds'; v.patience = baseWait();
+        }
+      } else {
+        v.happy = true; leaveOutbound(v);    // done → leaves happy
+      }
+    }
+
     function updateVisitor(v, dt) {
       maybeLitter(v, dt);                    // visitors randomly drop litter while waiting
       // After reception, the bladder ticks while the client waits; at zero they
@@ -3382,112 +3467,14 @@
         }
         return;
       }
-      if (v.phase === 'toExam') {          // walk to the exam room's owner-side tile
-        var et = v.path[v.wp];
-        if (stepToward(v, et.x, et.y, dt, 0.06)) {
-          v.wp++;
-          if (v.wp >= v.path.length) {
-            v.x = et.x; v.y = et.y; v.moving = false; v.phase = 'inExam';
-            v.patience = baseWait(); v.examWait = baseWait();  // fresh "waiting to be seen" timer
-            var ek = examKeyTiles(v.examRoom.gx, v.examRoom.gy, v.examRoom.rot);
-            v.dir = chooseDir(ek.table.x - v.x, ek.table.y - v.y);  // face the table
-          }
-        }
-        v.patience -= dt * drainMult(v);
-        if (v.patience <= 0) { releaseExam(v); leaveOutbound(v); }
-        return;
-      }
-      if (v.phase === 'inExam') {          // at the table; the vet examines from the circle
-        v.moving = false;
-        var rm = v.examRoom;
-        v.processing = vetAtExam(rm) || roomVetWorking(rm); // player on the circle OR a roaming hired Vet examines
-        if (v.processing) {
-          // the player works at full speed; a hired Vet is 50% as effective
-          rm.examT = (rm.examT || 0) + dt * (vetAtExam(rm) ? 1 : 0.5);
-          if (rm.examT >= 3 * procTime()) {
-            money += 100; renderMoney();
-            floaters.push({ v: v, t: 0, amt: 100 });
-            v.examined = true;
-            releaseExam(v);
-            // The pet may now need follow-up care. The need is rolled regardless of
-            // whether that room exists yet — if it doesn't (or all are busy), the
-            // client waits and eventually leaves unhappy, pressuring you to build it.
-            if (Math.random() < 0.2) {       // 20% need an X-ray
-              v.needsXray = true;
-              if (!claimXray(v)) {            // no free X-ray room → go wait for one
-                var ss = sideSpot();
-                v.path = examRoute(v.x, v.y, ss.x, ss.y);
-                v.wp = 0; v.phase = 'waitXray'; v.patience = baseWait();
-              }
-            } else if (Math.random() < 0.4) { // 40% of the rest need medicine
-              v.needsMeds = true;
-              if (!claimPharmacy(v)) {       // no free pharmacy counter → wait for one
-                var ps = sideSpot();
-                v.path = examRoute(v.x, v.y, ps.x, ps.y);
-                v.wp = 0; v.phase = 'waitMeds'; v.patience = baseWait();
-              }
-            } else {
-              v.happy = true; leaveOutbound(v);   // done → leaves happy
-            }
-          }
-        } else {                            // waiting to be seen — its own timer counts down
-          if (v.examWait == null) v.examWait = baseWait();
-          v.examWait -= dt * drainMult(v);
-          if (v.examWait <= 0) { releaseExam(v); leaveOutbound(v); return; }  // gives up, leaves
-        }
-        return;
-      }
-      if (v.phase === 'waitXray') {         // examined, needs an X-ray, waiting for a free room
-        if (v.path && v.wp < v.path.length) {
-          var wt = v.path[v.wp];
-          if (stepToward(v, wt.x, wt.y, dt, 0.08)) v.wp++;
-        } else { v.moving = false; }
-        v.patience -= dt * drainMult(v);
-        if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
-        return;
-      }
-      if (v.phase === 'toXray') {           // walk to the X-ray room's owner-side tile
-        var xt = v.path[v.wp];
-        if (stepToward(v, xt.x, xt.y, dt, 0.06)) {
-          v.wp++;
-          if (v.wp >= v.path.length) {
-            v.x = xt.x; v.y = xt.y; v.moving = false; v.phase = 'inXray';
-            v.patience = baseWait(); v.xrayWait = baseWait();
-            var xk = examKeyTiles(v.xrayRoom.gx, v.xrayRoom.gy, v.xrayRoom.rot);
-            v.dir = chooseDir(xk.table.x - v.x, xk.table.y - v.y);   // face the bed
-          }
-        }
-        v.patience -= dt * drainMult(v);
-        if (v.patience <= 0) { releaseXray(v); leaveOutbound(v); }
-        return;
-      }
-      if (v.phase === 'inXray') {           // on the bed; operator works from the circle
-        v.moving = false;
-        var xrm = v.xrayRoom;
-        v.processing = vetAtXray(xrm) || roomVetWorking(xrm);   // player on the circle OR a roaming hired Vet
-        if (v.processing) {
-          // X-ray takes 2× an exam (6×procTime); a hired Vet is 50% as effective
-          xrm.xrayT = (xrm.xrayT || 0) + dt * (vetAtXray(xrm) ? 1 : 0.5);
-          if (xrm.xrayT >= 6 * procTime()) {
-            money += 200; renderMoney();
-            floaters.push({ v: v, t: 0, amt: 200 });
-            v.xrayed = true; v.happy = true;
-            releaseXray(v); leaveOutbound(v);   // done → leaves happy
-          }
-        } else {                            // waiting for the operator
-          if (v.xrayWait == null) v.xrayWait = baseWait();
-          v.xrayWait -= dt * drainMult(v);
-          if (v.xrayWait <= 0) { releaseXray(v); leaveOutbound(v); return; }
-        }
-        return;
-      }
-      if (v.phase === 'waitMeds') {         // examined, needs meds, waiting for a free counter
-        if (v.path && v.wp < v.path.length) { var wmt = v.path[v.wp]; if (stepToward(v, wmt.x, wmt.y, dt, 0.08)) v.wp++; }
-        else { v.moving = false; }
-        v.patience -= dt * drainMult(v);
-        if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
-        return;
-      }
+      // Occupant-room care (exam + X-ray) runs through the generic walk / serve /
+      // wait handlers, parameterized by the room descriptor. The waitXray and
+      // waitMeds "loiter until a room frees up" states are identical.
+      if (v.phase === 'toExam') { toRoomGeneric(v, dt, 'exam'); return; }
+      if (v.phase === 'inExam') { inRoomGeneric(v, dt, 'exam'); return; }
+      if (v.phase === 'toXray') { toRoomGeneric(v, dt, 'xray'); return; }
+      if (v.phase === 'inXray') { inRoomGeneric(v, dt, 'xray'); return; }
+      if (v.phase === 'waitXray' || v.phase === 'waitMeds') { waitRoomGeneric(v, dt); return; }
       if (v.phase === 'toPharm') {          // walk to the counter's patient-side tile
         var pt = v.path[v.wp];
         if (stepToward(v, pt.x, pt.y, dt, 0.06)) {
