@@ -396,7 +396,7 @@
     function inWalledRoom(x, y) {
       if (examRooms.some(function (rm) { return x >= rm.gx && x < rm.gx + 3 && y >= rm.gy && y < rm.gy + 3; })) return true;
       if (xrayRooms.some(function (rm) { return x >= rm.gx && x < rm.gx + 3 && y >= rm.gy && y < rm.gy + 4; })) return true;
-      if (pharmacies.some(function (ph) { return x >= ph.gx && x < ph.gx + 4 && y >= ph.gy && y < ph.gy + 4; })) return true;
+      if (pharmacies.some(function (ph) { return x >= ph.gx && x < ph.gx + PHARM_W && y >= ph.gy && y < ph.gy + PHARM_H; })) return true;
       if (restrooms.some(function (rm) { return footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot).some(function (t) { return t.x === x && t.y === y; }); })) return true;
       return false;
     }
@@ -622,21 +622,28 @@
     }
 
     // ---- Pharmacy --------------------------------------------------------
-    // A 4x4 room with 3 counter sections; at each, a patient stands on the front
-    // tile and the player (or a hired Pharmacist) stands on the circle behind to
-    // fill the prescription. Built on grass touching a corridor, like other rooms.
-    var pharmacies = [];                   // [{gx,gy,rot,door,stations:[{patient,procT,pharm}x3]}]
-    function pharmTiles(gx, gy) {          // all 16 floor tiles (4x4)
+    // A 4-wide × 3-deep room with 2 counter sections; at each, a patient stands on
+    // the front tile and the player (or a hired Pharmacist) stands on the circle
+    // behind to fill the prescription. Fixed orientation (like the X-ray room).
+    // Built on grass touching a corridor, like other rooms.
+    var PHARM_W = 4, PHARM_H = 3;          // across × down
+    var pharmacies = [];                   // [{gx,gy,rot,door,stations:[{patient,procT,pharm}x2]}]
+    function pharmTiles(gx, gy) {          // all 12 floor tiles (4 wide × 3 deep)
       var t = [];
-      for (var j = 0; j < 4; j++) for (var i = 0; i < 4; i++) t.push({ x: gx + i, y: gy + j });
+      for (var j = 0; j < PHARM_H; j++) for (var i = 0; i < PHARM_W; i++) t.push({ x: gx + i, y: gy + j });
       return t;
     }
-    // 3 sections, each {counter, patient(front), circle(back)}, rotated in the 4x4.
-    function pharmStations(gx, gy, rot) {
-      rot = rot || 0;
-      var local = [{ c: [0, 1], p: [0, 2], r: [0, 0] }, { c: [1, 1], p: [1, 2], r: [1, 0] }, { c: [2, 1], p: [2, 2], r: [2, 0] }];
-      function rot4(lx, ly) { var x = lx, y = ly; for (var k = 0; k < rot; k++) { var nx = y, ny = 3 - x; x = nx; y = ny; } return { x: gx + x, y: gy + y }; }
-      return local.map(function (s) { return { counter: rot4(s.c[0], s.c[1]), patient: rot4(s.p[0], s.p[1]), circle: rot4(s.r[0], s.r[1]) }; });
+    // 2 sections, each {counter, patient(front), circle(back)}, centred in the
+    // 4-wide room (columns 1 & 2). Columns 0 & 3 stay open as walking lanes so
+    // clients and the player don't jam.
+    function pharmStations(gx, gy) {
+      return [1, 2].map(function (cx) {
+        return {
+          counter: { x: gx + cx, y: gy + 1 },
+          patient: { x: gx + cx, y: gy + 2 },   // front tile (toward viewer)
+          circle:  { x: gx + cx, y: gy + 0 }    // staff tile (back)
+        };
+      });
     }
     function pharmDoor(gx, gy) {
       var tiles = pharmTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -656,12 +663,12 @@
       var door = pharmDoor(gx, gy), st = pharmStations(gx, gy, rot);
       pharmTiles(gx, gy).forEach(function (t) { corridor[t.x + ',' + t.y] = true; });
       st.forEach(function (s) { occupied[s.counter.x + ',' + s.counter.y] = true; });
-      pharmacies.push({ gx: gx, gy: gy, rot: rot, door: door, stations: [{ patient: null, procT: 0, pharm: false }, { patient: null, procT: 0, pharm: false }, { patient: null, procT: 0, pharm: false }] });
+      pharmacies.push({ gx: gx, gy: gy, rot: rot, door: door, stations: [{ patient: null, procT: 0, pharm: false }, { patient: null, procT: 0, pharm: false }] });
       renderStatic();
     }
     function freePharmStation() {
       for (var i = 0; i < pharmacies.length; i++)
-        for (var j = 0; j < 3; j++)
+        for (var j = 0; j < pharmacies[i].stations.length; j++)
           if (!pharmacies[i].stations[j].patient) return { ph: pharmacies[i], idx: j };
       return null;
     }
@@ -681,7 +688,7 @@
       { id: 'restroom', name: 'Restroom', cost: 120, w: 2, h: 3, icon: '🚻', cat: 'rooms', kind: 'restroom', draw: drawRestroom },
       { id: 'exam', name: 'Exam Room', cost: 300, w: 3, h: 3, icon: '🩺', cat: 'rooms', kind: 'exam' },
       { id: 'xray', name: 'X-Ray Room', cost: 600, w: 3, h: 4, icon: '🩻', cat: 'rooms', kind: 'xray' },
-      { id: 'pharmacy', name: 'Pharmacy', cost: 400, w: 4, h: 4, icon: '💊', cat: 'rooms', kind: 'pharmacy' },
+      { id: 'pharmacy', name: 'Pharmacy', cost: 400, w: 4, h: 3, icon: '💊', cat: 'rooms', kind: 'pharmacy' },
       { id: 'pharmacist', name: 'Pharmacist', cost: 600, w: 1, h: 1, icon: '🧑‍🔬', cat: 'staff', kind: 'pharmstaff' },
       { id: 'cleaner', name: 'Cleaner', cost: 400, w: 1, h: 1, icon: '🧹', cat: 'staff', kind: 'cleaner' }
     ].sort(function (a, b) { return a.cost - b.cost; });
@@ -1222,10 +1229,10 @@
           if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) { if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 }); else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3'); }
         });
       });
-      // pharmacies: wall corridor-facing sides, single doorway (4×4)
+      // pharmacies: wall corridor-facing sides, single doorway (4 wide × 3 deep)
       pharmacies.forEach(function (ph) {
         var door = ph.door;
-        function mine(x, y) { return x >= ph.gx && x < ph.gx + 4 && y >= ph.gy && y < ph.gy + 4; }
+        function mine(x, y) { return x >= ph.gx && x < ph.gx + PHARM_W && y >= ph.gy && y < ph.gy + PHARM_H; }
         function isDoor(x, y) { return door && door.x === x && door.y === y; }
         pharmTiles(ph.gx, ph.gy).forEach(function (t) {
           var x = t.x, y = t.y;
@@ -2330,7 +2337,7 @@
       }
     }
 
-    // Ghost for the 4x4 pharmacy: footprint tint + previews of the 3 counters/circles.
+    // Ghost for the 4×3 pharmacy: footprint tint + previews of the 2 counters/circles.
     function drawPharmGhost(rot) {
       var ok = canPlacePharmacy(pointer.gx, pointer.gy), st = pharmStations(pointer.gx, pointer.gy, rot);
       ctx.save();
@@ -2346,13 +2353,47 @@
     }
 
     // A cleaner: the generic worker figure holding a mop.
+    // A janitor: grey-blue coveralls, a red ball cap, and a mop — distinct from
+    // the receptionist (purple top + headset). Drawn facing the camera.
     function drawCleaner(c, gx, gy) {
-      drawReceptionist(c, gx, gy);
       var s = iso(gx, gy);
+      c.fillStyle = 'rgba(20,40,30,0.26)';
+      c.beginPath(); c.ellipse(s.x, s.y, 13, 6, 0, 0, Math.PI * 2); c.fill();
+      c.save(); c.translate(s.x, s.y);
+      // legs (work trousers) + boots
+      c.fillStyle = '#3c4654'; c.fillRect(-6, -14, 5, 14); c.fillRect(1, -14, 5, 14);
+      c.fillStyle = '#22252b'; c.fillRect(-7, -3, 6, 4); c.fillRect(1, -3, 6, 4);
+      // coveralls torso (grey-blue) with zip, collar + chest patch
+      var bt = -40;
+      var g = c.createLinearGradient(0, bt, 0, -12);
+      g.addColorStop(0, '#6c8197'); g.addColorStop(1, '#4f6275');
+      c.fillStyle = g; roundRect(c, -11, bt, 22, 28, 7); c.fill();
+      c.fillStyle = '#445667'; roundRect(c, -14, bt + 2, 5, 13, 2.5); c.fill(); roundRect(c, 9, bt + 2, 5, 13, 2.5); c.fill(); // sleeves
+      c.strokeStyle = '#36444f'; c.lineWidth = 1.4;                                   // zip
+      c.beginPath(); c.moveTo(0, bt + 2); c.lineTo(0, bt + 22); c.stroke();
+      c.fillStyle = '#36444f'; c.beginPath(); c.moveTo(-4, bt); c.lineTo(0, bt + 6); c.lineTo(4, bt); c.closePath(); c.fill(); // collar
+      c.fillStyle = '#e0a93c'; c.fillRect(3, bt + 7, 6, 4);                            // hi-vis chest patch
+      c.fillStyle = '#f0c8a4'; c.fillRect(-14, bt + 14, 5, 4); c.fillRect(9, bt + 14, 5, 4); // hands
+      c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                            // neck
+      var hy = bt - 13;
+      c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill(); // head
+      c.fillStyle = '#7a5a3a'; c.fillRect(-8.5, hy + 1, 17, 4);                         // a bit of hair under the cap
+      // red ball cap (crown + brim)
+      c.fillStyle = '#c0392b';
+      c.beginPath(); c.arc(0, hy - 1, 9, Math.PI, Math.PI * 2, false); c.closePath(); c.fill();
+      c.fillRect(-9, hy - 2, 18, 3);
+      c.fillStyle = '#9e2f24'; roundRect(c, -8.5, hy - 2.5, 17, 2.6, 1.3); c.fill();    // brim
+      // face (eyes + smile) below the brim
+      c.fillStyle = '#2b2b33';
+      c.beginPath(); c.arc(-3, hy + 1.5, 1.3, 0, Math.PI * 2); c.arc(3, hy + 1.5, 1.3, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#9a5f44'; c.lineWidth = 1.2;
+      c.beginPath(); c.arc(0, hy + 4, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      // mop in hand
       c.strokeStyle = '#9a6a3a'; c.lineWidth = 2.5; c.lineCap = 'round';
-      c.beginPath(); c.moveTo(s.x + 11, s.y - 30); c.lineTo(s.x + 15, s.y - 2); c.stroke();
-      c.fillStyle = '#cfd6dd'; c.beginPath(); c.ellipse(s.x + 15, s.y - 1, 5, 3, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.moveTo(11, -30); c.lineTo(15, -2); c.stroke();
+      c.fillStyle = '#cfd6dd'; c.beginPath(); c.ellipse(15, -1, 5, 3, 0, 0, Math.PI * 2); c.fill();
       c.lineCap = 'butt';
+      c.restore();
     }
     // Ghost for placing a cleaner: a figure at the cursor, valid on clear room floor.
     function drawCleanerGhost() {
@@ -2920,8 +2961,8 @@
         if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + 3 && ay >= rm.gy && ay < rm.gy + 4,
                              bx >= rm.gx && bx < rm.gx + 3 && by >= rm.gy && by < rm.gy + 4)) return true; }
       for (i = 0; i < pharmacies.length; i++) { rm = pharmacies[i];
-        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + 4 && ay >= rm.gy && ay < rm.gy + 4,
-                             bx >= rm.gx && bx < rm.gx + 4 && by >= rm.gy && by < rm.gy + 4)) return true; }
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + PHARM_W && ay >= rm.gy && ay < rm.gy + PHARM_H,
+                             bx >= rm.gx && bx < rm.gx + PHARM_W && by >= rm.gy && by < rm.gy + PHARM_H)) return true; }
       for (i = 0; i < restrooms.length; i++) { rm = restrooms[i];
         fp = footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot);
         inA = fp.some(function (t) { return t.x === ax && t.y === ay; });
