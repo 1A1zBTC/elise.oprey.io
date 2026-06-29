@@ -251,7 +251,9 @@
     </div>
   </div>
 
-  <script type="module" src="js/main.js"></script>
+  <!-- Classic (non-module) script so the game runs when opened via file://;
+       browsers block ES-module loading over the file:// protocol. -->
+  <script src="js/main.js" defer></script>
 
   <script>
     // On desktop the homepage loads this game in a pane. Hide the "‹ Games" back link

@@ -1,10 +1,48 @@
+(function () {
     'use strict';
 
-    import {
-      TILE_W, TILE_H, TILE_HW, TILE_HH, WALL_H, FRONT_WALL_H, ROOM,
-      DOOR_A, DOOR_B, DOOR_MID, DOOR_H, BASE_SPEED, FRONT
-    } from './constants.js';
-    import { isoRaw, hash, diamondPath, shade, chooseDir } from './util.js';
+    // NOTE: loaded as a CLASSIC script (not type=module) so the game still works
+    // when opened directly from disk via file:// — browsers block ES-module
+    // loading over file://. Constants + pure helpers are inlined here rather than
+    // imported for the same reason.
+
+    // ---- Isometric world + layout constants ------------------------------
+    var TILE_W = 64, TILE_H = 32;          // 2:1 isometric tile footprint
+    var TILE_HW = TILE_W / 2, TILE_HH = TILE_H / 2;
+    var WALL_H = 62;                       // tall back walls
+    var FRONT_WALL_H = 30;                 // short front walls (see over them)
+    var ROOM = 8;                          // floor grid is ROOM x ROOM
+    var DOOR_A = 2.5, DOOR_B = 4.5, DOOR_MID = 3.5;   // sliding entry doors (tiles 3-4)
+    var DOOR_H = WALL_H;                    // doors rise to full ceiling height
+    var BASE_SPEED = 3.3;                   // player's base movement (Speed skill adds to it)
+    var FRONT = [{ x: 0, y: 1 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: -1, y: 0 }];  // customer-facing dir per rotation
+
+    // ---- Pure helpers ----------------------------------------------------
+    function isoRaw(gx, gy) { return { x: (gx - gy) * TILE_HW, y: (gx + gy) * TILE_HH }; }
+    function hash(x, y) {                   // deterministic 0..1 (stable texture on resize)
+      var n = (x | 0) * 374761393 + (y | 0) * 668265263;
+      n = (n ^ (n >> 13)) * 1274126177;
+      return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+    }
+    function diamondPath(c, cx, cy) {       // trace one tile's diamond at screen (cx,cy)
+      c.beginPath();
+      c.moveTo(cx, cy - TILE_HH);
+      c.lineTo(cx + TILE_HW, cy);
+      c.lineTo(cx, cy + TILE_HH);
+      c.lineTo(cx - TILE_HW, cy);
+      c.closePath();
+    }
+    function shade(hex, f) {                 // multiply #rrggbb by f -> 'rgb(...)'
+      var n = parseInt(hex.slice(1), 16);
+      var r = Math.min(255, ((n >> 16) & 255) * f) | 0;
+      var g = Math.min(255, ((n >> 8) & 255) * f) | 0;
+      var b = Math.min(255, (n & 255) * f) | 0;
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+    function chooseDir(mx, my) {             // movement vector -> isometric facing
+      if (Math.abs(mx) > Math.abs(my)) return mx > 0 ? 'SE' : 'NW';
+      return my > 0 ? 'SW' : 'NE';
+    }
 
     var canvas = document.getElementById('game');
     var ctx = canvas.getContext('2d');
@@ -3986,3 +4024,4 @@
       overlapInfo: function () { var occ = {}, hits = []; visitors.forEach(function (v) { if (v.moving) return; var k = Math.round(v.x) + ',' + Math.round(v.y); if (occ[k]) hits.push({ tile: k, a: occ[k], b: v.phase }); else occ[k] = v.phase; }); return hits; },
       qat: function (x, y) { return visitors.filter(function (v) { return Math.round(v.x) === x && Math.round(v.y) === y; }).map(function (v) { return { ph: v.phase, line: v.line, idx: (v.line != null && queue[v.line]) ? queue[v.line].indexOf(v) : '-', slot: v.phase === 'queuing' ? slotPos(v) : null, mv: !!v.moving }; }); }
     };
+  })();
