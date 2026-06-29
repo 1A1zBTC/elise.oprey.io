@@ -4274,6 +4274,9 @@
       restroomList: function () { return restrooms.map(function (r) { return { gx: r.gx, gy: r.gy, toilet: r.toilet, stand: r.stand, door: r.door, occ: !!r.occupant }; }); },
       emojis: function () { return visitors.map(function (v) { return { phase: v.phase, served: !!v.served, examined: !!v.examined, happy: !!v.happy, emoji: visitorEmoji(v) }; }); },
       hireReceptionist: function (line) { staff.push({ type: 'receptionist', line: line || 0 }); return staff.length; },
+      hireVet: function () { vets.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0 }); return vets.length; },
+      hirePharmacists: function () { pharmacies.forEach(function (ph) { ph.stations.forEach(function (s) { s.pharm = true; }); }); return pharmacies.length; },
+      hireCleaner: function () { cleaners.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, speed: 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0 }); return cleaners.length; },
       overlaps: function () { var occ = {}, n = 0; visitors.forEach(function (v) { if (v.moving) return; var k = Math.round(v.x) + ',' + Math.round(v.y); if (occ[k]) n++; occ[k] = 1; }); return n; },
       overlapInfo: function () { var occ = {}, hits = []; visitors.forEach(function (v) { if (v.moving) return; var k = Math.round(v.x) + ',' + Math.round(v.y); if (occ[k]) hits.push({ tile: k, a: occ[k], b: v.phase }); else occ[k] = v.phase; }); return hits; },
       qat: function (x, y) { return visitors.filter(function (v) { return Math.round(v.x) === x && Math.round(v.y) === y; }).map(function (v) { return { ph: v.phase, line: v.line, idx: (v.line != null && queue[v.line]) ? queue[v.line].indexOf(v) : '-', slot: v.phase === 'queuing' ? slotPos(v) : null, mv: !!v.moving }; }); }
