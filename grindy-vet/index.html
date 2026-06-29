@@ -211,6 +211,11 @@
 
     // Automatic doors: open (0..1) eases toward 1 when the vet OR a visitor is near.
     var door = { open: 0 };
+    // Corridor↔room doorways get the same auto sliding doors as the entry. Each
+    // drawDoorOpening() registers its opening in `doorways` (rebuilt by
+    // renderStatic); the run loop eases a per-doorway value in `doorOpen`.
+    var doorways = [];                     // [{ax,ay,bx,by,H}] one per corridor doorway
+    var doorOpen = {};                     // edge-key -> 0..1 eased open amount
     var animT = 0;                         // running time, drives idle/anger wobble
 
     // ---- Visitors --------------------------------------------------------
@@ -222,6 +227,7 @@
     var spawnTimer = 0;                    // first visitor arrives immediately, then every `frq` seconds
     var visitors = [];
     var visitorSeq = 0;
+    var examTicketSeq = 0;                  // monotonic check-in number → exam order
     // Visitors queue in two lines in front of the reception desk (one per desk
     // tile). queue[0] / queue[1] are ordered arrays of visitors; index 0 = front.
     var queue = [[], []];
@@ -262,7 +268,7 @@
     var CARRIER = ['#e0683c', '#3d8fd0', '#7d5bbe', '#3bb1a2', '#e0a93c', '#d94f6e'];
 
     // ---- Economy + build / placement -------------------------------------
-    var money = 150;                       // player's cash
+    var money = 1000;                      // player's cash
     var placed = [];                       // [{id, gx, gy}] furniture in the room
     var occupied = {};                     // "gx,gy" -> true (a placed footprint tile)
     var staff = [];                        // [{type:'receptionist', line}] hired staff at desk circles
@@ -280,6 +286,17 @@
     function isClinic(x, y) { return x >= 0 && y >= 0 && x < ROOM && y < ROOM; }
     function isCorridor(x, y) { return !!corridor[x + ',' + y]; }
     function isRoomFloor(x, y) { return isClinic(x, y) || isCorridor(x, y); }
+    // The tile directly across a 2-wide corridor (its other lane), or null. A
+    // corridor tile has one corridor neighbour along its narrow axis and grass on
+    // the opposite side — that neighbour is the "across" lane. Used to keep one
+    // lane clear: seating can't go on both sides of the corridor at the same spot.
+    function corridorAcross(x, y) {
+      if (isCorridor(x, y - 1) !== isCorridor(x, y + 1))
+        return isCorridor(x, y - 1) ? { x: x, y: y - 1 } : { x: x, y: y + 1 };
+      if (isCorridor(x - 1, y) !== isCorridor(x + 1, y))
+        return isCorridor(x - 1, y) ? { x: x - 1, y: y } : { x: x + 1, y: y };
+      return null;
+    }
     // The non-grass surfaces out front (entrance path + sidewalk/road band).
     function onPath(x, y) { return (x === 3 || x === 4) && y >= ROOM && y <= ROOM + 4; }
     function onRoadZone(x, y) { return y >= ROOM + 5 && y <= ROOM + 10; }
@@ -354,17 +371,98 @@
       for (var i = 0; i < restrooms.length; i++) if (!restrooms[i].occupant) return restrooms[i];
       return null;
     }
+    // Interior layout of a restroom: the doorway tile it opens onto, the room tile
+    // just inside it (entry), the toilet (deepest tile from the entry) and the
+    // stand tile in front of the toilet the user faces while using it.
+    function restroomLayout(gx, gy, rot) {
+      var fp = footprintTiles(FURN_BY_ID.restroom, gx, gy, rot);
+      var door = restroomDoor(gx, gy, rot), entry = fp[0];
+      if (door) for (var i = 0; i < fp.length; i++)
+        if (Math.abs(fp[i].x - door.x) + Math.abs(fp[i].y - door.y) === 1) { entry = fp[i]; break; }
+      var toilet = fp[0], best = -1;
+      fp.forEach(function (t) { var d = Math.abs(t.x - entry.x) + Math.abs(t.y - entry.y); if (d > best) { best = d; toilet = t; } });
+      var stand = entry, sbest = 1e9;
+      fp.forEach(function (t) {
+        if (Math.abs(t.x - toilet.x) + Math.abs(t.y - toilet.y) !== 1) return;  // adjacent to toilet
+        var d = Math.abs(t.x - entry.x) + Math.abs(t.y - entry.y);
+        if (d < sbest) { sbest = d; stand = t; }
+      });
+      return { door: door, entry: entry, toilet: toilet, stand: stand,
+               face: { x: Math.sign(stand.x - toilet.x), y: Math.sign(stand.y - toilet.y) } };
+    }
+    // Build the restroom as a walled room: its footprint joins the corridor floor
+    // (so renderStatic walls it in and opens a doorway onto the connecting corridor)
+    // and the toilet tile becomes a solid fixture. Mirrors placeExam.
+    function placeRestroom(gx, gy, rot) {
+      rot = rot || 0;
+      var L = restroomLayout(gx, gy, rot);
+      footprintTiles(FURN_BY_ID.restroom, gx, gy, rot).forEach(function (t) { corridor[t.x + ',' + t.y] = true; });
+      occupied[L.toilet.x + ',' + L.toilet.y] = true;
+      restrooms.push({ gx: gx, gy: gy, rot: rot, door: L.door, entry: L.entry, toilet: L.toilet, stand: L.stand, face: L.face, occupant: null });
+      renderStatic();                        // floor + walls around the new room
+    }
+
+    // ---- Exam rooms ------------------------------------------------------
+    // A 3×3 room (corridor-class floor so the vet can walk in) holding a desk and
+    // an exam table. The pet's owner stands one side of the table; the vet stands
+    // on the circle the other side to examine. Built on grass touching a corridor.
+    var examRooms = [];                    // [{gx,gy,rot,occupant,examT,door}]
+
+    // Key tiles relative to the room, by rotation (centre is the exam table).
+    function examKeyTiles(gx, gy, rot) {
+      var C = { x: gx + 1, y: gy + 1 }, f = FRONT[rot || 0];
+      var perp = { x: -f.y, y: f.x };
+      return {
+        table:   { x: C.x, y: C.y },
+        circle:  { x: C.x - f.x, y: C.y - f.y },            // vet's side (behind table)
+        visitor: { x: C.x + f.x, y: C.y + f.y },            // owner's side (in front)
+        desk:    { x: C.x - f.x + perp.x, y: C.y - f.y + perp.y }
+      };
+    }
+    function examTiles(gx, gy) {           // all 9 floor tiles
+      var t = [];
+      for (var j = 0; j < 3; j++) for (var i = 0; i < 3; i++) t.push({ x: gx + i, y: gy + j });
+      return t;
+    }
+    function examDoor(gx, gy) {            // a corridor tile the room touches
+      var tiles = examTiles(gx, gy), n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (var i = 0; i < tiles.length; i++)
+        for (var j = 0; j < n.length; j++)
+          if (isCorridor(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return { x: tiles[i].x + n[j][0], y: tiles[i].y + n[j][1] };
+      return null;
+    }
+    function canPlaceExam(gx, gy) {
+      var tiles = examTiles(gx, gy);
+      for (var i = 0; i < tiles.length; i++) if (!isGrassBuildable(tiles[i].x, tiles[i].y)) return false;
+      return !!examDoor(gx, gy);           // must connect to a corridor
+    }
+    function placeExam(gx, gy, rot) {
+      rot = rot || 0;
+      var k = examKeyTiles(gx, gy, rot), door = examDoor(gx, gy);  // door before tiles join corridor
+      examTiles(gx, gy).forEach(function (t) { corridor[t.x + ',' + t.y] = true; }); // walkable room floor
+      occupied[k.table.x + ',' + k.table.y] = true;        // table + desk block movement
+      occupied[k.desk.x + ',' + k.desk.y] = true;
+      examRooms.push({ gx: gx, gy: gy, rot: rot, occupant: null, examT: 0, door: door });
+      renderStatic();                      // floor + walls around the new room
+    }
+    function freeExamRoom() {
+      for (var i = 0; i < examRooms.length; i++) if (!examRooms[i].occupant) return examRooms[i];
+      return null;
+    }
 
     // Catalog: the single source for the shop rows AND placement. `cat` picks the
     // shop tab; `kind:'staff'` items snap to a desk action-circle instead of a tile.
     // (drawChair/drawDesk are function declarations, hoisted, so usable here.)
     var FURNITURE = [
-      { id: 'chair', name: 'Chair',          cost: 20,  w: 1, h: 1, icon: '🪑', cat: 'reception', draw: drawChair, interact: chairInteractTiles },
-      { id: 'desk',  name: 'Reception Desk', cost: 100, w: 2, h: 1, icon: '🛎️', cat: 'reception', draw: drawDesk, interact: deskInteractTiles },
+      { id: 'chair', name: 'Chair',          cost: 20,  w: 1, h: 1, icon: '🪑', cat: 'reception', corridorOK: true, draw: drawChair, interact: chairInteractTiles },
+      { id: 'bench', name: 'Bench',          cost: 35,  w: 2, h: 1, icon: '<svg width="34" height="34" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect x="10.5" y="11" width="3.5" height="15" rx="1" fill="#8c6638"/><rect x="34" y="11" width="3.5" height="15" rx="1" fill="#8c6638"/><rect x="9" y="11.5" width="30" height="4" rx="2" fill="#c79a63"/><rect x="9" y="18" width="30" height="4" rx="2" fill="#c79a63"/><rect x="6.5" y="24.5" width="35" height="6" rx="2.5" fill="#cda06a"/><rect x="10" y="30" width="4" height="11" rx="1.5" fill="#8c6638"/><rect x="34" y="30" width="4" height="11" rx="1.5" fill="#8c6638"/></svg>', cat: 'reception', corridorOK: true, draw: drawBench, interact: benchInteractTiles },
+      { id: 'desk',  name: 'Reception Desk', cost: 100, w: 2, h: 1, icon: '🖥️', cat: 'reception', draw: drawDesk, interact: deskInteractTiles },
       { id: 'tv',    name: 'TV',             cost: 150, w: 1, h: 1, icon: '📺', cat: 'reception', draw: drawTV },
       { id: 'receptionist', name: 'Receptionist', cost: 500, w: 1, h: 1, icon: '🧑‍💼', cat: 'staff', kind: 'staff' },
+      { id: 'vet', name: 'Vet', cost: 800, w: 1, h: 1, icon: '🧑‍⚕️', cat: 'staff', kind: 'examstaff' },
       { id: 'corridor', name: 'Corridor', cost: 10, icon: '🚪', cat: 'rooms', kind: 'corridor', perSquare: true },
-      { id: 'restroom', name: 'Restroom', cost: 120, w: 2, h: 3, icon: '🚻', cat: 'rooms', kind: 'restroom', draw: drawRestroom }
+      { id: 'restroom', name: 'Restroom', cost: 120, w: 2, h: 3, icon: '🚻', cat: 'rooms', kind: 'restroom', draw: drawRestroom },
+      { id: 'exam', name: 'Exam Room', cost: 300, w: 3, h: 3, icon: '🩺', cat: 'rooms', kind: 'exam' }
     ].sort(function (a, b) { return a.cost - b.cost; });
     var FURN_BY_ID = {};
     FURNITURE.forEach(function (f) { FURN_BY_ID[f.id] = f; });
@@ -694,7 +792,7 @@
     }
     // A doorway opening on a wall edge a→b at height H: two jambs + a lintel,
     // leaving the middle clear so the connected floor shows through.
-    function drawDoorOpening(c, ax, ay, bx, by, H) {
+    function drawDoorOpening(c, ax, ay, bx, by, H, reg) {
       var frame = '#d6dfe4', jw = 0.18;
       var lx = ax + (bx - ax) * jw, ly = ay + (by - ay) * jw;       // inner edge of left jamb
       var rx = ax + (bx - ax) * (1 - jw), ry = ay + (by - ay) * (1 - jw); // inner edge of right jamb
@@ -702,24 +800,127 @@
       edgeQuad(c, rx, ry, bx, by, H, 0, frame);                    // right jamb
       edgeQuad(c, ax, ay, bx, by, H, H - 9, frame);                // lintel
       edgeQuad(c, ax, ay, bx, by, H - 9, H - 11, '#37b3a3');       // teal accent stripe
+      doorways.push({ ax: ax, ay: ay, bx: bx, by: by, H: H,        // register for animated doors
+                      style: (reg && reg.style) || 'slide', inx: (reg && reg.inx) || 0, iny: (reg && reg.iny) || 0 });
     }
-    // Walls around every bought corridor square: an edge gets a wall wherever it
-    // borders something that is NOT room floor. Back-facing edges (toward −gx/−gy)
-    // are tall and cached behind the actors (bgx); front-facing edges (+gx/+gy)
-    // are short and cached in front (fgx) — matching the clinic's own walls.
-    function corridorWalls() {
+    // A wall shared with a corridor gets ONE doorway, not an opening at every tile:
+    // true only at the first tile of each contiguous run of corridor-adjacent edge
+    // tiles (corr(i) = does edge index i abut a corridor?). The rest stay solid.
+    function firstOfRun(corr, i) { return corr(i) && !corr(i - 1); }
+    // One frosted-glass door leaf between iso points a→b, rising to H. `handleAtB`
+    // puts the vertical handle on the b end (the leaf's meeting edge).
+    function genPanel(c, a, b, H, handleAtB) {
+      var g = c.createLinearGradient(0, a.y - H, 0, a.y);
+      g.addColorStop(0, 'rgba(210,236,244,0.94)');
+      g.addColorStop(1, 'rgba(168,208,224,0.94)');
+      c.beginPath();
+      c.moveTo(a.x, a.y - H); c.lineTo(b.x, b.y - H);
+      c.lineTo(b.x, b.y); c.lineTo(a.x, a.y); c.closePath();
+      c.fillStyle = g; c.fill();
+      c.strokeStyle = '#9fb6c2'; c.lineWidth = 2; c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(a.x + (b.x - a.x) * 0.32, a.y - H * 0.82);
+      c.lineTo(a.x + (b.x - a.x) * 0.5, a.y - H * 0.2);
+      c.stroke();
+      var hx = handleAtB ? b.x - 4 : a.x + 4, hy = handleAtB ? b.y : a.y;
+      c.strokeStyle = '#566873'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(hx, hy - H * 0.62); c.lineTo(hx, hy - H * 0.34); c.stroke();
+    }
+    // Automatic double sliding doors filling a 1-tile doorway `d` ({ax,ay,bx,by,H}).
+    // `open` 0 (shut, leaves meet in the middle) … 1 (slid apart into the jambs).
+    // Clipped to the opening so the leaves vanish into the wall, like the entry.
+    function drawDoorwayPanels(c, d, open) {
+      var H = d.H - 10;
+      function P(t) { return iso(d.ax + (d.bx - d.ax) * t, d.ay + (d.by - d.ay) * t); }
+      var a = P(0), b = P(1);
+      c.save();
+      c.beginPath();
+      c.moveTo(a.x, a.y - H); c.lineTo(b.x, b.y - H);
+      c.lineTo(b.x, b.y); c.lineTo(a.x, a.y); c.closePath();
+      c.clip();
+      genPanel(c, P(-0.5 * open), P(0.5 - 0.5 * open), H, true);     // left leaf
+      genPanel(c, P(0.5 + 0.5 * open), P(1 + 0.5 * open), H, false); // right leaf
+      c.restore();
+    }
+    // A regular hinged wooden door filling a 1-tile doorway `d`. Hinged at its a→b
+    // start and swinging into the room (d.inx,d.iny) as `open` goes 0 (shut) … 1.
+    function drawBrownDoor(c, d, open) {
+      var Hd = d.H - 10;
+      var th = open * Math.PI * 0.5 * 0.82;                  // swing up to ~74°
+      var ex = d.bx - d.ax, ey = d.by - d.ay;                // closed-leaf direction (1 tile)
+      var A = iso(d.ax, d.ay);
+      var F = iso(d.ax + Math.cos(th) * ex + Math.sin(th) * (d.inx || 0),
+                  d.ay + Math.cos(th) * ey + Math.sin(th) * (d.iny || 0));
+      var g = c.createLinearGradient(0, A.y - Hd, 0, A.y);
+      g.addColorStop(0, '#b07c45'); g.addColorStop(1, '#875528');
+      c.beginPath();
+      c.moveTo(A.x, A.y - Hd); c.lineTo(F.x, F.y - Hd);
+      c.lineTo(F.x, F.y); c.lineTo(A.x, A.y); c.closePath();
+      c.fillStyle = g; c.fill();
+      c.strokeStyle = '#6f4621'; c.lineWidth = 1.5; c.stroke();
+      c.strokeStyle = 'rgba(80,50,22,0.5)'; c.lineWidth = 1;   // two recessed-panel division lines
+      [0.36, 0.64].forEach(function (hf) {
+        c.beginPath(); c.moveTo(A.x, A.y - Hd * hf); c.lineTo(F.x, F.y - Hd * hf); c.stroke();
+      });
+      var hx = A.x + (F.x - A.x) * 0.82, hy = (A.y + (F.y - A.y) * 0.82) - Hd * 0.5; // brass handle
+      c.fillStyle = '#e8d28a'; c.beginPath(); c.arc(hx, hy, 1.8, 0, Math.PI * 2); c.fill();
+    }
+    // Walls for every corridor square and exam room, baked in ONE pass so they
+    // layer correctly across structures. Within each layer (tall→bgx behind the
+    // actors, short→fgx in front) segments are sorted back-to-front by gx+gy, so a
+    // nearer wall always paints over a farther one — fixing the z-fighting you get
+    // when a room's wall was drawn on top of a corridor wall standing in front of
+    // it. Corridor edges wall off anything that isn't room floor; exam rooms wall
+    // off the corridor side too, leaving a single doorway at rm.door.
+    function bakeRoomWalls() {
+      var tall = [], shortw = [];     // {d, fn}; d = segment midpoint depth (gx+gy sum)
+      function W(isTall, ax, ay, bx, by, H, c1, c2, c3, c4) {
+        (isTall ? tall : shortw).push({ d: ax + ay + bx + by,
+          fn: function (cx) { wallFace(cx, ax, ay, bx, by, H, c1, c2, c3, c4); } });
+      }
+      function D(isTall, ax, ay, bx, by, H, opts) {
+        (isTall ? tall : shortw).push({ d: ax + ay + bx + by,
+          fn: function (cx) { drawDoorOpening(cx, ax, ay, bx, by, H, opts); } });
+      }
+      // corridor squares: wall every edge that borders non-room-floor
       for (var key in corridor) {
         if (!corridor.hasOwnProperty(key)) continue;
         var p = key.split(','), x = +p[0], y = +p[1];
-        if (!isRoomFloor(x - 1, y)) // back-left, tall
-          wallFace(bgx, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
-        if (!isRoomFloor(x, y - 1)) // back-right, tall
-          wallFace(bgx, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
-        if (!isRoomFloor(x + 1, y)) // front-right, short
-          wallFace(fgx, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
-        if (!isRoomFloor(x, y + 1)) // front-left, short
-          wallFace(fgx, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
+        if (!isRoomFloor(x - 1, y)) W(true,  x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+        if (!isRoomFloor(x, y - 1)) W(true,  x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+        if (!isRoomFloor(x + 1, y)) W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
+        if (!isRoomFloor(x, y + 1)) W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
       }
+      // exam rooms: wall the corridor-facing sides, leaving a single doorway
+      examRooms.forEach(function (rm) {
+        var gx = rm.gx, gy = rm.gy, door = rm.door;
+        function mine(x, y) { return x >= gx && x < gx + 3 && y >= gy && y < gy + 3; }
+        function isDoor(x, y) { return door && door.x === x && door.y === y; }
+        examTiles(gx, gy).forEach(function (t) {
+          var x = t.x, y = t.y;
+          if (!mine(x - 1, y) && isRoomFloor(x - 1, y)) {
+            if (isDoor(x - 1, y)) D(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, { style: 'brown', inx: 1, iny: 0 });
+            else W(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+          }
+          if (!mine(x, y - 1) && isRoomFloor(x, y - 1)) {
+            if (isDoor(x, y - 1)) D(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, { style: 'brown', inx: 0, iny: 1 });
+            else W(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+          }
+          if (!mine(x + 1, y) && isRoomFloor(x + 1, y)) {
+            if (isDoor(x + 1, y)) D(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: -1, iny: 0 });
+            else W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
+          }
+          if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) {
+            if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 });
+            else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
+          }
+        });
+      });
+      tall.sort(function (a, b) { return a.d - b.d; });
+      shortw.sort(function (a, b) { return a.d - b.d; });
+      tall.forEach(function (s) { s.fn(bgx); });
+      shortw.forEach(function (s) { s.fn(fgx); });
     }
 
     // Static frame (jambs + lintel + sign) around the sliding doors.
@@ -779,6 +980,7 @@
       fgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       bgx.clearRect(0, 0, view.w, view.h);
       fgx.clearRect(0, 0, view.w, view.h);
+      doorways.length = 0;                  // rebuilt as drawDoorOpening() runs below
 
       // 1) grass: cover the whole viewport (grid bbox of the 4 screen corners)
       var corners = [screenToGrid(0, 0), screenToGrid(view.w, 0),
@@ -861,13 +1063,15 @@
       // 4) tall back walls (behind the vet) → bg. Segmented per tile so a corridor
       //    joining on that side punches a doorway instead of a solid wall.
       // back-left along gx = -0.5 (lit)
+      var corrL = function (i) { return isCorridor(-1, i); };
       for (var bgy = 0; bgy < ROOM; bgy++) {
-        if (isCorridor(-1, bgy)) drawDoorOpening(bgx, -0.5, bgy - 0.5, -0.5, bgy + 0.5, WALL_H);
+        if (firstOfRun(corrL, bgy)) drawDoorOpening(bgx, -0.5, bgy - 0.5, -0.5, bgy + 0.5, WALL_H);
         else wallFace(bgx, -0.5, bgy - 0.5, -0.5, bgy + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
       }
       // back-right along gy = -0.5 (shaded)
+      var corrR = function (i) { return isCorridor(i, -1); };
       for (var bgx2 = 0; bgx2 < ROOM; bgx2++) {
-        if (isCorridor(bgx2, -1)) drawDoorOpening(bgx, bgx2 - 0.5, -0.5, bgx2 + 0.5, -0.5, WALL_H);
+        if (firstOfRun(corrR, bgx2)) drawDoorOpening(bgx, bgx2 - 0.5, -0.5, bgx2 + 0.5, -0.5, WALL_H);
         else wallFace(bgx, bgx2 - 0.5, -0.5, bgx2 + 0.5, -0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
       }
 
@@ -921,18 +1125,20 @@
 
       // 5) short front walls (occlude the vet) → fg
       // front-right along gx = ROOM-0.5 (segmented for corridor doorways)
+      var corrFR = function (i) { return isCorridor(ROOM, i); };
       for (var fgy = 0; fgy < ROOM; fgy++) {
-        if (isCorridor(ROOM, fgy)) drawDoorOpening(fgx, ROOM - 0.5, fgy - 0.5, ROOM - 0.5, fgy + 0.5, FRONT_WALL_H);
+        if (firstOfRun(corrFR, fgy)) drawDoorOpening(fgx, ROOM - 0.5, fgy - 0.5, ROOM - 0.5, fgy + 0.5, FRONT_WALL_H);
         else wallFace(fgx, ROOM - 0.5, fgy - 0.5, ROOM - 0.5, fgy + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
       }
       // front-left along gy = ROOM-0.5, segmented to leave the entrance (tiles 3 & 4)
+      var corrFL = function (i) { return (i === 3 || i === 4) ? false : isCorridor(i, ROOM); };
       for (var dx = 0; dx < ROOM; dx++) {
         if (dx === 3 || dx === 4) continue;   // main entrance opening
-        if (isCorridor(dx, ROOM)) { drawDoorOpening(fgx, dx - 0.5, ROOM - 0.5, dx + 0.5, ROOM - 0.5, FRONT_WALL_H); continue; }
+        if (firstOfRun(corrFL, dx)) { drawDoorOpening(fgx, dx - 0.5, ROOM - 0.5, dx + 0.5, ROOM - 0.5, FRONT_WALL_H); continue; }
         wallFace(fgx, dx - 0.5, ROOM - 0.5, dx + 0.5, ROOM - 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
       }
       drawDoorFrame(fgx);                       // static jambs + lintel around the doors
-      corridorWalls();                          // walls around every bought corridor square
+      bakeRoomWalls();                          // corridor + exam-room walls, one depth-sorted pass
     }
 
     // ---- The vet character (clean flat-iso style) ------------------------
@@ -1051,6 +1257,17 @@
     // ---- Visitor + pet rendering -----------------------------------------
     var DOG_SIZE = { 'dog-s': 0.78, 'dog-m': 1.0, 'dog-l': 1.32 };
     var DOG_COLOR = { 'dog-s': '#cba36e', 'dog-m': '#9c6b43', 'dog-l': '#5b4a3a' };
+
+    // The status bubble above a visitor's head: which service they still need, or
+    // — once leaving — how they felt. 🙂 only if they completed everything (got an
+    // exam); any early exit (gave up waiting, accident) leaves them 😠.
+    function visitorEmoji(v) {
+      if (v.phase === 'leaving') return v.happy ? '🙂' : '😡';
+      if (v.phase === 'toRestroom' || v.phase === 'inRestroom') return '🚻';
+      if (!v.served) return '💻';                 // arriving / in line → needs reception
+      if (!v.examined) return '🩺';               // seen reception → needs an exam room
+      return null;
+    }
 
     function drawVisitor(v) {
       var seated = v.phase === 'seated';
@@ -1201,6 +1418,48 @@
         ctx.fillStyle = v.processing ? '#36b3f5' : '#6f7d8a'; // dim/grey if paused (vet away)
         roundRect(ctx, px, py, Math.max(0, pw * prog), 4, 2); ctx.fill();
       }
+
+      // restroom-need: a draining orange "hold it" bar above the head (the 🚻
+      // status bubble below shows what it's for)
+      if (v.phase === 'toRestroom' && v.relief != null) {
+        var rw = 24, rx = cx - rw / 2, ry = baseY - 64, r = Math.max(0, v.relief / 40);
+        ctx.fillStyle = 'rgba(15,20,30,0.65)';
+        roundRect(ctx, rx - 1.5, ry - 1.5, rw + 3, 7, 3); ctx.fill();
+        ctx.fillStyle = r > 0.5 ? '#52b0e8' : r > 0.25 ? '#e8a13a' : '#e0563f';
+        roundRect(ctx, rx, ry, Math.max(0, rw * r), 4, 2); ctx.fill();
+      }
+
+      // exam bars: while being examined a blue bar fills 0→1; while waiting to be
+      // seen a separate "patience" bar drains green→red.
+      if (v.phase === 'inExam' && v.examRoom) {
+        var ew2 = 26, ex = cx - ew2 / 2, ey = baseY - 66;
+        ctx.fillStyle = 'rgba(15,20,30,0.65)';
+        roundRect(ctx, ex - 1.5, ey - 1.5, ew2 + 3, 7, 3); ctx.fill();
+        if (v.processing) {
+          var eprog = Math.min(1, (v.examRoom.examT || 0) / (3 * procTime()));
+          ctx.fillStyle = '#36b3f5';
+          roundRect(ctx, ex, ey, Math.max(0, ew2 * eprog), 4, 2); ctx.fill();
+        } else {
+          var ep = Math.max(0, (v.examWait || 0) / baseWait());
+          ctx.fillStyle = ep > 0.6 ? '#4cc46a' : ep > 0.33 ? '#e8c34a' : '#e0563f';
+          roundRect(ctx, ex, ey, Math.max(0, ew2 * ep), 4, 2); ctx.fill();
+        }
+      }
+
+      // status bubble: the service this visitor still needs, or 🙂/😠 on the way out
+      var emo = visitorEmoji(v);
+      if (emo) {
+        var by3 = baseY - 90;
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,0.94)';
+        ctx.beginPath(); ctx.arc(cx, by3, 11, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx - 4, by3 + 8); ctx.lineTo(cx + 4, by3 + 8); ctx.lineTo(cx, by3 + 13); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(15,20,30,0.22)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx, by3, 11, 0, Math.PI * 2); ctx.stroke();
+        ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(emo, cx, by3 + 1);
+        ctx.restore();
+      }
     }
 
     // Side-profile dog on a leash. (cx,cy) is the dog's centre on the ground.
@@ -1317,6 +1576,28 @@
       isoBox(c, bx0, by0, bx1, by1, 30, '#69bdde', '#3f93b8', '#357fa0'); // backrest
     }
 
+    // A 2x1 wooden bench: a long seat (2 tiles) with a backrest along the back
+    // and a divider so it reads as two seats. Footprint follows the rotation.
+    function drawBench(c, gx, gy, rot) {
+      rot = rot || 0;
+      var ew = (rot & 1) ? 1 : 2, eh = (rot & 1) ? 2 : 1;
+      var x0 = gx - 0.42, y0 = gy - 0.42, x1 = gx + (ew - 1) + 0.42, y1 = gy + (eh - 1) + 0.42;
+      furnShadow(c, x0, y0, x1, y1);
+      isoBox(c, x0, y0, x1, y1, 13, '#cda06a', '#a87d4e', '#946c41');   // seat slab
+      // backrest: a thin tall slab along the back (opposite the FRONT side)
+      var bx0 = x0, by0 = y0, bx1 = x1, by1 = y1;
+      if (rot === 0) by1 = y0 + 0.18;        // back at -gy
+      else if (rot === 2) by0 = y1 - 0.18;   // back at +gy
+      else if (rot === 1) bx1 = x0 + 0.18;   // back at -gx
+      else bx0 = x1 - 0.18;                  // back at +gx
+      isoBox(c, bx0, by0, bx1, by1, 30, '#d8b07e', '#a87d4e', '#946c41');
+      // divider groove between the two seats (down the centre of the seat top)
+      var m0 = iso((rot & 1) ? x0 : gx + 0.5, (rot & 1) ? gy + 0.5 : y0);
+      var m1 = iso((rot & 1) ? x1 : gx + 0.5, (rot & 1) ? gy + 0.5 : y1);
+      c.strokeStyle = 'rgba(90,62,34,0.5)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(m0.x, m0.y - 13); c.lineTo(m1.x, m1.y - 13); c.stroke();
+    }
+
     // Reception desk: a 2x1 counter (white top, teal front) with a computer.
     function drawDesk(c, gx, gy, rot) {
       rot = rot || 0;
@@ -1404,6 +1685,75 @@
       c.fillStyle = '#5fe08a'; c.beginPath(); c.arc(m.x + 16, topY - 9, 1, 0, Math.PI * 2); c.fill();
     }
 
+    // A 2×3 restroom building with a flat roof, a door and a WC sign.
+    function drawRestroom(c, gx, gy, rot) {
+      rot = rot || 0;
+      var ew = (rot & 1) ? 3 : 2, eh = (rot & 1) ? 2 : 3, H = 50;
+      var x0 = gx - 0.5, y0 = gy - 0.5, x1 = gx + ew - 0.5, y1 = gy + eh - 0.5;
+      furnShadow(c, x0, y0, x1, y1);
+      isoBox(c, x0, y0, x1, y1, H, '#dbe5ee', '#9fb4c4', '#88a0b2');     // walls
+      var T = iso(x0, y0), R = iso(x1, y0), F = iso(x1, y1), L = iso(x0, y1);
+      c.beginPath();                                                     // flat roof slab
+      c.moveTo(T.x, T.y - H); c.lineTo(R.x, R.y - H); c.lineTo(F.x, F.y - H); c.lineTo(L.x, L.y - H); c.closePath();
+      c.fillStyle = '#74899b'; c.fill(); c.strokeStyle = '#5d7184'; c.lineWidth = 2; c.stroke();
+      var fc = iso((x0 + x1) / 2, y1);                                   // door + WC sign on the camera-side wall
+      c.fillStyle = '#48535f'; c.fillRect(fc.x - 7, fc.y - 31, 14, 29);
+      c.fillStyle = '#6f7c88'; c.fillRect(fc.x - 7, fc.y - 31, 14, 2);
+      c.fillStyle = '#2f6fd0'; c.fillRect(fc.x - 8, fc.y - 43, 16, 9);
+      c.fillStyle = '#fff'; c.font = '800 8px Nunito, sans-serif'; c.textAlign = 'center';
+      c.fillText('WC', fc.x, fc.y - 36);
+      c.fillStyle = '#cdd6dd'; c.beginPath(); c.arc(fc.x + 4, fc.y - 16, 1.4, 0, Math.PI * 2); c.fill();
+    }
+
+    // A toilet fixture standing inside a restroom room: a white cistern at the
+    // back with the bowl toward `face` (the direction the user stands / faces).
+    function drawToilet(c, gx, gy, face) {
+      face = face || { x: 0, y: 1 };
+      furnShadow(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34);
+      var tx = gx - face.x * 0.3, ty = gy - face.y * 0.3;               // cistern, against the back wall
+      isoBox(c, tx - 0.26, ty - 0.26, tx + 0.26, ty + 0.26, 26, '#eef4f8', '#b9c8d3', '#a6b8c5');
+      var s = iso(gx + face.x * 0.12, gy + face.y * 0.12);              // bowl, toward the open side
+      c.strokeStyle = '#7d93a3'; c.lineWidth = 1.5;
+      c.fillStyle = '#b3c2cd'; c.beginPath(); c.ellipse(s.x, s.y - 4, 9.5, 6.2, 0, 0, Math.PI * 2); c.fill();           // pedestal base
+      c.fillStyle = '#f5f9fb'; c.beginPath(); c.ellipse(s.x, s.y - 9, 8.6, 5.4, 0, 0, Math.PI * 2); c.fill(); c.stroke(); // seat rim
+      c.fillStyle = '#9fb1bf'; c.beginPath(); c.ellipse(s.x, s.y - 9.5, 5.2, 3.1, 0, 0, Math.PI * 2); c.fill();          // bowl opening
+    }
+
+    // Exam table — a teal-topped table on white legs; shows the pet on top in use.
+    function drawExamTable(c, gx, gy, occ) {
+      var H = 17;
+      furnShadow(c, gx - 0.42, gy - 0.42, gx + 0.42, gy + 0.42);
+      c.fillStyle = '#cdd6dd';                 // legs
+      [[-0.32, -0.32], [0.32, -0.32], [0.32, 0.32], [-0.32, 0.32]].forEach(function (o) {
+        var p = iso(gx + o[0], gy + o[1]); c.fillRect(p.x - 1.5, p.y - H, 3, H);
+      });
+      var T = iso(gx - 0.42, gy - 0.42), R = iso(gx + 0.42, gy - 0.42), F = iso(gx + 0.42, gy + 0.42), L = iso(gx - 0.42, gy + 0.42);
+      c.fillStyle = '#2f9e90';                 // top thickness (front faces)
+      c.beginPath(); c.moveTo(L.x, L.y - H); c.lineTo(F.x, F.y - H); c.lineTo(F.x, F.y - H + 5); c.lineTo(L.x, L.y - H + 5); c.closePath(); c.fill();
+      c.beginPath(); c.moveTo(F.x, F.y - H); c.lineTo(R.x, R.y - H); c.lineTo(R.x, R.y - H + 5); c.lineTo(F.x, F.y - H + 5); c.closePath(); c.fill();
+      c.fillStyle = '#a6e3d7';                 // top
+      c.beginPath(); c.moveTo(T.x, T.y - H); c.lineTo(R.x, R.y - H); c.lineTo(F.x, F.y - H); c.lineTo(L.x, L.y - H); c.closePath(); c.fill();
+      if (occ) drawDog(occ, iso(gx, gy).x, iso(gx, gy).y - H, true);   // the pet being examined
+    }
+
+    // A compact exam desk (white) with the computer on top.
+    function drawExamDesk(c, gx, gy, rot) {
+      var H = 24;
+      furnShadow(c, gx - 0.42, gy - 0.42, gx + 0.42, gy + 0.42);
+      isoBox(c, gx - 0.42, gy - 0.42, gx + 0.42, gy + 0.42, H, '#f4f7f9', '#c4d2da', '#b0c0c9');
+      drawComputer(c, gx, gy - 0.05, H, rot);
+    }
+
+    // The ring the vet stands in to examine (brighter when the vet is on it).
+    function drawExamCircle(c, gx, gy, on) {
+      var s = iso(gx, gy);
+      c.save();
+      c.beginPath(); c.ellipse(s.x, s.y, TILE_HW * 0.6, TILE_HH * 0.6, 0, 0, Math.PI * 2);
+      c.fillStyle = on ? 'rgba(80,210,130,0.32)' : 'rgba(60,190,165,0.20)'; c.fill();
+      c.lineWidth = on ? 4 : 3; c.strokeStyle = on ? 'rgba(70,205,120,1)' : 'rgba(55,179,163,0.95)'; c.stroke();
+      c.restore();
+    }
+
     // ---- Placement -------------------------------------------------------
     // Footprint tiles for an item at (gx,gy) with rotation rot (0..3). A 90°/270°
     // turn swaps width and height; the anchor stays the min (top-left) corner.
@@ -1434,6 +1784,20 @@
       var f = FRONT[rot || 0];
       return [{ x: gx + f.x, y: gy + f.y, kind: 'customer' }];
     }
+    // The two seat tiles of a 2x1 bench, accounting for rotation.
+    function benchSeatTiles(b) {
+      var rot = b.rot || 0;
+      return (rot & 1)
+        ? [{ x: b.gx, y: b.gy }, { x: b.gx, y: b.gy + 1 }]
+        : [{ x: b.gx, y: b.gy }, { x: b.gx + 1, y: b.gy }];
+    }
+    // A bench seats two: the tile in front of each seat must stay clear.
+    function benchInteractTiles(gx, gy, rot) {
+      var f = FRONT[rot || 0];
+      return benchSeatTiles({ gx: gx, gy: gy, rot: rot || 0 }).map(function (t) {
+        return { x: t.x + f.x, y: t.y + f.y, kind: 'customer' };
+      });
+    }
     function interactTiles(item, gx, gy, rot) {
       return item.interact ? item.interact(gx, gy, rot) : [];
     }
@@ -1442,16 +1806,27 @@
       var tiles = footprintTiles(item, gx, gy, rot);
       for (var i = 0; i < tiles.length; i++) {
         var t = tiles[i];
-        if (t.x < 0 || t.y < 0 || t.x >= ROOM || t.y >= ROOM) return false;
+        // must sit on clinic floor — or corridor floor, for items flagged corridorOK
+        if (!isClinic(t.x, t.y) && !(item.corridorOK && isCorridor(t.x, t.y))) return false;
         if (occupied[t.x + ',' + t.y]) return false;
         if (t.x === vtx && t.y === vty) return false;          // can't drop on the player
       }
-      // every interaction square must be clear floor inside the room, too
+      // every interaction square must be clear room floor, too
       var it = interactTiles(item, gx, gy, rot);
       for (var j = 0; j < it.length; j++) {
         var u = it[j];
-        if (u.x < 0 || u.y < 0 || u.x >= ROOM || u.y >= ROOM) return false;
+        if (!isRoomFloor(u.x, u.y)) return false;
         if (occupied[u.x + ',' + u.y]) return false;
+      }
+      // In a corridor, keep one lane open: nothing directly across, and a bench
+      // may not span both lanes. (Only applies to footprint tiles in a corridor.)
+      for (var k = 0; k < tiles.length; k++) {
+        var c = tiles[k];
+        if (!isCorridor(c.x, c.y)) continue;
+        var across = corridorAcross(c.x, c.y);
+        if (!across) continue;
+        var spans = tiles.some(function (q) { return q.x === across.x && q.y === across.y; });
+        if (spans || occupied[across.x + ',' + across.y]) return false;
       }
       return true;
     }
@@ -1502,12 +1877,58 @@
       ctx.restore();
     }
 
+    // Ghost for the 2×3 restroom: footprint tinted green only on buildable grass
+    // that touches a corridor, plus a translucent toilet preview inside.
+    function drawRestroomGhost(rot) {
+      var item = FURN_BY_ID.restroom, ok = canPlaceRestroom(pointer.gx, pointer.gy, rot);
+      var L = restroomLayout(pointer.gx, pointer.gy, rot);
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.38)' : 'rgba(224,86,63,0.42)';
+      footprintTiles(item, pointer.gx, pointer.gy, rot).forEach(function (t) {
+        var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill();
+      });
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      drawToilet(ghostCtx, L.toilet.x, L.toilet.y, L.face);
+      if (!ok) {
+        ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop';
+        ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
+    // Ghost for the 3×3 exam room: footprint tint + a preview of desk/table/circle.
+    function drawExamGhost(rot) {
+      var ok = canPlaceExam(pointer.gx, pointer.gy);
+      var k = examKeyTiles(pointer.gx, pointer.gy, rot);
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.34)' : 'rgba(224,86,63,0.42)';
+      examTiles(pointer.gx, pointer.gy).forEach(function (t) { var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill(); });
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      drawExamCircle(ghostCtx, k.circle.x, k.circle.y, false);
+      drawExamDesk(ghostCtx, k.desk.x, k.desk.y, rot);
+      drawExamTable(ghostCtx, k.table.x, k.table.y, null);
+      if (!ok) {
+        ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop';
+        ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
     function drawGhost() {
       if (!placing) return;
       var item = placing.item, rot = placing.rot || 0;
       if (item.kind === 'corridor') { if (pointer.on || corridorDrag) drawCorridorGhost(); return; }
       if (!pointer.on) return;
       if (item.kind === 'staff') { drawStaffGhost(); return; }
+      if (item.kind === 'examstaff') { drawVetStaffGhost(); return; }
+      if (item.kind === 'restroom') { drawRestroomGhost(rot); return; }
+      if (item.kind === 'exam') { drawExamGhost(rot); return; }
       var ok = canPlace(item, pointer.gx, pointer.gy, rot);
       // footprint tint on the floor (green = ok, red = blocked)
       ctx.save();
@@ -1521,8 +1942,7 @@
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
       interactTiles(item, pointer.gx, pointer.gy, rot).forEach(function (t) {
-        var clear = t.x >= 0 && t.y >= 0 && t.x < ROOM && t.y < ROOM &&
-                    !occupied[t.x + ',' + t.y];
+        var clear = isRoomFloor(t.x, t.y) && !occupied[t.x + ',' + t.y];
         var staff = t.kind === 'staff';
         var hue = staff ? '76,196,106' : '70,170,235';   // green | blue
         var s = iso(t.x, t.y);
@@ -1554,6 +1974,32 @@
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     }
 
+    // The placed furniture item whose footprint covers (gx,gy), topmost first.
+    function placedAt(gx, gy) {
+      for (var i = placed.length - 1; i >= 0; i--) {
+        var f = placed[i], def = FURN_BY_ID[f.id];
+        var tiles = footprintTiles(def, f.gx, f.gy, f.rot || 0);
+        for (var j = 0; j < tiles.length; j++)
+          if (tiles[j].x === gx && tiles[j].y === gy) return { idx: i, f: f, def: def };
+      }
+      return null;
+    }
+    // Double-click/tap a placed item to pick it back up and reposition it: free its
+    // tiles and re-enter placement in "moving" mode (no second charge). Cancelling
+    // (Esc / right-click / off-grid) drops it back where it was.
+    function pickUpAt(gx, gy) {
+      if (placing) return;
+      var hit = placedAt(gx, gy);
+      if (!hit) return;
+      var f = hit.f, def = hit.def;
+      footprintTiles(def, f.gx, f.gy, f.rot || 0).forEach(function (t) { delete occupied[t.x + ',' + t.y]; });
+      placed.splice(hit.idx, 1);
+      placing = { item: def, rot: f.rot || 0, moving: true, orig: { gx: f.gx, gy: f.gy, rot: f.rot || 0 } };
+      pointer.gx = gx; pointer.gy = gy; pointer.on = true;
+      document.body.classList.add('placing');
+      renderShop();
+    }
+
     function tryPlace() {
       if (!placing) return;
       var item = placing.item, rot = placing.rot || 0;
@@ -1566,19 +2012,49 @@
         }
         return;
       }
+      if (item.kind === 'examstaff') {      // assign a Vet to an exam room's circle
+        var ec = nearestExamCircle();
+        if (pointer.on && ec && ec.ok) {
+          ec.room.vet = true;
+          money -= item.cost; renderMoney();
+          cancelPlacing();
+        }
+        return;
+      }
+      if (item.kind === 'restroom') {       // 2×3 walled room off a corridor
+        if (pointer.on && canPlaceRestroom(pointer.gx, pointer.gy, rot)) {
+          placeRestroom(pointer.gx, pointer.gy, rot);
+          money -= item.cost; renderMoney();
+          cancelPlacing();
+        }
+        return;
+      }
+      if (item.kind === 'exam') {           // 3×3 walkable room on corridor-adjacent grass
+        if (pointer.on && canPlaceExam(pointer.gx, pointer.gy)) {
+          placeExam(pointer.gx, pointer.gy, rot);
+          money -= item.cost; renderMoney();
+          cancelPlacing();
+        }
+        return;
+      }
       if (pointer.on && canPlace(item, pointer.gx, pointer.gy, rot)) {
         placed.push({ id: item.id, gx: pointer.gx, gy: pointer.gy, rot: rot });
         footprintTiles(item, pointer.gx, pointer.gy, rot).forEach(function (t) {
           occupied[t.x + ',' + t.y] = true;
         });
-        money -= item.cost;
-        renderMoney();
+        if (!placing.moving) { money -= item.cost; renderMoney(); }  // moving a placed item is free
+        placing.orig = null;               // committed → don't restore on the cancel below
         cancelPlacing();                   // place one, then back to the shop
       }
       // clicking an invalid spot just keeps you in placement mode
     }
 
     function cancelPlacing() {
+      if (placing && placing.moving && placing.orig) {   // move aborted → drop it back where it was
+        var o = placing.orig, def = placing.item;
+        placed.push({ id: def.id, gx: o.gx, gy: o.gy, rot: o.rot });
+        footprintTiles(def, o.gx, o.gy, o.rot).forEach(function (t) { occupied[t.x + ',' + t.y] = true; });
+      }
       placing = null;
       document.body.classList.remove('placing');
       renderShop();
@@ -1708,6 +2184,11 @@
     }
 
     function leaveOutbound(v) {
+      if (!v.left) {                        // tune arrival rate once per departure, by reason
+        v.left = true;
+        if (v.served && !v.peed) frq = Math.max(3, frq - 1.5);  // happy (service complete) → arrivals speed up
+        else frq = Math.min(120, frq + 1);                      // unhappy (gave up / accident) → arrivals slow down
+      }
       v.phase = 'leaving';
       v.sideIdx = -1;                      // release any side spot
       if (v.chair) {                       // stand up off the seat onto its clear front tile
@@ -1730,10 +2211,14 @@
     function vetBlocked(x, y) { return tileBlocked(x, y) || !isRoomFloor(Math.round(x), Math.round(y)); }
     // Axis-separated move so actors slide along furniture instead of stopping dead.
     // `blocked` defaults to furniture-only (visitors walk the path/road too).
+    // If the actor is already standing ON a blocked tile (e.g. a seated client on a
+    // bench/chair), let them move freely so they can escape it — otherwise the tile
+    // they occupy blocks every step and they get stuck getting up.
     function moveActor(a, nx, ny, blocked) {
       blocked = blocked || tileBlocked;
-      if (!blocked(nx, a.y)) a.x = nx;
-      if (!blocked(a.x, ny)) a.y = ny;
+      var escaping = blocked(a.x, a.y);
+      if (escaping || !blocked(nx, a.y)) a.x = nx;
+      if (escaping || !blocked(a.x, ny)) a.y = ny;
     }
 
     // Move a visitor toward a target tile; returns true once essentially there.
@@ -1744,6 +2229,48 @@
       moveActor(v, v.x + ux * v.speed * dt, v.y + uy * v.speed * dt);
       v.dir = chooseDir(ux, uy); v.walkPhase += dt * 9; v.moving = true;
       return false;
+    }
+
+    // Breadth-first route over the clinic grid from (sx,sy) to (tx,ty), avoiding
+    // occupied tiles (the target is allowed even if it's a reserved approach tile).
+    // Returns the list of step tiles (start excluded, target last), or null. Used
+    // so visitors walk AROUND furniture to a seat's front tile instead of jamming
+    // against it — a single chair slides past, but a 2-tile bench needs routing.
+    function findPath(sx, sy, tx, ty) {
+      sx = Math.round(sx); sy = Math.round(sy); tx = Math.round(tx); ty = Math.round(ty);
+      var key = function (x, y) { return x + ',' + y; };
+      var came = {}; came[key(sx, sy)] = null;
+      var q = [{ x: sx, y: sy }], head = 0;
+      var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      while (head < q.length) {
+        var c = q[head++];
+        if (c.x === tx && c.y === ty) break;
+        for (var i = 0; i < 4; i++) {
+          var nx = c.x + dirs[i][0], ny = c.y + dirs[i][1], k = key(nx, ny);
+          if (nx < 0 || ny < 0 || nx >= ROOM || ny >= ROOM || k in came) continue;
+          if (!(nx === tx && ny === ty) && occupied[k]) continue;   // can't pass through furniture
+          came[k] = { x: c.x, y: c.y }; q.push({ x: nx, y: ny });
+        }
+      }
+      if (!(key(tx, ty) in came)) return null;
+      var path = [], cur = { x: tx, y: ty };
+      while (cur) { path.unshift(cur); cur = came[key(cur.x, cur.y)]; }
+      path.shift();                              // drop the start tile
+      return path;
+    }
+
+    // Snap a visitor onto their claimed seat and start the (extended) sit timer.
+    function sitDown(v) {
+      v.x = v.chair.gx; v.y = v.chair.gy; v.moving = false; v.seated = true;
+      v.dir = chooseDir(v.chair.fx - v.chair.gx, v.chair.fy - v.chair.gy); // face outward
+      v.patience *= (v.chair.mult || 2);         // chair ×2, bench ×1.8
+      v.phase = 'seated';
+    }
+    // Send a visitor to their claimed seat, routing around furniture.
+    function headToSeat(v) {
+      v.sideIdx = -1; v.seated = false; v.phase = 'toChair';
+      v.seatPath = findPath(v.x, v.y, v.chair.fx, v.chair.fy);
+      v.seatWp = 0;
     }
 
     function hasDesk() { return placed.some(function (f) { return f.id === 'desk'; }); }
@@ -1759,8 +2286,88 @@
       var s = stationTile(line);
       return Math.round(vet.x) === s.x && Math.round(vet.y) === s.y;
     }
-    // A hired receptionist permanently mans a line's station.
-    function staffAtStation(line) { return staff.some(function (s) { return s.line === line; }); }
+    // A hired receptionist mans a line's station. With two receptionists each
+    // covers their own line; a lone receptionist alternates (their `curLine`
+    // toggles after each client — see updateReceptionist / serveVisitor), so they
+    // serve both queues instead of leaving one starved.
+    function loneStaffLine() {
+      var s = staff[0];
+      return s.curLine != null ? s.curLine : (s.line || 0);
+    }
+    function staffAtStation(line) {
+      if (staff.length === 1) return loneStaffLine() === line;
+      return staff.some(function (s) { return s.line === line; });
+    }
+    // A lone receptionist switches to the other queue when their current one runs
+    // out (so they never sit idle while clients wait on the other side).
+    function updateReceptionist() {
+      if (staff.length !== 1) return;
+      var s = staff[0];
+      if (s.curLine == null) s.curLine = (s.line || 0);
+      var other = 1 - s.curLine;
+      if (queue[s.curLine].length === 0 && queue[other].length > 0) s.curLine = other;
+    }
+
+    // Is the vet standing in an exam room's processing circle?
+    function vetAtExam(rm) {
+      var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+      return Math.round(vet.x) === k.circle.x && Math.round(vet.y) === k.circle.y;
+    }
+
+    // BFS a route over ALL connected room floor (clinic + corridors + exam rooms),
+    // avoiding furniture, so clients reach an exam table via the corridors instead
+    // of beelining into a wall. Returns step tiles (start dropped); falls back to a
+    // single direct step if no route exists.
+    function examRoute(sx, sy, tx, ty) {
+      sx = Math.round(sx); sy = Math.round(sy); tx = Math.round(tx); ty = Math.round(ty);
+      var key = function (x, y) { return x + ',' + y; };
+      var pass = function (x, y) { return isRoomFloor(x, y) && !occupied[key(x, y)]; };
+      if (!pass(tx, ty)) return [{ x: tx, y: ty }];
+      var came = {}; came[key(sx, sy)] = null;
+      var q = [{ x: sx, y: sy }], head = 0, dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]], n = 0;
+      while (head < q.length && n++ < 6000) {
+        var c = q[head++];
+        if (c.x === tx && c.y === ty) break;
+        for (var i = 0; i < 4; i++) {
+          var nx = c.x + dirs[i][0], ny = c.y + dirs[i][1], kk = key(nx, ny);
+          if (kk in came || !pass(nx, ny)) continue;
+          came[kk] = { x: c.x, y: c.y }; q.push({ x: nx, y: ny });
+        }
+      }
+      if (!(key(tx, ty) in came)) return [{ x: tx, y: ty }];
+      var path = [], cur = { x: tx, y: ty };
+      while (cur) { path.unshift(cur); cur = came[key(cur.x, cur.y)]; }
+      if (path.length > 1) path.shift();
+      return path;
+    }
+
+    // Send a waiting client to a free exam room (the next stage after reception).
+    function claimExam(v) {
+      var rm = freeExamRoom();
+      if (!rm) return false;
+      var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+      rm.occupant = v; rm.examT = 0; v.examRoom = rm;
+      v.seated = false; v.chair = null; v.sideIdx = -1;
+      v.patience = baseWait();              // fresh patience for the exam stage (restroom need persists)
+      // BFS a real route over connected room floor (clinic → corridors → exam),
+      // around furniture, so clients don't beeline into walls and jam.
+      v.path = examRoute(v.x, v.y, k.visitor.x, k.visitor.y);
+      v.wp = 0; v.phase = 'toExam';
+      return true;
+    }
+    function releaseExam(v) {
+      if (v.examRoom) { v.examRoom.occupant = null; v.examRoom.examT = 0; v.examRoom = null; }
+    }
+    // Fill free exam rooms with waiting clients in check-in (ticket) order, so the
+    // longest-waiting client is seen next and nobody leap-frogs the queue.
+    function assignExams() {
+      if (!freeExamRoom()) return;
+      var waiting = visitors.filter(function (v) {
+        return v.served && !v.examined && !v.examRoom &&
+          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
+      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
+      for (var i = 0; i < waiting.length && freeExamRoom(); i++) claimExam(waiting[i]);
+    }
     // The desk station nearest the cursor (for placing a receptionist), with validity.
     function nearestStation() {
       if (!hasDesk()) return null;
@@ -1809,23 +2416,124 @@
       c.restore();
     }
 
-    // An empty waiting-room chair (one no other visitor has claimed), or null.
-    function freeChair() {
+    // A hired Vet figure (teal scrubs, blue surgical cap, stethoscope) standing on
+    // an exam room circle, facing the table. `rot` is the room's rotation.
+    function drawVetStaff(c, gx, gy, rot) {
+      var s = iso(gx, gy);
+      var f = FRONT[rot || 0];
+      var dir = chooseDir(f.x, f.y);              // face the exam table
+      var front = (dir === 'SE' || dir === 'SW');
+      var mirror = (dir === 'SW' || dir === 'NW') ? -1 : 1;
+      c.fillStyle = 'rgba(20,40,30,0.26)';
+      c.beginPath(); c.ellipse(s.x, s.y, 13, 6, 0, 0, Math.PI * 2); c.fill();
+      c.save(); c.translate(s.x, s.y);
+      c.fillStyle = '#34506f'; c.fillRect(-6, -14, 5, 14); c.fillRect(1, -14, 5, 14); // legs (navy scrubs)
+      c.fillStyle = '#26323f'; c.fillRect(-7, -2, 6, 3); c.fillRect(1, -2, 6, 3);      // shoes
+      var bt = -40;                                                                    // torso (teal scrubs)
+      var g = c.createLinearGradient(0, bt, 0, -12);
+      g.addColorStop(0, '#46c3b3'); g.addColorStop(1, '#2f9e90');
+      c.fillStyle = g; roundRect(c, -11, bt, 22, 28, 7); c.fill();
+      c.fillStyle = '#3bb1a2'; roundRect(c, -14, bt + 2, 5, 13, 2.5); c.fill(); roundRect(c, 9, bt + 2, 5, 13, 2.5); c.fill();
+      c.fillStyle = '#f0c8a4'; c.fillRect(-14, bt + 14, 5, 4); c.fillRect(9, bt + 14, 5, 4); // hands
+      c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                            // neck
+      var hy = bt - 13;
+      c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#3d8fd0';                                                          // blue surgical cap
+      c.beginPath(); c.arc(0, hy - 1, 8.5, Math.PI * 1.02, Math.PI * 1.98, false); c.closePath(); c.fill();
+      c.fillRect(-8.5, hy - 2, 17, 3);
+      if (front) {
+        c.fillStyle = '#2a8d80';                                                       // V-neck
+        c.beginPath(); c.moveTo(-5, bt); c.lineTo(0, bt + 8); c.lineTo(5, bt); c.closePath(); c.fill();
+        c.strokeStyle = '#243240'; c.lineWidth = 2;                                     // stethoscope
+        c.beginPath(); c.arc(0, bt + 4, 6, Math.PI * 0.1, Math.PI * 0.9, false); c.stroke();
+        c.beginPath(); c.moveTo(-4, bt + 8); c.lineTo(-3, bt + 20); c.stroke();
+        c.fillStyle = '#9fb3c4'; c.beginPath(); c.arc(-3, bt + 21, 2.2, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#2b2b33';                                                        // eyes + smile
+        c.beginPath(); c.arc(-3 * mirror, hy, 1.3, 0, Math.PI * 2); c.arc(3 * mirror, hy, 1.3, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#9a5f44'; c.lineWidth = 1.2;
+        c.beginPath(); c.arc(0, hy + 3, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      } else {
+        c.fillStyle = '#6b4a32'; c.beginPath(); c.arc(0, hy + 2, 8, Math.PI * 0.05, Math.PI * 0.95, false); c.fill(); // hair under cap
+      }
+      c.restore();
+    }
+
+    // The exam-room circle nearest the cursor (for placing a Vet), with validity.
+    function nearestExamCircle() {
+      if (!examRooms.length) return null;
+      var best = null, bd = 1e9;
+      examRooms.forEach(function (rm) {
+        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+        var d = Math.abs(pointer.gx - k.circle.x) + Math.abs(pointer.gy - k.circle.y);
+        if (d < bd) { bd = d; best = { room: rm, x: k.circle.x, y: k.circle.y }; }
+      });
+      if (best) best.ok = !best.room.vet;         // circle free (no Vet hired there yet)
+      return best;
+    }
+
+    // Ghost for hiring a Vet: highlight the targeted exam circle + a vet preview.
+    function drawVetStaffGhost() {
+      var ec = nearestExamCircle();
+      if (!ec) return;                            // no exam room → nowhere to stand
+      var s = iso(ec.x, ec.y);
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, TILE_HW * 0.62, TILE_HH * 0.62, 0, 0, Math.PI * 2);
+      ctx.fillStyle = ec.ok ? 'rgba(76,196,106,0.32)' : 'rgba(224,86,63,0.40)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = ec.ok ? 'rgba(70,205,120,1)' : 'rgba(224,86,63,0.95)'; ctx.stroke();
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      drawVetStaff(ghostCtx, ec.x, ec.y, ec.room.rot);
+      if (!ec.ok) {
+        ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop';
+        ghostCtx.fillStyle = 'rgba(222,58,44,0.62)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
+    // Every seat slot across placed seating. A chair is one seat that ×2's the
+    // remaining wait; a bench is two seats, each only 80% as effective (×1.8).
+    // Each slot carries its tile, the front tile to approach from, and the mult.
+    function allSeats() {
+      var out = [];
       for (var i = 0; i < placed.length; i++) {
-        var p = placed[i];
-        if (p.id !== 'chair') continue;
+        var p = placed[i], rot = p.rot || 0, f = FRONT[rot];
+        if (p.id === 'chair') {
+          out.push({ gx: p.gx, gy: p.gy, fx: p.gx + f.x, fy: p.gy + f.y, mult: 2 });
+        } else if (p.id === 'bench') {
+          benchSeatTiles(p).forEach(function (t) {
+            out.push({ gx: t.x, gy: t.y, fx: t.x + f.x, fy: t.y + f.y, mult: 1.8 });
+          });
+        }
+      }
+      return out;
+    }
+    // A free seat slot no visitor has claimed, or null.
+    function freeSeat() {
+      var seats = allSeats();
+      for (var i = 0; i < seats.length; i++) {
+        var s = seats[i];
         var taken = visitors.some(function (v) {
-          return v.chair && v.chair.gx === p.gx && v.chair.gy === p.gy;
+          return v.chair && v.chair.gx === s.gx && v.chair.gy === s.gy;
         });
-        if (!taken) return p;
+        if (!taken) return s;
       }
       return null;
     }
 
     // Base wait before a client storms off. A room with a TV keeps them
     // entertained, so the whole room's wait time is doubled.
-    function roomHasTV() { return placed.some(function (p) { return p.id === 'tv'; }); }
-    function baseWait() { return wait * (roomHasTV() ? 2 : 1); }
+    // A TV only entertains visitors within 2 squares of it (any direction): a nearby
+    // visitor's patience drains at half speed (≈ doubling their wait) while in range,
+    // rather than a clinic-wide buff. baseWait stays the plain base patience value.
+    function nearTV(v) {
+      var vx = Math.round(v.x), vy = Math.round(v.y);
+      return placed.some(function (p) {
+        return p.id === 'tv' && Math.abs(p.gx - vx) <= 2 && Math.abs(p.gy - vy) <= 2;
+      });
+    }
+    function baseWait() { return wait; }
 
     // A reception client is served: pay out, pop a +10, give a fresh wait bar so
     // the queue advances. If a chair is free they head over to sit; otherwise
@@ -1834,19 +2542,120 @@
       money += 10; renderMoney();
       floaters.push({ v: v, t: 0 });
       var qi = queue[v.line].indexOf(v); if (qi >= 0) queue[v.line].splice(qi, 1);
+      // a lone receptionist hands the next turn to the other queue (alternation)
+      if (staff.length === 1 && !vetAtStation(v.line) && loneStaffLine() === v.line && queue[1 - v.line].length > 0) {
+        staff[0].curLine = 1 - v.line;
+      }
+      v.served = true;                       // service complete → counts as a happy departure later
+      v.ticket = examTicketSeq++;            // check-in order → examined first-come-first-served
       v.procT = 0; v.patience = baseWait();
-      var chair = freeChair();
-      if (chair) {                           // go sit in an empty chair
-        var f = chairInteractTiles(chair.gx, chair.gy, chair.rot || 0)[0];
-        v.chair = { gx: chair.gx, gy: chair.gy, fx: f.x, fy: f.y };
-        v.sideIdx = -1; v.seated = false; v.phase = 'toChair';
-      } else {                               // no chair free → step aside
+      // ~55% of clients will need the loo, 20–50s into their wait. Unlike patience
+      // (which refills each phase), this need is a single persistent countdown — so
+      // it actually fires before a comfortable (seated/TV) client is examined.
+      v.bladder = Math.random() < 0.55 ? 20 + Math.random() * 30 : null;
+      // exam rooms are assigned centrally, in check-in order, by assignExams()
+      var seat = freeSeat();
+      if (seat) {                            // go sit in an empty chair / bench seat
+        v.chair = { gx: seat.gx, gy: seat.gy, fx: seat.fx, fy: seat.fy, mult: seat.mult };
+        headToSeat(v);
+      } else {                               // no seat free → step aside
         var s = sideSpot();
         v.phase = 'served'; v.sideIdx = s.idx; v.sideX = s.x; v.sideY = s.y;
       }
     }
 
+    // The client suddenly needs the loo: drop their seat/spot and go seek a restroom
+    // (they have 40s before an accident).
+    function needRestroom(v) {
+      v.seated = false; v.chair = null; v.sideIdx = -1;
+      v.relief = 40; v.rm = null; v.path = null; v.wp = 0;
+      v.phase = 'toRestroom';
+    }
+    function peeAndLeave(v) {
+      if (v.rm) { v.rm.occupant = null; v.rm = null; }
+      puddles.push({ x: v.x, y: v.y });
+      v.relief = null; v.bladder = null; v.peed = true;
+      leaveOutbound(v);
+    }
+
     function updateVisitor(v, dt) {
+      // After reception, the bladder ticks while the client waits; at zero they
+      // break off to find a restroom.
+      if (v.bladder != null &&
+          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated')) {
+        v.bladder -= dt;
+        if (v.bladder <= 0) { v.bladder = null; needRestroom(v); return; }
+      }
+      if (v.phase === 'toRestroom') {      // break off to find/walk to a restroom
+        v.relief -= dt;
+        if (!v.rm) {                       // claim a free restroom and route into the room
+          var rm = freeRestroom();
+          if (rm) {
+            rm.occupant = v; v.rm = rm;
+            // route internally over connected floor (clinic → corridor → restroom),
+            // around furniture — same as exam rooms, not out the front doors
+            v.path = examRoute(v.x, v.y, rm.stand.x, rm.stand.y);
+            v.wp = 0;
+          } else { v.moving = false; }     // none free → squirm until one opens or time runs out
+        }
+        if (v.rm && v.path) {
+          var tgt = v.path[v.wp];
+          if (stepToward(v, tgt.x, tgt.y, dt, 0.06)) {
+            v.wp++;
+            if (v.wp >= v.path.length) {
+              v.x = v.rm.stand.x; v.y = v.rm.stand.y; v.moving = false;
+              v.dir = chooseDir(v.rm.toilet.x - v.x, v.rm.toilet.y - v.y);   // face the toilet
+              v.phase = 'inRestroom'; v.useT = 3;
+            }
+          }
+        }
+        if (v.relief <= 0) peeAndLeave(v);
+        return;
+      }
+      if (v.phase === 'inRestroom') {      // using the restroom inside the room, then head back in
+        v.useT -= dt;
+        if (v.useT <= 0) {
+          if (v.rm) { v.rm.occupant = null; v.rm = null; }
+          v.relief = null; v.bladder = null;     // relieved for the rest of this visit
+          var s = sideSpot();
+          v.phase = 'served'; v.sideIdx = s.idx; v.sideX = s.x; v.sideY = s.y; v.patience = baseWait();
+        }
+        return;
+      }
+      if (v.phase === 'toExam') {          // walk to the exam room's owner-side tile
+        var et = v.path[v.wp];
+        if (stepToward(v, et.x, et.y, dt, 0.06)) {
+          v.wp++;
+          if (v.wp >= v.path.length) {
+            v.x = et.x; v.y = et.y; v.moving = false; v.phase = 'inExam';
+            v.patience = baseWait(); v.examWait = baseWait();  // fresh "waiting to be seen" timer
+            var ek = examKeyTiles(v.examRoom.gx, v.examRoom.gy, v.examRoom.rot);
+            v.dir = chooseDir(ek.table.x - v.x, ek.table.y - v.y);  // face the table
+          }
+        }
+        v.patience -= dt * (nearTV(v) ? 0.5 : 1);
+        if (v.patience <= 0) { releaseExam(v); leaveOutbound(v); }
+        return;
+      }
+      if (v.phase === 'inExam') {          // at the table; the vet examines from the circle
+        v.moving = false;
+        var rm = v.examRoom;
+        v.processing = vetAtExam(rm) || !!rm.vet; // the player on the circle OR a hired Vet examines (3× reception time)
+        if (v.processing) {
+          rm.examT = (rm.examT || 0) + dt;
+          if (rm.examT >= 3 * procTime()) {
+            money += 100; renderMoney();
+            floaters.push({ v: v, t: 0, amt: 100 });
+            v.examined = true; v.happy = true;
+            releaseExam(v); leaveOutbound(v);  // happy → leaves (for now)
+          }
+        } else {                            // waiting to be seen — its own timer counts down
+          if (v.examWait == null) v.examWait = baseWait();
+          v.examWait -= dt * (nearTV(v) ? 0.5 : 1);
+          if (v.examWait <= 0) { releaseExam(v); leaveOutbound(v); return; }  // gives up, leaves
+        }
+        return;
+      }
       if (v.phase === 'queuing') {
         var t = slotPos(v);
         var reached = stepToward(v, t.x, t.y, dt);
@@ -1854,7 +2663,7 @@
           var f = FRONT[(deskAnchor().rot || 0)];
           v.x = t.x; v.y = t.y; v.moving = false; v.dir = chooseDir(-f.x, -f.y); // face the desk
         }
-        v.patience -= dt;                  // tick down while in line
+        v.patience -= dt * (nearTV(v) ? 0.5 : 1);                  // tick down while in line
         if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); return; }
         // the front-of-line client is processed while the vet stands on the desk's
         // action circle for that line, OR a hired receptionist mans it; bar fills.
@@ -1873,30 +2682,33 @@
         return;
       }
       if (v.phase === 'idle') {            // standing aside, fresh wait bar
-        var openChair = freeChair();
-        if (openChair) {                   // a seat opened up (e.g. player built one) → go sit
-          var cf = chairInteractTiles(openChair.gx, openChair.gy, openChair.rot || 0)[0];
-          v.chair = { gx: openChair.gx, gy: openChair.gy, fx: cf.x, fy: cf.y };
-          v.sideIdx = -1; v.seated = false; v.phase = 'toChair';
+        var openSeat = freeSeat();
+        if (openSeat) {                    // a seat opened up (e.g. player built one) → go sit
+          v.chair = { gx: openSeat.gx, gy: openSeat.gy, fx: openSeat.fx, fy: openSeat.fy, mult: openSeat.mult };
+          headToSeat(v);
           return;
         }
         v.moving = false;
-        v.patience -= dt;
+        v.patience -= dt * (nearTV(v) ? 0.5 : 1);
         if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
         return;
       }
-      if (v.phase === 'toChair') {         // walk over, then drop into the seat
-        if (stepToward(v, v.chair.fx, v.chair.fy, dt)) {
-          v.x = v.chair.gx; v.y = v.chair.gy; v.moving = false; v.seated = true;
-          v.dir = chooseDir(v.chair.fx - v.chair.gx, v.chair.fy - v.chair.gy); // face outward
-          v.patience *= 2;                 // seated: double the remaining wait
-          v.phase = 'seated';
+      if (v.phase === 'toChair') {         // route around furniture, then drop into the seat
+        var path = v.seatPath;
+        if (path && path.length) {
+          var wp = path[Math.min(v.seatWp, path.length - 1)];
+          if (stepToward(v, wp.x, wp.y, dt, 0.12)) {
+            v.seatWp++;
+            if (v.seatWp >= path.length) sitDown(v);
+          }
+        } else if (stepToward(v, v.chair.fx, v.chair.fy, dt)) {  // no route found → direct
+          sitDown(v);
         }
         return;
       }
       if (v.phase === 'seated') {          // sitting comfortably, doubled wait bar
         v.moving = false;
-        v.patience -= dt;
+        v.patience -= dt * (nearTV(v) ? 0.5 : 1);
         if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
         return;
       }
@@ -1936,10 +2748,12 @@
       // visitors: spawn on a timer, then step each one along its path
       spawnTimer -= dt;
       if (spawnTimer <= 0) { spawnVisitor(); spawnTimer += frq; }
+      updateReceptionist();                  // lone receptionist picks which queue to man
       for (var i = visitors.length - 1; i >= 0; i--) {
         updateVisitor(visitors[i], dt);
         if (visitors[i].dead) visitors.splice(i, 1);
       }
+      assignExams();                         // hand free exam rooms to the longest-waiting clients
       // advance + retire the +10 coin pops
       for (var fi = floaters.length - 1; fi >= 0; fi--) {
         floaters[fi].t += dt;
@@ -1952,6 +2766,17 @@
       var target = near ? 1 : 0;
       door.open += (target - door.open) * Math.min(1, dt * 9);
       if (Math.abs(door.open - target) < 0.002) door.open = target;
+      // same auto-open behaviour for every corridor↔room doorway
+      doorways.forEach(function (d) {
+        var k = d.ax + ',' + d.ay + ',' + d.bx + ',' + d.by;
+        var mx = (d.ax + d.bx) / 2, my = (d.ay + d.by) / 2;
+        var dn = Math.hypot(vet.x - mx, vet.y - my) < 1.6 ||
+                 visitors.some(function (v) { return Math.hypot(v.x - mx, v.y - my) < 1.6; });
+        var tg = dn ? 1 : 0, cur = doorOpen[k] || 0;
+        cur += (tg - cur) * Math.min(1, dt * 9);
+        if (Math.abs(cur - tg) < 0.002) cur = tg;
+        doorOpen[k] = cur;
+      });
     }
 
     function isNearDoor(x, y) {
@@ -1982,6 +2807,17 @@
       }
     }
 
+    // Puddles left by clients who couldn't hold it.
+    function drawPuddles() {
+      puddles.forEach(function (p) {
+        var s = iso(p.x, p.y);
+        ctx.fillStyle = 'rgba(226,206,74,0.55)';
+        ctx.beginPath(); ctx.ellipse(s.x, s.y + 3, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(202,178,40,0.5)';
+        ctx.beginPath(); ctx.ellipse(s.x + 3, s.y + 4, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
+      });
+    }
+
     // Floating "+10" coin pop-ups above served clients.
     function drawFloaters() {
       ctx.save();
@@ -1989,12 +2825,12 @@
       ctx.font = '800 16px Nunito, sans-serif';
       floaters.forEach(function (fl) {
         if (!fl.v) return;
-        var s = iso(fl.v.x, fl.v.y), y = s.y - 48 - fl.t * 34;
+        var s = iso(fl.v.x, fl.v.y), y = s.y - 48 - fl.t * 34, txt = '+' + (fl.amt || 10);
         ctx.globalAlpha = Math.max(0, 1 - fl.t / 1.2);
         ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,0.55)';
-        ctx.strokeText('+10', s.x, y);
+        ctx.strokeText(txt, s.x, y);
         ctx.fillStyle = '#ffd24a';
-        ctx.fillText('+10', s.x, y);
+        ctx.fillText(txt, s.x, y);
       });
       ctx.restore();
     }
@@ -2004,35 +2840,67 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(bg, 0, 0);
 
-      // Split actors by the front-wall plane (gy = ROOM-0.5): those inside the
-      // clinic are occluded by the short front walls; those still on the path /
-      // road are in front of them. Each group is depth-sorted by gx+gy.
-      var inside = [{ d: vet.x + vet.y, fn: drawVet }];
+      // Split actors by the floor they stand on: those on the clinic floor are
+      // occluded by its short front walls (the fg layer); anyone on a corridor /
+      // room floor or the path/road is drawn in front of those walls. Grouping by
+      // actual floor (not a single y-plane) keeps exam/restroom rooms placed
+      // beside or behind the clinic sorted correctly. Each group sorts by gx+gy.
+      var inside = [];
       var outside = [];
+      function actorGrp(x, y) { return isClinic(Math.round(x), Math.round(y)) ? inside : outside; }
+      actorGrp(vet.x, vet.y).push({ d: vet.x + vet.y, fn: drawVet });
       placed.forEach(function (f) {
         var def = FURN_BY_ID[f.id];
         var ew = ((f.rot || 0) & 1) ? def.h : def.w, eh = ((f.rot || 0) & 1) ? def.w : def.h;
-        inside.push({ d: (f.gx + (ew - 1) / 2) + (f.gy + (eh - 1) / 2), fn: function () { def.draw(ctx, f.gx, f.gy, f.rot || 0); } });
+        var cx = f.gx + (ew - 1) / 2, cy = f.gy + (eh - 1) / 2;
+        actorGrp(cx, cy).push({ d: cx + cy, fn: function () { def.draw(ctx, f.gx, f.gy, f.rot || 0); } });
       });
       visitors.forEach(function (v) {
-        var item = { d: v.x + v.y, fn: function () { drawVisitor(v); } };
-        (v.y <= ROOM - 0.5 ? inside : outside).push(item);
+        // seated visitors get a depth nudge so they draw in front of their own
+        // seating furniture (a 2x1 bench's centre sits between its two tiles).
+        var item = { d: v.x + v.y + (v.seated ? 0.6 : 0), fn: function () { drawVisitor(v); } };
+        actorGrp(v.x, v.y).push(item);
       });
       if (hasDesk()) staff.forEach(function (st) {       // receptionists at their stations
-        var p = stationTile(st.line);
+        var L = (staff.length === 1) ? loneStaffLine() : st.line;   // lone one stands at the queue it's serving
+        var p = stationTile(L);
         inside.push({ d: p.x + p.y, fn: function () { drawReceptionist(ctx, p.x, p.y); } });
+      });
+      restrooms.forEach(function (rm) {                  // toilet fixture inside the walled room
+        var tl = rm.toilet;                              // drawn over the room's short walls (like exam furniture)
+        outside.push({ d: tl.x + tl.y, fn: function () { drawToilet(ctx, tl.x, tl.y, rm.face); } });
+      });
+      examRooms.forEach(function (rm) {                  // exam-room furniture (depth-sorted)
+        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+        outside.push({ d: k.desk.x + k.desk.y, fn: function () { drawExamDesk(ctx, k.desk.x, k.desk.y, rm.rot); } });
+        if (rm.vet) {                                   // a hired Vet stands on the circle, examining
+          var kc = k.circle;
+          outside.push({ d: kc.x + kc.y, fn: function () { drawVetStaff(ctx, kc.x, kc.y, rm.rot); } });
+        }
+        var pet = (rm.occupant && rm.occupant.phase === 'inExam') ? rm.occupant : null;
+        outside.push({ d: k.table.x + k.table.y, fn: function () { drawExamTable(ctx, k.table.x, k.table.y, pet); } });
       });
       var byDepth = function (a, b) { return a.d - b.d; };
       inside.sort(byDepth);
       outside.sort(byDepth);
 
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      drawPuddles();                        // accidents on the floor, under everyone
+      examRooms.forEach(function (rm) {     // exam circles on the floor, under actors
+        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+        drawExamCircle(ctx, k.circle.x, k.circle.y, vetAtExam(rm) || rm.vet);
+      });
       inside.forEach(function (a) { a.fn(); });
       drawDeskCircles();                    // station rings behind the desk (drawn on top so the counter doesn't hide them)
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(fg, 0, 0);
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       drawSlidingDoors(ctx, door.open);
+      doorways.forEach(function (d) {        // animated doors at corridor↔room junctions
+        var dop = doorOpen[d.ax + ',' + d.ay + ',' + d.bx + ',' + d.by] || 0;
+        if (d.style === 'brown') drawBrownDoor(ctx, d, dop);   // exam-room entrance: hinged wooden door
+        else drawDoorwayPanels(ctx, d, dop);                   // corridor↔clinic: glass sliding doors
+      });
       outside.forEach(function (a) { a.fn(); });
       drawGhost();                          // placement preview floats on top
       drawFloaters();                       // +10 coin pops on top of everyone
@@ -2072,6 +2940,7 @@
 
     // ---- Input: drag-anywhere virtual joystick ----------------------------
     var origin = null;
+    var lastTap = { t: -1e9, x: 0, y: 0 };   // for double-click/tap pick-up
     function getPoint(e) { var t = e.touches ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; }
     function setPointer(clientX, clientY) {
       var rect = canvas.getBoundingClientRect();
@@ -2088,6 +2957,15 @@
         var pp = getPoint(e); setPointer(pp.x, pp.y);  // mouse click, drop it right away;
         if (!e.touches) tryPlace();        // touch positions now and drops on lift)
         e.preventDefault(); return;
+      }
+      // double-click / double-tap on a placed item picks it up to reposition
+      var tp = getPoint(e);
+      if (e.timeStamp - lastTap.t < 350 && Math.abs(tp.x - lastTap.x) < 24 && Math.abs(tp.y - lastTap.y) < 24) {
+        lastTap.t = -1e9;
+        setPointer(tp.x, tp.y); pickUpAt(pointer.gx, pointer.gy);
+        if (placing) { e.preventDefault(); return; }   // picked something up → now in move mode
+      } else {
+        lastTap = { t: e.timeStamp, x: tp.x, y: tp.y };
       }
       origin = getPoint(e); touchInput.active = true; touchInput.dx = 0; touchInput.dy = 0; e.preventDefault();
     }
@@ -2148,6 +3026,7 @@
       draw: draw,
       step: function (n) { for (var i = 0; i < (n || 1); i++) update(1 / 30); },
       money: function () { return money; },
+      frq: function () { return frq; },
       spawn: spawnVisitor,
       place: function (id, gx, gy, r) { placed.push({ id: id, gx: gx, gy: gy, rot: r || 0 }); footprintTiles(FURN_BY_ID[id], gx, gy, r || 0).forEach(function (t) { occupied[t.x + ',' + t.y] = true; }); },
       placeDesk: function (gx, gy, r) { window.__t.place('desk', gx, gy, r); },
@@ -2155,8 +3034,14 @@
       vet: function (x, y) { if (x != null) { vet.x = x; vet.y = y; } return { x: vet.x, y: vet.y }; },
       visitors: function () { return visitors.map(function (v) { return { phase: v.phase, seated: !!v.seated, pet: v.pet, patience: Math.round(v.patience * 10) / 10, x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100, chair: v.chair || null }; }); },
       buildCorridor: function (sx, sy, ex, ey) { commitCorridor(sx, sy, ex, ey); return Object.keys(corridor); },
+      placeExam: function (gx, gy, rot) { placeExam(gx, gy, rot); return examKeyTiles(gx, gy, rot || 0); },
+      exams: function () { return examRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet, examT: Math.round((r.examT||0)*10)/10 }; }); },
       corridors: function () { return Object.keys(corridor); },
-      setInput: function (k, v) { input[k] = v; }
+      setInput: function (k, v) { input[k] = v; },
+      can: function (id, gx, gy, rot) { return canPlace(FURN_BY_ID[id], gx, gy, rot || 0); },
+      buildRestroom: function (gx, gy, rot) { if (!canPlaceRestroom(gx, gy, rot || 0)) return false; placeRestroom(gx, gy, rot || 0); return restrooms[restrooms.length - 1]; },
+      restroomList: function () { return restrooms.map(function (r) { return { gx: r.gx, gy: r.gy, toilet: r.toilet, stand: r.stand, door: r.door, occ: !!r.occupant }; }); },
+      emojis: function () { return visitors.map(function (v) { return { phase: v.phase, served: !!v.served, examined: !!v.examined, happy: !!v.happy, emoji: visitorEmoji(v) }; }); }
     };
   })();
   </script>
