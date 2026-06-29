@@ -1319,6 +1319,7 @@
     // During bulk layout changes (load) we place many rooms in a loop, each of
     // which calls renderStatic(); suspend it and bake once at the end.
     var _suspendStatic = false;
+    var staticDirty = false;               // coalesces static redraws (e.g. while panning) to one per frame
     function renderStatic() {
       if (_suspendStatic) return;
       bgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
@@ -3905,6 +3906,7 @@
       var dt = Math.min((ts - last) / 1000, 0.05);
       last = ts;
       update(dt);
+      if (staticDirty) { staticDirty = false; renderStatic(); }   // one coalesced static redraw per frame
       draw();
       requestAnimationFrame(frame);
     }
@@ -3968,11 +3970,11 @@
       e.preventDefault();
     }
     function dragMove(e) {
-      if (panning) {                        // pan the camera; redraw the cached static layer at the new offset
+      if (panning) {                        // pan the camera; defer the heavy static redraw to the frame loop
         var mp = getPoint(e);
         camera.x = panning.camX + (mp.x - panning.x);
         camera.y = panning.camY + (mp.y - panning.y);
-        renderStatic();
+        staticDirty = true;
         e.preventDefault(); return;
       }
       if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
@@ -3992,7 +3994,7 @@
       e.preventDefault();
     }
     function dragEnd(e) {
-      if (panning) { panning = null; canvas.style.cursor = ''; if (e && e.preventDefault) e.preventDefault(); return; }
+      if (panning) { panning = null; canvas.style.cursor = ''; staticDirty = true; if (e && e.preventDefault) e.preventDefault(); return; }   // walls back on (next frame)
       if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
         if (corridorDrag) {
           if (placing.item.kind === 'blank') commitBlank(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy);
