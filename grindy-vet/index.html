@@ -33,7 +33,9 @@
       height: 100vh;
       display: block;
       touch-action: none;
+      cursor: grab;                  /* drag the background to pan the view */
     }
+    body.placing #game { cursor: crosshair; }   /* placing an item overrides the grab cursor */
 
     /* Overlay topbar floats above the canvas. */
     .topbar {
@@ -3929,6 +3931,7 @@
 
     // ---- Input: drag-anywhere virtual joystick ----------------------------
     var origin = null;
+    var panning = null;                      // mouse drag-to-pan: {x,y,camX,camY}
     var lastTap = { t: -1e9, x: 0, y: 0 };   // for double-click/tap pick-up
     function getPoint(e) { var t = e.touches ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; }
     function setPointer(clientX, clientY) {
@@ -3956,9 +3959,22 @@
       } else {
         lastTap = { t: e.timeStamp, x: tp.x, y: tp.y };
       }
-      origin = getPoint(e); touchInput.active = true; touchInput.dx = 0; touchInput.dy = 0; e.preventDefault();
+      if (!e.touches) {                    // mouse: drag the background to pan the view
+        panning = { x: tp.x, y: tp.y, camX: camera.x, camY: camera.y };
+        canvas.style.cursor = 'grabbing';
+      } else {                             // touch: drag-anywhere virtual joystick moves the player
+        origin = getPoint(e); touchInput.active = true; touchInput.dx = 0; touchInput.dy = 0;
+      }
+      e.preventDefault();
     }
     function dragMove(e) {
+      if (panning) {                        // pan the camera; redraw the cached static layer at the new offset
+        var mp = getPoint(e);
+        camera.x = panning.camX + (mp.x - panning.x);
+        camera.y = panning.camY + (mp.y - panning.y);
+        renderStatic();
+        e.preventDefault(); return;
+      }
       if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
         if (corridorDrag) { var cp = getPoint(e); setPointer(cp.x, cp.y); }
         e.preventDefault(); return;
@@ -3976,6 +3992,7 @@
       e.preventDefault();
     }
     function dragEnd(e) {
+      if (panning) { panning = null; canvas.style.cursor = ''; if (e && e.preventDefault) e.preventDefault(); return; }
       if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
         if (corridorDrag) {
           if (placing.item.kind === 'blank') commitBlank(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy);
