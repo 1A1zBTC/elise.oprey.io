@@ -1176,59 +1176,13 @@
         if (!isRoomFloor(x + 1, y)) W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
         if (!isRoomFloor(x, y + 1)) W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
       }
-      // exam rooms: wall the corridor-facing sides, leaving a single doorway
-      examRooms.forEach(function (rm) {
-        var gx = rm.gx, gy = rm.gy, door = rm.door;
-        function mine(x, y) { return x >= gx && x < gx + 3 && y >= gy && y < gy + 3; }
-        function isDoor(x, y) { return door && door.x === x && door.y === y; }
-        examTiles(gx, gy).forEach(function (t) {
-          var x = t.x, y = t.y;
-          if (!mine(x - 1, y) && isRoomFloor(x - 1, y)) {
-            if (isDoor(x - 1, y)) D(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, { style: 'brown', inx: 1, iny: 0 });
-            else W(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
-          }
-          if (!mine(x, y - 1) && isRoomFloor(x, y - 1)) {
-            if (isDoor(x, y - 1)) D(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, { style: 'brown', inx: 0, iny: 1 });
-            else W(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
-          }
-          if (!mine(x + 1, y) && isRoomFloor(x + 1, y)) {
-            if (isDoor(x + 1, y)) D(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: -1, iny: 0 });
-            else W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
-          }
-          if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) {
-            if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 });
-            else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
-          }
-        });
-      });
-      // X-ray rooms: same — wall the corridor-facing sides, single doorway (3×4)
-      xrayRooms.forEach(function (rm) {
-        var gx = rm.gx, gy = rm.gy, door = rm.door;
-        function mine(x, y) { return x >= gx && x < gx + 3 && y >= gy && y < gy + 4; }
-        function isDoor(x, y) { return door && door.x === x && door.y === y; }
-        xrayTiles(gx, gy).forEach(function (t) {
-          var x = t.x, y = t.y;
-          if (!mine(x - 1, y) && isRoomFloor(x - 1, y)) {
-            if (isDoor(x - 1, y)) D(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, { style: 'brown', inx: 1, iny: 0 });
-            else W(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
-          }
-          if (!mine(x, y - 1) && isRoomFloor(x, y - 1)) {
-            if (isDoor(x, y - 1)) D(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, { style: 'brown', inx: 0, iny: 1 });
-            else W(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
-          }
-          if (!mine(x + 1, y) && isRoomFloor(x + 1, y)) {
-            if (isDoor(x + 1, y)) D(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: -1, iny: 0 });
-            else W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
-          }
-          if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) {
-            if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 });
-            else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
-          }
-        });
-      });
-      // restrooms: wall corridor-facing sides, single doorway (2×3, rotated)
-      restrooms.forEach(function (rm) {
-        var door = rm.door, tiles = footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot), set = {};
+      // Walled rooms (exam / xray / restroom / pharmacy): wall every corridor-
+      // facing edge, punching a brown doorway at the room's door tile. One generic
+      // pass over the room registry — membership is a tile-set lookup so it works
+      // for any footprint (rectangular or rotated). Order matches the registry so
+      // equal-depth segments sort identically to before.
+      function roomWalls(rm, tiles) {
+        var door = rm.door, set = {};
         tiles.forEach(function (t) { set[t.x + ',' + t.y] = true; });
         function mine(x, y) { return !!set[x + ',' + y]; }
         function isDoor(x, y) { return door && door.x === x && door.y === y; }
@@ -1239,19 +1193,10 @@
           if (!mine(x + 1, y) && isRoomFloor(x + 1, y)) { if (isDoor(x + 1, y)) D(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: -1, iny: 0 }); else W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90'); }
           if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) { if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 }); else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3'); }
         });
-      });
-      // pharmacies: wall corridor-facing sides, single doorway (4 wide × 3 deep)
-      pharmacies.forEach(function (ph) {
-        var door = ph.door;
-        function mine(x, y) { return x >= ph.gx && x < ph.gx + PHARM_W && y >= ph.gy && y < ph.gy + PHARM_H; }
-        function isDoor(x, y) { return door && door.x === x && door.y === y; }
-        pharmTiles(ph.gx, ph.gy).forEach(function (t) {
-          var x = t.x, y = t.y;
-          if (!mine(x - 1, y) && isRoomFloor(x - 1, y)) { if (isDoor(x - 1, y)) D(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, { style: 'brown', inx: 1, iny: 0 }); else W(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3'); }
-          if (!mine(x, y - 1) && isRoomFloor(x, y - 1)) { if (isDoor(x, y - 1)) D(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, { style: 'brown', inx: 0, iny: 1 }); else W(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90'); }
-          if (!mine(x + 1, y) && isRoomFloor(x + 1, y)) { if (isDoor(x + 1, y)) D(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: -1, iny: 0 }); else W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90'); }
-          if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) { if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 }); else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3'); }
-        });
+      }
+      ['exam', 'xray', 'restroom', 'pharmacy'].forEach(function (type) {
+        var d = ROOM_TYPES[type];
+        d.list.forEach(function (rm) { roomWalls(rm, d.tiles(rm.gx, rm.gy, rm.rot || 0)); });
       });
       // ---- decorations billboarded onto the tall back-wall planes ----------
       // Each is its own scene item; d = the billboard's far grid-edge so its own
