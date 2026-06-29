@@ -490,20 +490,43 @@
     // we just blit bg, draw the vet, blit fg — cheap.
     var view = { w: 0, h: 0, dpr: 1 };
     var camera = { x: 0, y: 0 };
+    // The static layer (grass/road/floor) is procedurally heavy, so we bake it once
+    // into `bg`. To pan smoothly we bake it into a buffer PADDED by STATIC_PAD px on
+    // every side and just translate that cached bitmap by the camera delta each frame
+    // — re-baking only when a drag scrolls past the padding (see draw()/dragMove()).
+    var STATIC_PAD = 220;
+    var staticCamX = 0, staticCamY = 0;    // camera position at the last renderStatic() bake
     var bg = document.createElement('canvas'), bgx = bg.getContext('2d');
     var fg = document.createElement('canvas'), fgx = fg.getContext('2d');
     var ghostC = document.createElement('canvas'), ghostCtx = ghostC.getContext('2d'); // for tinting the placement preview
+    // The vignette is screen-anchored and never changes except on resize, so we
+    // bake it once here and blit it each frame instead of rasterising a full-canvas
+    // radial-gradient fill every frame (see draw()).
+    var vig = document.createElement('canvas'), vigx = vig.getContext('2d');
+    function buildVignette() {
+      vig.width = canvas.width; vig.height = canvas.height;
+      var cx = canvas.width / 2, cy = canvas.height / 2;
+      var g = vigx.createRadialGradient(cx, cy, Math.min(canvas.width, canvas.height) * 0.35,
+                                        cx, cy, Math.max(canvas.width, canvas.height) * 0.72);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.22)');
+      vigx.clearRect(0, 0, vig.width, vig.height);
+      vigx.fillStyle = g; vigx.fillRect(0, 0, vig.width, vig.height);
+    }
 
     function resize() {
       var rect = canvas.getBoundingClientRect();
       var dpr = Math.min(window.devicePixelRatio || 1, 2);
       view.w = rect.width; view.h = rect.height; view.dpr = dpr;
-      canvas.width = bg.width = fg.width = ghostC.width = Math.round(rect.width * dpr);
-      canvas.height = bg.height = fg.height = ghostC.height = Math.round(rect.height * dpr);
+      canvas.width = ghostC.width = Math.round(rect.width * dpr);
+      canvas.height = ghostC.height = Math.round(rect.height * dpr);
+      // bg/fg carry STATIC_PAD of pre-rendered margin so panning has room to translate.
+      bg.width = fg.width = Math.round((rect.width + 2 * STATIC_PAD) * dpr);
+      bg.height = fg.height = Math.round((rect.height + 2 * STATIC_PAD) * dpr);
       // Centre the room; nudge up so the front path has room below.
       var c = isoRaw(ROOM / 2 - 0.5, ROOM / 2 - 0.5);
       camera.x = view.w / 2 - c.x;
       camera.y = view.h / 2 - c.y - 28;
+      buildVignette();
       renderStatic();
     }
 
@@ -1091,16 +1114,20 @@
     var staticDirty = false;               // coalesces static redraws (e.g. while panning) to one per frame
     function renderStatic() {
       if (_suspendStatic) return;
-      bgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-      fgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-      bgx.clearRect(0, 0, view.w, view.h);
-      fgx.clearRect(0, 0, view.w, view.h);
+      staticCamX = camera.x; staticCamY = camera.y;   // remember where this bake was centred
+      // Shift the bake by STATIC_PAD so screen coord (x,y) lands at buffer pixel (x+PAD,y+PAD),
+      // leaving a pre-rendered margin on every side for the pan to translate into.
+      var P = STATIC_PAD * view.dpr;
+      bgx.setTransform(view.dpr, 0, 0, view.dpr, P, P);
+      fgx.setTransform(view.dpr, 0, 0, view.dpr, P, P);
+      bgx.clearRect(-STATIC_PAD, -STATIC_PAD, view.w + 2 * STATIC_PAD, view.h + 2 * STATIC_PAD);
+      fgx.clearRect(-STATIC_PAD, -STATIC_PAD, view.w + 2 * STATIC_PAD, view.h + 2 * STATIC_PAD);
       doorways.length = 0;                  // rebuilt as drawDoorOpening() runs in collectWalls()
       wallSegs.length = 0;                   // cleared so walls vanish while placing (collectWalls rebuilds)
 
-      // 1) grass: cover the whole viewport (grid bbox of the 4 screen corners)
-      var corners = [screenToGrid(0, 0), screenToGrid(view.w, 0),
-                     screenToGrid(0, view.h), screenToGrid(view.w, view.h)];
+      // 1) grass: cover the whole padded viewport (grid bbox of the 4 padded corners)
+      var corners = [screenToGrid(-STATIC_PAD, -STATIC_PAD), screenToGrid(view.w + STATIC_PAD, -STATIC_PAD),
+                     screenToGrid(-STATIC_PAD, view.h + STATIC_PAD), screenToGrid(view.w + STATIC_PAD, view.h + STATIC_PAD)];
       var minGx = 1e9, maxGx = -1e9, minGy = 1e9, maxGy = -1e9;
       corners.forEach(function (p) {
         minGx = Math.min(minGx, p.gx); maxGx = Math.max(maxGx, p.gx);
@@ -3528,7 +3555,11 @@
     // ---- Render -----------------------------------------------------------
     function draw() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(bg, 0, 0);
+      // Blit the padded static buffer, offset by how far the camera has moved since the
+      // bake. While panning this just translates the cached bitmap (cheap) instead of
+      // re-running the procedural tile render; the margin keeps the edges covered.
+      var dx = camera.x - staticCamX, dy = camera.y - staticCamY;
+      ctx.drawImage(bg, (-STATIC_PAD + dx) * view.dpr, (-STATIC_PAD + dy) * view.dpr);
 
       // ONE painter's pass over everything on the floor — walls, doors, furniture,
       // characters — sorted by foot depth (gx+gy). The lower an object's foot, the
@@ -3623,11 +3654,7 @@
       drawFloaters();                       // +10 coin pops on top of everyone
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      // gentle vignette for focus
-      ctx.fillStyle = gradR(ctx, canvas.width / 2, canvas.height / 2,
-        Math.min(canvas.width, canvas.height) * 0.35, canvas.width / 2, canvas.height / 2,
-        Math.max(canvas.width, canvas.height) * 0.72, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.22)']]);
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(vig, 0, 0);              // gentle vignette for focus (baked in buildVignette)
     }
 
     var last = 0;
@@ -3700,11 +3727,14 @@
       e.preventDefault();
     }
     function dragMove(e) {
-      if (panning) {                        // pan the camera; defer the heavy static redraw to the frame loop
+      if (panning) {                        // pan the camera by translating the cached static buffer
         var mp = getPoint(e);
         camera.x = panning.camX + (mp.x - panning.x);
         camera.y = panning.camY + (mp.y - panning.y);
-        staticDirty = true;
+        // Only re-bake when the pan nears the pre-rendered margin (else the edge would
+        // run dry); in between, draw() just translates the existing bitmap — buttery.
+        if (Math.abs(camera.x - staticCamX) > STATIC_PAD - 8 ||
+            Math.abs(camera.y - staticCamY) > STATIC_PAD - 8) staticDirty = true;
         e.preventDefault(); return;
       }
       if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
