@@ -1,0 +1,64 @@
+/* Shared styles for "Elise and Luke's Games".
+   Linked by every game as <link rel="stylesheet" href="/shared/game.css">
+   (after /fonts/fonts.css). Holds the design tokens + the component classes
+   that used to be copy-pasted into each game: the global reset, topbar,
+   canvas stage, overlay/panel, scoreline and start button.
+
+   Games keep only their OWN styles inline. Minor per-game variances
+   (e.g. .stage aspect-ratio, .topbar max-width, body touch-action) are fine
+   to override in the game's own <style> after this file. */
+
+:root {
+  --bg-0: #1a1a2e;        /* darkest — gradient top */
+  --bg-1: #16213e;        /* panels / gradient bottom */
+  --bg-2: #0f1830;        /* alt dark background */
+  --border: #0f3460;      /* borders */
+  --accent: #e94560;      /* primary accent (buttons, highlights) */
+  --accent-shadow: #b22a44; /* button drop shadow */
+  --muted: #a0a8c0;       /* secondary text / labels */
+  --gold: #ffe8b0;        /* gold highlight */
+  --fg: #fff;             /* primary text */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  background: linear-gradient(160deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 16px; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+
+/* ---- Topbar / "‹ Games" back link ---- */
+.topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.back { color: var(--muted); text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
+.back:hover { color: var(--fg); background: rgba(255,255,255,0.06); }
+.title { font-family: 'Pacifico', cursive; color: var(--fg); font-size: 1.6rem; line-height: 1; }
+
+/* ---- Canvas stage ---- */
+.stage {
+  position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid var(--border); aspect-ratio: 760 / 560;
+}
+canvas { display: block; width: 100%; height: 100%; }
+
+/* ---- Hint line ---- */
+.hint { margin-top: 12px; color: var(--muted); font-size: 0.82rem; text-align: center; max-width: 560px; line-height: 1.5; }
+.hint b { color: var(--gold); }
+
+/* ---- Overlay / panel (start + game-over screens) ---- */
+.overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+.overlay[hidden] { display: none; }
+.panel { width: 100%; max-width: 380px; background: var(--bg-1); border: 2px solid var(--border); border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
+.panel h2 { font-family: 'Pacifico', cursive; color: var(--fg); font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
+.panel .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 14px; line-height: 1.4; }
+
+/* ---- Scoreline ---- */
+.scoreline { color: var(--fg); font-weight: 800; font-size: 1rem; margin: 6px 0; }
+.scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
+.scoreline .lbl { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* ---- Primary action button ---- */
+.start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: var(--fg); background: var(--accent); border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 var(--accent-shadow); transition: transform 0.1s ease, box-shadow 0.1s ease; }
+.start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--accent-shadow); }

@@ -5,20 +5,20 @@
 
    MAINTENANCE: when you add a new game, add its "<game>/" to PAGES below and
    bump CACHE (e.g. el-games-v2) so clients pick up the new precache list. */
-const CACHE = 'el-games-v34';
+const CACHE = 'el-games-v36';
 
 const PAGES = [
-  '/',
-  'battleships/', 'bunny-dig/', 'catch-the-treats/', 'chameleons/', 'crossy-pets/', 'flappy-dog/',
-  'fly-or-die/', 'frog-feast/', 'fruit-merge/', 'grindy-vet/', 'hungry-pig/', 'kit-clash/', 'kitten-jump/',
-  'match-it/', 'mob-soccer/', 'monkey-swing/', 'naughty-shelf/', 'picwits/', 'scroot-rooms/',
-  'snakes-and-ladders/', 'sumo/', 'twisted-system/', 'wavelength/', 'whack-a-mole/'
+  '/', 'battleships/', 'bunny-dig/', 'catch-the-treats/', 'chameleons/', 'crossy-pets/',
+  'flappy-dog/', 'fly-or-die/', 'frog-feast/', 'fruit-merge/', 'grindy-vet/', 'hungry-pig/',
+  'kit-clash/', 'kitten-jump/', 'match-it/', 'mob-soccer/', 'monkey-swing/', 'naughty-shelf/',
+  'picwits/', 'scroot-rooms/', 'snakes-and-ladders/', 'sumo/', 'twisted-system/', 'wavelength/',
+  'whack-a-mole/'
 ];
 const ASSETS = [
-  'manifest.webmanifest', 'pwa.js',
-  'fonts/fonts.css', 'fonts/nunito.woff2', 'fonts/pacifico.woff2',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-512-maskable.png',
-  'icons/apple-touch-icon.png', 'icons/favicon.png'
+  'manifest.webmanifest', 'pwa.js', 'shared/game.css',
+  'shared/game.js', 'fonts/fonts.css', 'fonts/nunito.woff2',
+  'fonts/pacifico.woff2', 'icons/icon-192.png', 'icons/icon-512.png',
+  'icons/icon-512-maskable.png', 'icons/apple-touch-icon.png', 'icons/favicon.png'
 ];
 const PRECACHE = PAGES.concat(ASSETS);
 
