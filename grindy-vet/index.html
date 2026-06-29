@@ -1371,7 +1371,11 @@
     }
 
     // ---- Build the static layers -----------------------------------------
+    // During bulk layout changes (load) we place many rooms in a loop, each of
+    // which calls renderStatic(); suspend it and bake once at the end.
+    var _suspendStatic = false;
     function renderStatic() {
+      if (_suspendStatic) return;
       bgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       fgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       bgx.clearRect(0, 0, view.w, view.h);
@@ -4192,10 +4196,12 @@
         var def = FURN_BY_ID[p.id];
         if (def) footprintTiles(def, p.gx, p.gy, p.rot || 0).forEach(function (t) { occupied[t.x + ',' + t.y] = true; });
       });
+      _suspendStatic = true;                    // bake once after all rooms (below), not per room
       if (typeof placeExam === 'function')     (data.examRooms || []).forEach(function (r) { placeExam(r.gx, r.gy, r.rot || 0); });
       if (typeof placeXray === 'function')     (data.xrayRooms || []).forEach(function (r) { placeXray(r.gx, r.gy, r.rot || 0); });
       if (typeof placeRestroom === 'function') (data.restrooms || []).forEach(function (r) { placeRestroom(r.gx, r.gy, r.rot || 0); });
       if (typeof placePharmacy === 'function') (data.pharmacies || []).forEach(function (r) { placePharmacy(r.gx, r.gy, r.rot || 0); });
+      _suspendStatic = false;
       // per-room persistent extras, by index (push order matches save order)
       (data.xrayRooms || []).forEach(function (r, i) { if (xrayRooms[i]) xrayRooms[i].vet = !!r.vet; });
       (data.pharmacies || []).forEach(function (r, i) {
