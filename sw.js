@@ -5,7 +5,7 @@
 
    MAINTENANCE: when you add a new game, add its "<game>/" to PAGES below and
    bump CACHE (e.g. el-games-v2) so clients pick up the new precache list. */
-const CACHE = 'el-games-v30';
+const CACHE = 'el-games-v31';
 
 const PAGES = [
   '/',

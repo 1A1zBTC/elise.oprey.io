@@ -68,7 +68,7 @@
       <div class="panel">
         <h2>Scroot Rooms</h2>
         <div class="sub">You've no-clipped into the <b>Backrooms</b>. 🚪<br>
-          Find a glowing <b>door</b> and open it to drop into a different place &mdash; the yellow halls, the <b>poolrooms</b>, a <b>subway station</b>, a <b>haunted house</b>, the <b>sewers</b>, or a moonlit <b>forest</b>. Or take a <b>slide</b> down. Two things hunt you: <b>Captain Clark</b> and the <b>Bacteria</b> &mdash; both <b>faster than you</b>, so break their line of sight around a corner. Leave <b>✕ marks</b> to track where you've been.<br><br>
+          Find a glowing <b>door</b> and open it to drop into a different place &mdash; the yellow halls, the <b>poolrooms</b>, a <b>subway</b>, an <b>abandoned school</b>, an <b>empty hospital</b>, a <b>supermarket</b>, the <b>bubblegum factory</b>, an <b>office</b>, a <b>parking garage</b>, <b>Level Fun =)</b>, or a moonlit <b>forest</b>. Or take a <b>slide</b> down. Things hunt you here: <b>Captain Clark</b>, the gloopy <b>Bacteria</b>, grinning <b>Smilers</b>, the <b>Partygoers</b>, lean <b>Hounds</b> and blank-faced <b>Facelings</b>. Many are <b>faster than you</b> &mdash; break their line of sight around a corner. Leave <b>✕ marks</b> to track where you've been.<br><br>
           <b style="color:#e0a0a0">Headphones on. They scream.</b><br><br>
           <b>Move</b> drag / WASD &nbsp;·&nbsp; <b>Turn</b> drag / A&nbsp;D &nbsp;·&nbsp; <b>Mark</b> M or the ✕ button</div>
         <button class="start-btn" id="start-btn">Enter the Backrooms</button>
@@ -145,13 +145,13 @@
     let dirX, dirY, planeX, planeY;
     let entities, corpses;       // hunters (Captain Clark + the Bacteria), hazmat corpses
     let doors, slides, marks, glitches;  // openable doors, slide chutes, your trail markers, phasing objects
+    let props;                           // themed scenery (benches, lockers, trees, shelving…) that sells each place
     let level, bestLevel, themeName, phasing;
     let banner;                  // {text, sub, t} brief level intro
     let darkness, blackout;      // per-level mood: 0 (lit) .. 1 (pitch black + flicker)
-    let jumpT = 0, jumpFace = 0; // jumpscare timer + which face (0 Clark, 1 Bacteria)
+    let jumpT = 0, jumpType = 'clark'; // jumpscare timer + which entity's face lunges
     let slideT = 0;              // slide-down transition timer
-    let audio = null;            // WebAudio context (created on first start)
-    let music = null;            // running eerie-ambience nodes
+    let audio = null;            // WebAudio context (created on first start, for the screech)
 
     // ---------- level generation ----------
     // Recursive-backtracker maze, then knock out extra walls to open it into
@@ -267,9 +267,26 @@
           return;
         }
       }
+      // Captain Clark always stalks; each place then has its own signature
+      // hunter so the levels feel distinct, plus the Bacteria infesting some.
       const clarks = clamp(1 + Math.floor((lvl - 1) / 3), 1, 3);
-      for (let i = 0; i < clarks; i++) spawnHunter('clark', 2.9 + lvl * 0.06);
-      if (lvl >= 2) spawnHunter('bacteria', 2.55 + lvl * 0.05);   // skittering blob
+      for (let i = 0; i < clarks; i++) spawnHunter('clark', 2.85 + lvl * 0.06);
+      const T = themeName;
+      if (T === 'party') {                                  // a mob of Partygoers
+        const n = clamp(3 + Math.floor(lvl / 2), 3, 6);
+        for (let i = 0; i < n; i++) spawnHunter('partygoer', 2.5 + lvl * 0.04);
+      } else if (T === 'forest') {                          // Hounds hunt the woods
+        for (let i = 0, n = lvl >= 3 ? 2 : 1; i < n; i++) spawnHunter('hound', 3.0 + lvl * 0.05);
+      } else if (T === 'school' || T === 'office' || T === 'hospital' || T === 'grocery') {
+        if (lvl >= 2) spawnHunter('faceling', 1.8 + lvl * 0.03);   // blank-faced wanderers
+        if (lvl >= 3 && Math.random() < 0.5) spawnHunter('faceling', 1.8 + lvl * 0.03);
+      }
+      // dark places: Smilers lurk in the shadows and lunge
+      if ((T === 'subway' || T === 'garage' || T === 'haunted' || T === 'sewer') && lvl >= 2) spawnHunter('smiler', 3.4 + lvl * 0.05);
+      // the Bacteria infests damp / organic levels
+      if (lvl >= 2 && (T === 'yellow' || T === 'sewer' || T === 'factory' || T === 'pool' || T === 'hospital')) spawnHunter('bacteria', 2.7 + lvl * 0.05);
+      // deep levels get an extra roaming Hound
+      if (lvl >= 5 && T !== 'party' && T !== 'forest' && Math.random() < 0.4) spawnHunter('hound', 3.0 + lvl * 0.05);
 
       // dead people in yellow hazmat suits
       corpses = [];
@@ -299,6 +316,9 @@
           n++;
         }
       }
+
+      // themed scenery (benches, lockers, trees, shelving…) that sells the place
+      placeProps();
 
       // lighting: per-theme base + a gentle depth ramp. Dim, atmospheric levels
       // flicker — but nothing goes fully pitch black anymore.
@@ -1060,6 +1080,274 @@
       g.restore();
     }
 
+    // ===================== more Backrooms entities =====================
+
+    // SMILER — no body, just a huge glowing Cheshire grin + two glowing eyes
+    // floating in the dark. Drawn on a transparent frame so the void "body" is
+    // simply the room behind it. The face sits high in the frame so it hovers
+    // at head height when floor-anchored.
+    const SMW = 220, SMH = 340;
+    function drawSmilerBody(g, phase) {
+      const cx = SMW / 2, cy = SMH * 0.34;
+      const wj = 1 + Math.sin(phase) * 0.05, glow = 0.55 + 0.45 * (Math.sin(phase * 2) * 0.5 + 0.5);
+      // soft sickly halo
+      const hg = g.createRadialGradient(cx, cy, 4, cx, cy, 130);
+      hg.addColorStop(0, 'rgba(226,232,176,' + (0.16 * glow) + ')'); hg.addColorStop(1, 'rgba(226,232,176,0)');
+      g.fillStyle = hg; g.beginPath(); g.arc(cx, cy, 130, 0, 6.29); g.fill();
+      // two glowing eyes
+      for (const sgn of [-1, 1]) {
+        const ex = cx + sgn * 38, ey = cy - 30;
+        const eg = g.createRadialGradient(ex, ey, 1, ex, ey, 16);
+        eg.addColorStop(0, 'rgba(255,255,238,0.98)'); eg.addColorStop(0.5, 'rgba(232,238,180,0.8)'); eg.addColorStop(1, 'rgba(232,238,180,0)');
+        g.fillStyle = eg; g.beginPath(); g.arc(ex, ey, 16, 0, 6.29); g.fill();
+        g.fillStyle = 'rgba(255,255,240,0.95)'; g.beginPath(); g.ellipse(ex, ey, 7, 9, 0, 0, 6.29); g.fill();
+      }
+      // huge wide crescent grin of teeth
+      g.save(); g.translate(cx, cy + 22); g.scale(wj, 1);
+      const mw = 86, mh = 28;
+      g.beginPath();
+      g.moveTo(-mw, 0); g.quadraticCurveTo(0, mh * 2.5, mw, 0); g.quadraticCurveTo(0, mh * 0.5, -mw, 0); g.closePath();
+      g.fillStyle = 'rgba(247,250,214,0.96)'; g.fill();
+      g.save(); g.clip();
+      g.strokeStyle = 'rgba(24,18,10,0.7)'; g.lineWidth = 2.6;          // tooth seams
+      for (let i = -7; i <= 7; i++) { const x = i / 7 * mw; g.beginPath(); g.moveTo(x, -6); g.lineTo(x, mh * 2.8); g.stroke(); }
+      g.fillStyle = 'rgba(120,30,30,0.25)'; g.fillRect(-mw, mh * 1.5, mw * 2, mh); // gum shadow at back
+      g.restore();
+      g.strokeStyle = 'rgba(20,14,8,0.85)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(-mw, 0); g.quadraticCurveTo(0, mh * 2.5, mw, 0); g.quadraticCurveTo(0, mh * 0.5, -mw, 0); g.stroke();
+      g.restore();
+    }
+    const SMILER_FRAMES = (function () {
+      const N = 12, arr = [];
+      for (let i = 0; i < N; i++) { const c = makeCanvas(SMW, SMH), g = c.getContext('2d'); drawSmilerBody(g, (i / N) * Math.PI * 2); arr.push(c); }
+      return arr;
+    })();
+    function drawSmilerFace(g, cx, cy, S, open, t) {
+      g.save(); g.translate(cx, cy); g.scale(S, S);
+      g.fillStyle = '#000'; g.fillRect(-400, -400, 800, 800);
+      // glowing eyes
+      for (const sgn of [-1, 1]) {
+        const ex = sgn * 90, ey = -90;
+        const eg = g.createRadialGradient(ex, ey, 2, ex, ey, 70);
+        eg.addColorStop(0, 'rgba(255,255,240,1)'); eg.addColorStop(0.4, 'rgba(236,240,176,0.9)'); eg.addColorStop(1, 'rgba(236,240,176,0)');
+        g.fillStyle = eg; g.beginPath(); g.arc(ex, ey, 70, 0, 6.29); g.fill();
+        g.fillStyle = '#fffff0'; g.beginPath(); g.ellipse(ex, ey, 26, 32, 0, 0, 6.29); g.fill();
+      }
+      // enormous grin
+      const mw = 220 * (1 + open * 0.25), mh = 70 + open * 50;
+      g.beginPath(); g.moveTo(-mw, 0); g.quadraticCurveTo(0, mh * 2.4, mw, 0); g.quadraticCurveTo(0, mh * 0.5, -mw, 0); g.closePath();
+      g.fillStyle = '#f6f9d6'; g.fill();
+      g.save(); g.clip();
+      g.strokeStyle = 'rgba(24,18,10,0.7)'; g.lineWidth = 7;
+      for (let i = -8; i <= 8; i++) { const x = i / 8 * mw; g.beginPath(); g.moveTo(x, -10); g.lineTo(x, mh * 2.8); g.stroke(); }
+      g.fillStyle = 'rgba(120,20,20,0.4)'; g.fillRect(-mw, mh * 1.6, mw * 2, mh); g.restore();
+      g.restore();
+    }
+
+    // PARTYGOER — matte-black featureless humanoid with a faint white painted
+    // smile; jerky "celebrating" arms. (Level Fun.)
+    const PGW = 150, PGH = 412;
+    function drawPartygoerBody(g, phase) {
+      const cx = PGW / 2;
+      const legA = Math.sin(phase), armA = Math.sin(phase * 2), bob = Math.abs(Math.sin(phase));
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      // legs (jerky little dance, wide stance)
+      g.strokeStyle = '#0a0a0e'; g.lineWidth = PGW * 0.15;
+      g.beginPath(); g.moveTo(cx - 15, PGH * 0.62); g.lineTo(cx - 20 + legA * 9, PGH * 0.80); g.lineTo(cx - 24 + legA * 16, PGH * 0.97); g.stroke();
+      g.beginPath(); g.moveTo(cx + 15, PGH * 0.62); g.lineTo(cx + 20 - legA * 9, PGH * 0.80); g.lineTo(cx + 24 - legA * 16, PGH * 0.97); g.stroke();
+      // broad torso with shoulders
+      const tg = g.createLinearGradient(cx - 40, 0, cx + 40, 0);
+      tg.addColorStop(0, '#040406'); tg.addColorStop(0.5, '#22222c'); tg.addColorStop(1, '#040406');
+      g.fillStyle = tg;
+      g.beginPath();
+      g.moveTo(cx - 38, PGH * 0.31); g.lineTo(cx + 38, PGH * 0.31);
+      g.lineTo(cx + 30, PGH * 0.64); g.lineTo(cx - 30, PGH * 0.64); g.closePath(); g.fill();
+      // arms thrown up, clapping on the beat
+      g.strokeStyle = '#0c0c11'; g.lineWidth = PGW * 0.12; const clap = armA * 0.5 + 0.5;
+      g.beginPath(); g.moveTo(cx - 32, PGH * 0.34); g.lineTo(cx - 40 + clap * 14, PGH * 0.20); g.lineTo(cx - 10 + clap * 9, PGH * 0.09); g.stroke();
+      g.beginPath(); g.moveTo(cx + 32, PGH * 0.34); g.lineTo(cx + 40 - clap * 14, PGH * 0.20); g.lineTo(cx + 10 - clap * 9, PGH * 0.09); g.stroke();
+      // rounded head
+      const headY = PGH * 0.21 - bob * 4;
+      const hg = g.createRadialGradient(cx - 8, headY - 8, 3, cx, headY, 36);
+      hg.addColorStop(0, '#26262f'); hg.addColorStop(1, '#050507');
+      g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 29, 33, 0, 0, 6.29); g.fill();
+      // faint painted white smile (only feature)
+      g.strokeStyle = 'rgba(238,238,242,0.6)'; g.lineWidth = 3;
+      g.beginPath(); g.arc(cx, headY + 4, 13, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+      // cold rim light so the black silhouette reads against the dark
+      g.strokeStyle = 'rgba(130,130,165,0.28)'; g.lineWidth = 2.4;
+      g.beginPath(); g.ellipse(cx, headY, 29, 33, 0, 0, 6.29); g.stroke();
+      g.beginPath(); g.moveTo(cx - 38, PGH * 0.31); g.lineTo(cx + 38, PGH * 0.31); g.stroke();
+    }
+    const PARTYGOER_FRAMES = (function () {
+      const N = 12, arr = [];
+      for (let i = 0; i < N; i++) { const c = makeCanvas(PGW, PGH), g = c.getContext('2d'); drawPartygoerBody(g, (i / N) * Math.PI * 2); arr.push(c); }
+      return arr;
+    })();
+    function drawPartygoerFace(g, cx, cy, S, open, t) {
+      g.save(); g.translate(cx, cy); g.scale(S, S);
+      const grd = g.createRadialGradient(-30, -40, 20, 0, 0, 250);
+      grd.addColorStop(0, '#1c1c24'); grd.addColorStop(0.6, '#08080c'); grd.addColorStop(1, '#000');
+      g.fillStyle = grd; g.beginPath(); g.ellipse(0, 0, 175, 220, 0, 0, 6.29); g.fill();
+      // the painted smile tears open into a scream as `open` grows
+      const mw = 120, mh = 14 + open * 130;
+      g.fillStyle = 'rgba(235,235,242,0.85)'; g.lineWidth = 6;
+      if (open < 0.25) {
+        g.strokeStyle = 'rgba(235,235,242,0.85)'; g.beginPath(); g.arc(0, 30, 70, 0.12 * Math.PI, 0.88 * Math.PI); g.stroke();
+      } else {
+        const mg = g.createRadialGradient(0, 70, 6, 0, 70, mh);
+        mg.addColorStop(0, '#160606'); mg.addColorStop(1, '#000');
+        g.fillStyle = mg; g.beginPath(); g.ellipse(0, 70, mw, mh, 0, 0, 6.29); g.fill();
+        g.strokeStyle = 'rgba(235,235,242,0.85)'; g.lineWidth = 5; g.beginPath(); g.ellipse(0, 70, mw, mh, 0, 0, 6.29); g.stroke();
+      }
+      g.restore();
+    }
+
+    // HOUND — lean, emaciated, deformed quadruped: long thin legs, exposed ribs,
+    // elongated jaw of teeth. Loping side-on silhouette.
+    const HDW = 230, HDH = 156;
+    function drawHoundBody(g, phase) {
+      const legA = Math.sin(phase), legB = Math.sin(phase + Math.PI), bodyY = HDH * 0.44;
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      const skin = g.createLinearGradient(0, bodyY - 30, 0, bodyY + 30);
+      skin.addColorStop(0, '#8c877b'); skin.addColorStop(1, '#534f47');
+      // far legs (darker, behind)
+      g.strokeStyle = '#494539'; g.lineWidth = 7;
+      g.beginPath(); g.moveTo(HDW * 0.40, bodyY + 14); g.lineTo(HDW * 0.34 + legB * 16, HDH * 0.95); g.stroke();
+      g.beginPath(); g.moveTo(HDW * 0.66, bodyY + 14); g.lineTo(HDW * 0.72 + legA * 16, HDH * 0.95); g.stroke();
+      // emaciated torso
+      g.fillStyle = skin;
+      g.beginPath();
+      g.moveTo(HDW * 0.28, bodyY);
+      g.bezierCurveTo(HDW * 0.32, bodyY - 28, HDW * 0.60, bodyY - 26, HDW * 0.72, bodyY - 12);
+      g.bezierCurveTo(HDW * 0.80, bodyY - 4, HDW * 0.80, bodyY + 12, HDW * 0.68, bodyY + 18);
+      g.bezierCurveTo(HDW * 0.52, bodyY + 24, HDW * 0.34, bodyY + 22, HDW * 0.28, bodyY); g.closePath(); g.fill();
+      // ribs + spine hollow
+      g.strokeStyle = 'rgba(38,35,30,0.5)'; g.lineWidth = 2;
+      for (let i = 0; i < 4; i++) { const x = HDW * (0.38 + i * 0.06); g.beginPath(); g.moveTo(x, bodyY - 16); g.lineTo(x, bodyY + 14); g.stroke(); }
+      g.fillStyle = 'rgba(30,28,24,0.4)'; g.beginPath(); g.ellipse(HDW * 0.5, bodyY + 6, HDW * 0.14, 7, 0, 0, 6.29); g.fill();
+      // near legs (in front, lighter)
+      g.strokeStyle = '#7d786b'; g.lineWidth = 9;
+      g.beginPath(); g.moveTo(HDW * 0.42, bodyY + 14); g.lineTo(HDW * 0.38 + legA * 18, HDH * 0.98); g.stroke();
+      g.beginPath(); g.moveTo(HDW * 0.62, bodyY + 14); g.lineTo(HDW * 0.66 + legB * 18, HDH * 0.98); g.stroke();
+      // neck + elongated skull reaching forward (right)
+      g.fillStyle = skin;
+      g.beginPath(); g.moveTo(HDW * 0.70, bodyY - 8); g.lineTo(HDW * 0.84, bodyY - 24); g.lineTo(HDW * 0.92, bodyY - 14); g.lineTo(HDW * 0.78, bodyY + 6); g.closePath(); g.fill();
+      // long snout + lower jaw
+      g.fillStyle = '#827c70';
+      g.beginPath(); g.moveTo(HDW * 0.84, bodyY - 22); g.lineTo(HDW * 1.0, bodyY - 13); g.lineTo(HDW * 0.99, bodyY - 4); g.lineTo(HDW * 0.84, bodyY - 8); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(HDW * 0.86, bodyY - 2); g.lineTo(HDW * 0.99, bodyY - 1); g.lineTo(HDW * 0.86, bodyY + 6); g.closePath(); g.fill();
+      // jagged teeth
+      g.fillStyle = '#ece6d6';
+      for (let i = 0; i < 6; i++) { const x = HDW * (0.86 + i * 0.021); g.beginPath(); g.moveTo(x, bodyY - 3); g.lineTo(x + 4, bodyY - 3); g.lineTo(x + 2, bodyY + 3); g.closePath(); g.fill(); }
+      // pale sunken eye
+      g.fillStyle = '#cfd6c6'; g.beginPath(); g.arc(HDW * 0.855, bodyY - 15, 3.2, 0, 6.29); g.fill();
+      g.fillStyle = '#15140f'; g.beginPath(); g.arc(HDW * 0.86, bodyY - 15, 1.4, 0, 6.29); g.fill();
+      // pointed ear
+      g.fillStyle = skin; g.beginPath(); g.moveTo(HDW * 0.76, bodyY - 20); g.lineTo(HDW * 0.80, bodyY - 36); g.lineTo(HDW * 0.84, bodyY - 22); g.closePath(); g.fill();
+    }
+    const HOUND_FRAMES = (function () {
+      const N = 12, arr = [];
+      for (let i = 0; i < N; i++) { const c = makeCanvas(HDW, HDH), g = c.getContext('2d'); drawHoundBody(g, (i / N) * Math.PI * 2); arr.push(c); }
+      return arr;
+    })();
+    function drawHoundFace(g, cx, cy, S, open, t) {
+      g.save(); g.translate(cx, cy); g.scale(S, S);
+      const skin = g.createRadialGradient(-30, -40, 20, 0, 0, 240);
+      skin.addColorStop(0, '#9a9486'); skin.addColorStop(0.6, '#5c574d'); skin.addColorStop(1, '#26231c');
+      g.fillStyle = skin; g.beginPath(); g.ellipse(0, -20, 150, 180, 0, 0, 6.29); g.fill();
+      // sunken pale eyes
+      for (const sgn of [-1, 1]) {
+        g.fillStyle = '#0a0a07'; g.beginPath(); g.ellipse(sgn * 70, -90, 30, 24, 0, 0, 6.29); g.fill();
+        g.fillStyle = '#c9d0bd'; g.beginPath(); g.arc(sgn * 70, -90, 11, 0, 6.29); g.fill();
+        g.fillStyle = '#120f0a'; g.beginPath(); g.arc(sgn * 70, -90, 5, 0, 6.29); g.fill();
+      }
+      // snarling snout down the middle, gaping with `open`
+      const mh = 60 + open * 150;
+      g.fillStyle = '#0a0805'; g.beginPath(); g.ellipse(0, 90, 70, mh, 0, 0, 6.29); g.fill();
+      g.fillStyle = '#ece6d4';   // big fangs top + bottom
+      for (let i = -4; i <= 4; i++) {
+        g.beginPath(); g.moveTo(i * 16 - 7, 90 - mh + 6); g.lineTo(i * 16 + 7, 90 - mh + 6); g.lineTo(i * 16, 90 - mh + 34); g.closePath(); g.fill();
+        g.beginPath(); g.moveTo(i * 16 - 7, 90 + mh - 6); g.lineTo(i * 16 + 7, 90 + mh - 6); g.lineTo(i * 16, 90 + mh - 34); g.closePath(); g.fill();
+      }
+      // dripping snout nostrils
+      g.fillStyle = '#070605'; g.beginPath(); g.arc(-16, 0, 9, 0, 6.29); g.arc(16, 0, 9, 0, 6.29); g.fill();
+      g.restore();
+    }
+
+    // FACELING — ordinary human body and posture, plain clothes, but the face is
+    // completely smooth and blank. Calm, unnervingly polite gait.
+    const FCW = 132, FCH = 444;
+    function drawFacelingBody(g, phase) {
+      const cx = FCW / 2;
+      const legA = Math.sin(phase), armA = Math.sin(phase + Math.PI), bob = Math.abs(Math.sin(phase));
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      // trousers
+      g.strokeStyle = '#3a3d42'; g.lineWidth = FCW * 0.13;
+      g.beginPath(); g.moveTo(cx - 11, FCH * 0.60); g.lineTo(cx - 13 + legA * 8, FCH * 0.80); g.lineTo(cx - 15 + legA * 14, FCH * 0.95); g.stroke();
+      g.beginPath(); g.moveTo(cx + 11, FCH * 0.60); g.lineTo(cx + 13 - legA * 8, FCH * 0.80); g.lineTo(cx + 15 - legA * 14, FCH * 0.95); g.stroke();
+      g.fillStyle = '#191b1d';
+      g.beginPath(); g.ellipse(cx - 15 + legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 15 - legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
+      // shirt torso
+      const tg = g.createLinearGradient(cx - 28, 0, cx + 28, 0);
+      tg.addColorStop(0, '#3c4750'); tg.addColorStop(0.5, '#56606a'); tg.addColorStop(1, '#38424a');
+      g.fillStyle = tg;
+      g.beginPath(); g.moveTo(cx - 23, FCH * 0.29); g.lineTo(cx + 23, FCH * 0.29); g.lineTo(cx + 19, FCH * 0.62); g.lineTo(cx - 19, FCH * 0.62); g.closePath(); g.fill();
+      // arms
+      g.strokeStyle = '#48535c'; g.lineWidth = FCW * 0.09;
+      g.beginPath(); g.moveTo(cx - 21, FCH * 0.32); g.lineTo(cx - 27 + armA * 5, FCH * 0.46); g.lineTo(cx - 25, FCH * 0.60); g.stroke();
+      g.beginPath(); g.moveTo(cx + 21, FCH * 0.32); g.lineTo(cx + 27 - armA * 5, FCH * 0.46); g.lineTo(cx + 25, FCH * 0.60); g.stroke();
+      g.fillStyle = '#b89a7e'; g.beginPath(); g.arc(cx - 25, FCH * 0.60, 5, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 25, FCH * 0.60, 5, 0, 6.29); g.fill();
+      // neck + blank head
+      const headY = FCH * 0.18 - bob * 3;
+      g.fillStyle = '#a98d72'; g.fillRect(cx - 6, headY + 20, 12, 14);
+      const hg = g.createRadialGradient(cx - 8, headY - 8, 4, cx, headY, 30);
+      hg.addColorStop(0, '#cab08f'); hg.addColorStop(1, '#9a8064');
+      g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 22, 28, 0, 0, 6.29); g.fill();
+      // faint hollow where a face would be — but no features at all
+      g.fillStyle = 'rgba(120,98,76,0.22)'; g.beginPath(); g.ellipse(cx, headY + 4, 13, 17, 0, 0, 6.29); g.fill();
+      // hair
+      g.fillStyle = '#33291f'; g.beginPath(); g.ellipse(cx, headY - 14, 22, 13, 0, Math.PI, 2 * Math.PI); g.fill();
+    }
+    const FACELING_FRAMES = (function () {
+      const N = 12, arr = [];
+      for (let i = 0; i < N; i++) { const c = makeCanvas(FCW, FCH), g = c.getContext('2d'); drawFacelingBody(g, (i / N) * Math.PI * 2); arr.push(c); }
+      return arr;
+    })();
+    function drawFacelingFace(g, cx, cy, S, open, t) {
+      g.save(); g.translate(cx, cy); g.scale(S, S);
+      const skin = g.createRadialGradient(-40, -60, 24, 0, 0, 240);
+      skin.addColorStop(0, '#d4ba98'); skin.addColorStop(0.55, '#a88c6e'); skin.addColorStop(1, '#5c4a36');
+      g.fillStyle = skin; g.beginPath(); g.ellipse(0, 0, 150, 205, 0, 0, 6.29); g.fill();
+      // smooth blank — faint cheek/brow shading only
+      g.fillStyle = 'rgba(90,72,52,0.25)';
+      g.beginPath(); g.ellipse(-60, -30, 40, 70, 0.2, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(60, -30, 40, 70, -0.2, 0, 6.29); g.fill();
+      // then it splits open — a vertical seam tears down the blank face into a maw
+      if (open > 0.15) {
+        const mh = (open - 0.15) * 230;
+        const mg = g.createRadialGradient(0, 20, 6, 0, 20, mh + 10);
+        mg.addColorStop(0, '#1a0808'); mg.addColorStop(0.6, '#0a0404'); mg.addColorStop(1, '#000');
+        g.fillStyle = mg; g.beginPath(); g.ellipse(0, 20, 30 + open * 26, mh, 0, 0, 6.29); g.fill();
+        g.strokeStyle = 'rgba(150,40,30,0.5)'; g.lineWidth = 5; g.beginPath(); g.ellipse(0, 20, 30 + open * 26, mh, 0, 0, 6.29); g.stroke();
+        g.fillStyle = '#d8d0bc';     // a ring of small teeth inside
+        for (let i = 0; i < 12; i++) { const a = i / 12 * 6.2832; g.beginPath(); g.arc(Math.cos(a) * (28 + open * 22), 20 + Math.sin(a) * mh * 0.9, 4, 0, 6.29); g.fill(); }
+      }
+      g.restore();
+    }
+
+    // Per-entity render + behaviour table. `face` is the jumpscare close-up.
+    // sh/sw size the billboard; minB keeps glowing things (Smiler) visible in dark.
+    const ENTITY_DEFS = {
+      clark:     { frames: CLARK_FRAMES,     face: drawClarkFace,     sh: 1.46, sw: 0.50, bobF: 0.0022, bobA: 4, brightK: 0.12, minB: 0.14 },
+      bacteria:  { frames: BACTERIA_FRAMES,  face: drawBacteriaFace,  sh: 1.62, sw: 0.46, bobF: 0.006,  bobA: 5, brightK: 0.10, minB: 0.16 },
+      smiler:    { frames: SMILER_FRAMES,    face: drawSmilerFace,    sh: 1.05, sw: 0.64, bobF: 0.003,  bobA: 2, brightK: 0.4,  minB: 0.5 },
+      partygoer: { frames: PARTYGOER_FRAMES, face: drawPartygoerFace, sh: 1.42, sw: 0.52, bobF: 0.004,  bobA: 5, brightK: 0.2, minB: 0.2 },
+      hound:     { frames: HOUND_FRAMES,     face: drawHoundFace,     sh: 0.66, sw: 0.98, bobF: 0.008,  bobA: 6, brightK: 0.16, minB: 0.16 },
+      faceling:  { frames: FACELING_FRAMES,  face: drawFacelingFace,  sh: 1.46, sw: 0.48, bobF: 0.003,  bobA: 3, brightK: 0.2,  minB: 0.18 }
+    };
+
     // Openable doors, colour-coded by where they lead (green→yellow halls,
     // cyan→poolrooms, purple→pitch black). A glow makes them findable in dark.
     const DOOR_STYLE = {
@@ -1163,6 +1451,236 @@
       return c;
     })();
 
+    // ---------- themed scenery props (drawn once each, placed per level) ----------
+    // These billboards are what actually make a level read as a subway / forest /
+    // school / hospital etc. — one or two hero objects per place.
+    function prop(w, h, draw) { const c = makeCanvas(w, h), g = c.getContext('2d'); g.lineCap = 'round'; g.lineJoin = 'round'; draw(g, w, h); return c; }
+    const PA = {
+      // --- subway ---
+      bench: prop(120, 70, function (g) {
+        g.fillStyle = '#5a6068'; for (const x of [16, 100]) g.fillRect(x - 4, 38, 8, 28);   // legs
+        g.fillStyle = '#7c5a34'; for (let i = 0; i < 4; i++) g.fillRect(10, 30 + i * 4, 100, 3);  // wood slats seat
+        g.fillStyle = '#3c2c18'; g.fillRect(10, 30, 100, 2);
+      }),
+      turnstile: prop(100, 120, function (g) {
+        g.fillStyle = '#2a2e33'; g.fillRect(34, 40, 32, 76);                                 // post
+        g.fillStyle = '#9aa0a6'; g.fillRect(38, 44, 24, 30);                                 // chrome head
+        g.strokeStyle = '#c8ccd2'; g.lineWidth = 6;                                          // rotating arms
+        g.beginPath(); g.moveTo(50, 60); g.lineTo(96, 70); g.moveTo(50, 60); g.lineTo(8, 72); g.moveTo(50, 60); g.lineTo(50, 104); g.stroke();
+        g.fillStyle = '#4ad06a'; g.beginPath(); g.arc(50, 50, 4, 0, 6.29); g.fill();         // green light
+      }),
+      subsign: prop(110, 150, function (g) {
+        g.fillStyle = '#3a3e44'; g.fillRect(52, 50, 6, 100);                                 // pole
+        g.fillStyle = '#13315c'; g.fillRect(14, 16, 82, 44);                                 // sign board
+        g.strokeStyle = '#cfd8e6'; g.lineWidth = 2; g.strokeRect(14, 16, 82, 44);
+        g.fillStyle = '#e8c235'; g.beginPath(); g.arc(30, 38, 11, 0, 6.29); g.fill();        // line roundel
+        g.fillStyle = '#13315c'; g.font = 'bold 13px Nunito'; g.textAlign = 'center'; g.fillText('A', 30, 43);
+        g.fillStyle = '#cfd8e6'; g.font = 'bold 12px Nunito'; g.fillText('TRAINS', 64, 42);
+      }),
+      // --- forest ---
+      pine: prop(120, 300, function (g) {
+        g.fillStyle = '#3a2a18'; g.fillRect(54, 240, 12, 60);                                // trunk
+        for (let i = 0; i < 4; i++) {
+          const y = 60 + i * 50, w = 30 + i * 16;
+          const grd = g.createLinearGradient(60 - w, 0, 60 + w, 0);
+          grd.addColorStop(0, '#1c3a1e'); grd.addColorStop(0.5, '#2f5a32'); grd.addColorStop(1, '#16301a');
+          g.fillStyle = grd; g.beginPath(); g.moveTo(60, y - 46); g.lineTo(60 + w, y + 40); g.lineTo(60 - w, y + 40); g.closePath(); g.fill();
+        }
+      }),
+      bush: prop(110, 80, function (g) {
+        for (const [x, y, r, c] of [[40, 50, 26, '#274d28'], [70, 46, 24, '#356a36'], [55, 58, 28, '#2c5a2e']]) { g.fillStyle = c; g.beginPath(); g.arc(x, y, r, 0, 6.29); g.fill(); }
+        g.fillStyle = 'rgba(120,160,90,0.4)'; for (let i = 0; i < 30; i++) { g.beginPath(); g.arc(20 + Math.random() * 70, 30 + Math.random() * 40, 2, 0, 6.29); g.fill(); }
+      }),
+      rock: prop(100, 64, function (g) {
+        const grd = g.createLinearGradient(0, 10, 0, 60); grd.addColorStop(0, '#7a7568'); grd.addColorStop(1, '#454238');
+        g.fillStyle = grd; g.beginPath(); g.moveTo(14, 60); g.lineTo(26, 26); g.lineTo(56, 18); g.lineTo(86, 34); g.lineTo(90, 60); g.closePath(); g.fill();
+        g.fillStyle = 'rgba(40,60,30,0.4)'; g.beginPath(); g.ellipse(50, 24, 24, 7, 0, 0, 6.29); g.fill();   // moss top
+      }),
+      // --- school ---
+      lockers: prop(140, 150, function (g) {
+        for (let i = 0; i < 4; i++) {
+          const x = 8 + i * 32; const col = ['#2f6ea0', '#2f6ea0', '#a03434', '#2f6ea0'][i];
+          g.fillStyle = col; g.fillRect(x, 14, 28, 130);
+          g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2; g.strokeRect(x, 14, 28, 130);
+          g.fillStyle = 'rgba(255,255,255,0.15)'; g.fillRect(x + 2, 16, 3, 126);            // edge sheen
+          g.fillStyle = '#222'; for (let v = 0; v < 3; v++) g.fillRect(x + 8, 22 + v * 4, 12, 2);  // vents
+          g.fillStyle = '#1a1a1a'; g.beginPath(); g.arc(x + 22, 80, 2.6, 0, 6.29); g.fill();  // dial
+        }
+      }),
+      desk: prop(120, 90, function (g) {
+        g.fillStyle = '#7a5a30'; g.fillRect(16, 40, 88, 10);                                 // desktop
+        g.fillStyle = '#5a4022'; g.fillRect(20, 50, 6, 36); g.fillRect(94, 50, 6, 36);       // legs
+        g.fillStyle = '#34404a'; g.fillRect(40, 22, 40, 22);                                 // chair back behind
+        g.fillStyle = '#46535e'; g.fillRect(44, 54, 34, 8);
+      }),
+      // --- hospital ---
+      gurney: prop(160, 90, function (g) {
+        g.fillStyle = '#cfe0e6'; g.fillRect(20, 36, 120, 16);                                // mattress
+        g.fillStyle = '#9fb7c0'; g.fillRect(20, 36, 120, 4);
+        g.fillStyle = '#aeb6bc'; g.fillRect(20, 30, 6, 8); g.fillRect(134, 30, 6, 8);        // rails
+        g.fillStyle = '#7a8086'; g.fillRect(28, 52, 4, 28); g.fillRect(128, 52, 4, 28);      // legs
+        g.fillStyle = '#3a3e42'; g.beginPath(); g.arc(30, 82, 6, 0, 6.29); g.arc(130, 82, 6, 0, 6.29); g.fill();  // wheels
+      }),
+      ivstand: prop(60, 150, function (g) {
+        g.fillStyle = '#c0c6cc'; g.fillRect(28, 20, 4, 110);                                 // pole
+        g.strokeStyle = '#c0c6cc'; g.lineWidth = 3; g.beginPath(); g.moveTo(30, 24); g.lineTo(16, 14); g.moveTo(30, 24); g.lineTo(44, 14); g.stroke();  // hook
+        g.fillStyle = 'rgba(210,235,210,0.85)'; g.beginPath(); g.moveTo(20, 30); g.lineTo(40, 30); g.lineTo(36, 58); g.lineTo(24, 58); g.closePath(); g.fill();  // IV bag
+        g.fillStyle = '#3a3e42'; for (const a of [0, 2.1, 4.2]) { g.beginPath(); g.arc(30 + Math.cos(a) * 14, 134, 4, 0, 6.29); g.fill(); }  // base wheels
+      }),
+      wheelchair: prop(100, 110, function (g) {
+        g.strokeStyle = '#5a6066'; g.lineWidth = 4;
+        g.beginPath(); g.arc(40, 78, 26, 0, 6.29); g.stroke();                               // big wheel
+        for (let a = 0; a < 6.28; a += 0.9) { g.beginPath(); g.moveTo(40, 78); g.lineTo(40 + Math.cos(a) * 24, 78 + Math.sin(a) * 24); g.stroke(); }
+        g.fillStyle = '#2c333a'; g.fillRect(30, 44, 40, 8);                                  // seat
+        g.fillStyle = '#39424a'; g.fillRect(64, 20, 8, 36);                                  // back
+        g.fillStyle = '#5a6066'; g.beginPath(); g.arc(78, 92, 8, 0, 6.29); g.fill();         // small wheel
+      }),
+      // --- grocery ---
+      shelf: prop(140, 160, function (g) {
+        g.fillStyle = '#9aa0a4'; g.fillRect(10, 10, 120, 144);                               // frame
+        for (let r = 0; r < 4; r++) {
+          const y = 22 + r * 34; g.fillStyle = '#7c8488'; g.fillRect(12, y, 116, 6);          // shelf
+          for (let i = 0; i < 7; i++) { g.fillStyle = ['#c64b3b', '#d6b13a', '#3b78c6', '#4caf50', '#c64b9a'][(r + i) % 5]; g.fillRect(16 + i * 16, y - 16, 13, 16); }  // products
+        }
+      }),
+      freezer: prop(120, 150, function (g) {
+        const grd = g.createLinearGradient(0, 10, 0, 140); grd.addColorStop(0, '#bfeaf2'); grd.addColorStop(1, '#7fc2d6');
+        g.fillStyle = grd; g.fillRect(14, 12, 92, 130);                                      // glass case
+        g.fillStyle = '#dff6fb'; g.fillRect(14, 12, 92, 8);                                  // cold light top
+        g.strokeStyle = '#5a8ea0'; g.lineWidth = 3; g.strokeRect(14, 12, 92, 130);
+        g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 2; g.beginPath(); g.moveTo(24, 18); g.lineTo(24, 136); g.moveTo(60, 18); g.lineTo(60, 136); g.stroke();  // glass mullions + reflection
+        g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.moveTo(30, 18); g.lineTo(46, 18); g.lineTo(34, 136); g.lineTo(22, 136); g.closePath(); g.fill();
+      }),
+      cart: prop(120, 90, function (g) {
+        g.strokeStyle = '#aeb4b8'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(30, 30); g.lineTo(96, 30); g.lineTo(84, 64); g.lineTo(38, 64); g.closePath(); g.stroke();  // basket
+        for (let i = 1; i < 5; i++) { g.beginPath(); g.moveTo(30 + i * 13, 30); g.lineTo(34 + i * 10, 64); g.stroke(); }
+        g.beginPath(); g.moveTo(30, 30); g.lineTo(20, 18); g.stroke();                       // handle
+        g.fillStyle = '#3a3e42'; g.beginPath(); g.arc(44, 76, 7, 0, 6.29); g.arc(82, 76, 7, 0, 6.29); g.fill();  // wheels
+      }),
+      // --- bubblegum factory ---
+      gumvat: prop(130, 150, function (g) {
+        const grd = g.createLinearGradient(20, 0, 110, 0); grd.addColorStop(0, '#b56a8e'); grd.addColorStop(0.5, '#e08ab4'); grd.addColorStop(1, '#a85a82');
+        g.fillStyle = grd; g.fillRect(24, 40, 82, 100);                                      // steel tank
+        g.fillStyle = '#7a8086'; g.fillRect(20, 134, 90, 10);                                // base
+        g.fillStyle = '#ff9fd2';                                                             // pink froth on top
+        for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(30 + i * 9, 40, 7 + (i % 3) * 2, 0, 6.29); g.fill(); }
+        g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 3; g.beginPath(); g.moveTo(34, 50); g.lineTo(34, 130); g.stroke();  // sheen
+        g.fillStyle = '#d84c9e'; g.fillRect(96, 70, 24, 8);                                  // spout
+      }),
+      lollipop: prop(70, 230, function (g) {
+        g.fillStyle = '#e8e2d0'; g.fillRect(31, 90, 8, 140);                                 // stick
+        for (let i = 0; i < 22; i++) {                                                       // swirl disc
+          const a = i * 0.6, r = 2 + i * 1.5; g.strokeStyle = i % 2 ? '#ff7ec0' : '#fff2f8'; g.lineWidth = 6;
+          g.beginPath(); g.arc(35, 50, r, a, a + 0.7); g.stroke();
+        }
+        g.fillStyle = 'rgba(255,255,255,0.4)'; g.beginPath(); g.arc(28, 42, 6, 0, 6.29); g.fill();
+      }),
+      gumballs: prop(120, 70, function (g) {
+        const cols = ['#e8425a', '#42a5e8', '#f0c93a', '#5ad06a', '#c45ad0', '#ff8f3a'];
+        for (let i = 0; i < 26; i++) { g.fillStyle = cols[i % cols.length]; const x = 16 + (i % 9) * 11 + (Math.floor(i / 9) % 2) * 5, y = 60 - Math.floor(i / 9) * 11; g.beginPath(); g.arc(x, y, 7, 0, 6.29); g.fill(); g.fillStyle = 'rgba(255,255,255,0.4)'; g.beginPath(); g.arc(x - 2, y - 2, 2, 0, 6.29); g.fill(); }
+      }),
+      // --- Level Fun party ---
+      partytable: prop(160, 100, function (g) {
+        g.fillStyle = '#b03a5a'; g.fillRect(16, 50, 128, 12);                                // table
+        g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(16, 50, 128, 3);
+        g.fillStyle = '#8a2a44'; g.fillRect(24, 62, 6, 32); g.fillRect(130, 62, 6, 32);      // legs
+        g.fillStyle = '#f5e6c8'; g.beginPath(); g.moveTo(64, 50); g.lineTo(96, 50); g.lineTo(90, 24); g.lineTo(70, 24); g.closePath(); g.fill();  // cake
+        g.fillStyle = '#e85d6e'; g.fillRect(70, 24, 20, 4);
+        g.strokeStyle = '#f0d24a'; g.lineWidth = 2; g.beginPath(); g.moveTo(80, 24); g.lineTo(80, 14); g.stroke();  // candle
+        g.fillStyle = '#ffb84a'; g.beginPath(); g.arc(80, 12, 3, 0, 6.29); g.fill();         // flame
+      }),
+      balloons: prop(110, 160, function (g) {
+        for (const [x, y, c] of [[36, 44, '#e8425a'], [70, 36, '#42a5e8'], [54, 60, '#f0c93a'], [82, 64, '#5ad06a']]) {
+          g.fillStyle = c; g.beginPath(); g.ellipse(x, y, 18, 22, 0, 0, 6.29); g.fill();
+          g.fillStyle = 'rgba(255,255,255,0.4)'; g.beginPath(); g.ellipse(x - 6, y - 8, 4, 6, 0, 0, 6.29); g.fill();
+          g.strokeStyle = 'rgba(220,220,220,0.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y + 22); g.lineTo(58, 150); g.stroke();
+        }
+      }),
+      banner: prop(160, 80, function (g) {
+        g.fillStyle = '#d24a64'; g.beginPath(); g.moveTo(6, 10); g.lineTo(154, 10); g.lineTo(150, 52); g.quadraticCurveTo(80, 70, 10, 52); g.closePath(); g.fill();
+        g.fillStyle = '#fff2c8'; g.font = 'bold 30px Pacifico, cursive'; g.textAlign = 'center'; g.fillText('FUN =)', 80, 44);
+        g.strokeStyle = '#8a2a44'; g.lineWidth = 2; g.beginPath(); g.moveTo(6, 10); g.lineTo(154, 10); g.stroke();
+      }),
+      // --- office ---
+      cubicle: prop(150, 110, function (g) {
+        g.fillStyle = '#b9ad8c'; g.fillRect(10, 30, 130, 50);                                // partition behind
+        g.fillStyle = '#7a6a44'; g.fillRect(20, 70, 110, 10);                                // desk top
+        g.fillStyle = '#5a4c30'; g.fillRect(24, 80, 6, 24); g.fillRect(120, 80, 6, 24);      // legs
+        g.fillStyle = '#cfcabb'; g.fillRect(54, 44, 36, 26); g.fillStyle = '#3a6a8a'; g.fillRect(57, 47, 30, 18);  // CRT monitor
+        g.fillStyle = '#2c333a'; g.fillRect(38, 86, 24, 18);                                 // chair seat
+      }),
+      cooler: prop(60, 130, function (g) {
+        g.fillStyle = '#e6f2f4'; g.fillRect(18, 50, 26, 70);                                 // body
+        g.fillStyle = '#6fb6d8'; g.beginPath(); g.ellipse(31, 30, 16, 22, 0, 0, 6.29); g.fill();  // water bottle
+        g.fillStyle = 'rgba(255,255,255,0.4)'; g.beginPath(); g.ellipse(25, 24, 4, 8, 0, 0, 6.29); g.fill();
+        g.fillStyle = '#4a90b8'; g.fillRect(24, 70, 14, 8);                                  // tap
+      }),
+      // --- parking garage ---
+      car: prop(210, 100, function (g) {
+        const body = g.createLinearGradient(0, 30, 0, 80); body.addColorStop(0, '#7a3030'); body.addColorStop(1, '#4a1c1c');
+        g.fillStyle = body;
+        g.beginPath(); g.moveTo(20, 78); g.lineTo(30, 50); g.lineTo(70, 38); g.lineTo(140, 36); g.lineTo(180, 52); g.lineTo(190, 78); g.closePath(); g.fill();  // body
+        g.fillStyle = '#2a3640'; g.beginPath(); g.moveTo(66, 40); g.lineTo(135, 38); g.lineTo(150, 52); g.lineTo(58, 52); g.closePath(); g.fill();  // windows
+        g.fillStyle = '#cfb84a'; g.beginPath(); g.arc(182, 64, 6, 0, 6.29); g.fill();        // headlight
+        g.fillStyle = '#141414'; g.beginPath(); g.arc(58, 80, 16, 0, 6.29); g.arc(158, 80, 16, 0, 6.29); g.fill();  // tyres
+        g.fillStyle = '#5a5e62'; g.beginPath(); g.arc(58, 80, 7, 0, 6.29); g.arc(158, 80, 7, 0, 6.29); g.fill();    // hubs
+        g.fillStyle = 'rgba(20,20,20,0.4)'; g.beginPath(); g.ellipse(105, 96, 90, 6, 0, 0, 6.29); g.fill();         // shadow/oil
+      }),
+      pillar: prop(70, 180, function (g) {
+        g.fillStyle = '#8c8f92'; g.fillRect(18, 8, 36, 168);                                 // concrete pillar
+        g.fillStyle = '#d23838'; g.fillRect(18, 60, 36, 26);                                 // red band
+        g.fillStyle = '#fff'; g.font = 'bold 22px Nunito'; g.textAlign = 'center'; g.fillText('B2', 36, 80);
+        g.fillStyle = '#d8c24a'; g.fillRect(18, 160, 36, 8);                                 // yellow curb stripe
+        g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(20, 8, 4, 168);
+      })
+    };
+    // which props populate each theme, how big, and where they sit
+    const THEME_PROPS = {
+      subway:  [{ img: PA.bench, sh: 0.32, sw: 0.55, place: 'wall', count: [2, 4] }, { img: PA.turnstile, sh: 0.5, sw: 0.42, place: 'floor', count: [1, 2] }, { img: PA.subsign, sh: 0.7, sw: 0.51, place: 'wall', count: [1, 2] }],
+      forest:  [{ img: PA.pine, sh: 1.7, sw: 0.68, place: 'floor', count: [4, 7] }, { img: PA.bush, sh: 0.3, sw: 0.41, place: 'floor', count: [3, 6] }, { img: PA.rock, sh: 0.22, sw: 0.37, place: 'floor', count: [2, 4] }],
+      school:  [{ img: PA.lockers, sh: 0.9, sw: 0.84, place: 'wall', count: [3, 5] }, { img: PA.desk, sh: 0.42, sw: 0.56, place: 'floor', count: [2, 4] }],
+      hospital:[{ img: PA.gurney, sh: 0.4, sw: 0.71, place: 'wall', count: [2, 3] }, { img: PA.ivstand, sh: 0.78, sw: 0.31, place: 'floor', count: [1, 3] }, { img: PA.wheelchair, sh: 0.52, sw: 0.47, place: 'floor', count: [1, 2] }],
+      grocery: [{ img: PA.shelf, sh: 0.95, sw: 0.83, place: 'wall', count: [3, 6] }, { img: PA.freezer, sh: 0.88, sw: 0.7, place: 'wall', count: [1, 2] }, { img: PA.cart, sh: 0.42, sw: 0.56, place: 'floor', count: [1, 3] }],
+      factory: [{ img: PA.gumvat, sh: 0.8, sw: 0.69, place: 'wall', count: [2, 4] }, { img: PA.lollipop, sh: 1.2, sw: 0.37, place: 'floor', count: [1, 3] }, { img: PA.gumballs, sh: 0.32, sw: 0.55, place: 'floor', count: [1, 3] }],
+      party:   [{ img: PA.partytable, sh: 0.46, sw: 0.74, place: 'floor', count: [1, 2] }, { img: PA.balloons, sh: 0.9, sw: 0.62, place: 'floor', count: [2, 4] }, { img: PA.banner, sh: 0.42, sw: 0.84, place: 'wall', count: [1, 2] }],
+      office:  [{ img: PA.cubicle, sh: 0.52, sw: 0.71, place: 'wall', count: [2, 5] }, { img: PA.cooler, sh: 0.66, sw: 0.3, place: 'wall', count: [1, 2] }],
+      garage:  [{ img: PA.car, sh: 0.5, sw: 1.05, place: 'wall', count: [1, 3] }, { img: PA.pillar, sh: 0.92, sw: 0.36, place: 'floor', count: [2, 4] }]
+    };
+    // scatter a level's props into open cells (wall props hug an adjacent wall)
+    function placeProps() {
+      props = [];
+      const list = THEME_PROPS[themeName];
+      if (!list) return;
+      const cells = [];
+      for (let y = 1; y < mapH - 1; y++) for (let x = 1; x < mapW - 1; x++) {
+        if (map[y][x] !== 0) continue;
+        const cx = x + 0.5, cy = y + 0.5;
+        if (Math.hypot(cx - px, cy - py) < 2.5) continue;
+        let near = false;
+        for (const dr of doors) if (Math.hypot(dr.x - cx, dr.y - cy) < 1.4) near = true;
+        for (const sl of slides) if (Math.hypot(sl.x - cx, sl.y - cy) < 1.4) near = true;
+        if (near) continue;
+        let wd = null;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (map[y + dy][x + dx] === 1) { wd = [dx, dy]; break; }
+        cells.push({ x: cx, y: cy, wd: wd });
+      }
+      for (const spec of list) {
+        const n = rint(spec.count[0], spec.count[1]);
+        let placed = 0, tries = 0;
+        while (placed < n && tries < 250 && cells.length) {
+          tries++;
+          const idx = rint(0, cells.length - 1), c = cells[idx];
+          if (spec.place === 'wall' && !c.wd) continue;
+          if (props.some(function (p) { return Math.hypot(p.x - c.x, p.y - c.y) < 0.9; })) continue;
+          let ox = c.x, oy = c.y;
+          if (spec.place === 'wall' && c.wd) { ox += c.wd[0] * 0.34; oy += c.wd[1] * 0.34; }
+          props.push({ img: spec.img, x: ox, y: oy, sh: spec.sh, sw: spec.sw });
+          cells.splice(idx, 1); placed++;
+        }
+      }
+    }
+
     // ---------- rendering ----------
     function render() {
       // Per-frame lighting: deeper / blackout levels are darker, and the dark
@@ -1259,6 +1777,11 @@
         const d = Math.hypot(b.x - px, b.y - py);
         sprites.push({ img: hazmatImg, x: b.x, y: b.y, sh: 0.5, sw: 0.5, bob: 0, bright: clamp(ambient * (1.25 - d * 0.05) + 0.08, 0.2, 1) });
       }
+      // themed scenery props (z-buffer occluded, lit by distance)
+      for (const p of props) {
+        const d = Math.hypot(p.x - px, p.y - py);
+        sprites.push({ img: p.img, x: p.x, y: p.y, sh: p.sh, sw: p.sw, bob: 0, bright: clamp(ambient * (1.2 - d * 0.04) + 0.12, 0.22, 1) });
+      }
       // furniture phasing through the walls — flickers, no occlusion so it pokes through
       for (const gl of glitches) {
         const flick2 = Math.sin(perfNow * 0.02 + gl.ph) > -0.3 ? 1 : 0.25;
@@ -1268,16 +1791,12 @@
       for (const e of entities) {
         const d = Math.hypot(e.x - px, e.y - py);
         if (hasLOS(e.x, e.y, px, py)) nearHunter = Math.min(nearHunter, d);
+        const def = ENTITY_DEFS[e.type] || ENTITY_DEFS.clark;
         const stepMs = e.state === 'chase' ? 70 : 120;
-        if (e.type === 'bacteria') {
-          const fi = Math.floor(perfNow / (stepMs - 15) + e.phase * 5) % BACTERIA_FRAMES.length;
-          sprites.push({ img: BACTERIA_FRAMES[fi], x: e.x, y: e.y, sh: 1.6, sw: 0.42,
-            bob: Math.sin(perfNow * 0.006 + e.phase) * 5, bright: clamp((ambient + 0.1) * (1.2 - d * 0.055), 0.16, 1) });
-        } else {
-          const fi = Math.floor(perfNow / stepMs + e.phase * 5) % CLARK_FRAMES.length;
-          sprites.push({ img: CLARK_FRAMES[fi], x: e.x, y: e.y, sh: 1.46, sw: 0.5,
-            bob: Math.sin(perfNow * 0.0022 + e.phase) * 4, bright: clamp((ambient + 0.12) * (1.2 - d * 0.055), 0.14, 1) });
-        }
+        const fi = Math.floor(perfNow / stepMs + e.phase * 5) % def.frames.length;
+        sprites.push({ img: def.frames[fi], x: e.x, y: e.y, sh: def.sh, sw: def.sw,
+          bob: Math.sin(perfNow * def.bobF + e.phase) * def.bobA,
+          bright: clamp((ambient + def.brightK) * (1.2 - d * 0.055), def.minB, 1) });
       }
       for (const s of sprites) { const sx = s.x - px, sy = s.y - py; const invDet = 1 / (planeX * dirY - dirX * planeY);
         s.tY = invDet * (-planeY * sx + planeX * sy); }
@@ -1356,8 +1875,8 @@
       // face lunges from far to filling the screen; mouth tears open
       const S = (H / 360) * (0.5 + prog * 1.25);
       const open = clamp(prog * 1.3, 0, 1);
-      if (jumpFace === 1) drawBacteriaFace(ctx, W / 2 + ox, H / 2 + oy + H * 0.04, S, open, perfNow);
-      else drawClarkFace(ctx, W / 2 + ox, H / 2 + oy + H * 0.04, S, open, perfNow);
+      const faceFn = (ENTITY_DEFS[jumpType] || ENTITY_DEFS.clark).face;
+      faceFn(ctx, W / 2 + ox, H / 2 + oy + H * 0.04, S, open, perfNow);
       // red strobe + brief white static flashes
       if (Math.sin(perfNow * 0.05) > 0) { ctx.fillStyle = 'rgba(150,0,0,0.32)'; ctx.fillRect(0, 0, W, H); }
       if (prog > 0.25 && Math.sin(perfNow * 0.11) > 0.6) {
@@ -1442,12 +1961,12 @@
     function triggerJumpscare() {
       state = 'jumpscare';
       jumpT = JUMP_LEN;
-      jumpFace = caughtBy === 'bacteria' ? 1 : 0;
-      stopMusic();
+      jumpType = caughtBy;
       screech();
       keys.fwd = keys.back = keys.left = keys.right = false;
       joy.active = false;
     }
+    const HUNTER_NAMES = { clark: 'Captain Clark', bacteria: 'The Bacteria', smiler: 'A Smiler', partygoer: 'The Partygoers', hound: 'A Hound', faceling: 'A Faceling' };
 
     function gameOver() {
       state = 'over';
@@ -1455,70 +1974,14 @@
       if (reached > bestLevel) { bestLevel = reached; saveBest(bestLevel); }
       document.getElementById('over-level').textContent = reached;
       document.getElementById('over-best').textContent = bestLevel;
-      const who = caughtBy === 'bacteria' ? 'The Bacteria' : 'Captain Clark';
+      const who = HUNTER_NAMES[caughtBy] || 'Captain Clark';
       document.getElementById('over-title').textContent = who + ' got you';
       document.getElementById('over-sub').textContent = 'Caught on level ' + reached + '.';
       document.getElementById('over').hidden = false;
     }
 
-    // Eerie ambient drone played while you explore — original synthesized pad:
-    // a low detuned hum + a dissonant tritone, slowly pulsing. Guarded.
-    function startMusic() {
-      try {
-        if (!audio) return;
-        stopMusic();
-        const out = audio.createGain(); out.gain.value = 0.0001; out.connect(audio.destination);
-        out.gain.linearRampToValueAtTime(0.16, audio.currentTime + 2.5);
-        const mk = function (type, freq, gain) {
-          const o = audio.createOscillator(); o.type = type; o.frequency.value = freq;
-          const g = audio.createGain(); g.gain.value = gain;
-          o.connect(g).connect(out); o.start(); return o;
-        };
-        const o1 = mk('sine', 55, 1);          // low hum
-        const o2 = mk('sine', 55.5, 0.8);      // detuned beating
-        const o3 = mk('triangle', 146.8, 0.07);
-        const o4 = mk('triangle', 207.6, 0.05); // tritone dissonance
-        // breathy room-tone: filtered looping noise
-        const nbuf = audio.createBuffer(1, audio.sampleRate * 2, audio.sampleRate);
-        const nd = nbuf.getChannelData(0);
-        for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-        const noise = audio.createBufferSource(); noise.buffer = nbuf; noise.loop = true;
-        const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
-        const ng = audio.createGain(); ng.gain.value = 0.05;
-        noise.connect(lp).connect(ng).connect(out); noise.start();
-        // slow tremolo so it breathes
-        const lfo = audio.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.09;
-        const lfoG = audio.createGain(); lfoG.gain.value = 0.06;
-        lfo.connect(lfoG).connect(out.gain); lfo.start();
-        music = { out: out, nodes: [o1, o2, o3, o4, lfo, noise], stingerT: 0 };
-        music.stingerT = setTimeout(stinger, 4500 + Math.random() * 4000);
-      } catch (e) { music = null; }
-    }
-    // distant dissonant groan that swells now and then
-    function stinger() {
-      try {
-        if (!music || !audio) return;
-        const t0 = audio.currentTime;
-        const o = audio.createOscillator(); o.type = 'sawtooth';
-        const f = 64 + Math.random() * 46; o.frequency.setValueAtTime(f, t0);
-        o.frequency.linearRampToValueAtTime(f * 0.6, t0 + 2.6);
-        const g = audio.createGain(); g.gain.setValueAtTime(0.0001, t0);
-        g.gain.linearRampToValueAtTime(0.07, t0 + 1.3); g.gain.linearRampToValueAtTime(0.0001, t0 + 2.7);
-        const lp = audio.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 300;
-        o.connect(g).connect(lp).connect(music.out); o.start(t0); o.stop(t0 + 2.8);
-        music.stingerT = setTimeout(stinger, 7000 + Math.random() * 9000);
-      } catch (e) {}
-    }
-    function stopMusic() {
-      try {
-        if (!music) return;
-        const m = music; music = null;
-        clearTimeout(m.stingerT);
-        m.out.gain.cancelScheduledValues(audio.currentTime);
-        m.out.gain.linearRampToValueAtTime(0.0001, audio.currentTime + 0.3);
-        m.nodes.forEach(function (n) { try { n.stop(audio.currentTime + 0.4); } catch (e) {} });
-      } catch (e) {}
-    }
+    // (The eerie ambient drone was removed — the levels now play silent except
+    // for the jumpscare screech below.)
 
     // Jumpscare screech (dissonant noise + detuned tones). Guarded — silent if
     // WebAudio is unavailable or the context never got a user-gesture resume.
@@ -1621,7 +2084,6 @@
         audio = audio || new (window.AudioContext || window.webkitAudioContext)();
         if (audio.state === 'suspended') audio.resume();
       } catch (e) { audio = null; }
-      startMusic();
       level = 1;
       bestLevel = loadBest();
       genLevel(level, 'yellow');
