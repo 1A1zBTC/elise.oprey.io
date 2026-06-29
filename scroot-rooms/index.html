@@ -488,7 +488,14 @@
       at: function (x, y) { return mapAt(x, y); },
       props: function () { return (props || []).length; },
       structs: function () { return (structProps || []).length; },
-      pos: function () { return { px: px, py: py }; }
+      pos: function () { return { px: px, py: py }; },
+      showEntity: function (type, fr) {       // blit one entity walk-frame, scaled up, for art review
+        var def = ENTITY_DEFS[type] || ENTITY_DEFS.clark, img = def.frames[fr || 0];
+        ctx.fillStyle = '#15140a'; ctx.fillRect(0, 0, W, H);
+        var sc = Math.min(W / img.width, H / img.height) * 0.92;
+        ctx.drawImage(img, (W - img.width * sc) / 2, (H - img.height * sc) / 2, img.width * sc, img.height * sc);
+        return { type: type, frames: def.frames.length };
+      }
     };
 
     function updateCamera() {
@@ -981,6 +988,12 @@
       g.beginPath(); g.moveTo(Q(52 + lean), P(150)); g.lineTo(Q(75), P(178)); g.lineTo(Q(98 + lean), P(150)); g.closePath(); g.fill();
       g.strokeStyle = 'rgba(120,90,16,0.7)'; g.lineWidth = Q(2);
       g.beginPath(); g.moveTo(Q(75 + lean / 2), P(178)); g.lineTo(Q(75), P(302)); g.stroke();
+      // brass buttons down the waistcoat
+      for (let b = 0; b < 6; b++) {
+        const byv = 188 + b * 18;
+        g.fillStyle = '#c9a13a'; g.beginPath(); g.arc(Q(75), P(byv), Q(2.6), 0, 6.29); g.fill();
+        g.fillStyle = 'rgba(255,240,180,0.7)'; g.beginPath(); g.arc(Q(74), P(byv - 0.8), Q(1), 0, 6.29); g.fill();
+      }
 
       // --- dark belt + buckle at the waist ---
       g.fillStyle = '#1f1610'; g.fillRect(Q(33), P(250), Q(84), P(14));
@@ -995,11 +1008,18 @@
       g.moveTo(Q(46), P(258)); g.lineTo(Q(66), P(258));
       g.lineTo(Q(62 + sway), P(326)); g.lineTo(Q(54 + sway), P(338)); g.lineTo(Q(48 + sway), P(324)); g.closePath(); g.fill();
 
-      // --- blood splatters on the coat (slight) ---
-      g.fillStyle = 'rgba(120,12,8,0.82)';
-      g.beginPath(); g.ellipse(Q(94), P(214), Q(7), P(11), 0.3, 0, 6.29); g.fill();
-      g.beginPath(); g.arc(Q(102), P(232), Q(3), 0, 6.29); g.fill();
-      g.beginPath(); g.arc(Q(58), P(200), Q(2.5), 0, 6.29); g.fill();
+      // --- blood soaked down the waistcoat (heavy, from the collar) ---
+      g.fillStyle = 'rgba(110,10,7,0.8)';
+      g.beginPath();
+      g.moveTo(Q(70), P(180)); g.quadraticCurveTo(Q(60), P(220), Q(72), P(258));   // main run from the chest
+      g.quadraticCurveTo(Q(84), P(226), Q(88), P(196)); g.closePath(); g.fill();
+      g.beginPath(); g.ellipse(Q(96), P(214), Q(8), P(13), 0.3, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,18,12,0.7)';
+      g.beginPath(); g.arc(Q(102), P(238), Q(3.5), 0, 6.29); g.fill();
+      g.beginPath(); g.arc(Q(56), P(206), Q(3), 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(Q(64), P(240), Q(4), P(8), -0.2, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(70,6,4,0.6)';                                            // dried drips reaching the belt
+      for (const dx of [62, 78, 90]) { g.beginPath(); g.moveTo(Q(dx), P(244)); g.lineTo(Q(dx - 1), P(250)); g.lineTo(Q(dx + 1), P(250)); g.closePath(); g.fill(); }
 
       // --- head: gaunt dark-skinned face, sculpted with detailed shading ---
       const fg = g.createRadialGradient(Q(62), P(headY - 18), P(5), Q(78), P(headY + 6), P(56));
@@ -1024,7 +1044,7 @@
       g.fillStyle = 'rgba(150,120,86,0.15)'; g.beginPath(); g.ellipse(Q(76), P(headY + 2), Q(3), P(14), 0, 0, 6.29); g.fill();
       g.fillStyle = 'rgba(8,5,2,0.5)'; g.beginPath(); g.ellipse(Q(78), P(headY + 16), Q(4.5), P(4), 0, 0, 6.29); g.fill();
       // sunken sockets, then detailed wet eyes (uneven: left higher than right)
-      for (const e of [[64, headY - 12, 6.5, 5], [89, headY + 3, 5.5, 4.5]]) {
+      for (const e of [[63, headY - 13, 8.6, 8], [89, headY - 3, 8, 7.4]]) {
         const ex = e[0], ey = e[1], rx = e[2], ry = e[3];
         const so = g.createRadialGradient(Q(ex), P(ey), P(1), Q(ex), P(ey), P(rx + 6));
         so.addColorStop(0, 'rgba(6,4,2,0.85)'); so.addColorStop(1, 'rgba(6,4,2,0)');
@@ -1038,6 +1058,19 @@
         g.strokeStyle = 'rgba(6,4,2,0.55)'; g.lineWidth = Q(0.8);                                              // lower lid
         g.beginPath(); g.ellipse(Q(ex), P(ey + ry * 0.5), Q(rx), P(ry * 0.7), 0, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();
       }
+      // --- big black bushy beard around the jaw (drawn under the mouth) ---
+      g.fillStyle = '#0a0807';
+      g.beginPath();
+      g.moveTo(Q(52), P(headY + 4));
+      g.quadraticCurveTo(Q(46), P(headY + 34), Q(60), P(headY + 52));
+      g.quadraticCurveTo(Q(75), P(headY + 60), Q(90), P(headY + 52));
+      g.quadraticCurveTo(Q(104), P(headY + 34), Q(98), P(headY + 4));
+      g.quadraticCurveTo(Q(88), P(headY + 20), Q(75), P(headY + 18));   // cheek line under the eyes
+      g.quadraticCurveTo(Q(62), P(headY + 20), Q(52), P(headY + 4));
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(46,38,30,0.55)'; g.lineWidth = Q(1);                  // strand texture (deterministic)
+      for (let i = 0; i < 11; i++) { const bx = 56 + i * 3.6, j = ((i * 7) % 5) - 2; g.beginPath(); g.moveTo(Q(bx), P(headY + 22)); g.lineTo(Q(bx + j), P(headY + 50 - (i % 3) * 4)); g.stroke(); }
+
       // mouth: dark, cracked lips, a couple of teeth, drool of blood
       g.fillStyle = '#150a07'; g.beginPath(); g.ellipse(cx, P(headY + 28), Q(8), P(6), 0, 0, 6.29); g.fill();
       g.strokeStyle = 'rgba(90,60,46,0.6)'; g.lineWidth = Q(1);
@@ -1045,13 +1078,28 @@
       g.fillStyle = 'rgba(190,180,150,0.55)'; g.fillRect(Q(72), P(headY + 25), Q(2), P(3)); g.fillRect(Q(77), P(headY + 25), Q(2), P(3));
       g.fillStyle = 'rgba(150,14,8,0.85)';
       g.beginPath(); g.moveTo(Q(73), P(headY + 33)); g.lineTo(Q(77), P(headY + 33)); g.lineTo(Q(75), P(headY + 50)); g.closePath(); g.fill();
-      // hat (dark brimmed)
-      let hg = g.createLinearGradient(0, P(28), 0, P(60));
-      hg.addColorStop(0, '#241b10'); hg.addColorStop(1, '#0c0905');
+      // mustache over the upper lip (two tufts)
+      g.fillStyle = '#0c0a08';
+      g.beginPath(); g.moveTo(Q(75), P(headY + 22)); g.quadraticCurveTo(Q(64), P(headY + 19), Q(58), P(headY + 26)); g.quadraticCurveTo(Q(67), P(headY + 26), Q(75), P(headY + 24)); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(Q(75), P(headY + 22)); g.quadraticCurveTo(Q(86), P(headY + 19), Q(92), P(headY + 26)); g.quadraticCurveTo(Q(83), P(headY + 26), Q(75), P(headY + 24)); g.closePath(); g.fill();
+      // tricorn pirate hat (three upturned points), weathered brown leather
+      let hg = g.createLinearGradient(0, P(18), 0, P(60));
+      hg.addColorStop(0, '#4a3318'); hg.addColorStop(0.5, '#2c1e0e'); hg.addColorStop(1, '#0c0805');
+      g.fillStyle = '#160f07';
+      g.beginPath(); g.ellipse(cx, P(42), Q(17), P(13), 0, 0, 6.29); g.fill();   // crown peeking between the cocks
       g.fillStyle = hg;
-      g.beginPath(); g.ellipse(cx, P(56), Q(31), P(10), 0, 0, 6.29); g.fill();   // brim
-      g.beginPath(); g.moveTo(Q(56), P(56)); g.lineTo(Q(60), P(26)); g.lineTo(Q(90), P(26)); g.lineTo(Q(94), P(56)); g.closePath(); g.fill();
-      g.fillStyle = '#3a2a14'; g.fillRect(Q(58), P(48), Q(34), P(5));   // band
+      g.beginPath();
+      g.moveTo(Q(34), P(54));                                   // left brim tip
+      g.quadraticCurveTo(Q(48), P(22), Q(62), P(42));           // left cock up-sweep
+      g.quadraticCurveTo(Q(75), P(16), Q(88), P(42));           // front cock (tallest peak)
+      g.quadraticCurveTo(Q(102), P(22), Q(116), P(54));         // right cock to tip
+      g.quadraticCurveTo(Q(75), P(62), Q(34), P(54));           // brim underside
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(150,112,52,0.6)'; g.lineWidth = Q(2);             // gold brim trim
+      g.beginPath();
+      g.moveTo(Q(34), P(54)); g.quadraticCurveTo(Q(48), P(22), Q(62), P(42));
+      g.quadraticCurveTo(Q(75), P(16), Q(88), P(42)); g.quadraticCurveTo(Q(102), P(22), Q(116), P(54)); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.08)'; g.beginPath(); g.ellipse(Q(70), P(36), Q(10), P(8), -0.3, 0, 6.29); g.fill();  // sheen
     }
 
     // Pre-render the walk cycle once.
@@ -1436,34 +1484,43 @@
     function drawFacelingBody(g, phase) {
       const cx = FCW / 2;
       const legA = Math.sin(phase), armA = Math.sin(phase + Math.PI), bob = Math.abs(Math.sin(phase));
+      const sway = Math.sin(phase * 0.5) * 3;
       g.lineCap = 'round'; g.lineJoin = 'round';
-      // trousers
-      g.strokeStyle = '#3a3d42'; g.lineWidth = FCW * 0.13;
-      g.beginPath(); g.moveTo(cx - 11, FCH * 0.60); g.lineTo(cx - 13 + legA * 8, FCH * 0.80); g.lineTo(cx - 15 + legA * 14, FCH * 0.95); g.stroke();
-      g.beginPath(); g.moveTo(cx + 11, FCH * 0.60); g.lineTo(cx + 13 - legA * 8, FCH * 0.80); g.lineTo(cx + 15 - legA * 14, FCH * 0.95); g.stroke();
-      g.fillStyle = '#191b1d';
-      g.beginPath(); g.ellipse(cx - 15 + legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
-      g.beginPath(); g.ellipse(cx + 15 - legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
-      // shirt torso
-      const tg = g.createLinearGradient(cx - 28, 0, cx + 28, 0);
-      tg.addColorStop(0, '#3c4750'); tg.addColorStop(0.5, '#56606a'); tg.addColorStop(1, '#38424a');
+      // --- the entity: tall, emaciated, near-black silhouette, spindly limbs ---
+      // long thin legs (uneven gait), bony feet
+      g.strokeStyle = '#15171a'; g.lineWidth = FCW * 0.075;
+      g.beginPath(); g.moveTo(cx - 6, FCH * 0.55); g.lineTo(cx - 10 + legA * 9, FCH * 0.78); g.lineTo(cx - 12 + legA * 16, FCH * 0.97); g.stroke();
+      g.beginPath(); g.moveTo(cx + 6, FCH * 0.55); g.lineTo(cx + 10 - legA * 9, FCH * 0.78); g.lineTo(cx + 13 - legA * 16, FCH * 0.97); g.stroke();
+      g.fillStyle = '#0e0f11';
+      g.beginPath(); g.ellipse(cx - 12 + legA * 16, FCH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 13 - legA * 16, FCH * 0.975, 8, 4, 0, 0, 6.29); g.fill();
+      // emaciated tapering torso with faint rib shading
+      const tg = g.createLinearGradient(cx - 20, 0, cx + 20, 0);
+      tg.addColorStop(0, '#0c0d0f'); tg.addColorStop(0.5, '#26282c'); tg.addColorStop(1, '#0a0b0d');
       g.fillStyle = tg;
-      g.beginPath(); g.moveTo(cx - 23, FCH * 0.29); g.lineTo(cx + 23, FCH * 0.29); g.lineTo(cx + 19, FCH * 0.62); g.lineTo(cx - 19, FCH * 0.62); g.closePath(); g.fill();
-      // arms
-      g.strokeStyle = '#48535c'; g.lineWidth = FCW * 0.09;
-      g.beginPath(); g.moveTo(cx - 21, FCH * 0.32); g.lineTo(cx - 27 + armA * 5, FCH * 0.46); g.lineTo(cx - 25, FCH * 0.60); g.stroke();
-      g.beginPath(); g.moveTo(cx + 21, FCH * 0.32); g.lineTo(cx + 27 - armA * 5, FCH * 0.46); g.lineTo(cx + 25, FCH * 0.60); g.stroke();
-      g.fillStyle = '#b89a7e'; g.beginPath(); g.arc(cx - 25, FCH * 0.60, 5, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 25, FCH * 0.60, 5, 0, 6.29); g.fill();
-      // neck + blank head
-      const headY = FCH * 0.18 - bob * 3;
-      g.fillStyle = '#a98d72'; g.fillRect(cx - 6, headY + 20, 12, 14);
-      const hg = g.createRadialGradient(cx - 8, headY - 8, 4, cx, headY, 30);
-      hg.addColorStop(0, '#cab08f'); hg.addColorStop(1, '#9a8064');
-      g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 22, 28, 0, 0, 6.29); g.fill();
-      // faint hollow where a face would be — but no features at all
-      g.fillStyle = 'rgba(120,98,76,0.22)'; g.beginPath(); g.ellipse(cx, headY + 4, 13, 17, 0, 0, 6.29); g.fill();
-      // hair
-      g.fillStyle = '#33291f'; g.beginPath(); g.ellipse(cx, headY - 14, 22, 13, 0, Math.PI, 2 * Math.PI); g.fill();
+      g.beginPath();
+      g.moveTo(cx - 15, FCH * 0.27); g.lineTo(cx + 15, FCH * 0.27);
+      g.quadraticCurveTo(cx + 11, FCH * 0.45, cx + 8, FCH * 0.58); g.lineTo(cx - 8, FCH * 0.58);
+      g.quadraticCurveTo(cx - 11, FCH * 0.45, cx - 15, FCH * 0.27); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(120,124,130,0.12)'; g.lineWidth = 1.5;
+      for (let i = 0; i < 4; i++) { const ry = FCH * (0.34 + i * 0.05); g.beginPath(); g.moveTo(cx - 9, ry); g.quadraticCurveTo(cx, ry + 4, cx + 9, ry); g.stroke(); }
+      // extremely long spindly arms hanging past the hips, with thin fingers
+      g.strokeStyle = '#15171a'; g.lineWidth = FCW * 0.055;
+      const lh = FCH * (0.72 + armA * 0.02), rh = FCH * (0.72 - armA * 0.02);
+      g.beginPath(); g.moveTo(cx - 13, FCH * 0.30); g.lineTo(cx - 20 + sway, FCH * 0.52); g.lineTo(cx - 16 + sway, lh); g.stroke();
+      g.beginPath(); g.moveTo(cx + 13, FCH * 0.30); g.lineTo(cx + 20 - sway, FCH * 0.52); g.lineTo(cx + 16 - sway, rh); g.stroke();
+      g.strokeStyle = '#101113'; g.lineWidth = 2;
+      for (const f of [[cx - 16 + sway, lh, -1], [cx + 16 - sway, rh, 1]]) {
+        for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(f[0], f[1]); g.lineTo(f[0] + f[2] * (2 + i * 2), f[1] + 12 + i * 3); g.stroke(); }
+      }
+      // long thin neck + smooth, utterly featureless dark head (faint cold sheen)
+      const headY = FCH * 0.16 - bob * 3;
+      g.strokeStyle = '#1a1c1f'; g.lineWidth = FCW * 0.05;
+      g.beginPath(); g.moveTo(cx, headY + 16); g.lineTo(cx, FCH * 0.27); g.stroke();
+      const hg = g.createRadialGradient(cx - 6, headY - 8, 3, cx, headY, 26);
+      hg.addColorStop(0, '#3a3d42'); hg.addColorStop(0.6, '#1c1e21'); hg.addColorStop(1, '#0a0b0d');
+      g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 17, 23, 0, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(150,156,164,0.10)'; g.beginPath(); g.ellipse(cx - 4, headY - 2, 4, 12, 0.1, 0, 6.29); g.fill();
     }
     const FACELING_FRAMES = (function () {
       const N = 12, arr = [];
