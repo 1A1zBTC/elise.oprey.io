@@ -3702,6 +3702,19 @@
 
     function update(dt) {
       animT += dt;
+
+      // Autosave to the active slot every minute of play. Overwrites in place;
+      // creates the "Autosave" slot if the hospital hasn't been named yet.
+      autoSaveTimer += dt;
+      if (autoSaveTimer >= AUTOSAVE_PERIOD) {
+        autoSaveTimer = 0;
+        if (lsAvailable()) {
+          writeSave(currentName || AUTOSAVE_NAME);    // sets currentName, persists LS_CURRENT
+          updateHospitalLabel();                       // label reflects the (now-named) slot
+          if (!saveModal.hidden) renderSaveList();     // keep an open Saves panel fresh
+        }
+      }
+
       vet.speed = BASE_SPEED + (skills.speed.val - 1.0);  // Speed skill: additive movement
       var mx = 0, my = 0;
       if (touchInput.active) { mx = touchInput.dx; my = touchInput.dy; }
@@ -4066,6 +4079,8 @@
     // progress state is reset on load so the clinic resumes with fresh arrivals.
     var LS_SAVES = 'grindyvet.saves', LS_CURRENT = 'grindyvet.current';
     var currentName = (function () { try { return localStorage.getItem(LS_CURRENT) || ''; } catch (e) { return ''; } })();
+    var AUTOSAVE_NAME = 'Autosave', AUTOSAVE_PERIOD = 60;  // autosave: slot name + seconds between writes
+    var autoSaveTimer = 0;
 
     function lsAvailable() {
       try { var k = '__gv__'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; }
@@ -4144,7 +4159,7 @@
       money = 1000;
       skills.speed.val = 1.0; skills.speed.cost = 10;
       skills.processing.val = 1.0; skills.processing.cost = 10;
-      frq = 30; spawnTimer = 0;
+      frq = 30; spawnTimer = 0; autoSaveTimer = 0;
       currentName = '';
       try { localStorage.removeItem(LS_CURRENT); } catch (e) {}
       renderStatic(); renderMoney(); updateHospitalLabel();
@@ -4196,6 +4211,7 @@
       resetTransient();                       // clear anything the place-fns seeded
       renderStatic(); renderMoney();
       currentName = data.name || '';
+      autoSaveTimer = 0;                       // fresh minute from the moment of load
       try { localStorage.setItem(LS_CURRENT, currentName); } catch (e) {}
       updateHospitalLabel();
       return true;
