@@ -5,13 +5,13 @@
 
    MAINTENANCE: when you add a new game, add its "<game>/" to PAGES below and
    bump CACHE (e.g. el-games-v2) so clients pick up the new precache list. */
-const CACHE = 'el-games-v48';
+const CACHE = 'el-games-v51';
 
 const PAGES = [
   '/', 'battleships/', 'bunny-dig/', 'burgle-cats/', 'catch-the-treats/', 'chameleons/',
   'crossy-pets/', 'flappy-dog/', 'fly-or-die/', 'frog-feast/', 'fruit-merge/', 'grindy-vet/',
   'hungry-pig/', 'kit-clash/', 'kitten-jump/', 'match-it/', 'mob-soccer/', 'monkey-swing/',
-  'naughty-shelf/', 'picwits/', 'scroot-rooms/', 'snakes-and-ladders/', 'sumo/',
+  'naughty-shelf/', 'picwits/', 'scroot-rooms/', 'snakes-and-ladders/', 'street-fighter/', 'sumo/',
   'twisted-system/', 'wavelength/', 'whack-a-mole/'
 ];
 const ASSETS = [
@@ -47,20 +47,33 @@ self.addEventListener('fetch', function (e) {
   // to the network so it fails gracefully offline instead of breaking the SW.
   if (url.origin !== self.location.origin) return;
 
-  e.respondWith(
-    caches.match(req).then(function (hit) {
-      if (hit) return hit;
-      return fetch(req).then(function (res) {
-        if (res && res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copy); });
-        }
-        return res;
-      }).catch(function () {
-        // offline + not cached: for a page navigation, fall back to launcher
-        if (req.mode === 'navigate') return caches.match('/');
-        return Response.error();
-      });
-    })
-  );
+  function putCopy(res) {
+    if (res && res.ok && res.type === 'basic') {
+      const copy = res.clone();
+      caches.open(CACHE).then(function (c) { c.put(req, copy); });
+    }
+    return res;
+  }
+
+  // Game CODE (page navigations + HTML/JS/CSS) is served NETWORK-FIRST so edits
+  // show up immediately when online, with the cache as an offline fallback. (The
+  // old cache-first strategy served stale games forever until CACHE was bumped.)
+  // Static ASSETS (fonts/icons/images) stay cache-first for speed + offline.
+  const isCode = req.mode === 'navigate' || /\.(html?|js|css)$/i.test(url.pathname);
+
+  if (isCode) {
+    e.respondWith(
+      fetch(req).then(putCopy).catch(function () {
+        return caches.match(req).then(function (hit) {
+          return hit || (req.mode === 'navigate' ? caches.match('/') : Response.error());
+        });
+      })
+    );
+  } else {
+    e.respondWith(
+      caches.match(req).then(function (hit) {
+        return hit || fetch(req).then(putCopy).catch(function () { return Response.error(); });
+      })
+    );
+  }
 });
