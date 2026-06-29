@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Whack-a-Mole</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,7 +15,6 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
       background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
@@ -22,23 +22,6 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding: 16px; touch-action: manipulation; user-select: none; -webkit-user-select: none;
     }
-    .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
-    .stage {
-      position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
-    }
-    canvas { display: block; width: 100%; height: 100%; }
-    .hint { margin-top: 12px; color: #a0a8c0; font-size: 0.82rem; text-align: center; max-width: 560px; line-height: 1.5; }
-    .hint b { color: #ffe8b0; }
-
-    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
-    .overlay[hidden] { display: none; }
-    .panel { width: 100%; max-width: 380px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
-    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
-    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.4; }
     .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 8px; }
     .choices { display: flex; gap: 8px; justify-content: center; }
     .choice { flex: 1; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1rem; color: #cfd6ea; background: #0f1830; border: 2px solid #0f3460; border-radius: 14px; padding: 12px 4px; cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.1s ease; }
@@ -48,11 +31,6 @@
     .choice:active { transform: scale(0.96); }
     .choice.selected { border-color: #e94560; background: rgba(233,69,96,0.12); color: #fff; box-shadow: 0 0 18px rgba(233,69,96,0.25); }
     .choice.selected .small { color: #ffb3c2; }
-    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
-    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
-    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
-    .start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
-    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
   </style>
 </head>
 <body>
@@ -94,6 +72,7 @@
     <b>Tap or click</b> the gophers to bonk them. Golden gopher = <b>5×</b> &nbsp;·&nbsp; skunk = <b>ouch!</b> &nbsp;·&nbsp; chain hits for a combo. 2-player: each guards their own half.
   </p>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     const canvas = document.getElementById('game');
@@ -102,13 +81,12 @@
 
     const ROUND_MS = 45000;
     const BEST_KEY = 'whackamole.best';
-    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
-    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
-    function playerName(i, fb) { try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fb; } catch (e) { return fb; } }
+    const bestStore = EL.best(BEST_KEY), loadBest = bestStore.load, saveBest = bestStore.save;
+    const playerName = EL.playerName;
 
-    function rnd(a, b) { return a + Math.random() * (b - a); }
-    function ri(a, b) { return Math.floor(rnd(a, b + 1)); }
-    function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    const rnd = EL.rnd;
+    const ri = EL.rint;
+    const pick = EL.pick;
 
     let state = 'select';          // 'select' | 'playing' | 'over'
     let numPlayers = 1;
@@ -198,11 +176,7 @@
     // ---------- input ----------
     function selectedCount() { const el = document.querySelector('#count-choices .choice.selected'); return el ? parseInt(el.dataset.players, 10) : 1; }
 
-    function canvasPos(e) {
-      const rect = canvas.getBoundingClientRect();
-      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : ((e.touches && e.touches[0]) ? e.touches[0] : e);
-      return { x: (t.clientX - rect.left) / rect.width * W, y: (t.clientY - rect.top) / rect.height * H };
-    }
+    function canvasPos(e) { return EL.canvasPos(canvas, e, W, H); }
 
     const HEAD_R = 46;
     function whackAt(px, py) {

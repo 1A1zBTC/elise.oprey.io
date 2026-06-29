@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Monkey Swing</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -13,38 +14,6 @@
   <meta name="apple-mobile-web-app-title" content="E&L Games">
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body {
-      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
-      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
-      min-height: 100vh;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 16px; touch-action: none; user-select: none; -webkit-user-select: none;
-    }
-    .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
-    .stage {
-      position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
-    }
-    canvas { display: block; width: 100%; height: 100%; }
-    .hint { margin-top: 12px; color: #a0a8c0; font-size: 0.82rem; text-align: center; max-width: 560px; line-height: 1.5; }
-    .hint b { color: #ffe8b0; }
-
-    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
-    .overlay[hidden] { display: none; }
-    .panel { width: 100%; max-width: 380px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
-    .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.7rem; font-weight: 400; margin-bottom: 6px; }
-    .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.4; }
-    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
-    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
-    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
-    .start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
-    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
-  </style>
 </head>
 <body>
 
@@ -80,6 +49,7 @@
     <b>Tap</b> (click / Space) at the <b>bottom of the swing</b> to fling forward &nbsp;·&nbsp; land close to the next branch to grab it &mdash; <b>time it or you fall!</b> &nbsp;·&nbsp; collect <b>bananas</b> 🍌
   </p>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     const canvas = document.getElementById('game');
@@ -87,11 +57,10 @@
     const W = canvas.width, H = canvas.height;   // 760 x 560
 
     const BEST_KEY = 'monkeyswing.best';
-    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
-    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+    const bestStore = EL.best(BEST_KEY), loadBest = bestStore.load, saveBest = bestStore.save;
 
-    function rnd(a, b) { return a + Math.random() * (b - a); }
-    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+    const rnd = EL.rnd;
+    const clamp = EL.clamp;
 
     // ---- tuning ----
     const G = 0.5;            // gravity per 60fps-frame

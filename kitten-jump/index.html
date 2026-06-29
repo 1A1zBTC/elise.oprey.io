@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kitten Jump</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,13 +15,6 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      -webkit-tap-highlight-color: transparent;
-    }
-
     html, body { height: 100%; overflow: hidden; }
 
     body {
@@ -46,24 +40,6 @@
       margin-bottom: 10px;
     }
 
-    .back {
-      color: #a0a8c0;
-      text-decoration: none;
-      font-weight: 700;
-      font-size: 0.95rem;
-      padding: 6px 10px;
-      border-radius: 12px;
-      transition: color 0.15s ease, background 0.15s ease;
-    }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-
-    .title {
-      font-family: 'Pacifico', cursive;
-      color: #fff;
-      font-size: 1.6rem;
-      line-height: 1;
-    }
-
     .stage {
       position: relative;
       width: 100%;
@@ -75,8 +51,6 @@
       aspect-ratio: 760 / 560;
     }
 
-    canvas { display: block; width: 100%; height: 100%; }
-
     .hint {
       margin-top: 12px;
       color: #a0a8c0;
@@ -85,7 +59,6 @@
       max-width: 760px;
       line-height: 1.5;
     }
-    .hint b { color: #ffe8b0; }
 
     /* ---------- start dialog (shared format) ---------- */
     .overlay {
@@ -103,8 +76,6 @@
       overflow-y: auto;                  /* scroll if the picker is taller than the screen */
       -webkit-overflow-scrolling: touch;
     }
-    .overlay[hidden] { display: none; }
-
     /* On phones the panel + coat swatches + preview are taller than the viewport, so stack
        them and scroll from the top instead of centering (which would clip off-screen). */
     @media (max-width: 600px) {
@@ -137,13 +108,6 @@
       padding: 26px 22px;
       text-align: center;
       box-shadow: 0 18px 50px rgba(0,0,0,0.5);
-    }
-    .panel h2 {
-      font-family: 'Pacifico', cursive;
-      color: #fff;
-      font-size: 1.7rem;
-      font-weight: 400;
-      margin-bottom: 6px;
     }
     .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 18px; }
     .panel .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 16px 0 8px; }
@@ -187,8 +151,6 @@
       box-shadow: 0 6px 0 #b22a44;
       transition: transform 0.1s ease, box-shadow 0.1s ease;
     }
-    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
-
     /* fur-coat picker */
     .coat-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
     .coat-tabs[hidden] { display: none; }
@@ -259,16 +221,14 @@
     <b>P1:</b> Space &nbsp;·&nbsp; <b>P2:</b> Right Ctrl &nbsp;·&nbsp; stack each tile straight on the line &amp; outrun the water 🌊
   </p>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
 
     // Player names set centrally on the homepage (shared localStorage). Blank = default.
-    function playerName(i, fallback) {
-      try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fallback; }
-      catch (e) { return fallback; }
-    }
+    const playerName = EL.playerName;
 
     const W = canvas.width;    // 760
     const H = canvas.height;   // 560
