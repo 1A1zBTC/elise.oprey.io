@@ -609,6 +609,12 @@
         make: function (gx, gy, rot, door) {
           var k = examKeyTiles(gx, gy, rot);
           return { room: { gx: gx, gy: gy, rot: rot, occupant: null, examT: 0, door: door }, solid: [k.table] };
+        },
+        // occupant-claim service flow (see claimRoomGeneric/assignRoomGeneric):
+        timer: 'examT', vRoom: 'examRoom', toPhase: 'toExam',
+        waiting: function (v) {
+          return v.served && !v.examined && !v.examRoom &&
+            (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
         }
       },
       xray: {
@@ -617,6 +623,11 @@
         make: function (gx, gy, rot, door) {
           var k = examKeyTiles(gx, gy, rot);
           return { room: { gx: gx, gy: gy, rot: rot, occupant: null, xrayT: 0, door: door, vet: false }, solid: [k.table, k.desk] };
+        },
+        timer: 'xrayT', vRoom: 'xrayRoom', toPhase: 'toXray',
+        waiting: function (v) {
+          return v.needsXray && !v.xrayed && !v.xrayRoom &&
+            (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
         }
       },
       pharmacy: {
@@ -2945,61 +2956,47 @@
     }
 
     // Send a waiting client to a free exam room (the next stage after reception).
-    function claimExam(v) {
-      var rm = freeExamRoom();
+    // Generic occupant-claim for the exam/xray rooms (pharmacy is station-based, so
+    // it keeps its own claim below). The per-type room field, timer field, target
+    // phase and waiting predicate come from the room descriptor, so the exam and
+    // X-ray flows are the same code parameterized by type.
+    function claimRoomGeneric(v, type) {
+      var d = ROOM_TYPES[type], rm = freeRoom(type);
       if (!rm) return false;
       var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
-      rm.occupant = v; rm.examT = 0; v.examRoom = rm;
+      rm.occupant = v; rm[d.timer] = 0; v[d.vRoom] = rm;
       v.seated = false; v.chair = null; v.sideIdx = -1;
-      v.patience = baseWait();              // fresh patience for the exam stage (restroom need persists)
-      // BFS a real route over connected room floor (clinic → corridors → exam),
+      v.patience = baseWait();              // fresh patience for the stage (restroom need persists)
+      // BFS a real route over connected room floor (clinic → corridors → room),
       // around furniture, so clients don't beeline into walls and jam.
       v.path = examRoute(v.x, v.y, k.visitor.x, k.visitor.y);
-      v.wp = 0; v.phase = 'toExam';
+      v.wp = 0; v.phase = d.toPhase;
       return true;
     }
-    function releaseExam(v) {
-      if (v.examRoom) { v.examRoom.occupant = null; v.examRoom.examT = 0; v.examRoom = null; }
+    function releaseRoomGeneric(v, type) {
+      var d = ROOM_TYPES[type], rm = v[d.vRoom];
+      if (rm) { rm.occupant = null; rm[d.timer] = 0; v[d.vRoom] = null; }
     }
-    // Fill free exam rooms with waiting clients in check-in (ticket) order, so the
+    // Fill free rooms with waiting clients in check-in (ticket) order, so the
     // longest-waiting client is seen next and nobody leap-frogs the queue.
-    function assignExams() {
-      if (!freeExamRoom()) return;
-      var waiting = visitors.filter(function (v) {
-        return v.served && !v.examined && !v.examRoom &&
-          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
-      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
-      for (var i = 0; i < waiting.length && freeExamRoom(); i++) claimExam(waiting[i]);
+    function assignRoomGeneric(type) {
+      if (!freeRoom(type)) return;
+      var waiting = visitors.filter(ROOM_TYPES[type].waiting)
+        .sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
+      for (var i = 0; i < waiting.length && freeRoom(type); i++) claimRoomGeneric(waiting[i], type);
     }
+    function claimExam(v) { return claimRoomGeneric(v, 'exam'); }
+    function releaseExam(v) { releaseRoomGeneric(v, 'exam'); }
+    function assignExams() { assignRoomGeneric('exam'); }
 
     // ---- X-ray flow (mirrors exam) ---------------------------------------
     function vetAtXray(rm) {
       var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
       return Math.round(vet.x) === k.circle.x && Math.round(vet.y) === k.circle.y;
     }
-    function claimXray(v) {
-      var rm = freeXrayRoom();
-      if (!rm) return false;
-      var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
-      rm.occupant = v; rm.xrayT = 0; v.xrayRoom = rm;
-      v.seated = false; v.chair = null; v.sideIdx = -1;
-      v.patience = baseWait();
-      v.path = examRoute(v.x, v.y, k.visitor.x, k.visitor.y);
-      v.wp = 0; v.phase = 'toXray';
-      return true;
-    }
-    function releaseXray(v) {
-      if (v.xrayRoom) { v.xrayRoom.occupant = null; v.xrayRoom.xrayT = 0; v.xrayRoom = null; }
-    }
-    // Fill free X-ray rooms with examined clients that rolled "needs an X-ray".
-    function assignXrays() {
-      if (!freeXrayRoom()) return;
-      var waiting = visitors.filter(function (v) {
-        return v.needsXray && !v.xrayed && !v.xrayRoom &&
-          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
-      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
-      for (var i = 0; i < waiting.length && freeXrayRoom(); i++) claimXray(waiting[i]);
-    }
+    function claimXray(v) { return claimRoomGeneric(v, 'xray'); }
+    function releaseXray(v) { releaseRoomGeneric(v, 'xray'); }
+    function assignXrays() { assignRoomGeneric('xray'); }
 
     // ---- Pharmacy patient flow ------------------------------------------
     function playerAtPharm(ph, idx) {
