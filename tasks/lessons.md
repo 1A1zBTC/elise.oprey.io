@@ -29,3 +29,28 @@
 - Rule: "ship/publish/go live" for this repo = git commit/push (source control) AND the S3 +
   CloudFront deploy above. A push alone never updates the live site. Verify with
   `curl -o /dev/null -w "%{http_code}" https://elise.oprey.io/<game>/`.
+
+## Shared assets + tooling (2026-06-29)
+- Games now share `/shared/game.css` (palette as CSS variables + topbar/overlay/panel/
+  scoreline/start-btn/stage/reset) and `/shared/game.js` (`window.EL`: playerName, best(key),
+  rnd/rint/pick/clamp/lerp/dist2/shuffle, canvasPos). Each game links both; per-game files keep
+  only their own styles + value-differing overrides, and alias helpers (`const pick = EL.pick;`).
+- New add-a-game / change workflow: create the game dir, then run `node tools/build-sw.mjs`
+  (auto-regenerates sw.js PAGES from the dir listing, keeps shared assets in ASSETS, bumps
+  CACHE), then `tools/deploy.sh` (build-sw + `aws s3 sync` + CloudFront invalidate). No more
+  hand-editing sw.js or remembering the cache bump.
+
+## CSS-leak gotcha when extracting shared component rules
+- 2026-06-29: When a game keeps a shared-named rule (e.g. `body`, `.stage`) as an override, the
+  override CANNOT remove properties the shared rule sets — it can only change/add. So shared
+  `body { justify-content:center; touch-action:none }` LEAKED into DOM/board games that were
+  top-aligned + scrollable, re-centering tall boards and blocking touch scroll; and shared
+  `.stage { max-width; border; aspect-ratio }` LEAKED into scroot-rooms' full-bleed `position:fixed`
+  stage, constraining it.
+- Rule: when a game relies on the ABSENCE of a shared property, explicitly reset it in the
+  override (`justify-content:flex-start; touch-action:auto; max-width:none; aspect-ratio:auto;`
+  etc.). Verify by reasoning about the cascade AND by measuring `getComputedStyle` at both mobile
+  and desktop widths — not just eyeballing the start screen.
+- QA caveat: the service worker serves precached pages cache-first, so after editing a file the
+  browser may show a STALE copy. QA on a fresh port (new origin) or with a `?v=N` cache-bust
+  query, or unregister the SW + clear caches first.
