@@ -27,7 +27,10 @@ const ASSETS = [
   'shared/game.css', 'shared/game.js',
   'fonts/fonts.css', 'fonts/nunito.woff2', 'fonts/pacifico.woff2',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-512-maskable.png',
-  'icons/apple-touch-icon.png', 'icons/favicon.png'
+  'icons/apple-touch-icon.png', 'icons/favicon.png',
+  // Pet Vet (grindy-vet) is an ES-module game; its modules must be precached
+  // explicitly (the page precache only fetches index.html, not its imports).
+  'grindy-vet/js/main.js', 'grindy-vet/js/constants.js', 'grindy-vet/js/util.js'
 ];
 
 // Every top-level directory containing an index.html is a game page.

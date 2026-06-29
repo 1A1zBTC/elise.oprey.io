@@ -3934,6 +3934,19 @@
       if (!data) { var all = listSaves(); if (all.length) data = all[0]; }
       if (data) applySave(data);
     })();
+    // ---- Test harness ----------------------------------------------------
+    // window.__t is the headless test/debug API. It drives the sim without the
+    // UI so deterministic parity runs can build clinics, hire staff, spawn and
+    // step visitors, and read state. Freeze the loop (override
+    // requestAnimationFrame) + seed Math.random for reproducible runs; t.load()
+    // resets to a clean clinic. Key entries:
+    //   step(n), spawn(), draw()              — drive / render
+    //   money(), frq(), visitors(), emojis()  — read state
+    //   exams()/xrays()/pharms()/restroomList(), corridors()
+    //   place(id,gx,gy,r), buildCorridor, buildBlank, buildRestroom
+    //   placeExam/placeXray/placePharm + can{Exam,Xray,Pharm,Restroom}
+    //   hireReceptionist(line)/hireVet()/hirePharmacists()/hireCleaner()
+    //   save(name)/load(data)                 — round-trip the save schema
     window.__t = {
       draw: draw,
       step: function (n) { for (var i = 0; i < (n || 1); i++) update(1 / 30); },

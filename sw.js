@@ -5,7 +5,7 @@
 
    MAINTENANCE: when you add a new game, add its "<game>/" to PAGES below and
    bump CACHE (e.g. el-games-v2) so clients pick up the new precache list. */
-const CACHE = 'el-games-v38';
+const CACHE = 'el-games-v39';
 
 const PAGES = [
   '/', 'battleships/', 'bunny-dig/', 'catch-the-treats/', 'chameleons/', 'crossy-pets/',
@@ -18,7 +18,8 @@ const ASSETS = [
   'manifest.webmanifest', 'pwa.js', 'shared/game.css',
   'shared/game.js', 'fonts/fonts.css', 'fonts/nunito.woff2',
   'fonts/pacifico.woff2', 'icons/icon-192.png', 'icons/icon-512.png',
-  'icons/icon-512-maskable.png', 'icons/apple-touch-icon.png', 'icons/favicon.png'
+  'icons/icon-512-maskable.png', 'icons/apple-touch-icon.png', 'icons/favicon.png',
+  'grindy-vet/js/main.js', 'grindy-vet/js/constants.js', 'grindy-vet/js/util.js'
 ];
 const PRECACHE = PAGES.concat(ASSETS);
 
