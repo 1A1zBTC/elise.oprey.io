@@ -145,7 +145,8 @@
     let dirX, dirY, planeX, planeY;
     let entities, corpses;       // hunters (Captain Clark + the Bacteria), hazmat corpses
     let doors, slides, marks, glitches;  // openable doors, slide chutes, your trail markers, phasing objects
-    let props;                           // themed scenery (benches, lockers, trees, shelving…) that sells each place
+    let props;                           // scattered themed scenery that sells each place
+    let structProps;                     // structural obstacles (trees/shelves/cars/desks) tied to solid tiles
     let level, bestLevel, themeName, phasing;
     let banner;                  // {text, sub, t} brief level intro
     let darkness, blackout;      // per-level mood: 0 (lit) .. 1 (pitch black + flicker)
@@ -158,17 +159,26 @@
     // backrooms-style rooms. even/even intersections stay solid -> regular pillars.
     const THEME_NAMES = { yellow: 'The Yellow Halls', pool: 'The Poolrooms', subway: 'The Subway Station', haunted: 'The Haunted House', sewer: 'The Sewers', forest: 'The Forest',
       school: 'The Abandoned School', hospital: 'The Empty Hospital', grocery: 'The Supermarket', factory: 'The Bubblegum Factory', party: 'Level Fun =)', office: 'The Office', garage: 'The Parking Garage' };
-    function genLevel(lvl, theme) {
-      themeName = (theme && THEMES[theme]) ? theme : 'yellow';
-      curTheme = THEMES[themeName];
+    // Per-theme architecture so a level reads as the actual place, not just a
+    // re-textured maze: forests are open dark woods, schools have classrooms and
+    // a gym off a hallway, supermarkets have aisles, garages have pillars + cars.
+    // Tile values: 0 floor · 1 solid wall (raycast) · 2 solid-but-see-through
+    // obstacle drawn as a billboard prop (tree/shelf/car/desk…) that still blocks
+    // movement and line-of-sight.
+    const LAYOUT = {
+      yellow: 'maze', pool: 'maze', haunted: 'maze', sewer: 'maze',
+      forest: 'forest', grocery: 'aisles', garage: 'garage',
+      school: 'rooms', hospital: 'rooms',
+      subway: 'hall', office: 'hall', party: 'hall', factory: 'hall'
+    };
+    let curArch = 'maze';
+    function blankMap(w, h) { mapW = w; mapH = h; map = []; for (let y = 0; y < h; y++) map.push(new Array(w).fill(1)); }
+    function carveRect(x, y, w, h) { for (let j = Math.max(1, y); j < Math.min(mapH - 1, y + h); j++) for (let i = Math.max(1, x); i < Math.min(mapW - 1, x + w); i++) map[j][i] = 0; }
+    function addObst(tx, ty, img, sh, sw) { if (tx < 1 || ty < 1 || tx >= mapW - 1 || ty >= mapH - 1) return false; if (map[ty][tx] !== 0) return false; map[ty][tx] = 2; structProps.push({ img: img, x: tx + 0.5, y: ty + 0.5, sh: sh, sw: sw }); return true; }
 
-      // bigger every level: the backrooms sprawl as you go deeper
-      const cells = clamp(8 + lvl * 2, 8, 26);
-      const cols = cells, rows = cells;
-      mapW = cols * 2 + 1; mapH = rows * 2 + 1;
-      map = [];
-      for (let y = 0; y < mapH; y++) map.push(new Array(mapW).fill(1));
-
+    function buildMaze(theme, lvl) {                       // yellow halls, poolrooms, haunted house, sewers
+      const cells = clamp(8 + lvl * 2, 8, 26), cols = cells, rows = cells;
+      blankMap(cols * 2 + 1, rows * 2 + 1);
       const visited = [];
       for (let y = 0; y < rows; y++) visited.push(new Array(cols).fill(false));
       const stack = [[0, 0]];
@@ -184,36 +194,125 @@
         const [nx, ny] = nb[rint(0, nb.length - 1)];
         map[cy * 2 + 1 + (ny - cy)][cx * 2 + 1 + (nx - cx)] = 0;
         map[ny * 2 + 1][nx * 2 + 1] = 0;
-        visited[ny][nx] = true;
-        stack.push([nx, ny]);
+        visited[ny][nx] = true; stack.push([nx, ny]);
       }
-
-      // open it up + carve rooms (poolrooms are more open)
-      const openP = themeName === 'pool' ? 0.5 : 0.38;
-      for (let y = 1; y < mapH - 1; y++) {
-        for (let x = 1; x < mapW - 1; x++) {
-          if (map[y][x] !== 1) continue;
-          if (x % 2 === 0 && y % 2 === 0) continue;
-          if (Math.random() < openP) map[y][x] = 0;
-        }
+      const openP = theme === 'pool' ? 0.5 : 0.38;
+      for (let y = 1; y < mapH - 1; y++) for (let x = 1; x < mapW - 1; x++) {
+        if (map[y][x] !== 1) continue;
+        if (x % 2 === 0 && y % 2 === 0) continue;
+        if (Math.random() < openP) map[y][x] = 0;
       }
       const roomCount = clamp(2 + Math.floor(lvl / 1.5), 3, 9);
       for (let i = 0; i < roomCount; i++) {
-        const rw = rint(3, 6), rh = rint(3, 6);
-        const rx = rint(1, mapW - rw - 2), ry = rint(1, mapH - rh - 2);
-        for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) {
-          if (x % 2 === 0 && y % 2 === 0) continue;
-          map[y][x] = 0;
-        }
+        const rw = rint(3, 6), rh = rint(3, 6), rx = rint(1, mapW - rw - 2), ry = rint(1, mapH - rh - 2);
+        for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) { if (x % 2 === 0 && y % 2 === 0) continue; map[y][x] = 0; }
       }
-
       px = 1.5; py = 1.5; dir = 0;
+    }
+
+    function buildForest(lvl) {                            // open dark woods: weave between tall trees
+      const w = clamp(28 + lvl * 2, 28, 48), h = clamp(22 + lvl * 2, 22, 40);
+      blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
+      px = 2.5; py = 2.5; dir = 0.5;
+      const target = Math.floor(w * h * 0.12);
+      let placed = 0, guard = 0;
+      while (placed < target && guard < target * 12) {
+        guard++;
+        const tx = rint(2, w - 3), ty = rint(2, h - 3);
+        if (Math.hypot(tx + 0.5 - px, ty + 0.5 - py) < 4) continue;
+        if (addObst(tx, ty, PA.pine, 1.95, 0.72)) placed++;
+      }
+    }
+
+    function buildAisles(lvl) {                            // supermarket: long parallel shelving aisles
+      const w = clamp(24 + lvl, 24, 40), h = clamp(18 + lvl, 18, 32);
+      blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
+      px = 2.5; py = (h / 2 | 0) + 0.5; dir = 0;
+      // shelves run vertically with open top + bottom corridors connecting every aisle
+      for (let ax = 4; ax < w - 3; ax += 3) for (let y = 3; y < h - 3; y++) addObst(ax, y, PA.shelf, 0.95, 0.84);
+    }
+
+    function buildGarage(lvl) {                            // open concrete deck: pillar grid + parked cars
+      const w = clamp(26 + lvl, 26, 42), h = clamp(20 + lvl, 20, 34);
+      blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
+      px = 2.5; py = 2.5; dir = 0.3;
+      for (let y = 4; y < h - 3; y += 4) for (let x = 5; x < w - 4; x += 5) map[y][x] = 1;   // concrete pillars
+      const cars = Math.floor(w * h * 0.025);
+      let n = 0, gd = 0;
+      while (n < cars && gd < cars * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (Math.hypot(tx - px, ty - py) < 4) continue; if (addObst(tx, ty, PA.car, 0.5, 1.05)) n++; }
+    }
+
+    function buildRooms(theme, lvl) {                      // school / hospital: rooms + a big gym/ward off a hall
+      const w = clamp(30 + lvl, 30, 46), h = clamp(24 + lvl, 24, 36);
+      blankMap(w, h);
+      const hallTop = (h / 2 | 0) - 1, hallH = 4;
+      carveRect(2, hallTop, w - 4, hallH);                 // central corridor
+      px = 3.5; py = hallTop + 1.5; dir = 0;
+      const isSchool = theme === 'school';
+      function door(x, y) { if (x > 0 && y > 0 && x < mapW - 1 && y < mapH - 1) map[y][x] = 0; }
+      const gymW = 9, gymX = w - 3 - gymW;
+      let x = 3;
+      while (x < gymX - 2) {                                // classrooms / wards down both sides
+        const rw = rint(5, 7), rhT = rint(4, 6), rhB = rint(4, 6);
+        carveRect(x, hallTop - 1 - rhT, rw, rhT); door(x + (rw / 2 | 0), hallTop - 1);
+        carveRect(x, hallTop + hallH + 1, rw, rhB); door(x + (rw / 2 | 0), hallTop + hallH);
+        const fimg = isSchool ? PA.desk : PA.gurney, fsh = isSchool ? 0.42 : 0.4, fsw = isSchool ? 0.56 : 0.71;
+        addObst(x + 1, hallTop - 2 - rhT + 2, fimg, fsh, fsw);
+        addObst(x + rw - 2, hallTop + hallH + rhB - 1, fimg, fsh, fsw);
+        x += rw + 1;
+      }
+      carveRect(gymX, 3, gymW, h - 6);                      // the gym / ward — one big open room, merged with the hall
+    }
+
+    function buildHall(theme, lvl) {                       // subway platform / office / party hall / factory floor
+      const w = clamp(26 + lvl, 26, 44), h = clamp(20 + lvl, 20, 34);
+      blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
+      px = 2.5; py = (h / 2 | 0) + 0.5; dir = 0;
+      if (theme === 'subway') {
+        for (let x = 5; x < w - 4; x += 6) { map[3][x] = 1; map[h - 4][x] = 1; }            // platform pillars
+        for (let x = 4; x < w - 4; x += 5) { addObst(x, 3, PA.bench, 0.32, 0.55); addObst(x, h - 4, PA.bench, 0.32, 0.55); }
+        addObst(5, py | 0, PA.turnstile, 0.5, 0.42);
+      } else if (theme === 'office') {
+        for (let cy = 5; cy < h - 5; cy += 6) for (let cx = 6; cx < w - 6; cx += 8) {        // cubicle pods
+          addObst(cx, cy, PA.cubicle, 0.52, 0.71); addObst(cx + 1, cy, PA.cubicle, 0.52, 0.71);
+          map[cy + 1][cx] = 1; map[cy - 1] && (map[cy - 1][cx + 1] = 1);                     // low partitions
+        }
+      } else if (theme === 'party') {
+        const n = Math.floor(w * h * 0.02);
+        let p = 0, gd = 0;
+        while (p < n && gd < n * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (Math.hypot(tx - px, ty - py) < 3) continue; if (p % 2 ? addObst(tx, ty, PA.balloons, 0.9, 0.62) : addObst(tx, ty, PA.partytable, 0.46, 0.74)) p++; }
+      } else if (theme === 'factory') {
+        const midx = w / 2 | 0;
+        for (let y = 2; y < h - 2; y++) if (y !== (py | 0) && y !== (py | 0) + 1) map[y][midx] = 1;   // chamber divider with doorway
+        const n = Math.floor(w * h * 0.022);
+        let p = 0, gd = 0;
+        while (p < n && gd < n * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (tx === midx) continue; if (Math.hypot(tx - px, ty - py) < 3) continue; if (addObst(tx, ty, PA.gumvat, 0.8, 0.69)) p++; }
+      }
+    }
+
+    function buildLayout(theme, lvl) {
+      structProps = [];
+      curArch = LAYOUT[theme] || 'maze';
+      if (curArch === 'forest') buildForest(lvl);
+      else if (curArch === 'aisles') buildAisles(lvl);
+      else if (curArch === 'garage') buildGarage(lvl);
+      else if (curArch === 'rooms') buildRooms(theme, lvl);
+      else if (curArch === 'hall') buildHall(theme, lvl);
+      else buildMaze(theme, lvl);
+    }
+
+    function genLevel(lvl, theme) {
+      themeName = (theme && THEMES[theme]) ? theme : 'yellow';
+      curTheme = THEMES[themeName];
+
+      buildLayout(themeName, lvl);
 
       // BFS distances from spawn -> spread-out reachable cell centres
       const dist = [];
       for (let y = 0; y < mapH; y++) dist.push(new Array(mapW).fill(-1));
-      dist[1][1] = 0;
-      let q = [[1, 1]];
+      const sx = Math.floor(px), sy = Math.floor(py);
+      dist[sy][sx] = 0;
+      let q = [[sx, sy]];
       while (q.length) {
         const nq = [];
         for (const [cx, cy] of q) {
@@ -227,7 +326,7 @@
         q = nq;
       }
       const reach = [];
-      for (let cy = 1; cy < mapH; cy += 2) for (let cx = 1; cx < mapW; cx += 2)
+      for (let cy = 1; cy < mapH - 1; cy++) for (let cx = 1; cx < mapW - 1; cx++)
         if (dist[cy][cx] > 0) reach.push({ x: cx + 0.5, y: cy + 0.5, d: dist[cy][cx] });
       reach.sort(function (a, b) { return b.d - a.d; });
       const used = [];
@@ -300,9 +399,10 @@
 
       marks = [];   // fresh trail each level
 
-      // some rooms have stuff phasing through the walls (a glitch in the level)
+      // some rooms have stuff phasing through the walls (a glitch in the level) —
+      // only in the maze-style places, which have the interior walls for it
       glitches = [];
-      phasing = themeName !== 'pool' && lvl >= 2 && Math.random() < 0.55;
+      phasing = curArch === 'maze' && themeName !== 'pool' && lvl >= 2 && Math.random() < 0.55;
       if (phasing) {
         for (let g = 0, n = 0; g < 500 && n < 4 + (lvl % 3); g++) {
           const ox = rint(1, mapW - 2), oy = rint(1, mapH - 2);
@@ -317,12 +417,15 @@
         }
       }
 
-      // themed scenery (benches, lockers, trees, shelving…) that sells the place
+      // scattered complementary scenery, then the structural obstacles (trees,
+      // shelves, cars, desks…) that were built into the layout as solid tiles
       placeProps();
+      for (const sp of structProps) props.push(sp);
 
       // lighting: per-theme base + a gentle depth ramp. Dim, atmospheric levels
       // flicker — but nothing goes fully pitch black anymore.
       darkness = clamp(curTheme.base + 0.12 + (lvl - 1) * 0.04, 0, 0.7);
+      if (themeName === 'forest') darkness = clamp(darkness + 0.24, 0, 0.82);   // a scary dark wood
       blackout = darkness > 0.45 && lvl >= 3 && lvl % 3 === 0;   // brief flicker on dim levels
 
       updateCamera();
@@ -1635,17 +1738,19 @@
         g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(20, 8, 4, 168);
       })
     };
-    // which props populate each theme, how big, and where they sit
+    // Complementary scattered props. The hero objects (shelves, trees, cars,
+    // benches, vats, desks…) are placed structurally as solid tiles in the layout
+    // builders; these are the smaller extras that dress the rest of the space.
     const THEME_PROPS = {
-      subway:  [{ img: PA.bench, sh: 0.32, sw: 0.55, place: 'wall', count: [2, 4] }, { img: PA.turnstile, sh: 0.5, sw: 0.42, place: 'floor', count: [1, 2] }, { img: PA.subsign, sh: 0.7, sw: 0.51, place: 'wall', count: [1, 2] }],
-      forest:  [{ img: PA.pine, sh: 1.7, sw: 0.68, place: 'floor', count: [4, 7] }, { img: PA.bush, sh: 0.3, sw: 0.41, place: 'floor', count: [3, 6] }, { img: PA.rock, sh: 0.22, sw: 0.37, place: 'floor', count: [2, 4] }],
-      school:  [{ img: PA.lockers, sh: 0.9, sw: 0.84, place: 'wall', count: [3, 5] }, { img: PA.desk, sh: 0.42, sw: 0.56, place: 'floor', count: [2, 4] }],
-      hospital:[{ img: PA.gurney, sh: 0.4, sw: 0.71, place: 'wall', count: [2, 3] }, { img: PA.ivstand, sh: 0.78, sw: 0.31, place: 'floor', count: [1, 3] }, { img: PA.wheelchair, sh: 0.52, sw: 0.47, place: 'floor', count: [1, 2] }],
-      grocery: [{ img: PA.shelf, sh: 0.95, sw: 0.83, place: 'wall', count: [3, 6] }, { img: PA.freezer, sh: 0.88, sw: 0.7, place: 'wall', count: [1, 2] }, { img: PA.cart, sh: 0.42, sw: 0.56, place: 'floor', count: [1, 3] }],
-      factory: [{ img: PA.gumvat, sh: 0.8, sw: 0.69, place: 'wall', count: [2, 4] }, { img: PA.lollipop, sh: 1.2, sw: 0.37, place: 'floor', count: [1, 3] }, { img: PA.gumballs, sh: 0.32, sw: 0.55, place: 'floor', count: [1, 3] }],
-      party:   [{ img: PA.partytable, sh: 0.46, sw: 0.74, place: 'floor', count: [1, 2] }, { img: PA.balloons, sh: 0.9, sw: 0.62, place: 'floor', count: [2, 4] }, { img: PA.banner, sh: 0.42, sw: 0.84, place: 'wall', count: [1, 2] }],
-      office:  [{ img: PA.cubicle, sh: 0.52, sw: 0.71, place: 'wall', count: [2, 5] }, { img: PA.cooler, sh: 0.66, sw: 0.3, place: 'wall', count: [1, 2] }],
-      garage:  [{ img: PA.car, sh: 0.5, sw: 1.05, place: 'wall', count: [1, 3] }, { img: PA.pillar, sh: 0.92, sw: 0.36, place: 'floor', count: [2, 4] }]
+      subway:  [{ img: PA.subsign, sh: 0.7, sw: 0.51, place: 'wall', count: [2, 3] }],
+      forest:  [{ img: PA.bush, sh: 0.3, sw: 0.41, place: 'floor', count: [5, 9] }, { img: PA.rock, sh: 0.22, sw: 0.37, place: 'floor', count: [3, 6] }],
+      school:  [{ img: PA.lockers, sh: 0.9, sw: 0.84, place: 'wall', count: [4, 7] }],
+      hospital:[{ img: PA.ivstand, sh: 0.78, sw: 0.31, place: 'floor', count: [2, 4] }, { img: PA.wheelchair, sh: 0.52, sw: 0.47, place: 'floor', count: [1, 3] }],
+      grocery: [{ img: PA.freezer, sh: 0.88, sw: 0.7, place: 'wall', count: [2, 4] }, { img: PA.cart, sh: 0.42, sw: 0.56, place: 'floor', count: [2, 4] }],
+      factory: [{ img: PA.lollipop, sh: 1.2, sw: 0.37, place: 'floor', count: [2, 4] }, { img: PA.gumballs, sh: 0.32, sw: 0.55, place: 'floor', count: [2, 4] }],
+      party:   [{ img: PA.banner, sh: 0.42, sw: 0.84, place: 'wall', count: [1, 3] }, { img: PA.balloons, sh: 0.9, sw: 0.62, place: 'floor', count: [1, 3] }],
+      office:  [{ img: PA.cooler, sh: 0.66, sw: 0.3, place: 'wall', count: [2, 3] }],
+      garage:  [{ img: PA.pillar, sh: 0.92, sw: 0.36, place: 'floor', count: [2, 4] }]
     };
     // scatter a level's props into open cells (wall props hug an adjacent wall)
     function placeProps() {

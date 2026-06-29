@@ -43,3 +43,20 @@ sprite sheet + a jumpscare-face sheet):
 - SW cache bumped v30 → v31 so installed PWA users get the update.
 
 **Not deployed yet** — committed to git only. Run the S3 sync + CloudFront invalidate to go live.
+
+## Follow-up: real per-theme architecture (not just re-textured halls)
+Rebuilt the level generator so each place is structurally what it is. New tile type
+`2` = solid-but-see-through obstacle rendered as a billboard (blocks movement + sight),
+which lets trees/shelves/cars/desks be real obstacles instead of plain wall cubes.
+Layout archetypes (`LAYOUT` map + `buildLayout`):
+- **forest** → open dark woods, scattered tall pines you weave between (darker lighting).
+- **grocery** → long parallel shelving aisles stocked with products.
+- **garage** → open concrete deck, concrete pillar grid + parked cars.
+- **school / hospital** → classrooms / wards off a central hallway + one big gym / ward;
+  desks (school) and gurneys (hospital) inside the rooms.
+- **subway / office / party / factory** → big open halls: platform w/ benches+turnstile+
+  pillars; cubicle pods; party hall w/ tables+balloons; candy chambers w/ gum vats.
+- **yellow / pool / haunted / sewer** → keep the maze generator (they ARE halls).
+Wall-phasing glitches now only on maze levels; structural props merged after `placeProps`.
+Verified every archetype in a headless browser (screenshots) — all read as the real place,
+zero runtime errors.
