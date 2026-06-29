@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Mob Soccer</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,25 +15,7 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body {
-      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
-      background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
-      min-height: 100vh;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 16px; touch-action: none; user-select: none; -webkit-user-select: none;
-    }
-    .topbar { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
-    .stage {
-      position: relative; width: 100%; max-width: 560px; border-radius: 20px; overflow: hidden;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.45); border: 2px solid #0f3460; aspect-ratio: 760 / 560;
-    }
-    canvas { display: block; width: 100%; height: 100%; }
     .hint { margin-top: 12px; color: #a0a8c0; font-size: 0.8rem; text-align: center; max-width: 560px; line-height: 1.5; }
-    .hint b { color: #ffe8b0; }
 
     .ctl-btn {
       position: absolute; z-index: 6; touch-action: none;
@@ -49,8 +32,6 @@
     /* single-player: action buttons go right so the left thumb works the joystick */
     .stage.solo .ctl-btn.p1 { left: auto; right: 10px; }
 
-    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
-    .overlay[hidden] { display: none; }
     .panel { width: 100%; max-width: 420px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 22px 18px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
     .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; font-weight: 400; margin-bottom: 4px; }
     .panel .sub { color: #a0a8c0; font-size: 0.84rem; margin-bottom: 12px; line-height: 1.4; }
@@ -76,11 +57,7 @@
     .legend .row .em { font-size: 1.1rem; width: 22px; text-align: center; }
     .legend .row b { color: #fff; }
     .legend .row .d { color: #8b93b0; }
-    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
-    .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; }
-    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
     .start-btn { margin-top: 16px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
-    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
 
     /* ---------- Ultimate Team ---------- */
     .ut-entry { margin-top: 10px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1rem; color: #1a1a2e; background: linear-gradient(135deg, #ffe27a, #ffb300); border: none; border-radius: 16px; padding: 13px 20px; cursor: pointer; box-shadow: 0 6px 0 #c98f00; transition: transform 0.1s ease, box-shadow 0.1s ease; }
@@ -378,6 +355,7 @@
     Ball out the <b>sides</b> = throw-in &nbsp;·&nbsp; out over a <b>goal line</b> = corner or goal kick, just like real life.
   </p>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     const canvas = document.getElementById('game');
@@ -406,9 +384,9 @@
     const ROLE_LETTER = { gk: 'G', def: 'D', mid: 'M', atk: 'A' };
     let ballHold = 0, possCD = 0;
 
-    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
-    function rnd(a, b) { return a + Math.random() * (b - a); }
-    function playerName(i, fb) { try { var a = JSON.parse(localStorage.getItem('elise.playerNames')); var n = (a && a[i] != null ? String(a[i]) : '').trim(); return n || fb; } catch (e) { return fb; } }
+    const clamp = EL.clamp;
+    const rnd = EL.rnd;
+    const playerName = EL.playerName;
 
     const MOBS = {
       sheep:   { name: 'Sheep',   emoji: '🐑', tag: 'Light',     accel: 0.62, maxSpd: 4.2, mass: 1.0, r: 23, kick: 0.92, color: '#f3f3f3', dark: '#cdcdcd', face: '#e7c8a8' },
@@ -1254,10 +1232,10 @@
 
     function load(k) { try { return JSON.parse(localStorage.getItem(k)) || []; } catch (e) { return []; } }
     function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
-    function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
-    function rint(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
-    function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
-    function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+    const pick = EL.pick;
+    const rint = EL.rint;
+    const clamp = EL.clamp;
+    const shuffle = EL.shuffle;
     function uid() { return 'c' + Math.floor(Math.random() * 1e9).toString(36) + Date.now().toString(36); }
 
     var collection = load(LS_COL);

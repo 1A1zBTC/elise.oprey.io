@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Scroot Rooms</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,7 +15,6 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { height: 100%; }
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
@@ -22,8 +22,8 @@
       touch-action: none; user-select: none; -webkit-user-select: none;
     }
     /* Full-bleed: the stage fills whatever space the page / iframe is given. */
-    .stage { position: fixed; inset: 0; overflow: hidden; background: #070804; }
-    canvas { display: block; width: 100%; height: 100%; }
+    /* Full-bleed: neutralize the shared .stage box (max-width/border/radius/aspect-ratio). */
+    .stage { position: fixed; inset: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; aspect-ratio: auto; overflow: hidden; background: #070804; }
 
     /* Floating controls layered over the game (they don't steal screen space). */
     .fab { position: absolute; z-index: 15; display: flex; gap: 8px; }
@@ -39,12 +39,10 @@
     .fab.hidden-ui { display: none; }
 
     .overlay { position: absolute; inset: 0; background: rgba(10,12,6,0.82); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
-    .overlay[hidden] { display: none; }
     .panel { width: 100%; max-width: 400px; background: #1c1d10; border: 2px solid #6b6320; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.6); }
     .panel h2 { font-family: 'Pacifico', cursive; color: #e9dd6a; font-size: 1.8rem; font-weight: 400; margin-bottom: 6px; }
     .panel .sub { color: #b9b48a; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.45; }
     .panel .sub b { color: #ffe8b0; }
-    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
     .scoreline .big { font-size: 2.2rem; display: block; line-height: 1.1; color: #e9dd6a; }
     .scoreline .lbl { color: #b9b48a; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
     .start-btn { margin-top: 18px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #1c1d10; background: #e9dd6a; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #9c9226; transition: transform 0.1s ease, box-shadow 0.1s ease; }
@@ -86,6 +84,7 @@
     </div>
   </div>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     const canvas = document.getElementById('game');
@@ -125,12 +124,11 @@
     window.addEventListener('resize', resize);
 
     const BEST_KEY = 'scrootgames.best';
-    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
-    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+    const bestStore = EL.best(BEST_KEY), loadBest = bestStore.load, saveBest = bestStore.save;
 
-    function rnd(a, b) { return a + Math.random() * (b - a); }
-    function rint(a, b) { return Math.floor(rnd(a, b + 1)); }
-    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+    const rnd = EL.rnd;
+    const rint = EL.rint;
+    const clamp = EL.clamp;
 
     // ---- raycaster / world ----
     const MOVE_SPEED = 2.7;      // tiles / second

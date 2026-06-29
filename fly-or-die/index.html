@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Fly or Die</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,7 +15,6 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
       background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
@@ -23,9 +23,6 @@
       padding: 8px; touch-action: none; user-select: none; -webkit-user-select: none;
     }
     .topbar { width: 100%; max-width: 1400px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex: 0 0 auto; }
-    .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s ease, background 0.15s ease; }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
     .stage {
       position: relative; width: 100%; max-width: 1400px; flex: 1 1 auto; min-height: 0;
       border-radius: 16px; overflow: hidden;
@@ -33,11 +30,8 @@
     }
     canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     .hint { margin-top: 8px; color: #a0a8c0; font-size: 0.8rem; text-align: center; max-width: 900px; line-height: 1.5; flex: 0 0 auto; }
-    .hint b { color: #ffe8b0; }
     .hint .o2 { color: #6ee7ff; } .hint .h2o { color: #4ea8ff; }
 
-    .overlay { position: fixed; inset: 0; background: rgba(10,14,28,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
-    .overlay[hidden] { display: none; }
     .panel { width: 100%; max-width: 420px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
     .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.8rem; font-weight: 400; margin-bottom: 6px; }
     .panel .sub { color: #a0a8c0; font-size: 0.9rem; margin-bottom: 12px; line-height: 1.45; }
@@ -46,11 +40,8 @@
     .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left; margin: 12px 0 2px; }
     .legend .row { background: #131c33; border: 1px solid #243254; border-radius: 12px; padding: 8px 10px; font-size: 0.78rem; color: #cfd6ea; font-weight: 700; display: flex; align-items: center; gap: 8px; }
     .legend .row b { display: block; font-size: 0.66rem; color: #8b93b0; font-weight: 800; }
-    .scoreline { color: #fff; font-weight: 800; font-size: 1rem; margin: 6px 0; }
     .scoreline .big { font-size: 2.1rem; display: block; line-height: 1.1; }
-    .scoreline .lbl { color: #a0a8c0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
     .start-btn { margin-top: 14px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
-    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b22a44; }
   </style>
 </head>
 <body>
@@ -96,6 +87,7 @@
     dodge <span style="color:#ff5a6e">bigger</span> fliers &amp; <span style="color:#ff5a6e">ground beasts</span> 🦂🐺 &nbsp;·&nbsp; <span class="o2">O₂</span> in space ↑ &nbsp;·&nbsp; <span class="h2o">water</span> in seas ↓
   </p>
 
+  <script src="/shared/game.js"></script>
   <script>
   (function () {
     const canvas = document.getElementById('game');
@@ -116,12 +108,11 @@
     window.addEventListener('resize', resize);
 
     const BEST_KEY = 'flyordie.best';
-    function loadBest() { try { return parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) { return 0; } }
-    function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
-    function rnd(a, b) { return a + Math.random() * (b - a); }
-    function rndInt(a, b) { return Math.floor(rnd(a, b + 1)); }
-    function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
-    function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+    const bestStore = EL.best(BEST_KEY), loadBest = bestStore.load, saveBest = bestStore.save;
+    const rnd = EL.rnd;
+    const rndInt = EL.rint;
+    const clamp = EL.clamp;
+    const dist2 = EL.dist2;
 
     // ---- evolution ladder (all flying animals) ----
     // each level needs noticeably more XP than the last (steeper curve)

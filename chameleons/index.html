@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Chameleons</title>
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/game.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#16213e">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -14,7 +15,6 @@
   <link rel="icon" href="/icons/favicon.png">
   <script src="/pwa.js" defer></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
       background: linear-gradient(160deg, #1a1a2e 0%, #16213e 100%);
@@ -24,8 +24,6 @@
     }
     .topbar { width: 100%; max-width: 600px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .back { color: #a0a8c0; text-decoration: none; font-weight: 700; font-size: 0.95rem; padding: 6px 10px; border-radius: 12px; transition: color 0.15s, background 0.15s; }
-    .back:hover { color: #fff; background: rgba(255,255,255,0.06); }
-    .title { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.6rem; line-height: 1; }
 
     .phasebar { width: 100%; max-width: 600px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
     .phasebar .who { font-weight: 800; font-size: 0.95rem; color: #ffe8b0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -235,6 +233,7 @@
     </div>
   </div>
 
+  <script src="/shared/game.js"></script>
 <script>
 (function(){
   const cv = document.getElementById('game');
@@ -259,11 +258,11 @@
   }
   window.addEventListener('resize', resize);
 
-  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
-  function rnd(a,b){ return a+Math.random()*(b-a); }
-  function rint(a,b){ return Math.floor(rnd(a,b+1)); }
-  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-  function pname(i,f){ try{ const a=JSON.parse(localStorage.getItem('elise.playerNames')); const n=(a&&a[i]!=null?String(a[i]):'').trim(); return n||f; }catch(e){ return f; } }
+  const clamp=EL.clamp;
+  const rnd=EL.rnd;
+  const rint=EL.rint;
+  const pick=EL.pick;
+  const pname=EL.playerName;
   function jitC(hex,f){ const n=parseInt(hex.slice(1),16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255; r=clamp(r*f|0,0,255);g=clamp(g*f|0,0,255);b=clamp(b*f|0,0,255); return 'rgb('+r+','+g+','+b+')'; }
 
   const PALETTE = ['#3c6e1f','#6aa84f','#9ccb5a','#c8d96f','#d6b24a','#e08a2e','#a9543b','#7a4f2a',
