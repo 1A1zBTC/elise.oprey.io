@@ -236,6 +236,21 @@
     <div class="shop-items" id="shopItems"></div>
   </div>
 
+  <div class="modal-backdrop" id="saveModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <span class="modal-title">Your Hospitals</span>
+        <button class="modal-x" id="saveClose" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-row">
+        <input id="saveName" class="modal-input" type="text" maxlength="40" placeholder="Name your hospital…" />
+        <button class="modal-save" id="saveBtn">Save</button>
+      </div>
+      <button class="modal-new" id="newGameBtn">+ New Game</button>
+      <div class="modal-list" id="saveList"></div>
+    </div>
+  </div>
+
   <script>
   (function () {
     'use strict';
@@ -3821,10 +3836,6 @@
       placeXray: function (gx, gy, rot) { placeXray(gx, gy, rot); return examKeyTiles(gx, gy, rot || 0); },
       exams: function () { return examRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet, examT: Math.round((r.examT||0)*10)/10 }; }); },
       corridors: function () { return Object.keys(corridor); },
-      addLitter: function (x,y){ puddles.push({x:x,y:y,clean:0,kind:'litter'}); return puddles.length; },
-      messes: function (){ return puddles.map(function(p){return {x:p.x,y:p.y,kind:p.kind||'pee',clean:Math.round((p.clean||0)*100)/100};}); },
-      setSkill: function (k,v){ skills[k].val=v; return skills[k].val; },
-      forceLitter: function (i){ var v=visitors[i||0]; if(!v)return'none'; v.phase='idle'; v.litterT=0.001; v.x=5; v.y=5; return 'set'; },
       setInput: function (k, v) { input[k] = v; },
       can: function (id, gx, gy, rot) { return canPlace(FURN_BY_ID[id], gx, gy, rot || 0); },
       buildRestroom: function (gx, gy, rot) { if (!canPlaceRestroom(gx, gy, rot || 0)) return false; placeRestroom(gx, gy, rot || 0); return restrooms[restrooms.length - 1]; },
