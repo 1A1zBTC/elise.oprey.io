@@ -1,5 +1,16 @@
 # Lessons
 
+## Don't assume a game's genre from its name — research the actual mechanics first
+- 2026-06-29: Asked to add "Burgle Cats" (a PONOS game). I assumed from the PONOS/Battle Cats
+  connection that it was a lane-pushing battler and built a whole lane-battler. Wrong genre —
+  The Burgle Cats is a turn-based stealth HEIST PUZZLE (sneak a crew through a manor, dodge
+  sleeping guard doges + traps, find the real vault among decoys, escape via a shutter; 3
+  captures = bust). Had to rebuild from scratch.
+- Rule: when cloning/recreating a named real-world game, web-research its real mechanics BEFORE
+  building (sources: fandom/miraheze wikis, appgamer guides). One quick search would have saved
+  a full wrong build. Also: recreate mechanics/genre only — never copy the original's art,
+  character names, or exact stats (IP); ship original assets.
+
 ## Never run `git restore .` / discard without inspecting the diff first
 - 2026-05-30: User asked to "revert all changes since the last commit". I ran `git restore .`
   immediately. One of the wiped files (`battleships/index.html`) had uncommitted work the user

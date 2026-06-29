@@ -5,14 +5,14 @@
 
    MAINTENANCE: when you add a new game, add its "<game>/" to PAGES below and
    bump CACHE (e.g. el-games-v2) so clients pick up the new precache list. */
-const CACHE = 'el-games-v40';
+const CACHE = 'el-games-v48';
 
 const PAGES = [
-  '/', 'battleships/', 'bunny-dig/', 'catch-the-treats/', 'chameleons/', 'crossy-pets/',
-  'flappy-dog/', 'fly-or-die/', 'frog-feast/', 'fruit-merge/', 'grindy-vet/', 'hungry-pig/',
-  'kit-clash/', 'kitten-jump/', 'match-it/', 'mob-soccer/', 'monkey-swing/', 'naughty-shelf/',
-  'picwits/', 'scroot-rooms/', 'snakes-and-ladders/', 'sumo/', 'twisted-system/', 'wavelength/',
-  'whack-a-mole/'
+  '/', 'battleships/', 'bunny-dig/', 'burgle-cats/', 'catch-the-treats/', 'chameleons/',
+  'crossy-pets/', 'flappy-dog/', 'fly-or-die/', 'frog-feast/', 'fruit-merge/', 'grindy-vet/',
+  'hungry-pig/', 'kit-clash/', 'kitten-jump/', 'match-it/', 'mob-soccer/', 'monkey-swing/',
+  'naughty-shelf/', 'picwits/', 'scroot-rooms/', 'snakes-and-ladders/', 'sumo/',
+  'twisted-system/', 'wavelength/', 'whack-a-mole/'
 ];
 const ASSETS = [
   'manifest.webmanifest', 'pwa.js', 'shared/game.css',
