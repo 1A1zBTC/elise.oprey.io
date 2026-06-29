@@ -1069,15 +1069,22 @@
     // when a room's wall was drawn on top of a corridor wall standing in front of
     // it. Corridor edges wall off anything that isn't room floor; exam rooms wall
     // off the corridor side too, leaving a single doorway at rm.door.
-    function bakeRoomWalls() {
-      var tall = [], shortw = [];     // {d, fn}; d = segment midpoint depth (gx+gy sum)
+    var wallSegs = [];     // {d, fn}; rebuilt by collectWalls(), depth-sorted in draw()
+    function collectWalls() {
+      // Every wall / door / wall-decoration / entrance-frame segment becomes a
+      // depth-sorted scene item drawn live in draw(), so walls interleave with
+      // furniture and characters by their foot depth (no more baked bg/fg split).
+      // d = midpoint grid-sum ((ax+ay+bx+by)/2) — the SAME scale as an actor's
+      // gx+gy, so a back wall sorts just behind, a front wall just in front of, an
+      // actor sharing its tile, and nearer structures always paint over farther.
+      wallSegs.length = 0;
       function W(isTall, ax, ay, bx, by, H, c1, c2, c3, c4) {
-        (isTall ? tall : shortw).push({ d: ax + ay + bx + by,
-          fn: function (cx) { wallFace(cx, ax, ay, bx, by, H, c1, c2, c3, c4); } });
+        wallSegs.push({ d: (ax + ay + bx + by) / 2,
+          fn: function () { wallFace(ctx, ax, ay, bx, by, H, c1, c2, c3, c4); } });
       }
       function D(isTall, ax, ay, bx, by, H, opts) {
-        (isTall ? tall : shortw).push({ d: ax + ay + bx + by,
-          fn: function (cx) { drawDoorOpening(cx, ax, ay, bx, by, H, opts); } });
+        wallSegs.push({ d: (ax + ay + bx + by) / 2,
+          fn: function () { drawDoorOpening(ctx, ax, ay, bx, by, H, opts); } });
       }
       // clinic perimeter, segmented per tile so a corridor run punches one doorway.
       // Collected here (not drawn directly) so it depth-sorts with corridor/exam
@@ -1152,10 +1159,59 @@
           }
         });
       });
-      tall.sort(function (a, b) { return a.d - b.d; });
-      shortw.sort(function (a, b) { return a.d - b.d; });
-      tall.forEach(function (s) { s.fn(bgx); });
-      shortw.forEach(function (s) { s.fn(fgx); });
+      // ---- decorations billboarded onto the tall back-wall planes ----------
+      // Each is its own scene item; d = the billboard's far grid-edge so its own
+      // back wall never paints over it, while an actor standing in front (larger
+      // gx+gy) still occludes it. Heights are well above the floor, so the rare
+      // close actor barely overlaps.
+      function rRB(c, cx, dw, hLo, hHi, fill, stroke, lw) {   // back-right plane (gy=-0.5)
+        var p0 = iso(cx - dw, -0.5), p1 = iso(cx + dw, -0.5);
+        c.beginPath();
+        c.moveTo(p0.x, p0.y - hHi); c.lineTo(p1.x, p1.y - hHi);
+        c.lineTo(p1.x, p1.y - hLo); c.lineTo(p0.x, p0.y - hLo); c.closePath();
+        if (fill) { c.fillStyle = fill; c.fill(); }
+        if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || 2; c.stroke(); }
+      }
+      function rLB(c, cy, dw, hLo, hHi, fill, stroke, lw) {   // back-left plane (gx=-0.5)
+        var p0 = iso(-0.5, cy - dw), p1 = iso(-0.5, cy + dw);
+        c.beginPath();
+        c.moveTo(p0.x, p0.y - hHi); c.lineTo(p1.x, p1.y - hHi);
+        c.lineTo(p1.x, p1.y - hLo); c.lineTo(p0.x, p0.y - hLo); c.closePath();
+        if (fill) { c.fillStyle = fill; c.fill(); }
+        if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || 2; c.stroke(); }
+      }
+      wallSegs.push({ d: -0.5 + (2.5 + 0.95), fn: function () {   // back-left window + sill
+        var c = ctx;
+        rLB(c, 2.5, 0.95, 30, 52, '#cfe8f5', '#9fb4c0', 3);
+        var wm = iso(-0.5, 2.5);
+        c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(wm.x, wm.y - 52); c.lineTo(wm.x, wm.y - 30); c.stroke();
+        var wl = iso(-0.5, 2.5 - 0.95), wr = iso(-0.5, 2.5 + 0.95);
+        c.beginPath(); c.moveTo(wl.x, wl.y - 41); c.lineTo(wr.x, wr.y - 41); c.stroke();
+        rLB(c, 2.5, 1.05, 28, 30, '#eef4f7', null);             // sill
+      } });
+      wallSegs.push({ d: -0.5 + (5.2 + 0.5), fn: function () {    // back-left certificate
+        rLB(ctx, 5.2, 0.5, 35, 49, '#f3ead2', '#9a7b46', 3);
+      } });
+      wallSegs.push({ d: 2.0 + -0.5, fn: function () {            // back-right wall clock
+        var c = ctx, cl = iso(2.0, -0.5), clY = cl.y - 45;
+        c.fillStyle = '#f7fbfc'; c.beginPath(); c.arc(cl.x, clY, 8, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#5a6b76'; c.lineWidth = 2; c.stroke();
+        c.strokeStyle = '#2a3640'; c.lineWidth = 1.5; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(cl.x, clY); c.lineTo(cl.x, clY - 5); c.stroke();
+        c.beginPath(); c.moveTo(cl.x, clY); c.lineTo(cl.x + 4, clY + 1); c.stroke();
+        c.lineCap = 'butt';
+      } });
+      wallSegs.push({ d: (4.7 + 0.95) + -0.5, fn: function () {   // back-right vet-cross poster
+        var c = ctx, pc = iso(4.7, -0.5), pcY = pc.y - 41;
+        rRB(c, 4.7, 0.95, 30, 52, '#ffffff', '#37b3a3', 3);
+        c.fillStyle = '#e0563f';
+        c.fillRect(pc.x - 2.5, pcY - 7, 5, 14);
+        c.fillRect(pc.x - 7, pcY - 2.5, 14, 5);
+      } });
+      // entrance frame: front perimeter (gy = ROOM-0.5), so it draws in front of
+      // the clinic interior just like the short front walls it sits on.
+      wallSegs.push({ d: DOOR_MID + (ROOM - 0.5), fn: function () { drawDoorFrame(ctx); } });
     }
 
     // Static frame (jambs + lintel + sign) around the sliding doors.
@@ -1215,7 +1271,8 @@
       fgx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       bgx.clearRect(0, 0, view.w, view.h);
       fgx.clearRect(0, 0, view.w, view.h);
-      doorways.length = 0;                  // rebuilt as drawDoorOpening() runs below
+      doorways.length = 0;                  // rebuilt as drawDoorOpening() runs in collectWalls()
+      wallSegs.length = 0;                   // cleared so walls vanish while placing (collectWalls rebuilds)
 
       // 1) grass: cover the whole viewport (grid bbox of the 4 screen corners)
       var corners = [screenToGrid(0, 0), screenToGrid(view.w, 0),
@@ -1295,64 +1352,11 @@
         bgx.restore();
       })();
 
-      // 4) ALL walls (clinic perimeter + corridors + exam rooms) + their wall
-      //    decorations + the entrance frame. Skipped entirely while the player is
-      //    placing something, so walls never obscure the build view (renderStatic
-      //    is re-run when placement starts/ends).
-      if (!placing) {
-      bakeRoomWalls();
-
-      // ---- decorations billboarded onto the tall back-wall planes ----------
-      (function () {
-        // rect on the back-right wall plane (gy = -0.5), centred at gx = cx
-        function rRB(cx, dw, hLo, hHi, fill, stroke, lw) {
-          var p0 = iso(cx - dw, -0.5), p1 = iso(cx + dw, -0.5);
-          bgx.beginPath();
-          bgx.moveTo(p0.x, p0.y - hHi); bgx.lineTo(p1.x, p1.y - hHi);
-          bgx.lineTo(p1.x, p1.y - hLo); bgx.lineTo(p0.x, p0.y - hLo); bgx.closePath();
-          if (fill) { bgx.fillStyle = fill; bgx.fill(); }
-          if (stroke) { bgx.strokeStyle = stroke; bgx.lineWidth = lw || 2; bgx.stroke(); }
-        }
-        // rect on the back-left wall plane (gx = -0.5), centred at gy = cy
-        function rLB(cy, dw, hLo, hHi, fill, stroke, lw) {
-          var p0 = iso(-0.5, cy - dw), p1 = iso(-0.5, cy + dw);
-          bgx.beginPath();
-          bgx.moveTo(p0.x, p0.y - hHi); bgx.lineTo(p1.x, p1.y - hHi);
-          bgx.lineTo(p1.x, p1.y - hLo); bgx.lineTo(p0.x, p0.y - hLo); bgx.closePath();
-          if (fill) { bgx.fillStyle = fill; bgx.fill(); }
-          if (stroke) { bgx.strokeStyle = stroke; bgx.lineWidth = lw || 2; bgx.stroke(); }
-        }
-
-        // back-left wall: a window with sky, glazing bars and a sill
-        rLB(2.5, 0.95, 30, 52, '#cfe8f5', '#9fb4c0', 3);
-        var wm = iso(-0.5, 2.5);
-        bgx.strokeStyle = 'rgba(255,255,255,0.75)'; bgx.lineWidth = 2;
-        bgx.beginPath(); bgx.moveTo(wm.x, wm.y - 52); bgx.lineTo(wm.x, wm.y - 30); bgx.stroke();
-        var wl = iso(-0.5, 2.5 - 0.95), wr = iso(-0.5, 2.5 + 0.95);
-        bgx.beginPath(); bgx.moveTo(wl.x, wl.y - 41); bgx.lineTo(wr.x, wr.y - 41); bgx.stroke();
-        rLB(2.5, 1.05, 28, 30, '#eef4f7', null);             // sill
-        // back-left wall: a framed certificate
-        rLB(5.2, 0.5, 35, 49, '#f3ead2', '#9a7b46', 3);
-
-        // back-right wall: a round wall clock
-        var cl = iso(2.0, -0.5), clY = cl.y - 45;
-        bgx.fillStyle = '#f7fbfc'; bgx.beginPath(); bgx.arc(cl.x, clY, 8, 0, Math.PI * 2); bgx.fill();
-        bgx.strokeStyle = '#5a6b76'; bgx.lineWidth = 2; bgx.stroke();
-        bgx.strokeStyle = '#2a3640'; bgx.lineWidth = 1.5; bgx.lineCap = 'round';
-        bgx.beginPath(); bgx.moveTo(cl.x, clY); bgx.lineTo(cl.x, clY - 5); bgx.stroke();
-        bgx.beginPath(); bgx.moveTo(cl.x, clY); bgx.lineTo(cl.x + 4, clY + 1); bgx.stroke();
-        bgx.lineCap = 'butt';
-        // back-right wall: a framed poster with a vet cross
-        rRB(4.7, 0.95, 30, 52, '#ffffff', '#37b3a3', 3);
-        var pc = iso(4.7, -0.5), pcY = pc.y - 41;
-        bgx.fillStyle = '#e0563f';
-        bgx.fillRect(pc.x - 2.5, pcY - 7, 5, 14);
-        bgx.fillRect(pc.x - 7, pcY - 2.5, 14, 5);
-      })();
-
-      // 5) the entrance frame, on top of the (already-baked) front walls → fg
-      drawDoorFrame(fgx);                       // static jambs + lintel around the doors
-      }
+      // 4) ALL walls (clinic perimeter + corridors + rooms) + their wall
+      //    decorations + the entrance frame are collected into wallSegs and drawn
+      //    depth-sorted in draw(). Skipped while placing so walls never obscure
+      //    the build view (renderStatic re-runs when placement starts/ends).
+      if (!placing) collectWalls();
     }
 
     // ---- The vet character (clean flat-iso style) ------------------------
@@ -2649,8 +2653,8 @@
     function leaveOutbound(v) {
       if (!v.left) {                        // tune arrival rate once per departure, by reason
         v.left = true;
-        if (v.served && !v.peed) frq = Math.max(3, frq - 1.5);  // happy (service complete) → arrivals speed up
-        else frq = Math.min(120, frq + 1);                      // unhappy (gave up / accident) → arrivals slow down
+        if (v.served && !v.peed) frq = Math.max(3, frq - 1);    // happy (service complete) → arrivals speed up
+        else frq = Math.min(100, frq + 1.5);                    // unhappy (gave up / accident) → arrivals slow down (frq 100 = 1-star floor)
         renderRating();                                         // arrival rate changed → refresh rating
       }
       v.phase = 'leaving';
@@ -3305,17 +3309,19 @@
             floaters.push({ v: v, t: 0, amt: 100 });
             v.examined = true;
             releaseExam(v);
-            // 20% of pets now need an X-ray (only if an X-ray room exists to use).
-            if (xrayRooms.length && Math.random() < 0.2) {
+            // The pet may now need follow-up care. The need is rolled regardless of
+            // whether that room exists yet — if it doesn't (or all are busy), the
+            // client waits and eventually leaves unhappy, pressuring you to build it.
+            if (Math.random() < 0.2) {       // 20% need an X-ray
               v.needsXray = true;
-              if (!claimXray(v)) {            // all X-ray rooms busy → go wait for a free one
+              if (!claimXray(v)) {            // no free X-ray room → go wait for one
                 var ss = sideSpot();
                 v.path = examRoute(v.x, v.y, ss.x, ss.y);
                 v.wp = 0; v.phase = 'waitXray'; v.patience = baseWait();
               }
-            } else if (pharmacies.length && Math.random() < 0.4) {
-              v.needsMeds = true;            // 40% now need to pick up medicine
-              if (!claimPharmacy(v)) {       // all counters busy → wait for a free one
+            } else if (Math.random() < 0.4) { // 40% of the rest need medicine
+              v.needsMeds = true;
+              if (!claimPharmacy(v)) {       // no free pharmacy counter → wait for one
                 var ps = sideSpot();
                 v.path = examRoute(v.x, v.y, ps.x, ps.y);
                 v.wp = 0; v.phase = 'waitMeds'; v.patience = baseWait();
@@ -3681,92 +3687,88 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(bg, 0, 0);
 
-      // Split actors by the floor they stand on: those on the clinic floor are
-      // occluded by its short front walls (the fg layer); anyone on a corridor /
-      // room floor or the path/road is drawn in front of those walls. Grouping by
-      // actual floor (not a single y-plane) keeps exam/restroom rooms placed
-      // beside or behind the clinic sorted correctly. Each group sorts by gx+gy.
-      var inside = [];
-      var outside = [];
-      function actorGrp(x, y) { return isClinic(Math.round(x), Math.round(y)) ? inside : outside; }
-      actorGrp(vet.x, vet.y).push({ d: vet.x + vet.y, fn: drawVet });
-      placed.forEach(function (f) {
-        var def = FURN_BY_ID[f.id];
-        var ew = ((f.rot || 0) & 1) ? def.h : def.w, eh = ((f.rot || 0) & 1) ? def.w : def.h;
-        var cx = f.gx + (ew - 1) / 2, cy = f.gy + (eh - 1) / 2;
-        actorGrp(cx, cy).push({ d: cx + cy, fn: function () { def.draw(ctx, f.gx, f.gy, f.rot || 0); } });
-      });
-      visitors.forEach(function (v) {
-        // seated visitors get a depth nudge so they draw in front of their own
-        // seating furniture (a 2x1 bench's centre sits between its two tiles).
-        var item = { d: v.x + v.y + (v.seated ? 0.6 : 0), fn: function () { drawVisitor(v); } };
-        actorGrp(v.x, v.y).push(item);
-      });
-      if (hasDesk()) staff.forEach(function (st) {       // receptionists at their stations
-        var L = (staff.length === 1) ? loneStaffLine() : st.line;   // lone one stands at the queue it's serving
-        var p = stationTile(L);
-        inside.push({ d: p.x + p.y, fn: function () { drawReceptionist(ctx, p.x, p.y); } });
-      });
-      restrooms.forEach(function (rm) {                  // toilet fixture inside the walled room
-        var tl = rm.toilet;                              // drawn over the room's short walls (like exam furniture)
-        outside.push({ d: tl.x + tl.y, fn: function () { drawToilet(ctx, tl.x, tl.y, rm.face); } });
-      });
-      examRooms.forEach(function (rm) {                  // exam-room furniture (depth-sorted)
-        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
-        var pet = (rm.occupant && rm.occupant.phase === 'inExam') ? rm.occupant : null;
-        outside.push({ d: k.table.x + k.table.y, fn: function () { drawExamTable(ctx, k.table.x, k.table.y, pet); } });
-      });
-      xrayRooms.forEach(function (rm) {                  // X-ray-room furniture (depth-sorted)
-        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
-        outside.push({ d: k.desk.x + k.desk.y, fn: function () { drawExamDesk(ctx, k.desk.x, k.desk.y, rm.rot); } });
-        var xpet = (rm.occupant && rm.occupant.phase === 'inXray') ? rm.occupant : null;
-        outside.push({ d: k.table.x + k.table.y, fn: function () { drawXrayMachine(ctx, k.table.x, k.table.y, xpet); } });
-      });
-      vets.forEach(function (vt) {                       // roaming hired vets, depth-sorted with everyone
-        outside.push({ d: vt.x + vt.y, fn: function () { drawVetStaff(ctx, vt.x, vt.y, vt.room ? (vt.room.rot || 0) : 0, vt.moving ? vt.dir : null); } });
-      });
-      cleaners.forEach(function (cl) {                   // roaming cleaners, depth-sorted
-        actorGrp(cl.x, cl.y).push({ d: cl.x + cl.y, fn: function () { drawCleaner(ctx, cl.x, cl.y); } });
-      });
-      pharmacies.forEach(function (ph) {                 // pharmacy counters + hired pharmacists
-        pharmStations(ph.gx, ph.gy, ph.rot).forEach(function (sec, idx) {
-          outside.push({ d: sec.counter.x + sec.counter.y, fn: function () { drawPharmCounter(ctx, sec.counter.x, sec.counter.y); } });
-          if (ph.stations[idx].pharm) outside.push({ d: sec.circle.x + sec.circle.y, fn: function () { drawReceptionist(ctx, sec.circle.x, sec.circle.y); } });
-        });
-      });
-      var byDepth = function (a, b) { return a.d - b.d; };
-      inside.sort(byDepth);
-      outside.sort(byDepth);
-
+      // ONE painter's pass over everything on the floor — walls, doors, furniture,
+      // characters — sorted by foot depth (gx+gy). The lower an object's foot, the
+      // nearer it is, so it paints last/on top. This replaces the old bg/fg raster
+      // split + inside/outside buckets, which couldn't interleave walls with items.
       ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-      drawPuddles();                        // accidents on the floor, under everyone
-      examRooms.forEach(function (rm) {     // exam circles on the floor, under actors
+
+      // floor decals first, under everyone
+      drawPuddles();                        // accidents on the floor
+      examRooms.forEach(function (rm) {     // exam circles
         var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
         drawExamCircle(ctx, k.circle.x, k.circle.y, vetAtExam(rm) || roomVetWorking(rm));
       });
-      xrayRooms.forEach(function (rm) {      // X-ray operator circles on the floor
+      xrayRooms.forEach(function (rm) {     // X-ray operator circles
         var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
         drawExamCircle(ctx, k.circle.x, k.circle.y, vetAtXray(rm) || roomVetWorking(rm));
       });
-      pharmacies.forEach(function (ph) {      // pharmacy counter circles on the floor
+      pharmacies.forEach(function (ph) {    // pharmacy counter circles
         pharmStations(ph.gx, ph.gy, ph.rot).forEach(function (sec, idx) {
           drawExamCircle(ctx, sec.circle.x, sec.circle.y, playerAtPharm(ph, idx) || ph.stations[idx].pharm);
         });
       });
-      inside.forEach(function (a) { a.fn(); });
-      drawDeskCircles();                    // station rings behind the desk (drawn on top so the counter doesn't hide them)
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(fg, 0, 0);
-      ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-      if (!placing) {                       // doors are part of the walls → hidden while placing
-        drawSlidingDoors(ctx, door.open);
-        doorways.forEach(function (d) {      // animated doors at corridor↔room junctions
-          var dop = doorOpen[d.ax + ',' + d.ay + ',' + d.bx + ',' + d.by] || 0;
-          if (d.style === 'brown') drawBrownDoor(ctx, d, dop);   // exam-room entrance: hinged wooden door
-          else drawDoorwayPanels(ctx, d, dop);                   // corridor↔clinic: glass sliding doors
+
+      var scene = wallSegs.slice();         // walls + doors + decorations + entrance frame
+      if (!placing) {                       // animated doors share their opening's depth
+        scene.push({ d: DOOR_MID + (ROOM - 0.5), fn: function () { drawSlidingDoors(ctx, door.open); } });
+        doorways.forEach(function (dr) {    // animated doors at corridor↔room junctions
+          var dop = doorOpen[dr.ax + ',' + dr.ay + ',' + dr.bx + ',' + dr.by] || 0;
+          scene.push({ d: (dr.ax + dr.ay + dr.bx + dr.by) / 2, fn: function () {
+            if (dr.style === 'brown') drawBrownDoor(ctx, dr, dop);   // hinged wooden room door
+            else drawDoorwayPanels(ctx, dr, dop);                    // glass sliding corridor door
+          } });
         });
       }
-      outside.forEach(function (a) { a.fn(); });
+      scene.push({ d: vet.x + vet.y, fn: drawVet });
+      placed.forEach(function (f) {
+        var def = FURN_BY_ID[f.id];
+        var ew = ((f.rot || 0) & 1) ? def.h : def.w, eh = ((f.rot || 0) & 1) ? def.w : def.h;
+        var cx = f.gx + (ew - 1) / 2, cy = f.gy + (eh - 1) / 2;
+        scene.push({ d: cx + cy, fn: function () { def.draw(ctx, f.gx, f.gy, f.rot || 0); } });
+      });
+      visitors.forEach(function (v) {
+        // seated visitors get a depth nudge so they draw in front of their own
+        // seating furniture (a 2x1 bench's centre sits between its two tiles).
+        scene.push({ d: v.x + v.y + (v.seated ? 0.6 : 0), fn: function () { drawVisitor(v); } });
+      });
+      if (hasDesk()) staff.forEach(function (st) {       // receptionists at their stations
+        var L = (staff.length === 1) ? loneStaffLine() : st.line;   // lone one stands at the queue it's serving
+        var p = stationTile(L);
+        scene.push({ d: p.x + p.y, fn: function () { drawReceptionist(ctx, p.x, p.y); } });
+      });
+      restrooms.forEach(function (rm) {                  // toilet fixture inside the walled room
+        var tl = rm.toilet;
+        scene.push({ d: tl.x + tl.y, fn: function () { drawToilet(ctx, tl.x, tl.y, rm.face); } });
+      });
+      examRooms.forEach(function (rm) {                  // exam-room furniture
+        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+        var pet = (rm.occupant && rm.occupant.phase === 'inExam') ? rm.occupant : null;
+        scene.push({ d: k.table.x + k.table.y, fn: function () { drawExamTable(ctx, k.table.x, k.table.y, pet); } });
+      });
+      xrayRooms.forEach(function (rm) {                  // X-ray-room furniture
+        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+        scene.push({ d: k.desk.x + k.desk.y, fn: function () { drawExamDesk(ctx, k.desk.x, k.desk.y, rm.rot); } });
+        var xpet = (rm.occupant && rm.occupant.phase === 'inXray') ? rm.occupant : null;
+        scene.push({ d: k.table.x + k.table.y, fn: function () { drawXrayMachine(ctx, k.table.x, k.table.y, xpet); } });
+      });
+      vets.forEach(function (vt) {                       // roaming hired vets
+        scene.push({ d: vt.x + vt.y, fn: function () { drawVetStaff(ctx, vt.x, vt.y, vt.room ? (vt.room.rot || 0) : 0, vt.moving ? vt.dir : null); } });
+      });
+      cleaners.forEach(function (cl) {                   // roaming cleaners
+        scene.push({ d: cl.x + cl.y, fn: function () { drawCleaner(ctx, cl.x, cl.y); } });
+      });
+      pharmacies.forEach(function (ph) {                 // pharmacy counters + hired pharmacists
+        pharmStations(ph.gx, ph.gy, ph.rot).forEach(function (sec, idx) {
+          scene.push({ d: sec.counter.x + sec.counter.y, fn: function () { drawPharmCounter(ctx, sec.counter.x, sec.counter.y); } });
+          if (ph.stations[idx].pharm) scene.push({ d: sec.circle.x + sec.circle.y, fn: function () { drawReceptionist(ctx, sec.circle.x, sec.circle.y); } });
+        });
+      });
+
+      scene.sort(function (a, b) { return a.d - b.d; });
+      scene.forEach(function (a) { a.fn(); });
+
+      drawDeskCircles();                    // station rings, drawn on top of the desk counter
       drawGhost();                          // placement preview floats on top
       drawCleanBars();                      // mop-up progress, above whoever's cleaning
       drawFloaters();                       // +10 coin pops on top of everyone
