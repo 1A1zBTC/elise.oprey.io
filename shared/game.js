@@ -54,5 +54,7 @@
     return { x: (t.clientX - rect.left) / rect.width * W, y: (t.clientY - rect.top) / rect.height * H };
   };
 
-  window.EL = EL;
+  if (typeof window !== 'undefined') window.EL = EL;
+  // Also expose for Node (tools/test.mjs unit-tests these helpers). No-op in browsers.
+  if (typeof module !== 'undefined' && module.exports) module.exports = EL;
 })();

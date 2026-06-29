@@ -39,6 +39,10 @@
   (auto-regenerates sw.js PAGES from the dir listing, keeps shared assets in ASSETS, bumps
   CACHE), then `tools/deploy.sh` (build-sw + `aws s3 sync` + CloudFront invalidate). No more
   hand-editing sw.js or remembering the cache bump.
+- Tests (dependency-free, no npm): `node tools/test.mjs` runs unit tests for the EL.* helpers
+  AND the headless smoke test (`tools/smoke.mjs`: loads every game + launcher, asserts no console
+  errors and that pages linking /shared/game.js expose window.EL). Run it after editing shared/
+  or any game. Smoke skips gracefully if the gstack browse binary isn't installed.
 
 ## CSS-leak gotcha when extracting shared component rules
 - 2026-06-29: When a game keeps a shared-named rule (e.g. `body`, `.stage`) as an override, the
