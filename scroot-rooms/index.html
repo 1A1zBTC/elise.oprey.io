@@ -381,16 +381,18 @@
         used.push(c); return c;
       }
 
-      // doors you can open -> each leads to a different kind of level
-      const destPool = ['pool', 'subway', 'school', 'forest', 'hospital', 'grocery', 'haunted', 'party', 'sewer', 'office', 'factory', 'garage', 'forest', 'subway', 'yellow'];
+      // doors you can open -> each leads to a different kind of level. Every
+      // destination listed once = equal spawn chance; shuffled for a random,
+      // varied set each level (no destination repeats within a level).
+      const destPool = ['pool', 'subway', 'school', 'forest', 'hospital', 'grocery', 'haunted', 'party', 'sewer', 'office', 'factory', 'garage', 'yellow'];
       doors = [];
-      const dCount = lvl >= 4 ? 3 : 2;
+      const dCount = clamp(3 + Math.floor(lvl / 3), 3, 5);
       const far = reach.length ? reach[0].d : 1;
+      const picks = destPool.filter(function (t) { return t !== themeName; });
+      for (let s = picks.length - 1; s > 0; s--) { const j = rint(0, s), tmp = picks[s]; picks[s] = picks[j]; picks[j] = tmp; }  // Fisher-Yates shuffle
       for (let i = 0; i < dCount; i++) {
         const c = pickSpot(Math.min(far, 5));
-        let dest = destPool[(lvl + i) % destPool.length];
-        if (dest === themeName && dest !== 'yellow') dest = 'yellow';
-        doors.push({ x: c.x, y: c.y, theme: dest, open: 0 });
+        doors.push({ x: c.x, y: c.y, theme: picks[i % picks.length] || 'yellow', open: 0 });
       }
       // a slide chute that drops you deeper
       slides = [];
@@ -501,6 +503,8 @@
         ctx.drawImage(img, (W - img.width * sc) / 2, (H - img.height * sc) / 2, img.width * sc, img.height * sc);
         return { type: type, frames: def.frames.length };
       },
+      unstuck: function (x, y) { var r = pushOut(x, y, PLAYER_R); return { ok: mapAt(r[0], r[1]) === 0, x: Math.round(r[0] * 100) / 100, y: Math.round(r[1] * 100) / 100 }; },
+      doorThemes: function () { return doors.map(function (d) { return d.theme; }); },
       corpseInfo: function () {
         return corpses.map(function (b) {
           var bx = Math.floor(b.x), by = Math.floor(b.y), nearWall = false;
@@ -532,6 +536,35 @@
       if (mapAt(nx - r, oy) === 0 && mapAt(nx + r, oy) === 0) rx = nx;
       if (mapAt(rx, ny - r) === 0 && mapAt(rx, ny + r) === 0) ry = ny;
       return [rx, ry];
+    }
+    // Circle-vs-grid push-out: move freely, then shove the player (radius r) out
+    // of any solid tile its circle overlaps. This slides smoothly along walls and
+    // can NEVER wedge you inside a tile (the old axis test couldn't extract a
+    // penetrating centre, so you'd get stuck until you wiggled to a corner).
+    function pushOut(x, y, r) {
+      const cx = Math.floor(x), cy = Math.floor(y);
+      for (let ty = cy - 1; ty <= cy + 1; ty++) {
+        for (let tx = cx - 1; tx <= cx + 1; tx++) {
+          const solid = tx < 0 || ty < 0 || tx >= mapW || ty >= mapH || map[ty][tx] !== 0;
+          if (!solid) continue;
+          const qx = x < tx ? tx : (x > tx + 1 ? tx + 1 : x);   // closest point on the tile AABB
+          const qy = y < ty ? ty : (y > ty + 1 ? ty + 1 : y);
+          let dx = x - qx, dy = y - qy, d2 = dx * dx + dy * dy;
+          if (d2 >= r * r) continue;                            // no overlap
+          let d = Math.sqrt(d2);
+          if (d < 1e-4) {                                       // dead-centre: push toward an open neighbour
+            dx = x - (tx + 0.5); dy = y - (ty + 0.5); d = Math.hypot(dx, dy);
+            if (d < 1e-4) {
+              const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+              for (const o of opts) { const ax = tx + o[0], ay = ty + o[1]; if (ax >= 0 && ay >= 0 && ax < mapW && ay < mapH && map[ay][ax] === 0) { dx = o[0]; dy = o[1]; d = 1; break; } }
+              if (d < 1e-4) { dx = 1; dy = 0; d = 1; }
+            }
+          }
+          const push = r - d;
+          x += (dx / d) * push; y += (dy / d) * push;
+        }
+      }
+      return [x, y];
     }
     // line-of-sight: walk the segment, blocked if it crosses a wall
     function hasLOS(ax, ay, bx, by) {
@@ -2274,11 +2307,10 @@
       mv = clamp(mv, -1, 1); tn = clamp(tn, -1, 1);
 
       if (tn) { dir += tn * TURN_SPEED * dt; updateCamera(); }
-      if (mv) {
-        const nx = px + dirX * mv * MOVE_SPEED * dt;
-        const ny = py + dirY * mv * MOVE_SPEED * dt;
-        const r = tryMove(px, py, nx, ny, PLAYER_R); px = r[0]; py = r[1];
-      }
+      // move freely, then push the circle out of any solid tile (never wedges)
+      let nx = px, ny = py;
+      if (mv) { nx += dirX * mv * MOVE_SPEED * dt; ny += dirY * mv * MOVE_SPEED * dt; }
+      const mr = pushOut(nx, ny, PLAYER_R); px = mr[0]; py = mr[1];
 
       // ---- hunters: wander, then chase on sight; a catch = death ----
       for (const e of entities) {
