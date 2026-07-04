@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Your Store</title>
+  <link rel="stylesheet" href="../fonts/fonts.css">
+  <link rel="stylesheet" href="../shared/game.css">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="../icons/favicon.png">
+  <script src="../pwa.js" defer></script>
+  <style>
+    body { font-family:'Nunito','Segoe UI',system-ui,sans-serif; background:linear-gradient(160deg,#1a1a2e,#16213e); min-height:100vh;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; padding:8px; touch-action:none;
+      user-select:none; -webkit-user-select:none; color:#fff; overflow:hidden; }
+    .topbar { width:100%; max-width:920px; display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+    .back { color:#a0a8c0; text-decoration:none; font-weight:700; font-size:0.95rem; padding:6px 10px; border-radius:12px; }
+
+    .hud { width:100%; max-width:920px; display:flex; gap:7px; margin-bottom:6px; align-items:center; flex-wrap:wrap; }
+    .money { background:#143d2a; border:2px solid #2faf5a; color:#7df0a8; font-weight:900; font-size:1.05rem; padding:6px 13px; border-radius:12px; }
+    .stat { background:#16213e; border:2px solid #0f3460; color:#cfd6ea; font-weight:800; font-size:0.8rem; padding:6px 11px; border-radius:12px; }
+    .stat.star { color:#ffe08a; } .grow { flex:1; }
+
+    .stage { position:relative; width:100%; max-width:920px; border-radius:16px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5);
+      border:2px solid #0f3460; aspect-ratio:880/560; touch-action:none; }
+    canvas#game { display:block; width:100%; height:100%; }
+
+    .prompt { position:absolute; left:50%; bottom:15%; transform:translateX(-50%); background:rgba(10,14,28,0.82); border:1px solid rgba(255,255,255,0.18);
+      color:#fff; font-weight:800; font-size:0.9rem; padding:8px 16px; border-radius:999px; pointer-events:none; white-space:nowrap; z-index:6; }
+    .prompt b { color:#ffe08a; } .prompt[hidden]{ display:none; }
+    .toast { position:absolute; left:50%; top:12px; transform:translateX(-50%); background:rgba(10,14,28,0.85); border:1px solid rgba(255,255,255,0.18);
+      color:#7df0a8; font-weight:800; font-size:0.88rem; padding:7px 14px; border-radius:999px; z-index:7; }
+    .toast[hidden]{ display:none; }
+
+    .pads { width:100%; max-width:920px; display:none; justify-content:space-between; margin-top:8px; gap:8px; align-items:flex-end; }
+    body.touch .pads { display:flex; }
+    .dpad { display:grid; grid-template-columns:repeat(3,44px); grid-template-rows:repeat(3,44px); gap:4px; }
+    .btn { border:2px solid rgba(255,255,255,0.22); background:rgba(10,14,28,0.6); color:#fff; border-radius:12px; font-weight:900;
+      display:flex; align-items:center; justify-content:center; touch-action:none; font-size:0.78rem; }
+    .btn:active { transform:scale(0.93); filter:brightness(1.3); }
+    .dpad .btn { width:44px; height:44px; }
+    .d-u{grid-area:1/2} .d-l{grid-area:2/1} .d-r{grid-area:2/3} .d-d{grid-area:3/2}
+    .actcol { display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+    .bigbtn { width:120px; height:48px; border-radius:14px; font-size:0.92rem; }
+    .act { border-color:#ffd24a; color:#ffe8b0; } .phone { border-color:#8ad0ff; color:#cfeaff; } .open { border-color:#b6f23a; color:#dfffa8; }
+    .actcol .bigbtn[hidden]{ display:none; }
+    /* placement toolbar (bird's-eye build mode) */
+    .place-bar { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); display:flex; gap:8px; z-index:8; }
+    .place-bar[hidden]{ display:none; }
+    .place-bar button { font-family:inherit; font-weight:800; font-size:0.9rem; padding:10px 16px; border-radius:12px; border:2px solid; cursor:pointer; color:#fff; background:rgba(10,14,28,0.78); }
+    #pbRotate{ border-color:#8ad0ff; color:#cfeaff; } #pbPlace{ border-color:#2faf5a; color:#9af0bd; } #pbCancel{ border-color:#e94560; color:#ffc2cd; }
+
+    .hint { margin-top:8px; color:#a0a8c0; font-size:0.75rem; text-align:center; max-width:920px; line-height:1.5; }
+    body.touch .hint.kbd { display:none; } .hint.touchonly { display:none; } body.touch .hint.touchonly { display:block; }
+
+    .overlay { position:fixed; inset:0; background:rgba(10,14,28,0.92); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center;
+      padding:16px; z-index:20; overflow-y:auto; }
+    .overlay[hidden]{ display:none; }
+    .panel { width:100%; max-width:470px; background:#16213e; border:2px solid #0f3460; border-radius:22px; padding:22px 20px; text-align:center; box-shadow:0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family:'Pacifico',cursive; color:#fff; font-size:1.9rem; font-weight:400; margin-bottom:6px; }
+    .panel .sub { color:#a0a8c0; font-size:0.88rem; line-height:1.55; margin-bottom:14px; } .panel .sub b{ color:#ffe8b0; }
+    .start-btn { margin-top:8px; width:100%; max-width:320px; background:#e94560; color:#fff; border:none; border-radius:16px; padding:15px;
+      font-family:inherit; font-weight:800; font-size:1.05rem; cursor:pointer; box-shadow:0 6px 0 #b22a44; transition:transform .1s,box-shadow .1s; }
+    .start-btn:active{ transform:translateY(4px); box-shadow:0 2px 0 #b22a44; }
+
+    .phone-ov { position:fixed; inset:0; background:rgba(8,10,20,0.6); display:flex; align-items:center; justify-content:center; padding:14px; z-index:25; }
+    .phone-ov[hidden]{ display:none; }
+    .device { width:100%; max-width:370px; background:#0f1626; border:3px solid #28324a; border-radius:30px; padding:14px 12px 16px; box-shadow:0 20px 60px rgba(0,0,0,0.6); }
+    .ph-top { display:flex; align-items:center; justify-content:space-between; padding:2px 8px 10px; }
+    .ph-title { font-weight:900; font-size:1.05rem; color:#fff; } .ph-title small{ color:#7df0a8; font-weight:800; font-size:0.85rem; margin-left:6px; }
+    .ph-x { background:#28324a; border:none; color:#cfd6ea; font-weight:900; width:30px; height:30px; border-radius:50%; cursor:pointer; }
+    .ph-tabs { display:flex; gap:5px; margin-bottom:10px; flex-wrap:wrap; }
+    .ph-tab { flex:1 1 auto; background:#16203a; border:2px solid #28324a; color:#9fb0cf; font-family:inherit; font-weight:800; font-size:0.74rem; padding:8px 4px; border-radius:11px; cursor:pointer; }
+    .ph-tab.active { background:#1f57a8; border-color:#3a86c8; color:#fff; }
+    .ph-list { display:flex; flex-direction:column; gap:8px; max-height:56vh; overflow-y:auto; }
+    .row { display:flex; align-items:center; gap:10px; background:#16203a; border:2px solid #28324a; border-radius:14px; padding:9px 10px; }
+    .row .ic { width:42px; height:42px; border-radius:10px; flex:none; background:#0c1322; border:1px solid #28324a; }
+    .row .info { flex:1; min-width:0; text-align:left; } .row .nm { font-weight:800; font-size:0.9rem; color:#fff; } .row .ds { font-size:0.71rem; color:#9fb0cf; }
+    .row .buy { background:#2faf5a; border:none; color:#fff; font-family:inherit; font-weight:800; font-size:0.84rem; padding:9px 12px; border-radius:11px; cursor:pointer; white-space:nowrap; }
+    .row .buy:disabled { background:#3a4252; color:#7c869a; cursor:not-allowed; }
+    .row .buy.owned { background:#3a4252; color:#9fb0cf; }
+    .price-ctl { display:flex; align-items:center; gap:6px; }
+    .price-ctl button { width:30px; height:30px; border-radius:8px; border:none; background:#28324a; color:#fff; font-weight:900; cursor:pointer; }
+    .price-ctl .pv { min-width:42px; text-align:center; font-weight:900; color:#7df0a8; }
+    .rev { background:#16203a; border:2px solid #28324a; border-radius:12px; padding:9px 11px; text-align:left; }
+    .rev .st { color:#ffd24a; font-weight:900; font-size:0.85rem; } .rev .tx { color:#cfd6ea; font-size:0.78rem; } .rev .by { color:#7c869a; font-size:0.68rem; }
+    .ratebar { display:flex; gap:10px; align-items:center; background:#101a30; border:2px solid #28324a; border-radius:14px; padding:10px 12px; margin-bottom:8px; }
+    .ratebar .big { font-size:1.5rem; font-weight:900; color:#ffd24a; } .ratebar .lab { font-size:0.72rem; color:#9fb0cf; font-weight:800; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title" style="font-family:'Pacifico',cursive;font-size:1.4rem">Your Store</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="hud">
+    <span class="money" id="money">$0</span>
+    <span class="stat star" id="rating">⭐ —</span>
+    <span class="stat" id="sales">🛍️ 0</span>
+    <span class="grow"></span>
+    <span class="stat" id="rival">🏬 Rival 4.0</span>
+    <span class="stat" id="queue">🧍 0</span>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+    <div class="prompt" id="prompt" hidden></div>
+    <div class="toast" id="toast" hidden></div>
+    <div class="place-bar" id="placeBar" hidden>
+      <button id="pbRotate">↻ Rotate</button>
+      <button id="pbPlace">✓ Place</button>
+      <button id="pbCancel">✕ Cancel</button>
+    </div>
+  </div>
+
+  <div class="pads" id="pads">
+    <div class="dpad">
+      <button class="btn d-u" data-k="up">▲</button>
+      <button class="btn d-l" data-k="left">↺</button>
+      <button class="btn d-r" data-k="right">↻</button>
+      <button class="btn d-d" data-k="down">▼</button>
+    </div>
+    <div class="actcol">
+      <button class="btn bigbtn open" id="openBtn" hidden>🎴 Open Pack</button>
+      <button class="btn bigbtn phone" id="phoneBtn">📱 Phone</button>
+      <button class="btn bigbtn act" id="actBtn">✋ Action</button>
+    </div>
+  </div>
+
+  <p class="hint kbd"><b>WASD/Arrows</b> walk &amp; turn · <b>Space/E</b> action · <b>Q</b> open box/packs · <b>P</b> phone · placing: <b>R</b> rotate, <b>Esc</b> cancel</p>
+  <p class="hint touchonly">▲▼ walk · ↺↻ turn · drag to look · <b>Action</b> pick up / stock / open / checkout · <b>Phone</b> to buy</p>
+
+  <div class="overlay" id="startOv">
+    <div class="panel">
+      <h2>Your Store</h2>
+      <div class="sub">Run a hobby shop! First, open your <b>📱 phone</b> and buy the <b>register</b>, then place it. Order shelves and stock —
+        <b>Warhammer</b>, <b>Magic</b> sealed boxes (open them for packs!), <b>Monster High</b>, plus <b>NECA</b> &amp; <b>Tamashii&nbsp;Nations</b> figures.
+        Add <b>play tables</b>, expand into new <b>rooms</b>, beat your <b>rival</b>, and earn 5‑star <b>reviews</b>!</div>
+      <button class="start-btn" id="startBtn">Open the store</button>
+    </div>
+  </div>
+
+  <div class="phone-ov" id="phoneOv" hidden>
+    <div class="device">
+      <div class="ph-top">
+        <div class="ph-title">ShopMart <small id="phMoney">$0</small></div>
+        <button class="ph-x" id="phClose">✕</button>
+      </div>
+      <div class="ph-tabs">
+        <button class="ph-tab active" data-tab="stock">📦 Stock</button>
+        <button class="ph-tab" data-tab="furn">🪑 Furniture</button>
+        <button class="ph-tab" data-tab="staff">🧑‍💼 Staff</button>
+        <button class="ph-tab" data-tab="rooms">🚪 Rooms</button>
+        <button class="ph-tab" data-tab="price">🏷️ Prices</button>
+        <button class="ph-tab" data-tab="rev">⭐ Reviews</button>
+      </div>
+      <div class="ph-list" id="phList"></div>
+    </div>
+  </div>
+
+  <script src="../shared/game.js"></script>
+<script>
+(function(){
+  'use strict';
+  var clamp=EL.clamp, rnd=EL.rnd, rint=EL.rint, pick=EL.pick;
+
+  // ====================== canvas / engine ======================
+  var cv=document.getElementById('game'), ctx=cv.getContext('2d');
+  var W=880,H=560,RW=340,RH=216,PLANE=0.7,dpr=1;
+  var sceneCanvas=document.createElement('canvas'), sceneCtx=sceneCanvas.getContext('2d');
+  var sceneImg=null, buf32=null, zbuf=new Float32Array(RW);
+  var TW=64,TH=64,TMASK=63;
+  function resize(){
+    var r=cv.getBoundingClientRect(); dpr=Math.min(window.devicePixelRatio||1,2);
+    var cw=Math.max(2,Math.round((r.width||880)*dpr)), ch=Math.max(2,Math.round((r.height||560)*dpr));
+    var MAXW=1200; if(cw>MAXW){ ch=Math.round(ch*MAXW/cw); cw=MAXW; }
+    cv.width=cw; cv.height=ch; W=cw; H=ch; PLANE=0.7*(W/H);
+    RH=Math.max(2,Math.round(RW*H/W));
+    sceneCanvas.width=RW; sceneCanvas.height=RH;
+    sceneImg=sceneCtx.createImageData(RW,RH); buf32=new Uint32Array(sceneImg.data.buffer);
+    zbuf=new Float32Array(RW); ctx.imageSmoothingEnabled=true;
+  }
+  window.addEventListener('resize',resize);
+  function mkCanvas(w,h){ var c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+  function jitC(hex,f){ var n=parseInt(hex.slice(1),16); var r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+    r=clamp(r*f|0,0,255); g=clamp(g*f|0,0,255); b=clamp(b*f|0,0,255); return 'rgb('+r+','+g+','+b+')'; }
+  function texData(draw){ var c=mkCanvas(TW,TH), g=c.getContext('2d'); draw(g); return g.getImageData(0,0,TW,TH).data; }
+  function grad(g,c0,c1){ var gd=g.createLinearGradient(0,0,0,TH); gd.addColorStop(0,c0); gd.addColorStop(1,c1); g.fillStyle=gd; g.fillRect(0,0,TW,TH); }
+  function speck(g,n,base,spread,a){ for(var i=0;i<n;i++){ var s=Math.random();
+    g.fillStyle='rgba('+((base[0]+s*spread)|0)+','+((base[1]+s*spread)|0)+','+((base[2]+s*spread)|0)+','+a+')'; g.fillRect((Math.random()*TW)|0,(Math.random()*TH)|0,1,1); } }
+
+  var TEX={
+    wall: texData(function(g){ grad(g,'#e8e2d4','#cfc7b4'); g.fillStyle='rgba(0,0,0,0.05)'; for(var y=0;y<TH;y+=16)g.fillRect(0,y,TW,1); speck(g,60,[210,204,190],20,0.25); }),
+    floor: texData(function(g){ grad(g,'#caa57a','#a9885f'); for(var y=0;y<TH;y+=21)for(var x=0;x<TW;x+=21){ g.fillStyle='rgba(255,255,255,0.06)'; g.fillRect(x,y,20,20);} speck(g,200,[170,140,100],20,0.3); }),
+    ceil: texData(function(g){ grad(g,'#f2f1ee','#dcdbd6'); speck(g,80,[245,245,242],10,0.3); }),
+    // nicer glass shop door: frame, glass with reflections, push-bar handle, OPEN sign, mat
+    door: texData(function(g){
+      g.fillStyle='#3a2c1c'; g.fillRect(0,0,TW,TH);                                  // frame
+      var gl=g.createLinearGradient(0,0,TW,TH); gl.addColorStop(0,'#bfe4f2'); gl.addColorStop(0.5,'#7fb6cf'); gl.addColorStop(1,'#a7d6e6');
+      g.fillStyle=gl; g.fillRect(6,4,TW-12,TH-10);                                    // glass
+      g.fillStyle='#2a3c4a'; g.fillRect(TW/2-2,4,4,TH-10);                            // center mullion (double door)
+      g.strokeStyle='rgba(255,255,255,0.55)'; g.lineWidth=2;                          // reflections
+      g.beginPath(); g.moveTo(12,8); g.lineTo(24,8); g.lineTo(14,TH-8); g.lineTo(8,TH-8); g.closePath(); g.fill?g.fill():0;
+      g.fillStyle='rgba(255,255,255,0.4)'; g.beginPath(); g.moveTo(12,8); g.lineTo(22,8); g.lineTo(13,TH-8); g.lineTo(9,TH-8); g.closePath(); g.fill();
+      g.fillStyle='rgba(255,255,255,0.25)'; g.beginPath(); g.moveTo(TW/2+6,8); g.lineTo(TW/2+14,8); g.lineTo(TW/2+8,30); g.lineTo(TW/2+4,30); g.closePath(); g.fill();
+      g.fillStyle='#cfd6dc'; g.fillRect(TW/2-12,18,6,28); g.fillRect(TW/2+6,18,6,28);  // push handles
+      g.fillStyle='#e94560'; g.fillRect(TW/2-16,6,32,12); g.fillStyle='#fff'; g.font='900 8px sans-serif'; g.textAlign='center'; g.fillText('OPEN',TW/2,15); // sign
+      g.fillStyle='#7a4f2a'; g.fillRect(4,TH-6,TW-8,6);                                // mat
+    })
+  };
+
+  // ====================== products ======================
+  // sellable + sealed items. (Generic representations; brand names only.)
+  var PRODUCTS={
+    warhammer:{ name:'Warhammer', tag:'mini', price:26, draw:function(g,s){
+      g.fillStyle='#4a5530'; g.fillRect(s*0.32,s*0.74,s*0.36,s*0.12); g.fillStyle='#9fae5e'; g.fillRect(s*0.42,s*0.34,s*0.16,s*0.42);
+      g.fillStyle='#b9d94a'; g.beginPath(); g.arc(s*0.5,s*0.3,s*0.1,0,7); g.fill(); g.fillStyle='#5a6b2e'; g.fillRect(s*0.6,s*0.36,s*0.05,s*0.34); } },
+    neca:{ name:'NECA Figure', tag:'figure', price:23, draw:function(g,s){          // articulated horror/action figure
+      g.fillStyle='#2a2e34'; g.fillRect(s*0.34,s*0.76,s*0.32,s*0.1);                 // base
+      g.fillStyle='#5a6068'; g.fillRect(s*0.43,s*0.36,s*0.14,s*0.4);                 // torso
+      g.fillStyle='#7c838c'; g.beginPath(); g.arc(s*0.5,s*0.3,s*0.09,0,7); g.fill(); // head
+      g.strokeStyle='#3a3e44'; g.lineWidth=s*0.05; g.lineCap='round';
+      g.beginPath(); g.moveTo(s*0.45,s*0.42); g.lineTo(s*0.34,s*0.56); g.moveTo(s*0.55,s*0.42); g.lineTo(s*0.66,s*0.5); g.stroke();   // arms
+      g.strokeStyle='#aab0b8'; g.beginPath(); g.moveTo(s*0.66,s*0.5); g.lineTo(s*0.74,s*0.36); g.stroke(); } },                        // weapon
+    tamashii:{ name:'Tamashii Nations', tag:'figure', price:31, draw:function(g,s){  // sleek dynamic anime figure
+      g.fillStyle='#1f2740'; g.beginPath(); g.ellipse(s*0.5,s*0.8,s*0.18,s*0.06,0,0,7); g.fill();                                     // clear base
+      g.fillStyle='#e0556a'; g.fillRect(s*0.44,s*0.4,s*0.12,s*0.34);                 // body (red suit)
+      g.fillStyle='#ffd9a0'; g.beginPath(); g.arc(s*0.5,s*0.34,s*0.08,0,7); g.fill();
+      g.fillStyle='#3a3a3a'; g.beginPath(); g.arc(s*0.5,s*0.31,s*0.085,Math.PI,0); g.fill();   // hair
+      g.strokeStyle='#e0556a'; g.lineWidth=s*0.055; g.lineCap='round';
+      g.beginPath(); g.moveTo(s*0.46,s*0.46); g.lineTo(s*0.36,s*0.36); g.moveTo(s*0.54,s*0.46); g.lineTo(s*0.66,s*0.52); g.stroke();
+      g.strokeStyle='#6fc3d8'; g.beginPath(); g.moveTo(s*0.36,s*0.36); g.lineTo(s*0.3,s*0.24); g.stroke(); } },                         // glowing blade
+    mtg_pack:{ name:'Magic Pack', tag:'pack', price:7, openable:true, draw:function(g,s){
+      g.fillStyle='#1f3a5a'; g.fillRect(s*0.3,s*0.2,s*0.4,s*0.6); g.fillStyle='#6fc3d8'; g.fillRect(s*0.35,s*0.26,s*0.3,s*0.3);
+      g.fillStyle='#ffe08a'; g.beginPath(); g.arc(s*0.5,s*0.41,s*0.08,0,7); g.fill(); g.fillStyle='#bfe9f2'; g.fillRect(s*0.35,s*0.6,s*0.3,s*0.12); } },
+    mtg_box:{ name:'Magic Sealed Box', tag:'sealed', price:0, sealed:true, opensTo:'mtg_pack', openCount:12, draw:function(g,s){
+      g.fillStyle='#16263e'; g.fillRect(s*0.22,s*0.28,s*0.56,s*0.5); g.fillStyle='#2f5f8c'; g.fillRect(s*0.22,s*0.28,s*0.56,s*0.12);
+      g.fillStyle='#ffe08a'; g.beginPath(); g.arc(s*0.5,s*0.54,s*0.1,0,7); g.fill(); g.strokeStyle='#0c1626'; g.lineWidth=2; g.strokeRect(s*0.22,s*0.28,s*0.56,s*0.5);
+      g.fillStyle='#9fd0ff'; g.font='900 '+(s*0.16|0)+'px sans-serif'; g.textAlign='center'; g.fillText('MTG',s*0.5,s*0.74); } }
+  };
+  // ---- Monster-doll line: a big roster of original monster-themed dolls, each boxed ----
+  function drawDoll(g,s,o){ var cx=s*0.5; g.lineCap='round';
+    g.strokeStyle=o.skin; g.lineWidth=s*0.05; g.beginPath(); g.moveTo(cx-s*0.05,s*0.72); g.lineTo(cx-s*0.08,s*0.9); g.moveTo(cx+s*0.05,s*0.72); g.lineTo(cx+s*0.08,s*0.9); g.stroke();
+    g.fillStyle=o.dress; g.beginPath(); g.moveTo(cx-s*0.07,s*0.44); g.lineTo(cx+s*0.07,s*0.44); g.lineTo(cx+s*0.19,s*0.74); g.lineTo(cx-s*0.19,s*0.74); g.closePath(); g.fill();
+    g.fillStyle='rgba(255,255,255,0.18)'; g.fillRect(cx-s*0.05,s*0.46,s*0.03,s*0.26);
+    g.strokeStyle=o.skin; g.lineWidth=s*0.04; g.beginPath(); g.moveTo(cx-s*0.05,s*0.46); g.lineTo(cx-s*0.17,s*0.56); g.moveTo(cx+s*0.05,s*0.46); g.lineTo(cx+s*0.17,s*0.56); g.stroke();
+    g.fillStyle=o.hair; g.fillRect(cx-s*0.13,s*0.3,s*0.07,s*0.22); g.fillRect(cx+s*0.06,s*0.3,s*0.07,s*0.22);
+    g.fillStyle=o.skin; g.beginPath(); g.arc(cx,s*0.33,s*0.11,0,7); g.fill();
+    if(o.feat!=='snakes'){ g.fillStyle=o.hair; g.beginPath(); g.arc(cx,s*0.29,s*0.12,Math.PI,0); g.fill(); }
+    g.fillStyle='#1a1a2a'; g.beginPath(); g.arc(cx-s*0.04,s*0.34,s*0.013,0,7); g.arc(cx+s*0.04,s*0.34,s*0.013,0,7); g.fill();
+    dollFeat(g,s,cx,o); }
+  function dollFeat(g,s,cx,o){ var f=o.feat,i;
+    if(f==='fang'){ g.fillStyle='#fff'; g.beginPath(); g.moveTo(cx-s*0.03,s*0.39); g.lineTo(cx-s*0.015,s*0.43); g.lineTo(cx,s*0.39); g.fill(); g.beginPath(); g.moveTo(cx,s*0.39); g.lineTo(cx+s*0.015,s*0.43); g.lineTo(cx+s*0.03,s*0.39); g.fill(); }
+    else if(f==='ears'){ g.fillStyle=o.hair; g.beginPath(); g.moveTo(cx-s*0.11,s*0.24); g.lineTo(cx-s*0.06,s*0.16); g.lineTo(cx-s*0.02,s*0.26); g.fill(); g.beginPath(); g.moveTo(cx+s*0.11,s*0.24); g.lineTo(cx+s*0.06,s*0.16); g.lineTo(cx+s*0.02,s*0.26); g.fill(); }
+    else if(f==='cat'){ g.fillStyle=o.hair; g.beginPath(); g.moveTo(cx-s*0.1,s*0.24); g.lineTo(cx-s*0.07,s*0.15); g.lineTo(cx-s*0.03,s*0.25); g.fill(); g.beginPath(); g.moveTo(cx+s*0.1,s*0.24); g.lineTo(cx+s*0.07,s*0.15); g.lineTo(cx+s*0.03,s*0.25); g.fill();
+      g.strokeStyle='#fff'; g.lineWidth=s*0.01; g.beginPath(); g.moveTo(cx-s*0.06,s*0.37); g.lineTo(cx-s*0.12,s*0.36); g.moveTo(cx+s*0.06,s*0.37); g.lineTo(cx+s*0.12,s*0.36); g.stroke(); }
+    else if(f==='fins'){ g.fillStyle=o.dress; g.beginPath(); g.moveTo(cx-s*0.1,s*0.3); g.lineTo(cx-s*0.18,s*0.26); g.lineTo(cx-s*0.1,s*0.38); g.fill(); g.beginPath(); g.moveTo(cx+s*0.1,s*0.3); g.lineTo(cx+s*0.18,s*0.26); g.lineTo(cx+s*0.1,s*0.38); g.fill(); }
+    else if(f==='bolt'){ g.fillStyle='#99aab0'; g.fillRect(cx-s*0.14,s*0.42,s*0.04,s*0.03); g.fillRect(cx+s*0.1,s*0.42,s*0.04,s*0.03); }
+    else if(f==='bandage'){ g.strokeStyle='rgba(255,255,255,0.6)'; g.lineWidth=s*0.015; for(i=0;i<3;i++){ g.beginPath(); g.moveTo(cx-s*0.1,s*0.3+i*s*0.04); g.lineTo(cx+s*0.1,s*0.31+i*s*0.04); g.stroke(); } }
+    else if(f==='snakes'){ g.strokeStyle=o.hair; g.lineWidth=s*0.03; for(i=-2;i<=2;i++){ g.beginPath(); g.moveTo(cx+i*s*0.045,s*0.27); g.quadraticCurveTo(cx+i*s*0.07,s*0.16, cx+i*s*0.04,s*0.12); g.stroke(); } }
+    else if(f==='hat'){ g.fillStyle=o.hair; g.beginPath(); g.moveTo(cx-s*0.16,s*0.22); g.lineTo(cx+s*0.16,s*0.22); g.lineTo(cx,s*0.02); g.fill(); g.fillRect(cx-s*0.18,s*0.21,s*0.36,s*0.03); }
+    else if(f==='horns'){ g.fillStyle='#7a1010'; g.beginPath(); g.moveTo(cx-s*0.08,s*0.24); g.lineTo(cx-s*0.12,s*0.14); g.lineTo(cx-s*0.04,s*0.23); g.fill(); g.beginPath(); g.moveTo(cx+s*0.08,s*0.24); g.lineTo(cx+s*0.12,s*0.14); g.lineTo(cx+s*0.04,s*0.23); g.fill(); }
+    else if(f==='stitch'){ g.strokeStyle='#2a3a1a'; g.lineWidth=s*0.012; for(i=0;i<3;i++){ g.beginPath(); g.moveTo(cx+s*0.045+i*s*0.018,s*0.305); g.lineTo(cx+s*0.04+i*s*0.018,s*0.325); g.stroke(); } }
+    else if(f==='skull'){ g.fillStyle='#1a1a2a'; g.beginPath(); g.arc(cx-s*0.04,s*0.34,s*0.022,0,7); g.arc(cx+s*0.04,s*0.34,s*0.022,0,7); g.fill(); } }
+  // A large roster of ORIGINAL monster dolls across realistic price tiers:
+  // basic ~$20, deluxe ~$35, collector ~$55 (rarer, 2/case), exclusive ~$90 (1/case).
+  var DOLLS=[
+    // --- basic line (case of 4) ---
+    { key:'vampire', name:'Vampira',     skin:'#ece3f2', hair:'#1a1020', dress:'#7a1f3a', feat:'fang',    price:22, count:4 },
+    { key:'werewolf',name:'Wolfsbane',   skin:'#caa06a', hair:'#5a3a1a', dress:'#6a4a2a', feat:'ears',    price:22, count:4 },
+    { key:'sea',     name:'Marina Deep', skin:'#86d4cc', hair:'#2f7fb0', dress:'#2aa0a8', feat:'fins',    price:23, count:4 },
+    { key:'zombie',  name:'Mortia',      skin:'#a6c790', hair:'#3a5a2a', dress:'#4a6a3a', feat:'stitch',  price:20, count:4 },
+    { key:'mummy',   name:'Bandagia',    skin:'#e8e0c8', hair:'#cfc09a', dress:'#d8cda0', feat:'bandage', price:21, count:4 },
+    { key:'ghost',   name:'Spectra',     skin:'#e2e9f2', hair:'#aebbd0', dress:'#c6d2e6', feat:'none',    price:22, count:4 },
+    { key:'skeleton',name:'Calavera',    skin:'#f2f2f2', hair:'#22222a', dress:'#b53a6a', feat:'skull',   price:21, count:4 },
+    { key:'cat',     name:'Mausy',       skin:'#d6a6de', hair:'#3a2a4a', dress:'#d86fb0', feat:'cat',     price:22, count:4 },
+    // --- deluxe line (case of 4) ---
+    { key:'gorgon',  name:'Medusina',    skin:'#95d77f', hair:'#3a7a2a', dress:'#caa14a', feat:'snakes',  price:35, count:4 },
+    { key:'witch',   name:'Hexa',        skin:'#d3b6e6', hair:'#2a1a3a', dress:'#3a2a5a', feat:'hat',     price:33, count:4 },
+    { key:'bolt',    name:'Voltia',      skin:'#b4e6cc', hair:'#1a1a2a', dress:'#2a6a6a', feat:'bolt',    price:34, count:4 },
+    { key:'imp',     name:'Cinder',      skin:'#e07a6a', hair:'#3a1010', dress:'#1a1a22', feat:'horns',   price:36, count:4 },
+    { key:'phantom', name:'Operetta',    skin:'#efe6ee', hair:'#1f1a2a', dress:'#5a2a4a', feat:'none',    price:32, count:4 },
+    { key:'banshee', name:'Wailene',     skin:'#dfeaf2', hair:'#9fb6cf', dress:'#5a7a9a', feat:'none',    price:34, count:4 },
+    { key:'harpy',   name:'Featheria',   skin:'#e6c79a', hair:'#7a4a2a', dress:'#9a6a3a', feat:'ears',    price:35, count:4 },
+    { key:'faun',    name:'Pan-ica',     skin:'#d8b078', hair:'#5a3a1a', dress:'#3a6a3a', feat:'horns',   price:33, count:4 },
+    { key:'gargoyle',name:'Granita',     skin:'#9aa0a8', hair:'#5a6068', dress:'#3a4048', feat:'horns',   price:36, count:4 },
+    { key:'siren',   name:'Lorelei',     skin:'#9fe0d8', hair:'#2f9f8c', dress:'#1f7a8c', feat:'fins',    price:37, count:4 },
+    { key:'yeti',    name:'Abominabelle',skin:'#eef4fa', hair:'#cfe0ee', dress:'#7fb6cf', feat:'none',    price:38, count:4 },
+    // --- collector line (rarer, 2/case) ---
+    { key:'dragon',  name:'Drakaina',    skin:'#9ad07a', hair:'#2a5a2a', dress:'#b53a2a', feat:'horns',   price:55, count:2 },
+    { key:'kraken',  name:'Abyssa',      skin:'#6fa6c8', hair:'#1f3a5a', dress:'#2a3a6a', feat:'fins',    price:55, count:2 },
+    { key:'kitsune', name:'Tora-bi',     skin:'#f0c090', hair:'#c0532f', dress:'#e0712e', feat:'ears',    price:52, count:2 },
+    { key:'naga',    name:'Serpentina',  skin:'#7fc070', hair:'#2a6a3a', dress:'#caa14a', feat:'snakes',  price:58, count:2 },
+    // --- exclusives (1/case, premium) ---
+    { key:'lich',    name:'Necronia',    skin:'#cfeacb', hair:'#1a2a1a', dress:'#2a5a3a', feat:'skull',   price:95, count:1 },
+    { key:'sphinx',  name:'Anuket',      skin:'#e6c878', hair:'#2a2030', dress:'#caa14a', feat:'ears',    price:90, count:1 }
+  ];
+  DOLLS.forEach(function(d){ PRODUCTS['doll_'+d.key]={ name:d.name+' Doll', tag:'doll', price:d.price, draw:function(g,s){ drawDoll(g,s,d); } }; });
+
+  // ---- original wargame miniatures: my own factions & units ----
+  function drawMini(g,s,o){ var cx=s*0.5, big=o.type==='big';
+    g.fillStyle='#2a2c33'; g.beginPath(); g.ellipse(cx,s*0.85,s*(big?0.27:0.19),s*0.05,0,0,7); g.fill();              // base
+    g.fillStyle=o.body; g.fillRect(cx-s*0.07,s*0.58,s*0.05,s*0.24); g.fillRect(cx+s*0.02,s*0.58,s*0.05,s*0.24);      // legs
+    if(big){ g.fillStyle=o.body; g.fillRect(cx-s*0.17,s*0.3,s*0.34,s*0.32); g.fillStyle=o.trim; g.fillRect(cx-s*0.19,s*0.3,s*0.06,s*0.14); g.fillRect(cx+s*0.13,s*0.3,s*0.06,s*0.14); }
+    else { g.fillStyle=o.body; g.fillRect(cx-s*0.11,s*0.34,s*0.22,s*0.26);                                            // torso
+      g.fillStyle=o.trim; g.fillRect(cx-s*0.13,s*0.34,s*0.06,s*0.1); g.fillRect(cx+s*0.07,s*0.34,s*0.06,s*0.1); }     // pauldrons
+    g.fillStyle=o.trim; g.beginPath(); g.arc(cx,s*0.28,s*0.075,0,7); g.fill();                                         // helmet
+    g.fillStyle='#15151c'; g.fillRect(cx-s*0.05,s*0.27,s*0.1,s*0.03);                                                  // visor
+    g.strokeStyle='#33363d'; g.lineWidth=s*0.045; g.lineCap='round'; g.beginPath(); g.moveTo(cx+s*0.08,s*0.4); g.lineTo(cx+s*0.22,s*0.28); g.stroke(); // weapon
+    if(o.type==='char'){ g.fillStyle=o.trim; g.beginPath(); g.moveTo(cx-s*0.1,s*0.36); g.lineTo(cx-s*0.22,s*0.6); g.lineTo(cx-s*0.08,s*0.58); g.closePath(); g.fill(); } } // banner/cape
+  var FCOL={ iron:{body:'#3a567a',trim:'#cfd6e0'}, hollow:{body:'#8a9488',trim:'#39ff8e'}, brood:{body:'#5a3a6a',trim:'#c6ff4d'}, sun:{body:'#2b6fb0',trim:'#ffce4a'}, ashen:{body:'#6a2a2a',trim:'#e0712e'}, verdant:{body:'#2f7e4f',trim:'#caa14a'} };
+  var FNAME={ iron:'Iron Crusaders', hollow:'Hollow Legion', brood:'Hive Brood', sun:'Sunfire Caste', ashen:'Ashen Horde', verdant:'Verdant Kin' };
+  var MINIS=[
+    { key:'iron_sq',  fac:'iron',    name:'Crusader Battleline',  type:'troop', price:55 },
+    { key:'iron_lord',fac:'iron',    name:'Lord-Commander',       type:'char',  price:35 },
+    { key:'iron_wlk', fac:'iron',    name:'Siege Walker',         type:'big',   price:78 },
+    { key:'holl_pha', fac:'hollow',  name:'Bone Phalanx',         type:'troop', price:50 },
+    { key:'holl_rea', fac:'hollow',  name:'Reaper Lord',          type:'char',  price:32 },
+    { key:'holl_col', fac:'hollow',  name:'Dread Colossus',       type:'big',   price:82 },
+    { key:'brood_sw', fac:'brood',   name:'Swarmlings',           type:'troop', price:50 },
+    { key:'brood_ty', fac:'brood',   name:'Brood Tyrant',         type:'char',  price:40 },
+    { key:'brood_lev',fac:'brood',   name:'Carapace Leviathan',   type:'big',   price:92 },
+    { key:'sun_inf',  fac:'sun',     name:'Pulse Infantry',       type:'troop', price:52 },
+    { key:'sun_cmd',  fac:'sun',     name:'Caste Commander',      type:'char',  price:34 },
+    { key:'sun_suit', fac:'sun',     name:'Battlesuit Striker',   type:'big',   price:62 },
+    { key:'ash_war',  fac:'ashen',   name:'Bloodbound Warriors',  type:'troop', price:48 },
+    { key:'ash_chf',  fac:'ashen',   name:'Warchief',             type:'char',  price:33 },
+    { key:'ash_bst',  fac:'ashen',   name:'Hellforged Beast',     type:'big',   price:85 },
+    { key:'ver_arc',  fac:'verdant', name:'Thornguard Archers',   type:'troop', price:50 },
+    { key:'ver_wdn',  fac:'verdant', name:'Grove Warden',         type:'char',  price:36 },
+    { key:'ver_tre',  fac:'verdant', name:'Ancient Treant',       type:'big',   price:72 }
+  ];
+  MINIS.forEach(function(u){ var c=FCOL[u.fac]; PRODUCTS['mini_'+u.key]={ name:u.name, tag:'mini', price:u.price, draw:function(g,s){ drawMini(g,s,{body:c.body,trim:c.trim,type:u.type}); } }; });
+
+  function prodIcon(key,s){ var c=mkCanvas(s,s), g=c.getContext('2d'); PRODUCTS[key].draw(g,s); return c; }
+  var ICONS={}; Object.keys(PRODUCTS).forEach(function(k){ ICONS[k]=prodIcon(k,40); });
+
+  // buyable boxes on the phone
+  var BOXES=[
+    { key:'mtg', product:'mtg_box', count:1, cost:40, sealed:true, cat:'Trading Cards', name:'Magic sealed box', desc:'Open for 12 packs · $40' },
+    { key:'mtgpacks', product:'mtg_pack', count:8, cost:48, cat:'Trading Cards', name:'Magic booster packs', desc:'8 packs — sell, or open for pulls · $48' },
+    { key:'neca', product:'neca', count:4, cost:60, cat:'Action Figures', name:'NECA figure case', desc:'4 figures · $60' },
+    { key:'tama', product:'tamashii', count:4, cost:96, cat:'Action Figures', name:'Tamashii Nations case', desc:'4 figures · $96' },
+    { key:'wh', product:'warhammer', count:6, cost:90, cat:'Miniatures', name:'Battle-minis case', desc:'6 minis · $90' }
+  ];
+  DOLLS.forEach(function(d){ var cost=Math.round(d.price*d.count*0.62); var tier=d.price>=80?'Exclusive':d.price>=50?'Collector':d.price>=30?'Deluxe':'Basic';
+    BOXES.push({ key:'box_'+d.key, product:'doll_'+d.key, count:d.count, cost:cost, cat:'Monster Dolls', name:d.name+' ('+tier+')', desc:d.count+' doll'+(d.count>1?'s':'')+' · sells $'+d.price+' ea · $'+cost }); });
+  // ---- original tabletop-miniatures line: my own factions & units (not Games Workshop's) ----
+  MINIS.forEach(function(u){ var qty=u.type==='big'?2:3, cost=Math.round(u.price*qty*0.6);
+    BOXES.push({ key:'kit_'+u.key, product:'mini_'+u.key, count:qty, cost:cost, cat:'Miniatures', name:u.name,
+      desc:FNAME[u.fac]+' · '+qty+' kits · sells $'+u.price+' ea · $'+cost }); });
+
+  // ====================== furniture ======================
+  // kinds: register | shelf | playtable.  Shelves have 4 slots.
+  var SLOT_OFF=[-0.27,-0.09,0.09,0.27];   // local x positions of the 4 slots
+  var FURNITURE={
+    register:{ kind:'register', name:'Register', desc:'Required — place it first', cost:40, color:'#6a4a8c', topZ:0.6,
+      boxes:[ {x0:-0.42,y0:-0.16,x1:0.42,y1:0.18,z0:0,z1:0.42,col:'#6a4a8c'},
+              {x0:-0.42,y0:-0.18,x1:0.42,y1:0.20,z0:0.42,z1:0.47,col:'#8a6aa8'},
+              {x0:0.10,y0:-0.08,x1:0.32,y1:0.06,z0:0.47,z1:0.60,col:'#222633'} ] },
+    shelf_wood:{ kind:'shelf', name:'Wood Shelf', desc:'4 slots · classic', cost:60, slotCap:4, color:'#9a6a3c', itemZ:0.5, topZ:0.62,
+      boxes:[ {x0:-0.38,y0:0.06,x1:0.38,y1:0.20,z0:0,z1:0.5,col:'#9a6a3c'},
+              {x0:-0.40,y0:0.04,x1:0.40,y1:0.22,z0:0.26,z1:0.30,col:'#7a5630'} ] },
+    shelf_white:{ kind:'shelf', name:'White Shelf', desc:'4 slots · modern', cost:85, slotCap:4, color:'#dfe3ea', itemZ:0.46, topZ:0.5,
+      boxes:[ {x0:-0.40,y0:0.06,x1:0.40,y1:0.20,z0:0,z1:0.46,col:'#dfe3ea'},
+              {x0:-0.42,y0:0.04,x1:0.42,y1:0.22,z0:0.24,z1:0.28,col:'#b9bfc9'} ] },
+    shelf_glass:{ kind:'shelf', name:'Glass Case', desc:'4 slots · for figures', cost:120, slotCap:4, color:'#3a4658', itemZ:0.5, topZ:0.72,
+      boxes:[ {x0:-0.38,y0:0.04,x1:0.38,y1:0.22,z0:0,z1:0.16,col:'#2a3340'},
+              {x0:-0.36,y0:0.06,x1:0.36,y1:0.20,z0:0.16,z1:0.66,col:'#7fa6c8'},
+              {x0:-0.38,y0:0.04,x1:0.38,y1:0.22,z0:0.66,z1:0.72,col:'#2a3340'} ] },
+    shelf_endcap:{ kind:'shelf', name:'Endcap Display', desc:'4 slots · big seller', cost:150, slotCap:5, color:'#c0533f', itemZ:0.56, topZ:0.62,
+      boxes:[ {x0:-0.44,y0:0.02,x1:0.44,y1:0.22,z0:0,z1:0.56,col:'#c0533f'},
+              {x0:-0.46,y0:0.0,x1:0.46,y1:0.24,z0:0.3,z1:0.34,col:'#8a3b2c'} ] },
+    playtable:{ kind:'playtable', name:'Play Table', desc:'Players draw a crowd', cost:140, color:'#2f7e4f', topZ:0.34, seats:3,
+      boxes:[ {x0:-0.46,y0:-0.34,x1:0.46,y1:0.34,z0:0.28,z1:0.34,col:'#2f7e4f'},
+              {x0:-0.42,y0:-0.30,x1:-0.34,y1:-0.22,z0:0,z1:0.28,col:'#5a4a3a'},
+              {x0:0.34,y0:-0.30,x1:0.42,y1:-0.22,z0:0,z1:0.28,col:'#5a4a3a'},
+              {x0:-0.42,y0:0.22,x1:-0.34,y1:0.30,z0:0,z1:0.28,col:'#5a4a3a'},
+              {x0:0.34,y0:0.22,x1:0.42,y1:0.30,z0:0,z1:0.28,col:'#5a4a3a'} ] }
+  };
+  var SHELF_KEYS=['shelf_wood','shelf_white','shelf_glass','shelf_endcap'];
+
+  // ====================== map / rooms ======================
+  var iW=7,iH=5, mapW=9,mapH=7, map=[], doorPt={x:4.5,y:5.5};
+  var ROOMS={ back:false, side:false };
+  function rebuildMap(){
+    mapW=iW+2; mapH=iH+2; map=[];
+    for(var y=0;y<mapH;y++){ var row=[]; for(var x=0;x<mapW;x++){ row.push((x===0||y===0||x===mapW-1||y===mapH-1)?1:0); } map.push(row); }
+    var dx=(mapW/2)|0; map[mapH-1][dx]=2; doorPt={ x:dx+0.5, y:mapH-1.5 };
+  }
+  function mapAt(x,y){ var ix=Math.floor(x), iy=Math.floor(y); if(ix<0||iy<0||ix>=mapW||iy>=mapH) return 1; return map[iy][ix]; }
+  function wallTex(v){ return v===2?TEX.door:TEX.wall; }
+
+  // ====================== state ======================
+  var money=0, sold=0, gstate='start';
+  var px=4.5,py=4.0,dir=-Math.PI/2, dirX=0,dirY=-1, planeX=PLANE,planeY=0, cx2=4.5,cy2=4.0;
+  var placed=[];      // {kind,fkey,x,y,rot,fp, slots?}
+  var register=null;  // reference to placed register
+  var floorBoxes=[];  // {product,count,sealed,opensTo,openCount,x,y}
+  var carrying=null;  // {product,count,sealed,opensTo,openCount}
+  var customers=[];
+  var placing=null;   // {fkey,rot}
+  var ghostX=4.5, ghostY=3.5;   // bird's-eye placement cursor (world coords)
+  var employees=[];   // {role, x,y, img, state, target, carry, serveT}
+  var wageT=30;
+  var spawnT=0, toastT=0;
+  var reviews=[], ratingSum=0, ratingCount=0, rival=4.0;
+
+  function reset(){
+    iW=7; iH=5; ROOMS={back:false,side:false}; rebuildMap();
+    money=500; sold=0; placed=[]; register=null; floorBoxes=[]; carrying=null; customers=[]; placing=null; employees=[]; wageT=30;
+    reviews=[]; ratingSum=0; ratingCount=0; rival=4.0; spawnT=8;
+    px=(mapW/2); py=mapH-2.2; dir=-Math.PI/2; updateCamera(); refreshHUD();
+  }
+  function avgRating(){ return ratingCount? (ratingSum/ratingCount) : 0; }
+
+  // ====================== geometry helpers ======================
+  function rotPt(x,y,r){ return r===0?[x,y]:r===1?[-y,x]:r===2?[-x,-y]:[y,-x]; }
+  function rotB(b,r){ var a=rotPt(b.x0,b.y0,r), c=rotPt(b.x1,b.y1,r);
+    return {x0:Math.min(a[0],c[0]),x1:Math.max(a[0],c[0]),y0:Math.min(a[1],c[1]),y1:Math.max(a[1],c[1]),z0:b.z0,z1:b.z1,col:b.col}; }
+  function footprint(fkey,x,y,rot){ var bs=FURNITURE[fkey].boxes, nx=9,ny=9,xx=-9,xy=-9;
+    for(var i=0;i<bs.length;i++){ var b=rotB(bs[i],rot); if(b.x0<nx)nx=b.x0; if(b.y0<ny)ny=b.y0; if(b.x1>xx)xx=b.x1; if(b.y1>xy)xy=b.y1; }
+    return { fx0:x+nx, fy0:y+ny, fx1:x+xx, fy1:y+xy }; }
+  function solidAt(x,y){ var r=0.17; for(var i=0;i<placed.length;i++){ var f=placed[i].fp; if(x>f.fx0-r&&x<f.fx1+r&&y>f.fy0-r&&y<f.fy1+r) return true; } return false; }
+  function rectsHit(a,b){ return a.fx0<b.fx1&&a.fx1>b.fx0&&a.fy0<b.fy1&&a.fy1>b.fy0; }
+  function updateCamera(){ dirX=Math.cos(dir); dirY=Math.sin(dir); planeX=-dirY*PLANE; planeY=dirX*PLANE; cx2=px; cy2=py; }
+
+  // ====================== sprites ======================
+  function personSprite(skin,shirt){ var c=mkCanvas(48,72), g=c.getContext('2d'); g.lineCap='round'; g.lineJoin='round';
+    g.strokeStyle=shirt; g.lineWidth=9; g.beginPath(); g.moveTo(16,42); g.lineTo(13,64); g.moveTo(32,42); g.lineTo(35,64); g.stroke();
+    g.fillStyle=shirt; g.beginPath(); g.moveTo(13,30); g.quadraticCurveTo(24,26,35,30); g.lineTo(33,46); g.quadraticCurveTo(24,50,15,46); g.closePath(); g.fill();
+    g.lineWidth=7; g.beginPath(); g.moveTo(15,32); g.lineTo(9,46); g.moveTo(33,32); g.lineTo(39,46); g.stroke();
+    g.fillStyle=skin; g.beginPath(); g.arc(24,17,9,0,7); g.fill(); g.fillStyle='#3a2a1a'; g.beginPath(); g.arc(24,12,9,Math.PI,0); g.fill();
+    return c; }
+  var SKINS=['#f0c8a0','#e0a878','#c88858','#a86840'], SHIRTS=['#e0556a','#3a86c8','#2faf5a','#caa14a','#7a4bb0','#e0712e','#d86fb0'];
+  function boxSprite(prodKey,sealed){ var c=mkCanvas(64,56), g=c.getContext('2d');
+    g.fillStyle='#c9a06a'; g.fillRect(6,10,52,42); g.fillStyle='#b08a52'; g.fillRect(6,10,52,8);
+    g.strokeStyle='#7c5526'; g.lineWidth=2; g.strokeRect(6,10,52,42); g.beginPath(); g.moveTo(6,31); g.lineTo(58,31); g.stroke();
+    g.drawImage(ICONS[prodKey],22,16,22,22);
+    if(sealed){ g.fillStyle='#e94560'; g.fillRect(6,44,52,8); g.fillStyle='#fff'; g.font='900 9px sans-serif'; g.textAlign='center'; g.fillText('SEALED',32,51); }
+    return c; }
+
+  // ====================== loop ======================
+  var DT=1/60;
+  function frame(){ if(gstate==='play'){ update(); render(); } requestAnimationFrame(frame); }
+
+  function camDepth(wx,wy){ var sx=wx-cx2, sy=wy-cy2; var invDet=1/(planeX*dirY-dirX*planeY); return invDet*(-planeY*sx+planeX*sy); }
+  function projP(wx,wy,z){ var sx=wx-cx2, sy=wy-cy2; var invDet=1/(planeX*dirY-dirX*planeY);
+    var tX=invDet*(dirY*sx-dirX*sy), tY=invDet*(-planeY*sx+planeX*sy);
+    if(tY<=0.06) return null; var lineH=H/tY; return { x:(W/2)*(1+tX/tY), y:H/2+lineH/2 - z*lineH, tY:tY }; }
+  function fillFace(g,pts,fill,edge){ for(var i=0;i<pts.length;i++) if(!pts[i]) return; g.beginPath(); g.moveTo(pts[0].x,pts[0].y);
+    for(var j=1;j<pts.length;j++)g.lineTo(pts[j].x,pts[j].y); g.closePath(); g.fillStyle=fill; g.fill(); if(edge){ g.strokeStyle=edge; g.lineWidth=1; g.stroke(); } }
+  function drawBoxes(g,fx,fy,boxesRaw,rot,alpha,tint){
+    g.globalAlpha=alpha||1;
+    boxesRaw.map(function(b){ return rotB(b,rot); }).map(function(b){ return {b:b,d:camDepth(fx+(b.x0+b.x1)/2,fy+(b.y0+b.y1)/2)}; }).sort(function(a,b){ return b.d-a.d; }).forEach(function(o){
+      var b=o.b, x0=fx+b.x0,x1=fx+b.x1,y0=fy+b.y0,y1=fy+b.y1,z0=b.z0,z1=b.z1, col=tint||b.col, sides=[];
+      if(cx2<x0) sides.push({c:[[x0,y0,z0],[x0,y1,z0],[x0,y1,z1],[x0,y0,z1]],sh:0.7});
+      if(cx2>x1) sides.push({c:[[x1,y1,z0],[x1,y0,z0],[x1,y0,z1],[x1,y1,z1]],sh:0.7});
+      if(cy2<y0) sides.push({c:[[x1,y0,z0],[x0,y0,z0],[x0,y0,z1],[x1,y0,z1]],sh:0.85});
+      if(cy2>y1) sides.push({c:[[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]],sh:0.85});
+      sides.forEach(function(s){ fillFace(g, s.c.map(function(q){ return projP(q[0],q[1],q[2]); }), jitC(col,s.sh), jitC(col,s.sh*0.6)); });
+      if(z1<0.62) fillFace(g, [[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]].map(function(q){ return projP(q[0],q[1],q[2]); }), jitC(col,1.04), jitC(col,0.7));
+    });
+    g.globalAlpha=1;
+  }
+  function billboard(wx,wy,zOff,sh,sw,img,bright){ var pr=projP(wx,wy,0); if(!pr) return;
+    var lineH=H/pr.tY, spH=lineH*sh, spW=lineH*sw, bottomY=H/2+lineH/2 - zOff*lineH, topY=bottomY-spH;
+    var sx0=Math.floor(pr.x-spW/2), sx1=Math.ceil(pr.x+spW/2), xr=RW/W; ctx.globalAlpha=bright||1; var runStart=-1;
+    for(var x=sx0;x<=sx1;x++){ var vis=x>=0&&x<W&&(pr.tY<zbuf[(x*xr)|0])&&x<sx1;
+      if(vis&&runStart<0)runStart=x;
+      if((!vis||x===sx1)&&runStart>=0){ var runEnd=vis?x:x-1; var srcX=((runStart-sx0)/spW)*img.width, srcW=((runEnd-runStart+1)/spW)*img.width;
+        ctx.drawImage(img,srcX,0,srcW,img.height,runStart,topY,runEnd-runStart+1,spH); runStart=-1; } }
+    ctx.globalAlpha=1; }
+  function labelAt(wx,wy,z,text,color){ var pr=projP(wx,wy,z); if(!pr) return; if(pr.tY<0.12||pr.tY>=zbuf[clamp((pr.x/W*RW)|0,0,RW-1)]) return;
+    ctx.font='800 '+Math.max(10,W/74)+'px Nunito,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+    var w=ctx.measureText(text).width+10, h=Math.max(15,W/46); ctx.fillStyle='rgba(10,14,28,0.82)';
+    rr(ctx,pr.x-w/2,pr.y-h,w,h-3,6); ctx.fillStyle=color; ctx.fillText(text,pr.x,pr.y-6); }
+  function rr(g,x,y,w,h,r){ g.beginPath(); if(g.roundRect)g.roundRect(x,y,w,h,r); else g.rect(x,y,w,h); g.fill(); }
+
+  function render(){
+    var ob=document.getElementById('openBtn'), canOpen = carrying && !placing && (carrying.sealed || (PRODUCTS[carrying.product] && PRODUCTS[carrying.product].openable));
+    ob.hidden = !canOpen; if(canOpen) ob.textContent = carrying.sealed ? '📦 Open Box (Q)' : '🎴 Open Pack (Q)';
+    if(placing){ renderTopDown(); return; }
+    var halfH=RH/2, fog=0.085, rd0x=dirX-planeX, rd0y=dirY-planeY, rd1x=dirX+planeX, rd1y=dirY+planeY, buf=buf32, fd=TEX.floor, cd=TEX.ceil, y,x;
+    for(y=(halfH|0)+1;y<RH;y++){
+      var rowDist=halfH/(y-halfH), stepX=rowDist*(rd1x-rd0x)/RW, stepY=rowDist*(rd1y-rd0y)/RW, fx=cx2+rowDist*rd0x, fy=cy2+rowDist*rd0y;
+      var shade=clamp(1-rowDist*fog,0.18,1), cs=shade*0.96, fr=y*RW, cr=(RH-1-y)*RW;
+      for(x=0;x<RW;x++){ var tx=((fx-Math.floor(fx))*TW)&TMASK, ty=((fy-Math.floor(fy))*TH)&TMASK, ti=(ty*TW+tx)<<2;
+        buf[fr+x]=(0xff000000|(((fd[ti+2]*shade)|0)<<16)|(((fd[ti+1]*shade)|0)<<8)|((fd[ti]*shade)|0))>>>0;
+        buf[cr+x]=(0xff000000|(((cd[ti+2]*cs)|0)<<16)|(((cd[ti+1]*cs)|0)<<8)|((cd[ti]*cs)|0))>>>0; fx+=stepX; fy+=stepY; } }
+    for(x=0;x<RW;x++){
+      var cameraX=2*x/RW-1, rdx=dirX+planeX*cameraX, rdy=dirY+planeY*cameraX, mx=Math.floor(cx2), my=Math.floor(cy2);
+      var ddx=Math.abs(1/rdx), ddy=Math.abs(1/rdy), stepXX,stepYY,sdx,sdy;
+      if(rdx<0){ stepXX=-1; sdx=(cx2-mx)*ddx; } else { stepXX=1; sdx=(mx+1-cx2)*ddx; }
+      if(rdy<0){ stepYY=-1; sdy=(cy2-my)*ddy; } else { stepYY=1; sdy=(my+1-cy2)*ddy; }
+      var side=0,hit=0,guard=0,cellv=1;
+      while(!hit&&guard++<60){ if(sdx<sdy){ sdx+=ddx; mx+=stepXX; side=0; } else { sdy+=ddy; my+=stepYY; side=1; } cellv=mapAt(mx+0.5,my+0.5); if(cellv!==0) hit=1; }
+      var perp=side===0?(sdx-ddx):(sdy-ddy); zbuf[x]=perp;
+      var lineH=RH/perp, drawStartF=halfH-lineH/2, wallX=side===0?(cy2+perp*rdy):(cx2+perp*rdx); wallX-=Math.floor(wallX);
+      var texX=(wallX*TW)|0; if((side===0&&rdx>0)||(side===1&&rdy<0)) texX=TW-1-texX;
+      var wd=wallTex(cellv), wsh=clamp(1-perp*fog,0.2,1)*(side===1?0.82:1);
+      var y0=Math.max(0,Math.ceil(drawStartF)), y1=Math.min(RH-1,(drawStartF+lineH)|0), tStep=TH/lineH, tPos=(y0-drawStartF)*tStep;
+      for(y=y0;y<=y1;y++){ var tyy=(tPos|0)&TMASK, tii=((tyy*TW+texX)<<2);
+        buf[y*RW+x]=(0xff000000|(((wd[tii+2]*wsh)|0)<<16)|(((wd[tii+1]*wsh)|0)<<8)|((wd[tii]*wsh)|0))>>>0; tPos+=tStep; } }
+    sceneCtx.putImageData(sceneImg,0,0); ctx.drawImage(sceneCanvas,0,0,RW,RH,0,0,W,H);
+
+    var objs=[];
+    placed.forEach(function(f){ objs.push({d:camDepth(f.x,f.y), kind:'furn', f:f}); });
+    floorBoxes.forEach(function(b){ objs.push({d:camDepth(b.x,b.y), kind:'fbox', b:b}); });
+    customers.forEach(function(c){ objs.push({d:camDepth(c.x,c.y), kind:'cust', c:c}); });
+    employees.forEach(function(e){ objs.push({d:camDepth(e.x,e.y), kind:'emp', e:e}); });
+    objs.sort(function(a,b){ return b.d-a.d; });
+    objs.forEach(function(o){
+      if(o.kind==='furn'){ var f=o.f; drawBoxes(ctx,f.x,f.y,FURNITURE[f.fkey].boxes,f.rot,1); decorateFurn(f); }
+      else if(o.kind==='fbox'){ billboard(o.b.x,o.b.y,0,0.46,0.46,boxSprite(o.b.product,o.b.sealed),1); labelAt(o.b.x,o.b.y,0.56,PRODUCTS[o.b.product].name+(o.b.sealed?'':' ×'+o.b.count),'#ffe08a'); }
+      else if(o.kind==='cust'){ var c=o.c; billboard(c.x,c.y,0,0.62,0.42,c.img,1); if(c.item) billboard(c.x,c.y,0.64,0.18,0.18,ICONS[c.item],1);
+        if(c.state==='playing') billboard(c.x,c.y,0.7,0.14,0.14,ICONS['mtg_pack'],0.9); }
+      else if(o.kind==='emp'){ var e=o.e; billboard(e.x,e.y,0,0.62,0.42,e.img,1); if(e.carry) billboard(e.x,e.y,0.52,0.2,0.2,boxSprite(e.carry.product,e.carry.sealed),1);
+        labelAt(e.x,e.y,0.66, e.role==='cashier'?'👔 Cashier':'📦 Restocker','#9fd0ff'); }
+    });
+
+    if(carrying){ var bw=W*0.26, bh=bw*0.78; ctx.drawImage(boxSprite(carrying.product,carrying.sealed), W*0.5-bw/2, H-bh*0.72, bw, bh);
+      ctx.fillStyle='#0b0d16'; ctx.font='800 '+Math.max(12,W/60)+'px Nunito,sans-serif'; ctx.textAlign='center'; ctx.fillText(carrying.sealed?'SEALED':('×'+carrying.count), W*0.5, H-bh*0.10); }
+
+    drawReticle();
+    var vig=ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.78); vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,0,0,0.34)'); ctx.fillStyle=vig; ctx.fillRect(0,0,W,H);
+  }
+
+  // ---- bird's-eye build mode: top-down floor plan with an alignment grid ----
+  function renderTopDown(){
+    ctx.fillStyle='#0c1422'; ctx.fillRect(0,0,W,H);
+    var pad=Math.max(18,W*0.03), sc=Math.min((W-2*pad)/mapW,(H-2*pad)/mapH), ox=(W-sc*mapW)/2, oy=(H-sc*mapH)/2;
+    function SX(wx){ return ox+wx*sc; } function SY(wy){ return oy+wy*sc; }
+    var x,y;
+    // cells
+    for(y=0;y<mapH;y++) for(x=0;x<mapW;x++){ var v=map[y][x];
+      ctx.fillStyle = v===1?'#2a3346' : (v===2?'#2f5f8c':'#caa57a');
+      ctx.fillRect(SX(x),SY(y),sc+0.5,sc+0.5); }
+    // alignment grid
+    ctx.strokeStyle='rgba(255,255,255,0.16)'; ctx.lineWidth=1; ctx.beginPath();
+    for(x=0;x<=mapW;x++){ ctx.moveTo(SX(x),SY(0)); ctx.lineTo(SX(x),SY(mapH)); }
+    for(y=0;y<=mapH;y++){ ctx.moveTo(SX(0),SY(y)); ctx.lineTo(SX(mapW),SY(y)); }
+    ctx.stroke();
+    // placed furniture footprints
+    placed.forEach(function(f){ var m=FURNITURE[f.fkey], fp=f.fp;
+      ctx.fillStyle=jitC(m.color,0.95); ctx.fillRect(SX(fp.fx0),SY(fp.fy0),(fp.fx1-fp.fx0)*sc,(fp.fy1-fp.fy0)*sc);
+      ctx.strokeStyle=jitC(m.color,0.55); ctx.lineWidth=2; ctx.strokeRect(SX(fp.fx0),SY(fp.fy0),(fp.fx1-fp.fx0)*sc,(fp.fy1-fp.fy0)*sc);
+      ctx.fillStyle='#0b1020'; ctx.font='800 '+Math.max(9,sc*0.26)+'px Nunito,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(m.kind==='register'?'TILL':(m.kind==='playtable'?'PLAY':m.name.split(' ')[0]), SX((fp.fx0+fp.fx1)/2), SY((fp.fy0+fp.fy1)/2)); });
+    // floor boxes
+    floorBoxes.forEach(function(b){ ctx.fillStyle='#c9a06a'; ctx.fillRect(SX(b.x)-sc*0.18,SY(b.y)-sc*0.18,sc*0.36,sc*0.36); });
+    // player marker
+    ctx.fillStyle='#7df0a8'; ctx.beginPath(); ctx.arc(SX(px),SY(py),sc*0.18,0,7); ctx.fill();
+    ctx.strokeStyle='#7df0a8'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(SX(px),SY(py)); ctx.lineTo(SX(px+dirX*0.6),SY(py+dirY*0.6)); ctx.stroke();
+    // ghost (snapped)
+    var sx=snap(ghostX), sy=snap(ghostY), fp=footprint(placing.fkey,sx,sy,placing.rot), ok=ghostValid();
+    drawTopBoxes(SX,SY,sc,sx,sy,FURNITURE[placing.fkey].boxes,placing.rot, ok?'#7df0a8':'#e94560');
+    ctx.strokeStyle=ok?'#7df0a8':'#e94560'; ctx.lineWidth=2.5; ctx.setLineDash([6,5]);
+    ctx.strokeRect(SX(fp.fx0),SY(fp.fy0),(fp.fx1-fp.fx0)*sc,(fp.fy1-fp.fy0)*sc); ctx.setLineDash([]);
+    // title
+    ctx.fillStyle='#ffe08a'; ctx.font='900 '+Math.max(14,W/52)+'px Nunito,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText('Build Mode · '+FURNITURE[placing.fkey].name+' — line it up on the grid', W/2, 10);
+  }
+  function drawTopBoxes(SX,SY,sc,fx,fy,boxesRaw,rot,tint){
+    boxesRaw.forEach(function(bb){ var b=rotB(bb,rot); ctx.fillStyle=tint; ctx.globalAlpha=0.5;
+      ctx.fillRect(SX(fx+b.x0),SY(fy+b.y0),(b.x1-b.x0)*sc,(b.y1-b.y0)*sc); ctx.globalAlpha=1; });
+  }
+
+  function decorateFurn(f){ var meta=FURNITURE[f.fkey];
+    if(f.kind==='register'){ var q=customers.filter(function(c){ return c.state==='queue'; }).length;
+      labelAt(f.x,f.y,meta.topZ+0.08, q>0?('REGISTER · '+q+' waiting'):'REGISTER', q>0?'#ffd24a':'#cfd6ea'); return; }
+    if(f.kind==='playtable'){ labelAt(f.x,f.y,meta.topZ+0.2,'Play Table','#8fe0a8'); return; }
+    if(f.kind==='shelf'){ var any=false;
+      for(var i=0;i<4;i++){ var sl=f.slots[i]; if(!sl.product||sl.stock<=0) continue; any=true;
+        var op=rotPt(SLOT_OFF[i],0.02,f.rot), ux=f.x+op[0], uy=f.y+op[1];
+        billboard(ux,uy,meta.itemZ,0.2,0.15,ICONS[sl.product],1);
+        labelAt(ux,uy,meta.itemZ+0.14,'$'+sl.price,'#7df0a8'); }
+      if(!any) labelAt(f.x,f.y,meta.topZ+0.04,'Empty shelf — bring a box','#9fb0cf');
+    }
+  }
+  function drawReticle(){ var t=findTarget(); ctx.save(); ctx.translate(W/2,H/2);
+    ctx.strokeStyle=(t||placing||(carrying&&carrying.sealed))?'rgba(255,224,138,0.95)':'rgba(255,255,255,0.6)'; ctx.lineWidth=Math.max(2,W/420);
+    var r=Math.max(7,W*0.012); ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.stroke(); ctx.restore(); promptFor(t); }
+
+  // ====================== placement ======================
+  function ghostXY(){ return { x:ghostX, y:ghostY }; }
+  function snap(v){ return Math.floor(v)+0.5; }
+  function startPlacing(fkey){ placing={fkey:fkey,rot:0}; ghostX=clamp(px+dirX*1.2,1.5,mapW-1.5); ghostY=clamp(py+dirY*1.2,1.5,mapH-1.5); placeBar(true); }
+  function cancelPlacing(){ placing=null; placeBar(false); toast('Cancelled'); }
+  function rotateGhost(){ if(placing) placing.rot=(placing.rot+1)&3; }
+  function placeBar(on){ document.getElementById('placeBar').hidden=!on; }
+  function ghostValid(){ var gp=ghostXY(), sx=snap(gp.x), sy=snap(gp.y);
+    if(mapAt(sx,sy)!==0) return false;
+    var fp=footprint(placing.fkey,sx,sy,placing.rot);
+    for(var i=0;i<placed.length;i++){ if(rectsHit(fp,placed[i].fp)) return false; }
+    if(px>fp.fx0-0.2&&px<fp.fx1+0.2&&py>fp.fy0-0.2&&py<fp.fy1+0.2) return false;
+    return true; }
+  function placeNow(){ if(!ghostValid()){ toast('Can’t place there'); return; }
+    var gp=ghostXY(), sx=snap(gp.x), sy=snap(gp.y), meta=FURNITURE[placing.fkey];
+    var f={ kind:meta.kind, fkey:placing.fkey, x:sx, y:sy, rot:placing.rot, fp:footprint(placing.fkey,sx,sy,placing.rot) };
+    if(meta.kind==='shelf'){ f.slots=[0,1,2,3].map(function(){ return {product:null,stock:0,price:0}; }); }
+    if(meta.kind==='register'){ register=f; }
+    placed.push(f); toast(meta.name+' placed'); placing=null; placeBar(false); }
+  function placeAt(fkey,tx,ty,rot){ // test/helper: direct place (no validity check)
+    var meta=FURNITURE[fkey], x=tx+0.5, y=ty+0.5;
+    var f={ kind:meta.kind, fkey:fkey, x:x, y:y, rot:rot||0, fp:footprint(fkey,x,y,rot||0) };
+    if(meta.kind==='shelf') f.slots=[0,1,2,3].map(function(){ return {product:null,stock:0,price:0}; });
+    if(meta.kind==='register') register=f; placed.push(f); return f; }
+
+  // ====================== targeting / actions ======================
+  function findTarget(){ if(placing) return null;
+    var best=null, bestScore=1e9;
+    function consider(wx,wy,obj,weight){ var dx=wx-px, dy=wy-py, d=Math.hypot(dx,dy); if(d>2.2||d<0.01) return;
+      var dot=(dx*dirX+dy*dirY)/d; if(dot<0.55) return; var sc=(d*0.6+(1-dot)*2.4)*(weight||1); if(sc<bestScore){ bestScore=sc; best=obj; } }
+    // floor boxes get priority — they arrive by the door, where a register might sit
+    floorBoxes.forEach(function(b){ consider(b.x,b.y,{type:'pickup',box:b}, 0.55); });
+    placed.forEach(function(f){ if(f.kind==='shelf') consider(f.x,f.y,{type:'shelf',f:f});
+      else if(f.kind==='register') consider(f.x,f.y,{type:'register',f:f}); });
+    return best; }
+  function emptySlot(f,prod){ for(var i=0;i<4;i++){ if(f.slots[i].product===prod && f.slots[i].stock<FURNITURE[f.fkey].slotCap) return i; }
+    for(var j=0;j<4;j++){ if(!f.slots[j].product) return j; } return -1; }
+  function shelfHasStock(f){ for(var i=0;i<4;i++) if(f.slots[i].product&&f.slots[i].stock>0) return true; return false; }
+
+  function promptFor(t){ var p=document.getElementById('prompt');
+    if(placing){ p.hidden=false; p.innerHTML='Aim &amp; <b>Action</b> to place · <b>R</b> rotate · <b>Esc</b> cancel'; return; }
+    if(carrying&&carrying.sealed){ p.hidden=false; p.innerHTML='<b>Q</b>: open the sealed box ('+carrying.openCount+' packs)'; return; }
+    if(carrying&&PRODUCTS[carrying.product]&&PRODUCTS[carrying.product].openable){ p.hidden=false; p.innerHTML='<b>Q</b>: open a pack · or stock a shelf'; return; }
+    if(!t){ if(!register){ p.hidden=false; p.innerHTML='Open your <b>📱 Phone</b> → buy &amp; place the Register'; return; } p.hidden=true; return; }
+    var txt='';
+    if(t.type==='pickup'){ txt= carrying?'Hands full — stock or open first':'<b>Action</b>: pick up '+PRODUCTS[t.box.product].name; }
+    else if(t.type==='shelf'){ var f=t.f;
+      if(carrying){ var slot=emptySlot(f,carrying.product); txt= slot>=0?'<b>Action</b>: stock '+PRODUCTS[carrying.product].name:'Shelf full'; }
+      else txt= shelfHasStock(f)?'Shelf · '+shelfSummary(f):'Empty shelf — bring a box'; }
+    else if(t.type==='register'){ var q=customers.filter(function(c){ return c.state==='queue'; }).length;
+      txt= q>0?'<b>Action</b>: check out ($'+nextSalePrice()+')':'Register — no one waiting'; }
+    p.hidden=false; p.innerHTML=txt; }
+  function shelfSummary(f){ var s=[]; for(var i=0;i<4;i++){ if(f.slots[i].product) s.push(PRODUCTS[f.slots[i].product].name.split(' ')[0]+' '+f.slots[i].stock); } return s.join(' · '); }
+  function nextSalePrice(){ var c=queueFront(); return c?c.price:0; }
+  function queueFront(){ var f=null, fd=1e9; customers.forEach(function(c){ if(c.state==='queue'&&c.qd<fd){ fd=c.qd; f=c; } }); return f; }
+
+  function doAction(){ if(gstate!=='play') return;
+    if(placing){ placeNow(); return; }
+    if(carrying&&carrying.sealed){ // open it
+      carrying={ product:carrying.opensTo, count:carrying.openCount, sealed:false }; toast('Opened! '+carrying.count+' '+PRODUCTS[carrying.product].name+'s'); return; }
+    var t=findTarget(); if(!t) return;
+    if(t.type==='pickup'){ if(carrying){ toast('Hands full!'); return; }
+      var b=t.box; carrying={ product:b.product, count:b.count, sealed:b.sealed, opensTo:b.opensTo, openCount:b.openCount };
+      floorBoxes.splice(floorBoxes.indexOf(b),1); toast('Carrying '+PRODUCTS[b.product].name); }
+    else if(t.type==='shelf'){ var f=t.f;
+      if(!carrying){ toast(shelfHasStock(f)?shelfSummary(f):'Bring a box to stock it'); return; }
+      var slot=emptySlot(f,carrying.product); if(slot<0){ toast('Shelf is full'); return; }
+      var sl=f.slots[slot]; if(!sl.product){ sl.product=carrying.product; sl.price=PRODUCTS[carrying.product].price; }
+      var move=Math.min(FURNITURE[f.fkey].slotCap-sl.stock, carrying.count); sl.stock+=move; carrying.count-=move;
+      toast('Stocked '+move+' '+PRODUCTS[sl.product].name); if(carrying.count<=0) carrying=null; }
+    else if(t.type==='register'){ var c=queueFront(); if(!c){ toast('No one waiting'); return; }
+      money+=c.price; sold++; addReview(c); c.state='leave'; c.target=doorPt; toast('+$'+c.price+'  '+PRODUCTS[c.item].name); refreshHUD(); }
+  }
+  // ---- open a booster pack you're carrying: gamble for a pull ----
+  var PULLS=[ {p:0.64,v:2,n:'a common'}, {p:0.24,v:5,n:'an uncommon'}, {p:0.09,v:15,n:'a RARE!'}, {p:0.03,v:50,n:'a MYTHIC! 🤩'} ];
+  function openCarriedPack(){ if(gstate!=='play'||placing) return;
+    if(!carrying||!(PRODUCTS[carrying.product]&&PRODUCTS[carrying.product].openable)){ toast('Nothing to open'); return; }
+    var r=Math.random(), acc=0, pull=PULLS[0]; for(var i=0;i<PULLS.length;i++){ acc+=PULLS[i].p; if(r<acc){ pull=PULLS[i]; break; } }
+    money+=pull.v; carrying.count--; if(carrying.count<=0) carrying=null;
+    toast('🎴 Opened — '+pull.n+'  +$'+pull.v); refreshHUD(); }
+  // Q opens whatever's in hand: a sealed box → packs, then each pack → a pull
+  function unifiedOpen(){ if(gstate!=='play'||placing) return;
+    if(!carrying){ toast('Nothing to open'); return; }
+    if(carrying.sealed){ carrying={ product:carrying.opensTo, count:carrying.openCount, sealed:false };
+      toast('📦 Opened the box — '+carrying.count+' '+PRODUCTS[carrying.product].name+'s! Press Q to open packs'); refreshHUD(); return; }
+    openCarriedPack(); }
+
+  // ====================== reviews ======================
+  var GREAT=['Absolutely perfect — five stars!','Best hobby store in town!','Amazing selection and service.','I’ll be back every week!'];
+  var GOOD=['Pretty good shop.','Found what I wanted.','Friendly enough, fair prices.','Nice little store.'];
+  var MEH=['Bit of a wait at the till.','Prices are a little steep.','Could use more stock.','Service was kind of slow.'];
+  var BAD=['Way overpriced. Not coming back.','Waited forever — terrible service.','Felt like a total rip-off.','Slow and pricey. One star.','Long lines, picked-over shelves. Avoid.'];
+  // Harsh critics: 5 stars must be earned — any wait or markup costs you.
+  function addReview(c){ var stars=4, base=PRODUCTS[c.item].price;
+    if(c.price>base*1.5) stars-=2; else if(c.price>base*1.15) stars-=1;     // price gouging hurts
+    if(c.patience>8) stars-=1; if(c.patience>16) stars-=1; if(c.patience>24) stars-=1;  // any wait is noticed
+    if(employees.some(function(e){ return e.role==='cashier'; })) stars+=1; // a staffed till speeds things up
+    if(playTables()>0 && stars>=3) stars+=1;                                // good vibe only if already decent
+    if(Math.random()<0.22) stars-=1;                                        // picky shoppers
+    stars=clamp(Math.round(stars),1,5);
+    var txt= stars>=5?pick(GREAT) : stars>=4?pick(GOOD) : stars>=3?pick(MEH) : pick(BAD);
+    reviews.unshift({ stars:stars, text:txt }); if(reviews.length>20) reviews.pop();
+    ratingSum+=stars; ratingCount++;
+    rival = clamp(rival + (avgRating()>rival?-0.015:0.03), 3.6, 4.9);       // rival keeps up, slips slowly
+  }
+  function playTables(){ var n=0; placed.forEach(function(f){ if(f.kind==='playtable') n++; }); return n; }
+
+  // ====================== customers ======================
+  function stockedShelves(){ return placed.filter(function(f){ return f.kind==='shelf'&&shelfHasStock(f); }); }
+  function freePlayTable(){ var ts=placed.filter(function(f){ return f.kind==='playtable'; }); for(var i=0;i<ts.length;i++){ if(playersAt(ts[i])<FURNITURE.playtable.seats) return ts[i]; } return null; }
+  function playersAt(t){ return customers.filter(function(c){ return c.table===t&&(c.state==='toPlay'||c.state==='playing'); }).length; }
+  function frontOf(f,dist){ var cx=mapW/2, cy=mapH/2-0.4; var dx=cx-f.x, dy=cy-f.y, d=Math.hypot(dx,dy)||1; return { x:f.x+dx/d*dist, y:f.y+dy/d*dist }; }
+  function spawnCustomer(){
+    if(!register) return; var ss=stockedShelves(), pt=freePlayTable();
+    var wantsPlay = pt && Math.random()<0.4;
+    if(!ss.length && !wantsPlay) return;
+    var c={ x:doorPt.x+rnd(-0.3,0.3), y:doorPt.y, img:personSprite(pick(SKINS),pick(SHIRTS)), item:null, price:0, patience:0, qd:0, t:0, table:null, playT:0 };
+    if(wantsPlay){ c.state='toPlay'; c.table=pt; c.target=frontOf(pt,0.8); }
+    else { c.state='toShelf'; c.shelf=pick(ss); c.target=frontOf(c.shelf,0.85); }
+    customers.push(c);
+  }
+  function moveToward(c,sp){ var dx=c.target.x-c.x, dy=c.target.y-c.y, d=Math.hypot(dx,dy); if(d<0.08) return true; var s=Math.min(sp,d); c.x+=dx/d*s; c.y+=dy/d*s; return false; }
+  function pickSlot(f){ var idx=[]; for(var i=0;i<4;i++) if(f.slots[i].product&&f.slots[i].stock>0) idx.push(i); return idx.length?pick(idx):-1; }
+
+  function update(){
+    if(placing){ // bird's-eye build mode: arrows move the ghost on the grid; shop is paused
+      var gs=3.2*DT; if(keys.up) ghostY-=gs; if(keys.down) ghostY+=gs; if(keys.left) ghostX-=gs; if(keys.right) ghostX+=gs;
+      ghostX=clamp(ghostX,1.3,mapW-1.3); ghostY=clamp(ghostY,1.3,mapH-1.3); refreshHUD(); return;
+    }
+    var mv=0,tn=0; if(keys.up)mv+=1; if(keys.down)mv-=1; if(keys.left)tn-=1; if(keys.right)tn+=1;
+    if(tn) dir+=tn*2.3*DT;
+    if(mv){ var nx=px+dirX*mv*2.6*DT, ny=py+dirY*mv*2.6*DT; if(mapAt(nx,py)===0&&!solidAt(nx,py)) px=nx; if(mapAt(px,ny)===0&&!solidAt(px,ny)) py=ny; }
+    updateCamera();
+    updateEmployees();
+    wageT-=DT; if(wageT<=0){ wageT=30; var wage=10*employees.length; if(wage>0){ if(money>=wage){ money-=wage; } else { var q=employees.pop(); if(q) toast('Couldn’t make payroll — '+q.role+' quit'); } } }
+
+    spawnT-=DT; if(spawnT<=0){ var base=rnd(5,9); spawnT= base * clamp(rival/Math.max(0.8,avgRating()||4),0.5,1.8);
+      if(customers.length<8) spawnCustomer(); }
+
+    var qList=customers.filter(function(c){ return c.state==='queue'; }).sort(function(a,b){ return a.qd-b.qd; });
+    for(var i=customers.length-1;i>=0;i--){ var c=customers[i]; c.t+=DT;
+      if(c.state==='toShelf'){ if(moveToward(c,2.0*DT)){ var sl=pickSlot(c.shelf);
+          if(sl>=0){ var prc=c.shelf.slots[sl].price, b=PRODUCTS[c.shelf.slots[sl].product].price;
+            if(prc>b*1.8 && Math.random()<0.6){ c.state='leave'; c.target=doorPt; reviews.unshift({stars:1,text:pick(BAD)}); ratingSum+=1; ratingCount++; toast('Too pricey — a customer balked 😤'); }
+            else { c.shelf.slots[sl].stock--; c.item=c.shelf.slots[sl].product; c.price=prc; c.state='toReg'; c.target=regPt(); } }
+          else { c.state='leave'; c.target=doorPt; } } }
+      else if(c.state==='toReg'){ c.target=regPt(); if(moveToward(c,2.0*DT)) c.state='queue'; }
+      else if(c.state==='queue'){ c.patience+=DT; var idx=qList.indexOf(c); c.qd=idx; var rp=regPt();
+        c.target={ x:rp.x, y:rp.y+idx*0.5 }; moveToward(c,1.6*DT);
+        if(c.patience>28){ c.state='leave'; c.target=doorPt; c.item=null; toast('A customer gave up 😠'); reviews.unshift({stars:1,text:'Waited forever, left empty-handed.'}); ratingSum+=1; ratingCount++; } }
+      else if(c.state==='toPlay'){ if(moveToward(c,2.0*DT)){ c.state='playing'; c.playT=rnd(6,12); } }
+      else if(c.state==='playing'){ c.playT-=DT; if(c.playT<=0){ var ss=stockedShelves();
+          if(ss.length&&Math.random()<0.7){ c.state='toShelf'; c.shelf=pick(ss); c.target=frontOf(c.shelf,0.85); c.table=null; }
+          else { c.state='leave'; c.target=doorPt; c.table=null; reviews.unshift({stars:5,text:'Had a blast at the play tables!'}); ratingSum+=5; ratingCount++; } } }
+      else if(c.state==='leave'){ if(moveToward(c,2.4*DT)) customers.splice(i,1); }
+    }
+    refreshHUD();
+    if(toastT>0){ toastT-=DT; if(toastT<=0) document.getElementById('toast').hidden=true; }
+  }
+  function regPt(){ if(!register) return doorPt; return frontOf(register,0.85); }
+
+  // ====================== employees ======================
+  function empSprite(role){ var c=personSprite('#e8c49a', role==='cashier'?'#27408b':'#c75b2a'); var g=c.getContext('2d');
+    g.fillStyle='#fff'; g.fillRect(19,29,10,3);                                   // name-tag
+    if(role==='cashier'){ g.fillStyle='#27408b'; g.fillRect(16,5,16,4); }         // cap
+    else { g.fillStyle='#ffd24a'; g.fillRect(13,30,22,3); g.fillRect(13,40,22,3); } // hi-vis stripes
+    return c; }
+  function empIcon(role){ var c=mkCanvas(40,40), g=c.getContext('2d'); g.drawImage(empSprite(role),3,-6,34,50); return c; }
+  function hireEmployee(role){ var cost=role==='cashier'?220:200; if(money<cost){ toast('Need $'+cost); return false; }
+    money-=cost; employees.push({ role:role, x:doorPt.x, y:doorPt.y, img:empSprite(role), target:null, carry:null, serveT:0 });
+    refreshHUD(); toast('Hired a '+role+'!'); return true; }
+  function nearestBox(e){ var best=null,bd=1e9; floorBoxes.forEach(function(b){ var d=Math.hypot(b.x-e.x,b.y-e.y); if(d<bd){ bd=d; best=b; } }); return best; }
+  function shelfNeeding(prod){ for(var i=0;i<placed.length;i++){ if(placed[i].kind==='shelf'&&emptySlot(placed[i],prod)>=0) return placed[i]; } return null; }
+  function updateEmployees(){
+    employees.forEach(function(e){
+      if(e.role==='cashier'){
+        if(!register){ e.target=doorPt; moveToward(e,1.8*DT); return; }
+        e.target=frontOf(register,0.5); moveToward(e,2.0*DT);
+        var c=queueFront();
+        if(c && c.state==='queue' && c.qd===0){ e.serveT=(e.serveT||0)+DT;
+          if(e.serveT>=1.1){ e.serveT=0; money+=c.price; sold++; addReview(c); c.state='leave'; c.target=doorPt; refreshHUD(); toast('💵 +$'+c.price); } }
+        else e.serveT=0;
+      } else { // restocker: haul boxes to shelves
+        if(e.carry && e.carry.sealed){ e.carry={ product:e.carry.opensTo, count:e.carry.openCount, sealed:false }; }
+        if(!e.carry){ var box=nearestBox(e);
+          if(box){ e.target={x:box.x,y:box.y}; if(moveToward(e,2.2*DT)){ e.carry={ product:box.product, count:box.count, sealed:box.sealed, opensTo:box.opensTo, openCount:box.openCount }; floorBoxes.splice(floorBoxes.indexOf(box),1); } }
+          else { e.target=frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.5); moveToward(e,1.4*DT); } }
+        else { var sh=shelfNeeding(e.carry.product);
+          if(sh){ e.target=frontOf(sh,0.85);
+            if(moveToward(e,2.2*DT)){ var slot=emptySlot(sh,e.carry.product);
+              if(slot>=0){ var sl=sh.slots[slot]; if(!sl.product){ sl.product=e.carry.product; sl.price=PRODUCTS[e.carry.product].price; }
+                var mv=Math.min(FURNITURE[sh.fkey].slotCap-sl.stock, e.carry.count); sl.stock+=mv; e.carry.count-=mv; if(e.carry.count<=0) e.carry=null; }
+              else e.carry=null; } }
+          else { e.target=frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.5); moveToward(e,1.4*DT); } }
+      }
+    });
+  }
+
+  // ====================== HUD ======================
+  function refreshHUD(){ document.getElementById('money').textContent='$'+money;
+    var ar=avgRating(); document.getElementById('rating').textContent='⭐ '+(ratingCount?ar.toFixed(1):'—');
+    document.getElementById('sales').textContent='🛍️ '+sold;
+    document.getElementById('rival').textContent='🏬 Rival '+rival.toFixed(1);
+    document.getElementById('queue').textContent='🧍 '+customers.filter(function(c){ return c.state==='queue'; }).length;
+    document.getElementById('phMoney').textContent='$'+money; }
+  function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; toastT=2.2; }
+
+  // ====================== phone ======================
+  var phoneTab='stock';
+  function phoneOpen(){ return !document.getElementById('phoneOv').hidden; }
+  function openPhone(){ if(gstate!=='play'||placing) return; document.getElementById('phoneOv').hidden=false; buildPhone(); }
+  function closePhone(){ document.getElementById('phoneOv').hidden=true; }
+  function buildPhone(){ refreshHUD();
+    document.querySelectorAll('.ph-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===phoneTab); });
+    var list=document.getElementById('phList'); list.innerHTML='';
+    if(phoneTab==='stock'){
+      ['Trading Cards','Action Figures','Miniatures','Monster Dolls'].forEach(function(cat){
+        var items=BOXES.filter(function(b){ return (b.cat||'Other')===cat; }); if(!items.length) return;
+        var h=document.createElement('div'); h.style.cssText='color:#9fd0ff;font-weight:900;font-size:0.78rem;padding:8px 4px 2px;letter-spacing:0.4px';
+        h.textContent=cat+'  ('+items.length+')'; list.appendChild(h);
+        items.forEach(function(bx){ list.appendChild(makeRow(ICONS[bx.product], bx.name, bx.desc, 'Buy $'+bx.cost, money>=bx.cost, function(){
+          if(money<bx.cost) return; money-=bx.cost; deliverBox(bx); refreshHUD(); buildPhone(); toast(bx.name+' ordered — at the door'); })); });
+      });
+    } else if(phoneTab==='furn'){
+      ['register'].concat(SHELF_KEYS).concat(['playtable']).forEach(function(k){ var f=FURNITURE[k];
+        var owned = (k==='register' && register);
+        list.appendChild(makeRow(furnIcon(k), f.name+(k==='register'?' ★':''), f.desc+' · $'+f.cost, owned?'Placed':'Buy $'+f.cost, !owned&&money>=f.cost, function(){
+          if(owned||money<f.cost) return; money-=f.cost; refreshHUD(); closePhone(); startPlacing(k); toast('Move it with arrows · ↻ rotate · ✓ place'); }, owned)); });
+    } else if(phoneTab==='staff'){
+      var hdr=document.createElement('div'); hdr.className='rev'; hdr.innerHTML='<div class="tx">Staff work while you do other things — but cost <b>$10 each</b> every payday.</div>'; list.appendChild(hdr);
+      var cN=employees.filter(function(e){ return e.role==='cashier'; }).length, rN=employees.filter(function(e){ return e.role==='restocker'; }).length;
+      list.appendChild(makeRow(empIcon('cashier'),'Cashier'+(cN?' ×'+cN:''),'Runs the register automatically · $220','Hire $220', money>=220, function(){ if(hireEmployee('cashier')) buildPhone(); }));
+      list.appendChild(makeRow(empIcon('restocker'),'Restocker'+(rN?' ×'+rN:''),'Carries boxes &amp; fills shelves · $200','Hire $200', money>=200, function(){ if(hireEmployee('restocker')) buildPhone(); }));
+      if(employees.length){ var fo=document.createElement('div'); fo.className='rev'; fo.innerHTML='<div class="st">On the clock: '+employees.length+'</div><div class="tx">'+cN+' cashier(s) · '+rN+' restocker(s)</div>'; list.appendChild(fo); }
+    } else if(phoneTab==='rooms'){
+      var ex=[ {key:'back', name:'Back Room (+depth)', cost:250, on:ROOMS.back, act:function(){ iH+=4; ROOMS.back=true; }},
+               {key:'side', name:'Side Room (+width)', cost:300, on:ROOMS.side, act:function(){ iW+=4; ROOMS.side=true; }} ];
+      var info=document.createElement('div'); info.className='rev'; info.innerHTML='<div class="tx">Your shop is <b>'+iW+'×'+iH+'</b> tiles. Buy rooms for space to add more shelves &amp; tables.</div>'; list.appendChild(info);
+      ex.forEach(function(e){ list.appendChild(makeRow(roomIcon(), e.name, e.on?'Already added':'More floor space · $'+e.cost, e.on?'Owned':'Buy $'+e.cost, !e.on&&money>=e.cost, function(){
+        if(e.on||money<e.cost) return; money-=e.cost; e.act(); rebuildMap(); refreshHUD(); buildPhone(); toast('Store expanded!'); }, e.on)); });
+    } else if(phoneTab==='price'){
+      Object.keys(PRODUCTS).forEach(function(k){ var p=PRODUCTS[k]; if(p.sealed) return;
+        var row=makeRow(ICONS[k], p.name, 'Sell price each:', null, false, null);
+        var ctl=document.createElement('div'); ctl.className='price-ctl';
+        var minus=document.createElement('button'); minus.textContent='–'; var pv=document.createElement('span'); pv.className='pv'; pv.textContent='$'+p.price;
+        var plus=document.createElement('button'); plus.textContent='+';
+        minus.onclick=function(){ p.price=Math.max(1,p.price-1); pv.textContent='$'+p.price; applyPrice(k); };
+        plus.onclick=function(){ p.price=p.price+1; pv.textContent='$'+p.price; applyPrice(k); };
+        ctl.appendChild(minus); ctl.appendChild(pv); ctl.appendChild(plus); row.querySelector('.buyslot').appendChild(ctl); list.appendChild(row); });
+    } else { // reviews
+      var rb=document.createElement('div'); rb.className='ratebar';
+      var ar=avgRating();
+      rb.innerHTML='<div><div class="big">'+(ratingCount?ar.toFixed(1):'—')+' ★</div><div class="lab">'+ratingCount+' reviews</div></div>'+
+        '<div style="flex:1"></div><div style="text-align:right"><div class="lab">Rival store</div><div class="big" style="color:#9fb0cf;font-size:1.1rem">'+rival.toFixed(1)+' ★</div></div>';
+      list.appendChild(rb);
+      if(!reviews.length){ var e=document.createElement('div'); e.className='rev'; e.innerHTML='<div class="tx">No reviews yet — sell some stock to get rated!</div>'; list.appendChild(e); }
+      reviews.slice(0,12).forEach(function(r){ var d=document.createElement('div'); d.className='rev';
+        d.innerHTML='<div class="st">'+'★'.repeat(r.stars)+'<span style="color:#3a4252">'+'★'.repeat(5-r.stars)+'</span></div><div class="tx">'+r.text+'</div>'; list.appendChild(d); });
+    }
+  }
+  function applyPrice(k){ placed.forEach(function(f){ if(f.kind==='shelf') f.slots.forEach(function(sl){ if(sl.product===k) sl.price=PRODUCTS[k].price; }); }); }
+  function makeRow(iconCanvas,name,desc,buyLabel,enabled,onBuy,owned){ var row=document.createElement('div'); row.className='row';
+    var ic=document.createElement('canvas'); ic.width=42; ic.height=42; ic.className='ic'; ic.getContext('2d').drawImage(iconCanvas,1,1,40,40); row.appendChild(ic);
+    var info=document.createElement('div'); info.className='info'; info.innerHTML='<div class="nm">'+name+'</div><div class="ds">'+desc+'</div>'; row.appendChild(info);
+    var slot=document.createElement('div'); slot.className='buyslot';
+    if(buyLabel!=null){ var b=document.createElement('button'); b.className='buy'+(owned?' owned':''); b.textContent=buyLabel; b.disabled=!enabled; b.onclick=onBuy; slot.appendChild(b); }
+    row.appendChild(slot); return row; }
+  function furnIcon(k){ var c=mkCanvas(40,40), g=c.getContext('2d'), f=FURNITURE[k];
+    if(k==='register'){ g.fillStyle='#6a4a8c'; g.fillRect(8,16,24,18); g.fillStyle='#8a6aa8'; g.fillRect(6,12,28,6); g.fillStyle='#222633'; g.fillRect(22,6,8,8); g.fillStyle='#7df0a8'; g.fillRect(23,7,6,3); }
+    else if(k==='playtable'){ g.fillStyle='#2f7e4f'; g.fillRect(6,16,28,8); g.fillStyle='#5a4a3a'; g.fillRect(8,24,4,10); g.fillRect(28,24,4,10); g.fillStyle='#cfd6ea'; g.fillRect(12,18,16,4); }
+    else { g.fillStyle=f.color; g.fillRect(8,6,24,28); g.fillStyle=jitC(f.color,0.7); g.fillRect(8,6,24,5); g.strokeStyle=jitC(f.color,0.5); g.strokeRect(8,6,24,28);
+      g.fillStyle='#caa14a'; g.fillRect(11,14,18,3); g.fillRect(11,22,18,3); } return c; }
+  function roomIcon(){ var c=mkCanvas(40,40), g=c.getContext('2d'); g.strokeStyle='#9fb0cf'; g.lineWidth=3; g.strokeRect(6,6,28,28); g.strokeStyle='#7df0a8'; g.beginPath(); g.moveTo(20,34); g.lineTo(20,20); g.lineTo(34,20); g.stroke(); return c; }
+  function deliverBox(bx){ floorBoxes.push({ product:bx.product, count:bx.count, sealed:!!bx.sealed,
+    opensTo:PRODUCTS[bx.product].opensTo, openCount:PRODUCTS[bx.product].openCount, x:doorPt.x+rnd(-0.7,0.7), y:doorPt.y-0.6+rnd(-0.2,0.2) }); }
+
+  // ====================== input ======================
+  var keys={up:false,down:false,left:false,right:false};
+  var KMAP={ KeyW:'up',ArrowUp:'up', KeyS:'down',ArrowDown:'down', KeyA:'left',ArrowLeft:'left', KeyD:'right',ArrowRight:'right' };
+  window.addEventListener('keydown',function(e){ if(phoneOpen()){ if(e.code==='Escape'||e.code==='KeyP') closePhone(); return; }
+    if(KMAP[e.code]){ keys[KMAP[e.code]]=true; e.preventDefault(); return; }
+    if(e.code==='Space'||e.code==='KeyE'){ doAction(); e.preventDefault(); }
+    else if(e.code==='KeyP'){ openPhone(); }
+    else if(e.code==='KeyQ'||e.code==='KeyO'){ unifiedOpen(); }
+    else if(e.code==='KeyR'){ rotateGhost(); }
+    else if(e.code==='Escape'){ if(placing) cancelPlacing(); } });
+  window.addEventListener('keyup',function(e){ if(KMAP[e.code]) keys[KMAP[e.code]]=false; });
+  if(matchMedia('(pointer:coarse)').matches||'ontouchstart' in window) document.body.classList.add('touch');
+  document.querySelectorAll('.dpad .btn').forEach(function(b){ var k=b.dataset.k;
+    var on=function(e){ e.preventDefault(); keys[k]=true; }, off=function(e){ e.preventDefault(); keys[k]=false; };
+    b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off); b.addEventListener('pointerleave',off); b.addEventListener('pointercancel',off); });
+  document.getElementById('actBtn').addEventListener('click',function(){ doAction(); });
+  document.getElementById('openBtn').addEventListener('click',function(){ unifiedOpen(); });
+  document.getElementById('phoneBtn').addEventListener('click',function(){ if(placing) cancelPlacing(); else openPhone(); });
+  document.getElementById('pbRotate').addEventListener('click',rotateGhost);
+  document.getElementById('pbPlace').addEventListener('click',function(){ placeNow(); });
+  document.getElementById('pbCancel').addEventListener('click',cancelPlacing);
+  var dragId=null,dragX=0;
+  cv.addEventListener('pointerdown',function(e){ if(phoneOpen()||gstate!=='play') return; dragId=e.pointerId; dragX=e.clientX; try{cv.setPointerCapture(e.pointerId);}catch(err){} });
+  cv.addEventListener('pointermove',function(e){ if(e.pointerId!==dragId) return; var dx=e.clientX-dragX; dragX=e.clientX; dir+=dx*0.005; });
+  function endDrag(e){ if(e.pointerId===dragId) dragId=null; }
+  cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
+  document.querySelectorAll('.ph-tab').forEach(function(b){ b.addEventListener('click',function(){ phoneTab=b.dataset.tab; buildPhone(); }); });
+  document.getElementById('phClose').addEventListener('click',closePhone);
+  document.getElementById('phoneOv').addEventListener('click',function(e){ if(e.target===this) closePhone(); });
+
+  // ====================== boot ======================
+  document.getElementById('startBtn').addEventListener('click',function(){ document.getElementById('startOv').hidden=true; gstate='play'; reset(); });
+  resize(); reset(); requestAnimationFrame(frame);
+
+  window.__t={ get money(){ return money; }, set money(v){ money=v; }, get state(){ return gstate; }, set state(v){ gstate=v; },
+    get placed(){ return placed; }, get floorBoxes(){ return floorBoxes; }, get customers(){ return customers; }, get carrying(){ return carrying; },
+    get reviews(){ return reviews; }, get rating(){ return avgRating(); }, get rival(){ return rival; }, get register(){ return register; },
+    get iW(){ return iW; }, get iH(){ return iH; }, PRODUCTS:PRODUCTS, FURNITURE:FURNITURE, BOXES:BOXES,
+    deliverBox:function(key){ var bx=BOXES.filter(function(b){ return b.key===key; })[0]; if(bx) deliverBox(bx); },
+    buyRoom:function(which){ if(which==='back'){ iH+=4; ROOMS.back=true; } else { iW+=4; ROOMS.side=true; } rebuildMap(); },
+    placeAt:placeAt, doAction:doAction, render:render, update:update, spawn:spawnCustomer, openPhone:openPhone, buildPhone:buildPhone,
+    get employees(){ return employees; }, hire:hireEmployee, openPack:openCarriedPack, get placing(){ return placing; },
+    startPlacing:startPlacing, rotateGhost:rotateGhost, placeNow:placeNow, ghostValid:ghostValid, set ghost(p){ ghostX=p.x; ghostY=p.y; },
+    set px(v){ px=v; }, set py(v){ py=v; }, set dir(v){ dir=v; updateCamera(); }, faceTo:function(x,y){ dir=Math.atan2(y-py,x-px); updateCamera(); } };
+})();
+</script>
+</body>
+</html>
