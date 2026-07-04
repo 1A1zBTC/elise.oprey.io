@@ -58,7 +58,7 @@
     // Automatic doors: open (0..1) eases toward 1 when the vet OR a visitor is near.
     var door = { open: 0 };
     // Corridor↔room doorways get the same auto sliding doors as the entry. Each
-    // drawDoorOpening() registers its opening in `doorways` (rebuilt by
+    // D() in collectWalls() registers its opening in `doorways` (rebuilt by
     // renderStatic); the run loop eases a per-doorway value in `doorOpen`.
     var doorways = [];                     // [{ax,ay,bx,by,H}] one per corridor doorway
     var doorOpen = {};                     // edge-key -> 0..1 eased open amount
@@ -70,6 +70,23 @@
     // grid waypoints; `wait` parks them at a spot inside the clinic.
     var frq = 30;                          // seconds between arrivals
     var wait = 50;                         // seconds a client waits before storming off
+    // ---- Difficulty ------------------------------------------------------
+    // One row per mode. Easy == the original game (untouched). Higher modes start
+    // poorer + lower-rated, give clients less patience, and tune the rating engine
+    // harder: `up` is how much a happy client speeds arrivals (rating up), `down` is
+    // how much an unhappy one slows them (rating down). So on Hard each lost client
+    // really stings, forcing the player to build a solid clinic before opening up.
+    // money/frq/wait below are just the *starting* values; rating climbs from play.
+    var DIFFICULTY = {
+      easy:   { label: 'Easy',   money: 1000, frq: 30, wait: 50, up: 1.0, down: 1.5 },
+      medium: { label: 'Medium', money: 600,  frq: 45, wait: 42, up: 0.7, down: 2.5 },
+      hard:   { label: 'Hard',   money: 300,  frq: 60, wait: 34, up: 0.5, down: 4.0 }
+    };
+    var difficulty = 'easy';               // current mode (persisted per save; legacy saves → easy)
+    function diff() { return DIFFICULTY[difficulty] || DIFFICULTY.easy; }
+    var ROOM_DIRTY_USES = 3;               // an operating room (exam/X-ray) grimes up after this many procedures
+    var ROOM_GRIME_TIME = 45;              // a non-operating room (shop/pharmacy) grimes up after ~this many seconds of use
+    var ROOM_CLEAN_TIME = 20;              // seconds to scrub a dirty room clean (at Cleaning skill 1.0)
     var spawnTimer = 0;                    // first visitor arrives immediately, then every `frq` seconds
     var visitors = [];
     var visitorSeq = 0;
@@ -124,11 +141,32 @@
 
     // ---- Economy + build / placement -------------------------------------
     var money = 1000;                      // player's cash
+    var staffSurcharge = 0;                // +$50 to every staff hire per staff member already hired — each new hire costs more than the last
+    // The price to hire/build an item right now: staff carry an escalating surcharge
+    // (see staffSurcharge) on top of their base cost; everything else is just base cost.
+    function itemCost(item) { return item.cost + (item.cat === 'staff' ? staffSurcharge : 0); }
+    // Pay for a staff hire, then bump the surcharge so the NEXT hire (of any kind)
+    // costs $50 more than this one did.
+    function chargeStaffHire(item) { money -= itemCost(item); staffSurcharge += 50; renderMoney(); }
     var placed = [];                       // [{id, gx, gy}] furniture in the room
     var occupied = {};                     // "gx,gy" -> true (a placed footprint tile)
-    var staff = [];                        // [{type:'receptionist', line}] hired staff at desk circles
+    var staff = [];                        // [{type:'receptionist', line, name, gender}] hired staff at desk circles
     var placing = null;                    // { item } while positioning a purchase
     var pointer = { gx: 0, gy: 0, on: false }; // snapped tile under the cursor
+
+    // ---- Staff identity (name + gender) ----------------------------------
+    // Every hired staffer carries a `gender` ('male'/'female', drives the sprite)
+    // and a `name` (empty until the player names them via the overlay; the in-game
+    // label only shows once named). Pharmacists are stored as a `pharm` OBJECT on a
+    // counter station (was a boolean) so they can carry the same fields.
+    var _idSeq = 0;                        // spreads default genders so consecutive hires vary
+    function randGender() {                // dedicated integer mixer (the texture `hash` is biased low for small ints)
+      var h = (++_idSeq * 2654435761) >>> 0;
+      h ^= h >>> 15; h = (h * 2246822519) >>> 0; h ^= h >>> 13; h = (h * 3266489917) >>> 0; h ^= h >>> 16;
+      return ((h >>> 0) / 4294967296) < 0.5 ? 'female' : 'male';
+    }
+    function newStaffId() { return { name: '', gender: randGender() }; }   // {name,gender} for a fresh hire
+    function newPharm() { var s = newStaffId(); return { name: s.name, gender: s.gender }; }
 
     // ---- Rooms / corridors -----------------------------------------------
     // The clinic is the fixed ROOM×ROOM grid. The player can also buy
@@ -138,6 +176,7 @@
     var corridor = {};                     // "gx,gy" -> true (a built corridor tile)
     var corridorDrag = null;               // { sx, sy } while dragging out a line
     var openRoom = {};                     // "gx,gy" corridor tiles that are open rooms (no lane rule)
+    var park = {};                         // "gx,gy" tiles that are open-air Dog Park grass (a subset of corridor+openRoom, rendered as turf + fenced)
 
     function isClinic(x, y) { return x >= 0 && y >= 0 && x < ROOM && y < ROOM; }
     function isCorridor(x, y) { return !!corridor[x + ',' + y]; }
@@ -160,6 +199,14 @@
     function isGrassBuildable(x, y) {
       return !isRoomFloor(x, y) && !onPath(x, y) && !onRoadZone(x, y) && !occupied[x + ',' + y];
     }
+    // A tile a walled room may be carved on: clear grass, the original clinic floor,
+    // OR open (blank) room floor — anything with nothing on it. So rooms can be built
+    // inside the clinic or a blank room, provided they don't clash with any
+    // furniture/fixtures sitting there.
+    function isRoomBuildable(x, y) {
+      if (occupied[x + ',' + y]) return false;
+      return isGrassBuildable(x, y) || !!openRoom[x + ',' + y] || isClinic(x, y);
+    }
     function adjacentToRoom(x, y) {
       return isRoomFloor(x - 1, y) || isRoomFloor(x + 1, y) ||
              isRoomFloor(x, y - 1) || isRoomFloor(x, y + 1);
@@ -167,30 +214,25 @@
     // A "plain corridor" is a corridor tile that is NOT part of any built room
     // (exam/X-ray/pharmacy/blank/restroom) — an actual passage. Operating-room doors
     // open onto an OPEN tile (a plain corridor or a blank room), never onto a walled
-    // room (see isOpenAdj + adjacentToWalledRoom).
+    // room (see isOpenAdj). Rooms MAY sit wall-to-wall against each other; the shared
+    // wall stays solid because doors only ever open onto an OPEN tile.
     // A WALLED room tile (exam/X-ray/pharmacy/restroom) — a room with its own walls
     // and a single doorway, as opposed to an open blank room or a plain corridor.
     function inWalledRoom(x, y) {
       if (examRooms.some(function (rm) { return x >= rm.gx && x < rm.gx + 3 && y >= rm.gy && y < rm.gy + 3; })) return true;
       if (xrayRooms.some(function (rm) { return x >= rm.gx && x < rm.gx + 3 && y >= rm.gy && y < rm.gy + 4; })) return true;
       if (pharmacies.some(function (ph) { return x >= ph.gx && x < ph.gx + PHARM_W && y >= ph.gy && y < ph.gy + PHARM_H; })) return true;
+      if (shops.some(function (sh) { return x >= sh.gx && x < sh.gx + SHOP_W && y >= sh.gy && y < sh.gy + SHOP_H; })) return true;
+      if (groomings.some(function (gm) { return x >= gm.gx && x < gm.gx + GROOM_W && y >= gm.gy && y < gm.gy + GROOM_H; })) return true;
       if (restrooms.some(function (rm) { return footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot).some(function (t) { return t.x === x && t.y === y; }); })) return true;
       return false;
     }
     function inRoomFootprint(x, y) { return !!openRoom[x + ',' + y] || inWalledRoom(x, y); }
-    // True if any of `tiles` is orthogonally adjacent to a walled room. Used to keep
-    // operating rooms apart, so each connects to a corridor / blank room rather than
-    // sharing a wall with another room. (Diagonal touching is fine — no shared wall.)
-    function adjacentToWalledRoom(tiles) {
-      var n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (var i = 0; i < tiles.length; i++)
-        for (var j = 0; j < n.length; j++)
-          if (inWalledRoom(tiles[i].x + n[j][0], tiles[i].y + n[j][1])) return true;
-      return false;
-    }
     function isPlainCorridor(x, y) { return isCorridor(x, y) && !inRoomFootprint(x, y); }
-    // Open rooms (blank rooms + the clinic) join corridors with no wall/door.
-    function isOpenAdj(x, y) { return isPlainCorridor(x, y) || !!openRoom[x + ',' + y]; }
+    // Open rooms (blank rooms + the clinic) join corridors with no wall/door, and a
+    // room's door may open onto any of them. The clinic counts as open wherever it
+    // isn't itself part of a carved-in room footprint.
+    function isOpenAdj(x, y) { return isPlainCorridor(x, y) || !!openRoom[x + ',' + y] || (isClinic(x, y) && !inRoomFootprint(x, y)); }
     // Validate a click-drag into a straight, TWO-wide line of buildable grass.
     // The line follows whichever axis the drag favours; each step lays a 2×1 rung
     // (the tile + its perpendicular neighbour) costing $10. The start tile must
@@ -248,6 +290,206 @@
       renderMoney();
     }
 
+    // ---- Dog Park --------------------------------------------------------
+    // A drag-out rectangle of grass, $20/square, that touches the building. Park
+    // tiles are walkable (tagged in corridor+openRoom so pathing/openness just work)
+    // but render as turf with a fence instead of vinyl + walls. Some visitors come
+    // only for the park; others detour to it on the way out (see parkAppeal).
+    function parkRectTiles(sx, sy, ex, ey) {
+      var x0 = Math.min(sx, ex), x1 = Math.max(sx, ex), y0 = Math.min(sy, ey), y1 = Math.max(sy, ey);
+      var tiles = [], touches = false;
+      for (var y = y0; y <= y1; y++)
+        for (var x = x0; x <= x1; x++) {
+          if (!isGrassBuildable(x, y)) return { tiles: [], cost: 0, ok: false };
+          tiles.push({ x: x, y: y });
+          if (adjacentToRoom(x, y)) touches = true;
+        }
+      var cost = tiles.length * 20;
+      return { tiles: tiles, cost: cost, ok: touches && cost <= money };
+    }
+    function commitPark(sx, sy, ex, ey) {
+      var res = parkRectTiles(sx, sy, ex, ey);
+      if (!res.ok) return;
+      res.tiles.forEach(function (t) { var k = t.x + ',' + t.y; corridor[k] = true; openRoom[k] = true; park[k] = true; });
+      money -= res.cost;
+      renderStatic();
+      renderMoney();
+    }
+    function isPark(x, y) { return !!park[x + ',' + y]; }
+    function parkSize() { return Object.keys(park).length; }
+    // ---- Cat park: any blank room furnished with cat items works like a dog park
+    // for cats. Blank-room floor = openRoom minus park (commitPark tags grass into
+    // openRoom too). The whole dog-park pipeline below takes an optional zone
+    // ('dog' default / 'cat') so both share one state machine.
+    function isCatFloor(x, y) { var k = x + ',' + y; return !!openRoom[k] && !park[k]; }
+    function catFloorSize() { var n = 0; for (var k in openRoom) { if (openRoom.hasOwnProperty(k) && !park[k]) n++; } return n; }
+    function zoneFloor(zone, x, y) { return zone === 'cat' ? isCatFloor(x, y) : isPark(x, y); }
+    // "Niceness": sum of the quality of every placed park item (they only sit on park
+    // tiles, gated in canPlace), so adding toys makes the park more attractive.
+    function parkQuality(zone) {
+      var q = 0, flag = zone === 'cat' ? 'catItem' : 'parkItem';
+      for (var i = 0; i < placed.length; i++) { var d = FURN_BY_ID[placed[i].id]; if (d && d[flag]) q += (d.quality || 0); }
+      return q;
+    }
+    // Park tiles a visitor can stand on (turf with nothing built on it).
+    function parkStandTiles(zone) {
+      var out = [], set = zone === 'cat' ? openRoom : park;
+      for (var k in set) { if (!set.hasOwnProperty(k)) continue; if (zone === 'cat' && park[k]) continue; var p = k.split(','), x = +p[0], y = +p[1]; if (!occupied[x + ',' + y]) out.push({ x: x, y: y }); }
+      return out;
+    }
+    // A free standing spot in the park (not occupied, not targeted by another
+    // park-goer, not under the player), or null. When `from` is given, only return
+    // a spot the visitor can actually WALK to — toys can enclose a tile that is
+    // "free" but unreachable, and routing a visitor there wedges them against a toy.
+    function freeParkSpot(from, zone) {
+      var spots = parkStandTiles(zone);
+      if (!spots.length) return null;
+      var taken = {};
+      visitors.forEach(function (v) { if (v.parkSpot) taken[v.parkSpot.x + ',' + v.parkSpot.y] = true; });
+      var vtx = Math.round(vet.x), vty = Math.round(vet.y);
+      for (var i = 0; i < spots.length; i++) {
+        var s = spots[i];
+        if (taken[s.x + ',' + s.y]) continue;
+        if (s.x === vtx && s.y === vty) continue;
+        if (from) { examRoute(from.x, from.y, s.x, s.y); if (!examRouteReached) continue; }   // skip toy-enclosed / unreachable tiles
+        return { x: s.x, y: s.y };
+      }
+      return null;
+    }
+    function parkGoers(zone) { var n = 0; for (var i = 0; i < visitors.length; i++) { var v = visitors[i], ph = v.phase; if ((ph === 'toDogPark' || ph === 'inDogPark') && (v.parkZone || 'dog') === (zone || 'dog')) n++; } return n; }
+    function parkBusy(zone) { var cap = parkStandTiles(zone).length; return cap ? Math.min(1, parkGoers(zone) / cap) : 1; }
+    // Pull of the park: rises with size + niceness, falls as it fills up. Capped at
+    // 0.5 (the "Medium" tuning). Returns 0 when there is no park (for the cat zone
+    // that also means no cat items — a furniture-only blank room attracts nobody).
+    function parkAppeal(zone) {
+      var size = zone === 'cat' ? catFloorSize() : parkSize();
+      if (!size) return 0;
+      if (zone === 'cat' && !parkQuality('cat')) return 0;
+      var raw = size * 0.012 + parkQuality(zone) * 0.03;
+      return Math.min(0.5, raw) * (1 - parkBusy(zone));
+    }
+    // Send visitor v into the park: claim a spot, route there, start the visit.
+    function startDogPark(v, zone) {
+      var spot = freeParkSpot(v, zone);      // reachable from where the visitor stands
+      if (!spot) return false;
+      v.parkZone = zone || 'dog';
+      v.parkSpot = { x: spot.x, y: spot.y };
+      v.path = examRoute(v.x, v.y, spot.x, spot.y); v.wp = 0;
+      v.phase = 'toDogPark'; v.dogT = 8; v.patience = baseWait();   // longer dwell so the off-leash play is visible
+      return true;
+    }
+
+    // ---- Off-leash park dogs ---------------------------------------------
+    // While the owner stands at their spot, a DOG (not a cat — those ride in a
+    // carrier) is let off the leash and roams the park on its own: it runs to the
+    // toys, sniffs the other dogs, does zoomies, and usually leaves one or more
+    // messes a cleaner has to mop. The dog lives on `v.dog = {x,y,tx,ty,...}` for the park visit only.
+    var PARK_DOG_SPEED = 3.0;              // tiles/sec — a happy run, faster than a person walks
+    // Centre points of every placed park toy (frisbee, ball pit, seesaw, …).
+    function parkToyTargets(zone) {
+      var out = [], flag = zone === 'cat' ? 'catItem' : 'parkItem';
+      placed.forEach(function (it) {
+        var def = FURN_BY_ID[it.id]; if (!def || !def[flag]) return;
+        var ew = ((it.rot || 0) & 1) ? def.h : def.w, eh = ((it.rot || 0) & 1) ? def.w : def.h;
+        out.push({ x: it.gx + (ew - 1) / 2, y: it.gy + (eh - 1) / 2 });
+      });
+      return out;
+    }
+    // A point ~`off` tiles from (tx,ty) that's still on park turf — so the dog ends
+    // up beside a toy / another dog rather than on top of it.
+    function nearPark(tx, ty, off, zone) {
+      for (var a = 0; a < 6; a++) {
+        var ang = Math.random() * Math.PI * 2, nx = tx + Math.cos(ang) * off, ny = ty + Math.sin(ang) * off;
+        if (zoneFloor(zone || 'dog', Math.round(nx), Math.round(ny))) return { x: nx, y: ny };
+      }
+      return { x: tx, y: ty };
+    }
+    // Pick the dog's next destination: 40% a toy, 30% another park dog, else zoomies.
+    function pickParkDogTarget(v) {
+      var d = v.dog, r = Math.random(), tgt = null, list, zone = v.parkZone || 'dog';
+      if (r < 0.4) { list = parkToyTargets(zone); if (list.length) { var t = list[(Math.random() * list.length) | 0]; tgt = nearPark(t.x, t.y, 0.85, zone); } }
+      else if (r < 0.7) {
+        list = visitors.filter(function (o) { return o !== v && o.phase === 'inDogPark' && o.dog && (o.parkZone || 'dog') === zone; });
+        if (list.length) { var o = list[(Math.random() * list.length) | 0].dog; tgt = nearPark(o.x, o.y, 0.7, zone); }
+      }
+      if (!tgt) { var sp = parkStandTiles(zone); if (sp.length) { var s = sp[(Math.random() * sp.length) | 0]; tgt = { x: s.x, y: s.y }; } }
+      if (tgt) { d.tx = tgt.x; d.ty = tgt.y; }
+    }
+    // Spin up the off-leash pet when its owner reaches the park. Dogs roam the turf;
+    // in a cat park the CAT comes out of the carrier and roams the blank room. Most
+    // will need the toilet partway through the visit (and may go again — see updateParkDog).
+    function startParkDog(v) {
+      var zone = v.parkZone || 'dog';
+      if (zone === 'dog' && v.pet.charAt(0) !== 'd') return;   // cats stay in their carrier at the DOG park
+      if (zone === 'cat' && v.pet !== 'cat') return;
+      v.dog = { x: v.x, y: v.y, tx: v.x, ty: v.y, face: 1, gait: 0, wag: 0, pause: 0.3, squat: 0, moving: false };
+      if (Math.random() < 0.8) v.dog.pooT = 1.2 + Math.random() * Math.max(0.6, v.dogT - 2.5);
+      pickParkDogTarget(v);
+    }
+    // Drop a poo on a clean, walkable park tile at/near the dog (so a cleaner can
+    // reach it). Reuses the puddle system; messGoal('poo') makes it a 10s job.
+    function dropPoo(d, zone) {
+      var cands = [{ x: Math.round(d.x), y: Math.round(d.y) }];
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (n) { cands.push({ x: Math.round(d.x) + n[0], y: Math.round(d.y) + n[1] }); });
+      for (var i = 0; i < cands.length; i++) {
+        var c = cands[i];
+        if (zoneFloor(zone || 'dog', c.x, c.y) && !occupied[c.x + ',' + c.y] && !messAt(c.x, c.y)) { puddles.push({ x: c.x, y: c.y, clean: 0, kind: 'poo' }); return; }
+      }
+    }
+    // Nearest free blank-room tile beside a placed litter box: where the cat squats
+    // and where the scoop-me mess lands (ON a walkable tile so cleaners can reach it).
+    function nearestLitterBox(d) {
+      var best = null, bd = 1e9;
+      placed.forEach(function (it) {
+        if (it.id !== 'litterbox') return;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (n) {
+          var x = it.gx + n[0], y = it.gy + n[1];
+          if (!isCatFloor(x, y) || occupied[x + ',' + y]) return;
+          var dist = Math.abs(x - d.x) + Math.abs(y - d.y);
+          if (dist < bd) { bd = dist; best = { x: x, y: y, box: it }; }
+        });
+      });
+      return best;
+    }
+    // Every 2nd use the box is full and a cleaner has to scoop it. `uses` is
+    // transient (not saved) — resetting on load is fine, like dirty puddles.
+    function useLitterBox(t) {
+      t.box.uses = (t.box.uses || 0) + 1;
+      if (t.box.uses >= 2 && !messAt(t.x, t.y)) { t.box.uses = 0; puddles.push({ x: t.x, y: t.y, clean: 0, kind: 'litterbox' }); }
+    }
+    // Advance one off-leash dog: poop timer, then run toward its target, pausing to
+    // sniff/play on arrival and repicking. At the end of the visit it's recalled to
+    // the owner so they leave together.
+    function updateParkDog(v, dt) {
+      var d = v.dog; if (!d) return;
+      var zone = v.parkZone || 'dog';
+      if (d.pooT != null) { d.pooT -= dt; if (d.pooT <= 0) {
+        var box = (zone === 'cat') ? nearestLitterBox(d) : null;
+        if (box) { d.toBox = box; d.tx = box.x; d.ty = box.y; d.pause = 0; d.pooT = null; }   // hold it: run to the litter box
+        else { dropPoo(d, zone); d.squat = 1.3;
+          d.pooT = (Math.random() < 0.5) ? 1.5 + Math.random() * 3 : null; } } }   // may squat again for a second/third mess
+      if (d.squat > 0) { d.squat -= dt; d.moving = false; d.gait = 0; return; }   // squatting to poo
+      d.wag += dt;
+      if (d.toBox && Math.hypot(d.x - d.toBox.x, d.y - d.toBox.y) < 0.2) {
+        useLitterBox(d.toBox); d.toBox = null; d.squat = 1.3;
+        d.pooT = (Math.random() < 0.5) ? 1.5 + Math.random() * 3 : null;   // may need to go again
+        return;
+      }
+      if (d.recall) { d.tx = v.x; d.ty = v.y; }
+      else if (!d.toBox && d.pause > 0) { d.pause -= dt; d.moving = false; d.gait = 0; if (d.pause <= 0) pickParkDogTarget(v); return; }
+      var dx = d.tx - d.x, dy = d.ty - d.y, dist = Math.hypot(dx, dy);
+      if (dist < 0.14) {
+        d.moving = false; d.gait = 0;
+        if (!d.recall && !d.toBox) d.pause = 0.5 + Math.random() * 1.7;   // arrived → sniff / play a beat
+        return;
+      }
+      var step = Math.min(PARK_DOG_SPEED * dt, dist), nx = d.x + dx / dist * step, ny = d.y + dy / dist * step;
+      if (zoneFloor(zone, Math.round(nx), Math.round(ny))) { d.x = nx; d.y = ny; }
+      else if (d.toBox) { d.toBox = null; dropPoo(d, zone); d.squat = 1.3; }   // box unreachable → accident on the spot
+      else { pickParkDogTarget(v); }
+      d.moving = true; d.gait += dt * 16; d.face = dx >= 0 ? 1 : -1;
+    }
+
     // ---- Restrooms -------------------------------------------------------
     // A 2×3 outdoor building placed on grass that touches a corridor. One visitor
     // uses it at a time; they reach it via the `door` tile (the adjacent corridor).
@@ -261,7 +503,12 @@
     // The corridor tile a placed restroom opens onto (or null if it touches none).
     function restroomDoor(gx, gy, rot) { return roomDoorFor(footprintTiles(FURN_BY_ID.restroom, gx, gy, rot)); }
     function canPlaceRestroom(gx, gy, rot) { return canPlaceRoom('restroom', gx, gy, rot); }
-    function freeRestroom() { return freeRoom('restroom'); }
+    // A dirty restroom can't be used at all (unlike exam/X-ray, which stay usable
+    // while grimy), so skip both occupied and dirty ones.
+    function freeRestroom() {
+      for (var i = 0; i < restrooms.length; i++) if (!restrooms[i].occupant && !restrooms[i].dirty) return restrooms[i];
+      return null;
+    }
     // Interior layout of a restroom: the doorway tile it opens onto, the room tile
     // just inside it (entry), the toilet (deepest tile from the entry) and the
     // stand tile in front of the toilet the user faces while using it.
@@ -331,26 +578,29 @@
     function freeXrayRoom() { return freeRoom('xray'); }
 
     // ---- Pharmacy --------------------------------------------------------
-    // A 4-wide × 3-deep room with 2 counter sections; at each, a patient stands on
+    // A 4-wide × 4-deep room with 2 counter sections; at each, a patient stands on
     // the front tile and the player (or a hired Pharmacist) stands on the circle
     // behind to fill the prescription. Fixed orientation (like the X-ray room).
-    // Built on grass touching a corridor, like other rooms.
-    var PHARM_W = 4, PHARM_H = 3;          // across × down
+    // The back row stays clear so the medicine shelving on the two tall back walls
+    // reads as the stock the pharmacist picks from. Built on grass touching a
+    // corridor, like other rooms.
+    var PHARM_W = 4, PHARM_H = 4;          // across × down
     var pharmacies = [];                   // [{gx,gy,rot,door,stations:[{patient,procT,pharm}x2]}]
-    function pharmTiles(gx, gy) {          // all 12 floor tiles (4 wide × 3 deep)
+    function pharmTiles(gx, gy) {          // all 16 floor tiles (4 wide × 4 deep)
       var t = [];
       for (var j = 0; j < PHARM_H; j++) for (var i = 0; i < PHARM_W; i++) t.push({ x: gx + i, y: gy + j });
       return t;
     }
     // 2 sections, each {counter, patient(front), circle(back)}, centred in the
-    // 4-wide room (columns 1 & 2). Columns 0 & 3 stay open as walking lanes so
-    // clients and the player don't jam.
+    // 4-wide room (columns 1 & 2). Columns 0 & 3 stay open as walking lanes. The
+    // staff stand on the back row right in front of the wall shelving (picking
+    // stock off it), leaving two open rows ahead of the counter for clients.
     function pharmStations(gx, gy) {
       return [1, 2].map(function (cx) {
         return {
           counter: { x: gx + cx, y: gy + 1 },
           patient: { x: gx + cx, y: gy + 2 },   // front tile (toward viewer)
-          circle:  { x: gx + cx, y: gy + 0 }    // staff tile (back)
+          circle:  { x: gx + cx, y: gy + 0 }    // staff tile (back, against the shelves)
         };
       });
     }
@@ -363,6 +613,87 @@
           if (!pharmacies[i].stations[j].patient) return { ph: pharmacies[i], idx: j };
       return null;
     }
+
+    // ---- Shop ------------------------------------------------------------
+    // A 5×5 retail room with no staff or service queue. Instead, a low fraction
+    // of clients on their way OUT detour through it and spend a little. Goods sit
+    // on the two back walls; a display island runs across the middle row.
+    var SHOP_W = 5, SHOP_H = 5;
+    var shops = [];                        // [{gx,gy,rot,door}]
+    var SHOP_CHANCE = 0.12;                // chance a departing client browses the shop
+    function shopTiles(gx, gy) {           // all 25 floor tiles
+      var t = [];
+      for (var j = 0; j < SHOP_H; j++) for (var i = 0; i < SHOP_W; i++) t.push({ x: gx + i, y: gy + j });
+      return t;
+    }
+    // The central display island: 3 solid tiles across the middle row, leaving
+    // aisles front and back and a clear lane down each side. The middle tile is the
+    // checkout counter (register); the cashier stands on the tile directly behind it.
+    function shopIslandTiles(gx, gy) {
+      return [{ x: gx + 1, y: gy + 2 }, { x: gx + 2, y: gy + 2 }, { x: gx + 3, y: gy + 2 }];
+    }
+    // The cashier's standing tile: centre of the back aisle, right behind the register
+    // counter. A fixture, so browsers never claim it and nobody walks through it.
+    function shopCashierTile(gx, gy) { return { x: gx + 2, y: gy + 1 }; }
+    // Where a browsing client stands: the aisle tiles in front of and behind the
+    // island (never a fixture, never an edge, so the doorway always stays reachable),
+    // minus the cashier's spot in the back aisle.
+    function shopBrowseSpots(s) {
+      var cash = shopCashierTile(s.gx, s.gy), r = [];
+      for (var x = s.gx + 1; x <= s.gx + 3; x++) {
+        if (x !== cash.x) r.push({ x: x, y: s.gy + 1 });   // back aisle (skip cashier tile)
+        r.push({ x: x, y: s.gy + 3 });                     // front aisle
+      }
+      return r;
+    }
+    function canPlaceShop(gx, gy) { return canPlaceRoom('shop', gx, gy); }
+    function placeShop(gx, gy, rot) { return placeRoom('shop', gx, gy, rot); }
+    // Random spend $20–$200, skewed low — pow(r,2.4) bunches most spends near $20,
+    // with the odd big splurge toward $200. Rounded to the nearest $5.
+    function shopSpend() { return Math.round((20 + Math.pow(Math.random(), 2.4) * 180) / 5) * 5; }
+    // A free aisle spot in some shop for a departing client, or null. Skips spots
+    // another client is already heading to / standing on, and any blocked tile.
+    function claimShopSpot() {
+      if (!shops.length) return null;
+      var taken = {};
+      visitors.forEach(function (v) { if (v.shopTile) taken[v.shopTile.x + ',' + v.shopTile.y] = true; });
+      for (var s = 0; s < shops.length; s++) {
+        var sp = shopBrowseSpots(shops[s]);
+        for (var i = 0; i < sp.length; i++)
+          if (!taken[sp[i].x + ',' + sp[i].y] && !tileBlocked(sp[i].x, sp[i].y))
+            return { shop: shops[s], x: sp[i].x, y: sp[i].y };
+      }
+      return null;
+    }
+
+    // ---- Grooming --------------------------------------------------------
+    // A 3-wide × 6-deep parlour with two stations stacked down the centre column:
+    // a Shower (back) then a Blow-Dry (front). A dog showers first, walks to the
+    // dry station, is blow-dried, then leaves — a successful groom pays $80. Each
+    // station is operated by the player standing on its circle (full rate) or a
+    // hired Worker (half rate); with no operator the dog's wait drains and it
+    // leaves unpaid. Fixed orientation, like the pharmacy/shop. Side columns are
+    // open walking lanes so the dog can route around the solid fixtures.
+    var GROOM_W = 3, GROOM_H = 6;
+    var groomings = [];                    // [{gx,gy,rot,door,occupant,showerT,dryT}]
+    function groomTiles(gx, gy) {          // all 18 floor tiles (3 wide × 6 deep)
+      var t = [];
+      for (var j = 0; j < GROOM_H; j++) for (var i = 0; i < GROOM_W; i++) t.push({ x: gx + i, y: gy + j });
+      return t;
+    }
+    // Two stations, each {fixture(solid, back), dogSpot(walkable), circle(operator,
+    // front)}. The dog always stands in FRONT of its fixture (higher depth) so the
+    // shower head / dryer never occludes it; the operator stands in front of the dog.
+    function groomStations(gx, gy) {
+      return [
+        { kind: 'shower', fixture: { x: gx + 1, y: gy + 0 }, dogSpot: { x: gx + 1, y: gy + 1 }, circle: { x: gx + 1, y: gy + 2 } },
+        { kind: 'dry',    fixture: { x: gx + 1, y: gy + 3 }, dogSpot: { x: gx + 1, y: gy + 4 }, circle: { x: gx + 1, y: gy + 5 } }
+      ];
+    }
+    function groomDoor(gx, gy) { return roomDoorFor(groomTiles(gx, gy)); }
+    function canPlaceGrooming(gx, gy) { return canPlaceRoom('grooming', gx, gy); }
+    function placeGrooming(gx, gy, rot) { return placeRoom('grooming', gx, gy, rot); }
+    function freeGroomRoom() { return freeRoom('grooming'); }
 
     // ---- Room registry ---------------------------------------------------
     // One descriptor per walled-room type drives the (previously duplicated)
@@ -377,7 +708,7 @@
         tiles: function (gx, gy, rot) { return footprintTiles(FURN_BY_ID.restroom, gx, gy, rot); },
         make: function (gx, gy, rot, door) {
           var L = restroomLayout(gx, gy, rot);
-          return { room: { gx: gx, gy: gy, rot: rot, door: L.door, entry: L.entry, toilet: L.toilet, stand: L.stand, face: L.face, occupant: null }, solid: [L.toilet] };
+          return { room: { gx: gx, gy: gy, rot: rot, door: L.door, entry: L.entry, toilet: L.toilet, stand: L.stand, face: L.face, occupant: null, dirty: false, cleanProg: 0 }, solid: [L.toilet] };
         }
       },
       exam: {
@@ -385,12 +716,12 @@
         tiles: function (gx, gy) { return examTiles(gx, gy); },
         make: function (gx, gy, rot, door) {
           var k = examKeyTiles(gx, gy, rot);
-          return { room: { gx: gx, gy: gy, rot: rot, occupant: null, examT: 0, door: door }, solid: [k.table] };
+          return { room: { gx: gx, gy: gy, rot: rot, occupant: null, examT: 0, door: door, uses: 0, dirty: false, cleanProg: 0 }, solid: [k.table] };
         },
         // occupant-claim service flow (see claimRoomGeneric/assignRoomGeneric):
         timer: 'examT', vRoom: 'examRoom', toPhase: 'toExam',
         waiting: function (v) {
-          return v.served && !v.examined && !v.examRoom &&
+          return v.served && !v.examined && !v.examRoom && !v.wantsGroom &&
             (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
         },
         // in-room service (see toRoomGeneric/inRoomGeneric): operated by the
@@ -406,12 +737,15 @@
         tiles: function (gx, gy) { return xrayTiles(gx, gy); },
         make: function (gx, gy, rot, door) {
           var k = examKeyTiles(gx, gy, rot);
-          return { room: { gx: gx, gy: gy, rot: rot, occupant: null, xrayT: 0, door: door, vet: false }, solid: [k.table, k.desk] };
+          return { room: { gx: gx, gy: gy, rot: rot, occupant: null, xrayT: 0, door: door, vet: false, uses: 0, dirty: false, cleanProg: 0 }, solid: [k.table, k.desk] };
         },
         timer: 'xrayT', vRoom: 'xrayRoom', toPhase: 'toXray',
         waiting: function (v) {
           return v.needsXray && !v.xrayed && !v.xrayRoom &&
-            (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
+            // include 'waitXray': a pet that found no free room right after its exam
+            // loiters in that phase and must still be pulled in when one frees up
+            // (mirrors how assignPharmacies handles 'waitMeds').
+            (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated' || v.phase === 'waitXray');
         },
         // X-ray takes 2x an exam (6x procTime) and pays 200; happy-leaves on done.
         inPhase: 'inXray', waitField: 'xrayWait', duration: 6, payout: 200,
@@ -425,45 +759,185 @@
         tiles: function (gx, gy) { return pharmTiles(gx, gy); },
         make: function (gx, gy, rot, door) {
           var st = pharmStations(gx, gy, rot);
-          return { room: { gx: gx, gy: gy, rot: rot, door: door, stations: [{ patient: null, procT: 0, pharm: false }, { patient: null, procT: 0, pharm: false }] }, solid: st.map(function (s) { return s.counter; }) };
+          return { room: { gx: gx, gy: gy, rot: rot, door: door, stations: [{ patient: null, procT: 0, pharm: false }, { patient: null, procT: 0, pharm: false }], dirty: false, cleanProg: 0, grimeT: null }, solid: st.map(function (s) { return s.counter; }) };
+        }
+      },
+      shop: {
+        list: shops,
+        tiles: function (gx, gy) { return shopTiles(gx, gy); },
+        make: function (gx, gy, rot, door) {
+          return { room: { gx: gx, gy: gy, rot: rot, door: door, cashierGender: randGender(), dirty: false, cleanProg: 0, grimeT: null },
+                   solid: shopIslandTiles(gx, gy).concat([shopCashierTile(gx, gy)]) };
+        }
+      },
+      grooming: {
+        list: groomings,
+        tiles: function (gx, gy) { return groomTiles(gx, gy); },
+        make: function (gx, gy, rot, door) {
+          var st = groomStations(gx, gy);
+          return { room: { gx: gx, gy: gy, rot: rot, door: door, occupant: null, showerT: 0, dryT: 0, dirty: false, cleanProg: 0, grimeT: null },
+                   solid: [st[0].fixture, st[1].fixture] };
         }
       }
     };
-    // The corridor tile a room's footprint opens onto, or null.
-    function roomDoorFor(tiles) {
+    // The corridor/clinic/blank tile a room's footprint opens onto, or null. The
+    // INNER footprint tile at the doorway must be walkable (not a fixture): otherwise
+    // the door can open straight onto e.g. the X-ray desk and the room is unenterable
+    // (pathing fails, the patient jams at the wall). `solid` lists the room's fixture
+    // tiles to skip as door positions.
+    function roomDoorFor(tiles, solid) {
+      var blocked = {};
+      if (solid) solid.forEach(function (t) { blocked[t.x + ',' + t.y] = true; });
       var n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (var i = 0; i < tiles.length; i++)
+      for (var i = 0; i < tiles.length; i++) {
+        if (blocked[tiles[i].x + ',' + tiles[i].y]) continue;   // inner tile is a fixture — can't enter here
         for (var j = 0; j < 4; j++) {
           var dx = tiles[i].x + n[j][0], dy = tiles[i].y + n[j][1];
           if (isOpenAdj(dx, dy)) return { x: dx, y: dy };
         }
+      }
       return null;
     }
+    // A room's fixture (solid) tiles, from its descriptor — these depend only on
+    // (gx,gy,rot), so they're known before a door is chosen. make() has no side effects.
+    function roomSolids(type, gx, gy, rot) { return ROOM_TYPES[type].make(gx, gy, rot, null).solid; }
     function canPlaceRoom(type, gx, gy, rot) {
-      var ts = ROOM_TYPES[type].tiles(gx, gy, rot || 0);
-      for (var i = 0; i < ts.length; i++) if (!isGrassBuildable(ts[i].x, ts[i].y)) return false;
-      if (adjacentToWalledRoom(ts)) return false;          // keep rooms apart, not wall-to-wall
-      return !!roomDoorFor(ts);                            // must open onto a corridor or blank room
+      rot = rot || 0;
+      var ts = ROOM_TYPES[type].tiles(gx, gy, rot);
+      // Every tile must be clear grass or unoccupied blank-room floor (rooms may sit
+      // wall-to-wall, or be carved inside a blank room as long as nothing clashes)...
+      for (var i = 0; i < ts.length; i++) if (!isRoomBuildable(ts[i].x, ts[i].y)) return false;
+      return !!roomDoorFor(ts, roomSolids(type, gx, gy, rot));   // ...and must open (walkably) onto a corridor/blank
     }
     function placeRoom(type, gx, gy, rot) {
       rot = rot || 0;
-      var d = ROOM_TYPES[type], ts = d.tiles(gx, gy, rot), door = roomDoorFor(ts);
+      var d = ROOM_TYPES[type], ts = d.tiles(gx, gy, rot), door = roomDoorFor(ts, roomSolids(type, gx, gy, rot));
       var m = d.make(gx, gy, rot, door);
-      ts.forEach(function (t) { corridor[t.x + ',' + t.y] = true; });   // walkable room floor
+      ts.forEach(function (t) { corridor[t.x + ',' + t.y] = true; delete openRoom[t.x + ',' + t.y]; });   // walkable room floor; no longer open (it's walled now)
       m.solid.forEach(function (t) { occupied[t.x + ',' + t.y] = true; }); // fixtures block movement
       d.list.push(m.room);
       renderStatic();                                       // floor + walls around the new room
       return m.room;
     }
+    // A dirty room is still usable (with penalties); a room mid-clean is NOT — it
+    // refuses new patients until the 20s scrub finishes (or is abandoned).
+    function beingCleaned(rm) { return (rm.cleanProg || 0) > 0; }
     function freeRoom(type) {                                // occupant-based rooms (not pharmacy)
       var L = ROOM_TYPES[type].list;
-      for (var i = 0; i < L.length; i++) if (!L[i].occupant) return L[i];
+      for (var i = 0; i < L.length; i++) if (!L[i].occupant && !beingCleaned(L[i])) return L[i];
       return null;
     }
 
     // Catalog: the single source for the shop rows AND placement. `cat` picks the
     // shop tab; `kind:'staff'` items snap to a desk action-circle instead of a tile.
     // (drawChair/drawDesk are function declarations, hoisted, so usable here.)
+    // ---- Dog-park toys (playful / agility set) ---------------------------
+    function drawFrisbee(c, gx, gy) {
+      furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
+      isoBox(c, gx - 0.07, gy - 0.07, gx + 0.07, gy + 0.07, 15, '#d8c089', '#b89a5e', '#a2854c'); // little stand
+      var s = iso(gx, gy);
+      c.fillStyle = '#e8514a'; c.beginPath(); c.ellipse(s.x, s.y - 17, 9, 4.4, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#f4a7a1'; c.beginPath(); c.ellipse(s.x, s.y - 18, 5, 2.4, 0, 0, Math.PI * 2); c.fill();
+    }
+    function drawBallPit(c, gx, gy) {
+      furnShadow(c, gx - 0.42, gy - 0.42, gx + 0.42, gy + 0.42);
+      var s = iso(gx, gy);
+      c.fillStyle = '#2f7fae'; c.beginPath(); c.ellipse(s.x, s.y + 2, 18, 9.5, 0, 0, Math.PI * 2); c.fill();  // tub wall
+      c.fillStyle = '#3b9ad1'; c.beginPath(); c.ellipse(s.x, s.y - 1, 17, 9, 0, 0, Math.PI * 2); c.fill();    // rim
+      c.fillStyle = '#aee0f5'; c.beginPath(); c.ellipse(s.x, s.y - 2, 13, 6.5, 0, 0, Math.PI * 2); c.fill();  // interior
+      var cols = ['#e8514a', '#f4c542', '#4cc46a', '#5aa0e8', '#e87fc0'];
+      for (var b = 0; b < 10; b++) {
+        var h = hash(gx * 9 + b, gy * 5 - b);
+        var bx = s.x + (h - 0.5) * 22, by = s.y - 3 + (hash(gx + b, gy - b) - 0.5) * 9;
+        c.fillStyle = cols[(h * cols.length) | 0]; c.beginPath(); c.arc(bx, by, 2.6, 0, Math.PI * 2); c.fill();
+      }
+    }
+    function drawSeesaw(c, gx, gy, rot) {
+      rot = rot || 0;
+      var ew = (rot & 1) ? 1 : 2, eh = (rot & 1) ? 2 : 1;
+      furnShadow(c, gx - 0.4, gy - 0.4, gx + (ew - 1) + 0.4, gy + (eh - 1) + 0.4);
+      var cx = gx + (ew - 1) / 2, cy = gy + (eh - 1) / 2;
+      isoBox(c, cx - 0.14, cy - 0.14, cx + 0.14, cy + 0.14, 10, '#c23b54', '#9a2f44', '#86283a'); // fulcrum
+      var e0 = iso(gx, gy), e1 = iso(gx + (ew - 1), gy + (eh - 1));   // the two ends along the long axis
+      c.strokeStyle = '#f4c542'; c.lineWidth = 5; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(e0.x, e0.y - 17); c.lineTo(e1.x, e1.y - 5); c.stroke();
+      c.lineCap = 'butt';
+      c.fillStyle = '#e8514a';
+      c.beginPath(); c.arc(e0.x, e0.y - 19, 2.4, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(e1.x, e1.y - 7, 2.4, 0, Math.PI * 2); c.fill();
+    }
+    function drawTunnel(c, gx, gy, rot) {
+      rot = rot || 0;
+      var ew = (rot & 1) ? 1 : 2, eh = (rot & 1) ? 2 : 1;
+      furnShadow(c, gx - 0.4, gy - 0.4, gx + (ew - 1) + 0.4, gy + (eh - 1) + 0.4);
+      var a = iso(gx, gy), b = iso(gx + (ew - 1), gy + (eh - 1));    // the two open ends
+      c.strokeStyle = '#4f93da'; c.lineWidth = 20; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(a.x, a.y - 11); c.lineTo(b.x, b.y - 11); c.stroke();   // tube body
+      c.strokeStyle = '#6aa8ea'; c.lineWidth = 12;
+      c.beginPath(); c.moveTo(a.x, a.y - 13); c.lineTo(b.x, b.y - 13); c.stroke();   // highlight ridge
+      c.lineCap = 'butt';
+      c.fillStyle = '#1f3b57'; c.beginPath(); c.ellipse(a.x, a.y - 11, 5, 9, 0, 0, Math.PI * 2); c.fill(); // dark mouth
+    }
+    function drawPool(c, gx, gy) {
+      furnShadow(c, gx - 0.45, gy - 0.45, gx + 1.45, gy + 1.45);
+      var s = iso(gx + 0.5, gy + 0.5);
+      c.fillStyle = '#2f7fae'; c.beginPath(); c.ellipse(s.x, s.y + 3, 30, 16, 0, 0, Math.PI * 2); c.fill();   // outer wall
+      c.fillStyle = '#7fd0ec'; c.beginPath(); c.ellipse(s.x, s.y, 28, 14.5, 0, 0, Math.PI * 2); c.fill();      // rim
+      c.fillStyle = '#bfeaf8'; c.beginPath(); c.ellipse(s.x, s.y, 23, 11.5, 0, 0, Math.PI * 2); c.fill();       // water
+      c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 1.4;
+      c.beginPath(); c.ellipse(s.x - 5, s.y - 1, 7, 3.2, 0, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.ellipse(s.x + 7, s.y + 2, 5, 2.4, 0, 0, Math.PI * 2); c.stroke();
+    }
+    // ---- Cat-park items (blank rooms become a cat playground) --------------
+    function drawLitterBox(c, gx, gy) {
+      furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
+      isoBox(c, gx - 0.36, gy - 0.36, gx + 0.36, gy + 0.36, 8, '#7d5bbe', '#64489c', '#553d85'); // plastic tray
+      var s = iso(gx, gy);
+      c.fillStyle = '#e6d7ae'; c.beginPath(); c.ellipse(s.x, s.y - 8, 12, 6, 0, 0, Math.PI * 2); c.fill(); // sand
+      for (var i = 0; i < 5; i++) {                                            // scattered grains
+        var h = hash(gx * 7 + i, gy * 3 - i);
+        c.fillStyle = h < 0.5 ? '#d4c295' : '#c9b684';
+        c.beginPath(); c.arc(s.x + (h - 0.5) * 16, s.y - 8 + (hash(gx + i, gy - i) - 0.5) * 6, 1.2, 0, Math.PI * 2); c.fill();
+      }
+    }
+    function drawCardboardBox(c, gx, gy) {
+      furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
+      isoBox(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34, 13, '#caa368', '#a8834f', '#93713f'); // carton
+      var s = iso(gx, gy);
+      c.fillStyle = '#3a2c1c'; c.beginPath(); c.ellipse(s.x, s.y - 13, 9, 4.4, 0, 0, Math.PI * 2); c.fill(); // open top
+      c.strokeStyle = '#e0bd85'; c.lineWidth = 2;                              // open flaps
+      c.beginPath(); c.moveTo(s.x - 10, s.y - 14); c.lineTo(s.x - 14, s.y - 20); c.stroke();
+      c.beginPath(); c.moveTo(s.x + 10, s.y - 14); c.lineTo(s.x + 14, s.y - 20); c.stroke();
+    }
+    function drawScratchPost(c, gx, gy) {
+      furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
+      isoBox(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3, 6, '#8a8f98', '#6d727b', '#5e636b');   // base
+      isoBox(c, gx - 0.1, gy - 0.1, gx + 0.1, gy + 0.1, 34, '#d8c089', '#b89a5e', '#a2854c');  // sisal post
+      var s = iso(gx, gy);
+      c.strokeStyle = '#93783f'; c.lineWidth = 1;                              // rope wraps
+      for (var i = 0; i < 5; i++) { c.beginPath(); c.moveTo(s.x - 4, s.y - 10 - i * 5); c.lineTo(s.x + 4, s.y - 12 - i * 5); c.stroke(); }
+    }
+    function drawCatnip(c, gx, gy) {
+      furnShadow(c, gx - 0.28, gy - 0.28, gx + 0.28, gy + 0.28);
+      isoBox(c, gx - 0.26, gy - 0.26, gx + 0.26, gy + 0.26, 10, '#c96f4a', '#a55538', '#8f4930'); // terracotta pot
+      var s = iso(gx, gy);
+      c.fillStyle = '#4cc46a';                                                 // leafy clump
+      c.beginPath(); c.ellipse(s.x, s.y - 15, 9, 5.5, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#6fdc8b';
+      c.beginPath(); c.ellipse(s.x - 3, s.y - 18, 5, 3.2, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(s.x + 4, s.y - 17, 4, 2.6, 0, 0, Math.PI * 2); c.fill();
+    }
+    function drawCatTree(c, gx, gy) {
+      furnShadow(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34);
+      isoBox(c, gx - 0.32, gy - 0.32, gx + 0.32, gy + 0.32, 6, '#b9a08a', '#997f69', '#856d59'); // base
+      isoBox(c, gx - 0.09, gy - 0.09, gx + 0.09, gy + 0.09, 44, '#d8c089', '#b89a5e', '#a2854c'); // trunk
+      var s = iso(gx, gy);
+      c.fillStyle = '#7d5bbe'; c.beginPath(); c.ellipse(s.x - 6, s.y - 26, 8, 4, 0, 0, Math.PI * 2); c.fill(); // low perch
+      c.fillStyle = '#9678d0'; c.beginPath(); c.ellipse(s.x + 2, s.y - 44, 10, 5, 0, 0, Math.PI * 2); c.fill(); // top perch
+      c.strokeStyle = '#d94f6e'; c.lineWidth = 1.2;                            // dangling toy
+      c.beginPath(); c.moveTo(s.x + 8, s.y - 43); c.lineTo(s.x + 8, s.y - 34); c.stroke();
+      c.fillStyle = '#e8514a'; c.beginPath(); c.arc(s.x + 8, s.y - 32, 2.4, 0, Math.PI * 2); c.fill();
+    }
     var FURNITURE = [
       { id: 'chair', name: 'Chair',          cost: 20,  w: 1, h: 1, icon: '🪑', cat: 'reception', corridorOK: true, draw: drawChair, interact: chairInteractTiles },
       { id: 'bench', name: 'Bench',          cost: 35,  w: 2, h: 1, icon: '<svg width="34" height="34" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><rect x="10.5" y="11" width="3.5" height="15" rx="1" fill="#8c6638"/><rect x="34" y="11" width="3.5" height="15" rx="1" fill="#8c6638"/><rect x="9" y="11.5" width="30" height="4" rx="2" fill="#c79a63"/><rect x="9" y="18" width="30" height="4" rx="2" fill="#c79a63"/><rect x="6.5" y="24.5" width="35" height="6" rx="2.5" fill="#cda06a"/><rect x="10" y="30" width="4" height="11" rx="1.5" fill="#8c6638"/><rect x="34" y="30" width="4" height="11" rx="1.5" fill="#8c6638"/></svg>', cat: 'reception', corridorOK: true, draw: drawBench, interact: benchInteractTiles },
@@ -476,9 +950,23 @@
       { id: 'restroom', name: 'Restroom', cost: 120, w: 2, h: 3, icon: '🚻', cat: 'rooms', kind: 'restroom', draw: drawRestroom },
       { id: 'exam', name: 'Exam Room', cost: 300, w: 3, h: 3, icon: '🩺', cat: 'rooms', kind: 'exam' },
       { id: 'xray', name: 'X-Ray Room', cost: 600, w: 3, h: 4, icon: '🩻', cat: 'rooms', kind: 'xray' },
-      { id: 'pharmacy', name: 'Pharmacy', cost: 400, w: 4, h: 3, icon: '💊', cat: 'rooms', kind: 'pharmacy' },
+      { id: 'pharmacy', name: 'Pharmacy', cost: 400, w: 4, h: 4, icon: '💊', cat: 'rooms', kind: 'pharmacy' },
+      { id: 'shop', name: 'Shop', cost: 500, w: 5, h: 5, icon: '🛒', cat: 'rooms', kind: 'shop' },
+      { id: 'grooming', name: 'Grooming', cost: 450, w: 3, h: 6, icon: '🛁', cat: 'rooms', kind: 'grooming' },
       { id: 'pharmacist', name: 'Pharmacist', cost: 600, w: 1, h: 1, icon: '🧑‍🔬', cat: 'staff', kind: 'pharmstaff' },
-      { id: 'cleaner', name: 'Cleaner', cost: 400, w: 1, h: 1, icon: '🧹', cat: 'staff', kind: 'cleaner' }
+      { id: 'cleaner', name: 'Cleaner', cost: 400, w: 1, h: 1, icon: '🧹', cat: 'staff', kind: 'cleaner' },
+      { id: 'worker', name: 'Worker', cost: 350, w: 1, h: 1, icon: '🧼', cat: 'staff', kind: 'worker' },
+      { id: 'dogpark', name: 'Dog Park', cost: 20, icon: '🐾', cat: 'park', kind: 'park', perSquare: true },
+      { id: 'frisbee', name: 'Frisbee Stand', cost: 40,  w: 1, h: 1, icon: '🥏', cat: 'park', parkItem: true, quality: 2, draw: drawFrisbee },
+      { id: 'ballpit', name: 'Ball Pit',      cost: 70,  w: 1, h: 1, icon: '🔴', cat: 'park', parkItem: true, quality: 3, draw: drawBallPit },
+      { id: 'seesaw',  name: 'Seesaw',        cost: 80,  w: 2, h: 1, icon: '🛝', cat: 'park', parkItem: true, quality: 4, draw: drawSeesaw },
+      { id: 'tunnel',  name: 'Tunnel',        cost: 90,  w: 2, h: 1, icon: '🛢️', cat: 'park', parkItem: true, quality: 4, draw: drawTunnel },
+      { id: 'pool',    name: 'Paddling Pool', cost: 120, w: 2, h: 2, icon: '🏊', cat: 'park', parkItem: true, quality: 6, draw: drawPool },
+      { id: 'litterbox', name: 'Litter Box',      cost: 40,  w: 1, h: 1, icon: '🚽', cat: 'park', catItem: true, quality: 2, draw: drawLitterBox },
+      { id: 'catbox',    name: 'Cardboard Box',   cost: 45,  w: 1, h: 1, icon: '📦', cat: 'park', catItem: true, quality: 2, draw: drawCardboardBox },
+      { id: 'scratcher', name: 'Scratching Post', cost: 60,  w: 1, h: 1, icon: '🪵', cat: 'park', catItem: true, quality: 3, draw: drawScratchPost },
+      { id: 'catnip',    name: 'Catnip Planter',  cost: 80,  w: 1, h: 1, icon: '🪴', cat: 'park', catItem: true, quality: 4, draw: drawCatnip },
+      { id: 'cattree',   name: 'Cat Tree',        cost: 120, w: 1, h: 1, icon: '🐈', cat: 'park', catItem: true, quality: 6, draw: drawCatTree }
     ].sort(function (a, b) { return a.cost - b.cost; });
     var FURN_BY_ID = {};
     FURNITURE.forEach(function (f) { FURN_BY_ID[f.id] = f; });
@@ -694,12 +1182,12 @@
       var light = (gx + gy) % 2 === 0;
       var h = hash(gx + 31, gy + 17);
       diamondPath(c, s.x, s.y);
-      c.fillStyle = light ? '#eaf3f6' : '#dde9ee';
+      c.fillStyle = light ? '#ffffff' : '#f1f3f5';
       c.fill();
       c.save();
       diamondPath(c, s.x, s.y); c.clip();
-      // faint per-tile shade variance
-      c.fillStyle = 'rgba(120,150,170,' + (0.03 + h * 0.05).toFixed(3) + ')';
+      // faint per-tile shade variance (neutral grey, no blue cast)
+      c.fillStyle = 'rgba(150,152,158,' + (0.03 + h * 0.05).toFixed(3) + ')';
       c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
       // glossy vinyl sheen sweeping down from the top corner
       var hg = c.createLinearGradient(s.x, s.y - TILE_HH, s.x, s.y + TILE_HH);
@@ -709,21 +1197,56 @@
       c.fillStyle = hg;
       c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
       // a few mineral specks + the occasional scuff mark
-      fleck(c, s, gx, gy, 5, 0.7, 1.2, function () { return 'rgba(150,180,196,0.22)'; });
+      fleck(c, s, gx, gy, 5, 0.7, 1.2, function () { return 'rgba(168,170,176,0.22)'; });
       if (hash(gx * 7 + 5, gy * 7 + 9) > 0.9) {
-        c.strokeStyle = 'rgba(120,140,155,0.25)'; c.lineWidth = 1.4;
+        c.strokeStyle = 'rgba(138,140,148,0.25)'; c.lineWidth = 1.4;
         c.beginPath(); c.arc(s.x + (h - 0.5) * 14, s.y + (h - 0.4) * 7, 4, 0.2, 2.2); c.stroke();
       }
       c.restore();
       // bevelled polished tile + grout
-      bevel(c, s, 1, 'rgba(255,255,255,0.32)', 'rgba(150,180,196,0.35)');
-      c.strokeStyle = 'rgba(150,180,196,0.55)';
+      bevel(c, s, 1, 'rgba(255,255,255,0.32)', 'rgba(170,172,178,0.35)');
+      c.strokeStyle = 'rgba(176,178,184,0.55)';
       c.lineWidth = 1;
       diamondPath(c, s.x, s.y); c.stroke();
     }
 
+    // Restroom floors: classic ceramic checkerboard. Each grid square splits
+    // into a 2×2 grid of half-size tiles alternating white and blue, so the
+    // pattern runs continuously across the whole room at half-tile scale.
+    function restroomTile(c, gx, gy) {
+      var s = iso(gx, gy);
+      for (var i = 0; i < 2; i++) {
+        for (var j = 0; j < 2; j++) {
+          var q = iso(gx - 0.25 + i * 0.5, gy - 0.25 + j * 0.5);
+          c.beginPath();
+          c.moveTo(q.x, q.y - TILE_HH / 2);
+          c.lineTo(q.x + TILE_HW / 2, q.y);
+          c.lineTo(q.x, q.y + TILE_HH / 2);
+          c.lineTo(q.x - TILE_HW / 2, q.y);
+          c.closePath();
+          c.fillStyle = ((i + j) % 2 === 0) ? '#ffffff' : '#7db3d8';
+          c.fill();
+          c.strokeStyle = 'rgba(105,140,165,0.45)'; c.lineWidth = 1;
+          c.stroke();
+        }
+      }
+      // glossy ceramic sheen sweeping down from the top corner
+      c.save();
+      diamondPath(c, s.x, s.y); c.clip();
+      var hg = c.createLinearGradient(s.x, s.y - TILE_HH, s.x, s.y + TILE_HH);
+      hg.addColorStop(0, 'rgba(255,255,255,0.28)');
+      hg.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+      hg.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = hg;
+      c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
+      c.restore();
+      // grout line around the full grid square
+      c.strokeStyle = 'rgba(105,140,165,0.55)'; c.lineWidth = 1;
+      diamondPath(c, s.x, s.y); c.stroke();
+    }
+
     // Plain corridors get a soft teal runner so passages read clearly differently
-    // from the glossy white-blue vinyl of the clinic, blank rooms and exam rooms.
+    // from the glossy white vinyl of the clinic, blank rooms and exam rooms.
     function carpetTile(c, gx, gy) {
       var s = iso(gx, gy);
       var h = hash(gx + 13, gy + 7);
@@ -744,6 +1267,17 @@
       c.strokeStyle = 'rgba(36,96,86,0.5)';
       c.lineWidth = 1;
       diamondPath(c, s.x, s.y); c.stroke();
+    }
+
+    // Dog-park turf: the lawn base + a faint mowed stripe so it reads as a tended
+    // park rather than the wild grass outside.
+    function parkTile(c, gx, gy) {
+      grassTile(c, gx, gy);
+      var s = iso(gx, gy);
+      c.save(); diamondPath(c, s.x, s.y); c.clip();
+      c.fillStyle = ((gx + gy) % 2 === 0) ? 'rgba(255,255,255,0.07)' : 'rgba(36,84,40,0.09)';
+      c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
+      c.restore();
     }
 
     // Gradient cache. Most per-frame gradients (walls, fixtures, character bodies)
@@ -854,6 +1388,18 @@
 
     // A filled band on ANY wall edge a→b (grid corner coords), between
     // screen-heights hBot..hTop above the floor line. (wallQuad, but generic.)
+    // A low white picket fence along a tile edge a→b (the open-air Dog Park border).
+    function drawParkFence(c, ax, ay, bx, by) {
+      var a = iso(ax, ay), b = iso(bx, by), H = 17;
+      c.strokeStyle = '#c2cbb2'; c.lineWidth = 2;                               // two rails
+      c.beginPath(); c.moveTo(a.x, a.y - H + 5); c.lineTo(b.x, b.y - H + 5); c.stroke();
+      c.beginPath(); c.moveTo(a.x, a.y - 4); c.lineTo(b.x, b.y - 4); c.stroke();
+      for (var i = 0; i <= 2; i++) {                                            // three pickets
+        var t = i / 2, px = a.x + (b.x - a.x) * t, py = a.y + (b.y - a.y) * t;
+        c.strokeStyle = '#eef2e6'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(px, py - H); c.lineTo(px, py); c.stroke();
+      }
+    }
     function edgeQuad(c, ax, ay, bx, by, hTop, hBot, fill) {
       var a = iso(ax, ay), b = iso(bx, by);
       c.beginPath();
@@ -871,8 +1417,9 @@
       edgeQuad(c, rx, ry, bx, by, H, 0, frame);                    // right jamb
       edgeQuad(c, ax, ay, bx, by, H, H - 9, frame);                // lintel
       edgeQuad(c, ax, ay, bx, by, H - 9, H - 11, '#37b3a3');       // teal accent stripe
-      doorways.push({ ax: ax, ay: ay, bx: bx, by: by, H: H,        // register for animated doors
-                      style: (reg && reg.style) || 'slide', inx: (reg && reg.inx) || 0, iny: (reg && reg.iny) || 0 });
+      // NOTE: pure drawing only — the doorway is registered in `doorways` by D()
+      // at collect time. Registering here (per draw call) leaked a duplicate entry
+      // every frame, growing update()'s door scan and draw()'s scene unboundedly.
     }
     // A wall shared with a corridor gets ONE doorway, not an opening at every tile:
     // true only at the first tile of each contiguous run of corridor-adjacent edge
@@ -942,6 +1489,10 @@
     // it. Corridor edges wall off anything that isn't room floor; exam rooms wall
     // off the corridor side too, leaving a single doorway at rm.door.
     var wallSegs = [];     // {d, fn}; rebuilt by collectWalls(), depth-sorted in draw()
+    // Content ceiling (screen px above the floor line) for segments that carry a
+    // shelf/decor billboard — taller than the wall itself (shelf pill caps, the
+    // X-ray board's glow) so their sprite bbox covers everything drawn on the wall.
+    var BILLBOARD_H = 78;
     function collectWalls() {
       // Every wall / door / wall-decoration / entrance-frame segment becomes a
       // depth-sorted scene item drawn live in draw(), so walls interleave with
@@ -950,12 +1501,21 @@
       // gx+gy, so a back wall sorts just behind, a front wall just in front of, an
       // actor sharing its tile, and nearer structures always paint over farther.
       wallSegs.length = 0;
+      // _ax/_ay/_bx/_by/_htop tag each segment with its wall edge + content height so
+      // the bake pass at the end can sprite-cache it; _key identifies the CONTENT so
+      // identical segments (same look, same edge shape) share one cached sprite
+      // (wall pixels are translation-invariant — see bakeWallSprites below).
       function W(isTall, ax, ay, bx, by, H, c1, c2, c3, c4) {
-        wallSegs.push({ d: (ax + ay + bx + by) / 2,
+        wallSegs.push({ d: (ax + ay + bx + by) / 2, _ax: ax, _ay: ay, _bx: bx, _by: by, _htop: H,
+          _key: 'W' + H + c1 + c2 + c3 + c4,
           fn: function () { wallFace(ctx, ax, ay, bx, by, H, c1, c2, c3, c4); } });
       }
       function D(isTall, ax, ay, bx, by, H, opts) {
-        wallSegs.push({ d: (ax + ay + bx + by) / 2,
+        // register the animated doorway ONCE here (collect time), never in the draw fn
+        doorways.push({ ax: ax, ay: ay, bx: bx, by: by, H: H,
+                        style: (opts && opts.style) || 'slide', inx: (opts && opts.inx) || 0, iny: (opts && opts.iny) || 0 });
+        wallSegs.push({ d: (ax + ay + bx + by) / 2, _ax: ax, _ay: ay, _bx: bx, _by: by, _htop: H,
+          _key: 'D' + H + ((opts && opts.style) || '') + ((opts && opts.inx) || 0) + ((opts && opts.iny) || 0),
           fn: function () { drawDoorOpening(ctx, ax, ay, bx, by, H, opts); } });
       }
       // clinic perimeter, segmented per tile so a corridor run punches one doorway.
@@ -975,11 +1535,25 @@
       // corridor squares: wall every edge that borders non-room-floor
       for (var key in corridor) {
         if (!corridor.hasOwnProperty(key)) continue;
+        if (park[key]) continue;             // dog-park tiles get a fence, not walls (below)
         var p = key.split(','), x = +p[0], y = +p[1];
         if (!isRoomFloor(x - 1, y)) W(true,  x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
         if (!isRoomFloor(x, y - 1)) W(true,  x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
         if (!isRoomFloor(x + 1, y)) W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
         if (!isRoomFloor(x, y + 1)) W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
+      }
+      // dog-park borders: a low fence on each edge that faces open grass (edges
+      // facing the building stay open so visitors can walk in). Pushed as scene
+      // items so the fence depth-sorts with everyone like the walls do.
+      for (var pk in park) {
+        if (!park.hasOwnProperty(pk)) continue;
+        var pp = pk.split(','), px = +pp[0], py = +pp[1];
+        (function (x, y) {
+          if (!isRoomFloor(x - 1, y)) wallSegs.push({ d: x - 0.5 + y, fn: function () { drawParkFence(ctx, x - 0.5, y - 0.5, x - 0.5, y + 0.5); } });
+          if (!isRoomFloor(x, y - 1)) wallSegs.push({ d: x + y - 0.5, fn: function () { drawParkFence(ctx, x - 0.5, y - 0.5, x + 0.5, y - 0.5); } });
+          if (!isRoomFloor(x + 1, y)) wallSegs.push({ d: x + 0.5 + y, fn: function () { drawParkFence(ctx, x + 0.5, y - 0.5, x + 0.5, y + 0.5); } });
+          if (!isRoomFloor(x, y + 1)) wallSegs.push({ d: x + y + 0.5, fn: function () { drawParkFence(ctx, x - 0.5, y + 0.5, x + 0.5, y + 0.5); } });
+        })(px, py);
       }
       // Walled rooms (exam / xray / restroom / pharmacy): wall every corridor-
       // facing edge, punching a brown doorway at the room's door tile. One generic
@@ -999,9 +1573,73 @@
           if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) { if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 }); else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3'); }
         });
       }
-      ['exam', 'xray', 'restroom', 'pharmacy'].forEach(function (type) {
+      ['exam', 'xray', 'restroom', 'pharmacy', 'shop', 'grooming'].forEach(function (type) {
         var d = ROOM_TYPES[type];
         d.list.forEach(function (rm) { roomWalls(rm, d.tiles(rm.gx, rm.gy, rm.rot || 0)); });
+      });
+      // Pharmacy: shelving billboarded on the two TALL back walls — the north edge
+      // (each tile's y-1 neighbour) and the west edge (x-1 neighbour). The
+      // back-right (north) wall carries the apothecary-jar/bottle supply shelves;
+      // the back-left (west) wall the colourful medicine boxes — so the two walls
+      // read distinctly. One scene item per back-wall tile, at that wall's exact
+      // depth, so a pharmacist standing in front occludes the shelves behind them.
+      // Shelved on EVERY back-wall tile except the doorway, so a pharmacy is
+      // stocked the same way wherever it sits. Where a back edge faces open
+      // grass/perimeter (roomWalls drew no wall), a matching tall wall is added
+      // first so the shelves always have a surface.
+      pharmacies.forEach(function (ph) {
+        var gx = ph.gx, gy = ph.gy, dr = ph.door;
+        function isDoor(nx, ny) { return dr && dr.x === nx && dr.y === ny; }
+        for (var i = 0; i < PHARM_W; i++) (function (x) {      // back-right (north) wall — supplies
+          if (isDoor(x, gy - 1)) return;
+          if (!isRoomFloor(x, gy - 1)) W(true, x - 0.5, gy - 0.5, x + 0.5, gy - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+          wallSegs.push({ d: x + gy - 0.5, _ax: x - 0.5, _ay: gy - 0.5, _bx: x + 0.5, _by: gy - 0.5, _htop: BILLBOARD_H, _key: 'sup' + (x + gy), fn: function () {
+            drawSupplyShelf(ctx, x - 0.5, gy - 0.5, x + 0.5, gy - 0.5, x + gy);
+          } });
+        })(gx + i);
+        for (var j = 0; j < PHARM_H; j++) (function (y) {      // back-left (west) wall — medicine
+          if (isDoor(gx - 1, y)) return;
+          if (!isRoomFloor(gx - 1, y)) W(true, gx - 0.5, y - 0.5, gx - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+          wallSegs.push({ d: gx + y - 0.5, _ax: gx - 0.5, _ay: y - 0.5, _bx: gx - 0.5, _by: y + 0.5, _htop: BILLBOARD_H, _key: 'med' + (gx + y + 3), fn: function () {
+            drawMedShelf(ctx, gx - 0.5, y - 0.5, gx - 0.5, y + 0.5, gx + y + 3);
+          } });
+        })(gy + j);
+      });
+      // Shop: retail-goods shelving on both TALL back walls, every tile except the
+      // doorway, with a fallback wall where a back edge faces open grass/perimeter.
+      shops.forEach(function (sh) {
+        var gx = sh.gx, gy = sh.gy, dr = sh.door;
+        function isDoor(nx, ny) { return dr && dr.x === nx && dr.y === ny; }
+        for (var i = 0; i < SHOP_W; i++) (function (x) {       // back-right (north) wall
+          if (isDoor(x, gy - 1)) return;
+          if (!isRoomFloor(x, gy - 1)) W(true, x - 0.5, gy - 0.5, x + 0.5, gy - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+          wallSegs.push({ d: x + gy - 0.5, _ax: x - 0.5, _ay: gy - 0.5, _bx: x + 0.5, _by: gy - 0.5, _htop: BILLBOARD_H, _key: 'shp' + (x + gy), fn: function () {
+            drawShopShelf(ctx, x - 0.5, gy - 0.5, x + 0.5, gy - 0.5, x + gy);
+          } });
+        })(gx + i);
+        for (var j = 0; j < SHOP_H; j++) (function (y) {       // back-left (west) wall
+          if (isDoor(gx - 1, y)) return;
+          if (!isRoomFloor(gx - 1, y)) W(true, gx - 0.5, y - 0.5, gx - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+          wallSegs.push({ d: gx + y - 0.5, _ax: gx - 0.5, _ay: y - 0.5, _bx: gx - 0.5, _by: y + 0.5, _htop: BILLBOARD_H, _key: 'shp' + (gx + y + 2), fn: function () {
+            drawShopShelf(ctx, gx - 0.5, y - 0.5, gx - 0.5, y + 0.5, gx + y + 2);
+          } });
+        })(gy + j);
+      });
+      // X-ray rooms (3 wide × 4 deep): the light-up viewing box is the centrepiece
+      // of the back-right wall, flanked by a radiation sign + clock; the back-left
+      // wall carries a lead apron and a film cabinet.
+      xrayRooms.forEach(function (rm) {
+        hangBackWall(rm, 3, 4,
+          [drawRadSign, drawXrayBoard, drawWallClock],
+          [drawLeadApron, function cabinetPlain(c, P) { drawCabinet(c, P, false); }, null, null]);
+      });
+      // Exam rooms (3 × 3): an anatomy chart centred on the back-right wall, framed
+      // by a diploma + clock; the back-left wall has a red-cross supply cabinet and
+      // a health poster.
+      examRooms.forEach(function (rm) {
+        hangBackWall(rm, 3, 3,
+          [drawCertificate, drawAnatomyPoster, drawWallClock],
+          [function cabinetCross(c, P) { drawCabinet(c, P, true); }, drawHealthPoster, null]);
       });
       // ---- decorations billboarded onto the tall back-wall planes ----------
       // Each is its own scene item; d = the billboard's far grid-edge so its own
@@ -1024,38 +1662,122 @@
         if (fill) { c.fillStyle = fill; c.fill(); }
         if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || 2; c.stroke(); }
       }
-      wallSegs.push({ d: -0.5 + (2.5 + 0.95), fn: function () {   // back-left window + sill
-        var c = ctx;
-        rLB(c, 2.5, 0.95, 30, 52, '#cfe8f5', '#9fb4c0', 3);
-        var wm = iso(-0.5, 2.5);
-        c.strokeStyle = 'rgba(255,255,255,0.75)'; c.lineWidth = 2;
-        c.beginPath(); c.moveTo(wm.x, wm.y - 52); c.lineTo(wm.x, wm.y - 30); c.stroke();
-        var wl = iso(-0.5, 2.5 - 0.95), wr = iso(-0.5, 2.5 + 0.95);
-        c.beginPath(); c.moveTo(wl.x, wl.y - 41); c.lineTo(wr.x, wr.y - 41); c.stroke();
-        rLB(c, 2.5, 1.05, 28, 30, '#eef4f7', null);             // sill
-      } });
-      wallSegs.push({ d: -0.5 + (5.2 + 0.5), fn: function () {    // back-left certificate
-        rLB(ctx, 5.2, 0.5, 35, 49, '#f3ead2', '#9a7b46', 3);
-      } });
-      wallSegs.push({ d: 2.0 + -0.5, fn: function () {            // back-right wall clock
-        var c = ctx, cl = iso(2.0, -0.5), clY = cl.y - 45;
-        c.fillStyle = '#f7fbfc'; c.beginPath(); c.arc(cl.x, clY, 8, 0, Math.PI * 2); c.fill();
-        c.strokeStyle = '#5a6b76'; c.lineWidth = 2; c.stroke();
-        c.strokeStyle = '#2a3640'; c.lineWidth = 1.5; c.lineCap = 'round';
-        c.beginPath(); c.moveTo(cl.x, clY); c.lineTo(cl.x, clY - 5); c.stroke();
-        c.beginPath(); c.moveTo(cl.x, clY); c.lineTo(cl.x + 4, clY + 1); c.stroke();
-        c.lineCap = 'butt';
-      } });
-      wallSegs.push({ d: (4.7 + 0.95) + -0.5, fn: function () {   // back-right vet-cross poster
-        var c = ctx, pc = iso(4.7, -0.5), pcY = pc.y - 41;
-        rRB(c, 4.7, 0.95, 30, 52, '#ffffff', '#37b3a3', 3);
-        c.fillStyle = '#e0563f';
-        c.fillRect(pc.x - 2.5, pcY - 7, 5, 14);
-        c.fillRect(pc.x - 7, pcY - 2.5, 14, 5);
-      } });
+      // (wall-mounted decorations — window, certificate, clock, vet-cross poster —
+      // removed for now per request; the rLB/rRB billboard helpers above are kept
+      // for when they come back.)
       // entrance frame: front perimeter (gy = ROOM-0.5), so it draws in front of
       // the clinic interior just like the short front walls it sits on.
       wallSegs.push({ d: DOOR_MID + (ROOM - 0.5), fn: function () { drawDoorFrame(ctx); } });
+      bakeWallSprites();
+    }
+
+    // Sprite-cache every tagged wall segment: rasterize its procedural drawing ONCE
+    // (here, at collect time) into a small offscreen canvas and swap its per-frame
+    // fn for a single drawImage blit. Depth-sorting in draw() is untouched — only
+    // each fn's body changes — so walls still interleave with actors correctly.
+    // Untagged segments (park fences, the entrance frame) stay live: they're few
+    // and cheap. The camera is a pure translation (no zoom), so sprite pixels are
+    // camera-invariant relative to their grid anchor: ox/oy/bw/bh below are all
+    // camera-free deltas, and the blit re-reads the live camera through iso() —
+    // pans need NO re-bake. (If zoom is ever added, re-run collectWalls on zoom.)
+    // Baking works by swapping the module `ctx` var — every draw fn reads it at
+    // call time — so the original closures render into the sprite unchanged.
+    var wallSpritesOn = true;              // debug/benchmark switch (see __t.setWallSprites)
+    // Sprite cache shared ACROSS collectWalls() runs. Wall pixels are translation-
+    // invariant, so the cache key is content (_key) + edge DELTA + height + dpr —
+    // not absolute position. Every identical wall/shelf/door in the clinic shares
+    // ONE sprite, and rebuilding walls (placement toggles, far pans, room moves)
+    // re-rasterizes nothing that was seen before — no re-bake hitch.
+    var wallSpriteCache = {};              // key -> {spr, ox, oy, bw, bh}
+    function bakeWallSprites() {
+      if (!wallSpritesOn) return;          // benchmark mode: leave the live vector fns
+      var MARGIN = 16, TOPMARGIN = 16, BOTMARGIN = 8;
+      var realCtx = ctx, dpr = view.dpr;
+      // dpr changed (window moved between monitors) → every entry is stale; drop all.
+      if (wallSpriteCache._dpr !== dpr) wallSpriteCache = { _dpr: dpr };
+      for (var si = 0; si < wallSegs.length; si++) {
+        var seg = wallSegs[si];
+        if (seg._ax === undefined) continue;           // untagged → keeps its live fn
+        var key = seg._key + '|' + (seg._bx - seg._ax) + ',' + (seg._by - seg._ay) + '|' + seg._htop;
+        var hit = wallSpriteCache[key];
+        if (!hit) {
+          var A = iso(seg._ax, seg._ay), B = iso(seg._bx, seg._by);
+          var sx0 = Math.min(A.x, B.x) - MARGIN;
+          var sy0 = Math.min(A.y, B.y) - seg._htop - TOPMARGIN;
+          var bw = (Math.max(A.x, B.x) + MARGIN) - sx0;
+          var bh = (Math.max(A.y, B.y) + BOTMARGIN) - sy0;
+          var spr = document.createElement('canvas');
+          spr.width = Math.ceil(bw * dpr); spr.height = Math.ceil(bh * dpr);
+          var sctx = spr.getContext('2d');
+          // Map the fn's live screen coords (isoRaw + bake camera) into sprite px.
+          sctx.setTransform(dpr, 0, 0, dpr, -sx0 * dpr, -sy0 * dpr);
+          ctx = sctx; seg.fn(); ctx = realCtx;         // vector draw → sprite, once ever
+          // ox/oy are camera-free deltas from the segment's A endpoint — and they
+          // depend only on the edge delta, so they're valid for every segment
+          // sharing this key regardless of where it sits on the grid.
+          hit = wallSpriteCache[key] = { spr: spr, ox: sx0 - A.x, oy: sy0 - A.y, bw: bw, bh: bh };
+        }
+        (function (seg, s, ax, ay) {
+          seg.fn = function () {                       // per-frame: one blit
+            var P = iso(ax, ay);
+            ctx.drawImage(s.spr, P.x + s.ox, P.y + s.oy, s.bw, s.bh);  // dest size in CSS px — mandatory under the dpr transform
+          };
+        })(seg, hit, seg._ax, seg._ay);
+      }
+    }
+
+    // ---- Character sprite cache -------------------------------------------
+    // Same idea as bakeWallSprites, for people/pets: the procedurally-drawn body
+    // is rasterized ONCE per (variant, facing, pose-bucket) into a small offscreen
+    // canvas and blitted per frame. Continuous walk/gait sines are quantized into
+    // buckets (≤ ~0.5px difference per bucket — invisible at this art scale), and
+    // everything genuinely dynamic (shadows tied to bars, patience bars, emoji
+    // bubbles, anger steam, leashes to a moving hand, carried-lift transforms,
+    // ghosts) stays live. Lazily baked on first use; the whole cache is wiped when
+    // it hits the cap (rebakes are ~0.1ms each) or when dpr changes.
+    var charSpritesOn = true;              // debug/benchmark switch (see __t.setCharSprites)
+    var CHAR_CACHE_MAX = 600;
+    var charSpriteCache = {}, charSpriteN = 0, charSpriteDpr = 0;
+    // local bounds around the anchor (feet / ground centre), CSS px
+    var VIS_BOX     = { x0: -16, y0: -66, w: 32, h: 72 };   // visitor body (torso/head/legs)
+    var SHADOW_BOX  = { x0: -16, y0: -9,  w: 32, h: 18 };   // shared ground shadow
+    var BUBBLE_BOX  = { x0: -13, y0: -13, w: 26, h: 28 };   // emoji status bubble
+    var PET_BOX     = { x0: -22, y0: -32, w: 44, h: 44 };   // dog or cat incl. leash/tail/shadow
+    var CARRIER_BOX = { x0: -12, y0: -10, w: 24, h: 28 };   // held/set-down cat carrier
+    var STAFF_BOX   = { x0: -22, y0: -70, w: 44, h: 82 };   // staff figure incl. mop/brush props
+    // paint(c) draws in anchor-local coords (anchor at 0,0) into the sprite ctx.
+    function charSprite(key, box, paint) {
+      if (charSpriteDpr !== view.dpr) { charSpriteCache = {}; charSpriteN = 0; charSpriteDpr = view.dpr; }
+      var spr = charSpriteCache[key];
+      if (!spr) {
+        if (charSpriteN >= CHAR_CACHE_MAX) { charSpriteCache = {}; charSpriteN = 0; }
+        var dpr = view.dpr;
+        spr = document.createElement('canvas');
+        spr.width = Math.ceil(box.w * dpr); spr.height = Math.ceil(box.h * dpr);
+        var sc = spr.getContext('2d');
+        sc.setTransform(dpr, 0, 0, dpr, -box.x0 * dpr, -box.y0 * dpr);
+        var real = ctx; ctx = sc;          // draw fns read the module ctx at call time
+        paint(sc);
+        ctx = real;
+        charSpriteCache[key] = spr; charSpriteN++;
+      }
+      return spr;
+    }
+    function blitChar(spr, box, x, y) { ctx.drawImage(spr, x + box.x0, y + box.y0, box.w, box.h); }
+    // Cached blit for a staff figure whose draw fn renders at iso(gx,gy) screen
+    // coords: the bake shifts those into anchor-local space (translate by -iso),
+    // and the blit follows the live iso(gx,gy) — so roaming staff move for free.
+    // No staff figure animates its legs; the only axes are kind/gender/facing,
+    // which the caller encodes in `key`.
+    function staffSprite(key, gx, gy, paint) {
+      if (!charSpritesOn) return paint(ctx, gx, gy);
+      var spr = charSprite(key, STAFF_BOX, function (c) {
+        var s0 = iso(gx, gy);
+        c.translate(-s0.x, -s0.y);
+        paint(c, gx, gy);
+      });
+      var s = iso(gx, gy);
+      blitChar(spr, STAFF_BOX, s.x, s.y);
     }
 
     // Static frame (jambs + lintel + sign) around the sliding doors.
@@ -1122,7 +1844,7 @@
       fgx.setTransform(view.dpr, 0, 0, view.dpr, P, P);
       bgx.clearRect(-STATIC_PAD, -STATIC_PAD, view.w + 2 * STATIC_PAD, view.h + 2 * STATIC_PAD);
       fgx.clearRect(-STATIC_PAD, -STATIC_PAD, view.w + 2 * STATIC_PAD, view.h + 2 * STATIC_PAD);
-      doorways.length = 0;                  // rebuilt as drawDoorOpening() runs in collectWalls()
+      doorways.length = 0;                  // rebuilt by D() as collectWalls() runs (below)
       wallSegs.length = 0;                   // cleared so walls vanish while placing (collectWalls rebuilds)
 
       // 1) grass: cover the whole padded viewport (grid bbox of the 4 padded corners)
@@ -1186,9 +1908,17 @@
       for (var ckey in corridor) {
         if (!corridor.hasOwnProperty(ckey)) continue;
         var cc = ckey.split(','), cgx = +cc[0], cgy = +cc[1];
-        if (isPlainCorridor(cgx, cgy)) carpetTile(bgx, cgx, cgy);   // passages → carpet runner
+        if (park[ckey]) parkTile(bgx, cgx, cgy);                    // dog park → grass turf
+        else if (isPlainCorridor(cgx, cgy)) carpetTile(bgx, cgx, cgy);   // passages → carpet runner
         else floorTile(bgx, cgx, cgy);                             // blank/exam/etc → vinyl
       }
+      // restrooms overdraw their footprint (clinic floor or corridor) with
+      // the white/blue ceramic checkerboard
+      restrooms.forEach(function (rm) {
+        footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot || 0).forEach(function (t) {
+          restroomTile(bgx, t.x, t.y);
+        });
+      });
       // soft warm light pool, clipped to the floor diamond
       (function () {
         var ctr = iso(ROOM / 2 - 0.5, ROOM / 2 - 0.5);
@@ -1333,11 +2063,88 @@
     function visitorEmoji(v) {
       if (v.phase === 'leaving') return v.happy ? '🙂' : '😡';
       if (v.phase === 'toRestroom' || v.phase === 'inRestroom') return '🚻';
+      if (v.phase === 'toShop' || v.phase === 'inShop') return '🛍️';
+      if (v.phase === 'toDogPark' || v.phase === 'inDogPark') return '🐾';
+      if (v.wantsGroom && !v.groomed) return '🛁'; // wants / getting a groom
       if (!v.served) return '💻';                 // arriving / in line → needs reception
       if (!v.examined) return '🩺';               // seen reception → needs an exam room
       if (v.needsXray && !v.xrayed) return '🩻';  // examined → needs an X-ray
       if (v.needsMeds && !v.medicated) return '💊'; // examined → needs medicine
       return null;
+    }
+
+    // The visitor's body (legs/torso/head/face) in FOOT-LOCAL coordinates — the
+    // caller positions it (translate or sprite-blit at cx/baseY). Pure function of
+    // its arguments, so it can be sprite-cached; everything time-varying beyond the
+    // quantized walk `step` (bob, jitter, bars, bubbles, pets) is handled outside.
+    function drawVisitorBody(c, v, seated, step, front, mirror, angry) {
+      // legs + shoes
+      if (seated) {
+        // sitting pose: thighs rest forward on the seat, shins drop to the floor
+        // in front, so the figure reads as sitting in (not standing on) the chair.
+        c.fillStyle = v.legs;
+        roundRect(c, -7, -13, 14, 7, 3); c.fill();   // lap / thighs on the seat
+        c.fillRect(-6, -7, 5, 8);                    // left shin
+        c.fillRect(1, -7, 5, 8);                     // right shin
+        c.fillStyle = '#2a2a30';
+        c.fillRect(-7, 0, 6, 3);                     // shoes on the floor in front
+        c.fillRect(1, 0, 6, 3);
+      } else {
+        c.fillStyle = v.legs;
+        c.fillRect(-6, -14, 5, 14 + step * 1.4);
+        c.fillRect(1, -14, 5, 14 - step * 1.4);
+        c.fillStyle = '#2a2a30';
+        c.fillRect(-7, -2 + step * 1.4, 6, 3);
+        c.fillRect(1, -2 - step * 1.4, 6, 3);
+      }
+
+      // torso (shirt)
+      var bodyTop = -40;
+      c.fillStyle = gradL(c, 0, bodyTop, 0, -12, [[0, shade(v.shirt, 1.12)], [1, v.shirt]]);
+      roundRect(c, -11, bodyTop, 22, 28, 7); c.fill();
+      // sleeves
+      c.fillStyle = shade(v.shirt, 0.9);
+      roundRect(c, -14, bodyTop + 2, 5, 13, 2.5); c.fill();
+      roundRect(c, 9, bodyTop + 2, 5, 13, 2.5); c.fill();
+      // hands
+      c.fillStyle = v.skin;
+      c.fillRect(-14, bodyTop + 14, 5, 4);
+      c.fillRect(9, bodyTop + 14, 5, 4);
+      if (!front) { // back seam
+        c.strokeStyle = 'rgba(0,0,0,0.08)'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(0, bodyTop + 3); c.lineTo(0, -13); c.stroke();
+      }
+
+      // neck + head
+      c.fillStyle = shade(v.skin, 0.94);
+      c.fillRect(-3, bodyTop - 4, 6, 5);
+      var hy = bodyTop - 13;
+      c.fillStyle = v.skin;
+      c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill();
+      // hair
+      c.fillStyle = v.hair;
+      c.beginPath(); c.arc(0, hy - 1, 8.5, Math.PI * (front ? 1.02 : 0.05), Math.PI * (front ? 1.98 : 0.95), false); c.fill();
+      if (!front) { c.beginPath(); c.arc(0, hy + 1, 8, Math.PI * 0.04, Math.PI * 0.96, false); c.fill(); }
+
+      if (front) {
+        // eyes (a frown-y angle when cross)
+        c.fillStyle = '#2b2b33';
+        c.beginPath();
+        c.arc(-3 * mirror, hy, 1.3, 0, Math.PI * 2);
+        c.arc(3 * mirror, hy, 1.3, 0, Math.PI * 2);
+        c.fill();
+        if (angry) {
+          // angry eyebrows + frown
+          c.strokeStyle = '#2b2b33'; c.lineWidth = 1.3;
+          c.beginPath(); c.moveTo(-5, hy - 3); c.lineTo(-1.5, hy - 1.5);
+          c.moveTo(5, hy - 3); c.lineTo(1.5, hy - 1.5); c.stroke();
+          c.strokeStyle = '#9a5f44';
+          c.beginPath(); c.arc(0, hy + 6, 2.4, 1.15 * Math.PI, 1.85 * Math.PI); c.stroke();
+        } else {
+          c.strokeStyle = '#9a5f44'; c.lineWidth = 1.2;
+          c.beginPath(); c.arc(0, hy + 3, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+        }
+      }
     }
 
     function drawVisitor(v) {
@@ -1368,98 +2175,47 @@
       var baseY = s.y - bob;
       var cx = s.x + jit;
 
-      // ground shadow
-      var sh = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, 16);
-      sh.addColorStop(0, 'rgba(20,40,30,0.28)'); sh.addColorStop(1, 'rgba(20,40,30,0)');
-      ctx.fillStyle = sh;
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, 15, 7, 0, 0, Math.PI * 2); ctx.fill();
+      // ground shadow — identical for every visitor, so it's one shared sprite
+      // (the per-frame createRadialGradient here used to be a real cost × crowd)
+      if (charSpritesOn) {
+        blitChar(charSprite('shadow', SHADOW_BOX, function (c) { drawVisitorShadow(c, 0, 0); }), SHADOW_BOX, s.x, s.y);
+      } else {
+        drawVisitorShadow(ctx, s.x, s.y);
+      }
 
       // a dog walks alongside; draw it first if it's "behind" (waiting/leaving facing
       // camera). When seated the pet is placed in front of the owner instead (below).
       var isDog = v.pet.charAt(0) === 'd';
-      if (isDog && front && !seated) drawDog(v, cx - 17 * mirror, s.y + 3, mirror > 0);
+      // In the park the dog is off the leash and drawn separately at its own
+      // position (see the off-leash scene pass), so don't also draw it beside the owner.
+      var dogLoose = isDog && v.phase === 'inDogPark' && !!v.dog;
+      if (isDog && !dogLoose && front && !seated) cachedDog(v, cx - 17 * mirror, s.y + 3, mirror > 0);
 
-      ctx.save();
-      ctx.translate(cx, baseY);
-
-      // legs + shoes
-      if (seated) {
-        // sitting pose: thighs rest forward on the seat, shins drop to the floor
-        // in front, so the figure reads as sitting in (not standing on) the chair.
-        ctx.fillStyle = v.legs;
-        roundRect(ctx, -7, -13, 14, 7, 3); ctx.fill();   // lap / thighs on the seat
-        ctx.fillRect(-6, -7, 5, 8);                      // left shin
-        ctx.fillRect(1, -7, 5, 8);                       // right shin
-        ctx.fillStyle = '#2a2a30';
-        ctx.fillRect(-7, 0, 6, 3);                       // shoes on the floor in front
-        ctx.fillRect(1, 0, 6, 3);
+      // Body: sprite-cached per (variant, facing, pose bucket) — see drawVisitorBody.
+      // The walk sine is quantized to 7 buckets (≤0.5px leg delta per bucket); bob
+      // and the anger jitter stay live via the blit position (baseY / cx).
+      var sq = v.moving ? Math.round(step * 3) : 0;
+      if (charSpritesOn) {
+        var bkey = 'v' + v.shirt + v.legs + v.skin + v.hair + (front ? 'f' : 'b') + mirror +
+                   (seated ? 's' : sq) + (angry && front ? 'a' : '');
+        blitChar(charSprite(bkey, VIS_BOX, function (c) {
+          drawVisitorBody(c, v, seated, sq / 3, front, mirror, angry);
+        }), VIS_BOX, cx, baseY);
       } else {
-        ctx.fillStyle = v.legs;
-        ctx.fillRect(-6, -14, 5, 14 + step * 1.4);
-        ctx.fillRect(1, -14, 5, 14 - step * 1.4);
-        ctx.fillStyle = '#2a2a30';
-        ctx.fillRect(-7, -2 + step * 1.4, 6, 3);
-        ctx.fillRect(1, -2 - step * 1.4, 6, 3);
+        ctx.save(); ctx.translate(cx, baseY);
+        drawVisitorBody(ctx, v, seated, step, front, mirror, angry);
+        ctx.restore();
       }
-
-      // torso (shirt)
-      var bodyTop = -40;
-      ctx.fillStyle = gradL(ctx, 0, bodyTop, 0, -12, [[0, shade(v.shirt, 1.12)], [1, v.shirt]]);
-      roundRect(ctx, -11, bodyTop, 22, 28, 7); ctx.fill();
-      // sleeves
-      ctx.fillStyle = shade(v.shirt, 0.9);
-      roundRect(ctx, -14, bodyTop + 2, 5, 13, 2.5); ctx.fill();
-      roundRect(ctx, 9, bodyTop + 2, 5, 13, 2.5); ctx.fill();
-      // hands
-      ctx.fillStyle = v.skin;
-      ctx.fillRect(-14, bodyTop + 14, 5, 4);
-      ctx.fillRect(9, bodyTop + 14, 5, 4);
-      if (!front) { // back seam
-        ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(0, bodyTop + 3); ctx.lineTo(0, -13); ctx.stroke();
-      }
-
-      // neck + head
-      ctx.fillStyle = shade(v.skin, 0.94);
-      ctx.fillRect(-3, bodyTop - 4, 6, 5);
-      var hy = bodyTop - 13;
-      ctx.fillStyle = v.skin;
-      ctx.beginPath(); ctx.arc(0, hy, 8.5, 0, Math.PI * 2); ctx.fill();
-      // hair
-      ctx.fillStyle = v.hair;
-      ctx.beginPath(); ctx.arc(0, hy - 1, 8.5, Math.PI * (front ? 1.02 : 0.05), Math.PI * (front ? 1.98 : 0.95), false); ctx.fill();
-      if (!front) { ctx.beginPath(); ctx.arc(0, hy + 1, 8, Math.PI * 0.04, Math.PI * 0.96, false); ctx.fill(); }
-
-      if (front) {
-        // eyes (a frown-y angle when cross)
-        ctx.fillStyle = '#2b2b33';
-        ctx.beginPath();
-        ctx.arc(-3 * mirror, hy, 1.3, 0, Math.PI * 2);
-        ctx.arc(3 * mirror, hy, 1.3, 0, Math.PI * 2);
-        ctx.fill();
-        if (angry) {
-          // angry eyebrows + frown
-          ctx.strokeStyle = '#2b2b33'; ctx.lineWidth = 1.3;
-          ctx.beginPath(); ctx.moveTo(-5, hy - 3); ctx.lineTo(-1.5, hy - 1.5);
-          ctx.moveTo(5, hy - 3); ctx.lineTo(1.5, hy - 1.5); ctx.stroke();
-          ctx.strokeStyle = '#9a5f44';
-          ctx.beginPath(); ctx.arc(0, hy + 6, 2.4, 1.15 * Math.PI, 1.85 * Math.PI); ctx.stroke();
-        } else {
-          ctx.strokeStyle = '#9a5f44'; ctx.lineWidth = 1.2;
-          ctx.beginPath(); ctx.arc(0, hy + 3, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
-        }
-      }
-      ctx.restore();
 
       if (seated) {
         // pet set down on the floor in front of the seated owner (at their feet)
-        if (isDog) drawDog(v, cx + 9, s.y + 13, false);
-        else drawCarrier(cx, s.y + 2, v.carrier, mirror);
+        if (isDog && !dogLoose) cachedDog(v, cx + 9, s.y + 13, false);
+        else cachedCarrier(cx, s.y + 2, v.carrier, mirror);
       } else {
         // cat carrier held in front of the body
-        if (!isDog) drawCarrier(cx, baseY - 14, v.carrier, mirror);
+        if (!isDog) cachedCarrier(cx, baseY - 14, v.carrier, mirror);
         // dog drawn after the body when it should appear in front (walking up, back to us)
-        if (isDog && !front) drawDog(v, cx - 16 * mirror, s.y + 4, mirror > 0);
+        if (isDog && !dogLoose && !front) cachedDog(v, cx - 16 * mirror, s.y + 4, mirror > 0);
       }
 
       // anger steam puffs
@@ -1544,40 +2300,77 @@
           roundRect(ctx, pxx, pyy, Math.max(0, pw3 * pp), 4, 2); ctx.fill();
         }
       }
+      if ((v.phase === 'inGroomShower' || v.phase === 'inGroomDry') && v.groomRoom) {
+        var gw = 26, gxx = cx - gw / 2, gyy = baseY - 66;
+        var isShower = v.phase === 'inGroomShower';
+        ctx.fillStyle = 'rgba(15,20,30,0.65)';
+        roundRect(ctx, gxx - 1.5, gyy - 1.5, gw + 3, 7, 3); ctx.fill();
+        if (v.processing) {
+          var gprog = Math.min(1, ((isShower ? v.groomRoom.showerT : v.groomRoom.dryT) || 0) / (GROOM_DURATION * procTime()));
+          ctx.fillStyle = isShower ? '#36b3f5' : '#eec23c'; roundRect(ctx, gxx, gyy, Math.max(0, gw * gprog), 4, 2); ctx.fill();
+        } else {
+          var gp = Math.max(0, (v.groomWait || 0) / baseWait());
+          ctx.fillStyle = gp > 0.6 ? '#4cc46a' : gp > 0.33 ? '#e8c34a' : '#e0563f';
+          roundRect(ctx, gxx, gyy, Math.max(0, gw * gp), 4, 2); ctx.fill();
+        }
+      }
 
-      // status bubble: the service this visitor still needs, or 🙂/😠 on the way out
+      // status bubble: the service this visitor still needs, or 🙂/😠 on the way out.
+      // Cached per emoji — fillText rasterizes the glyph every call otherwise.
       var emo = visitorEmoji(v);
       if (emo) {
         var by3 = baseY - 90;
-        ctx.save();
-        ctx.fillStyle = 'rgba(255,255,255,0.94)';
-        ctx.beginPath(); ctx.arc(cx, by3, 11, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(cx - 4, by3 + 8); ctx.lineTo(cx + 4, by3 + 8); ctx.lineTo(cx, by3 + 13); ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = 'rgba(15,20,30,0.22)'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(cx, by3, 11, 0, Math.PI * 2); ctx.stroke();
-        ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(emo, cx, by3 + 1);
-        ctx.restore();
+        if (charSpritesOn) {
+          blitChar(charSprite('emo' + emo, BUBBLE_BOX, function (c) { drawEmojiBubble(c, 0, 0, emo); }), BUBBLE_BOX, cx, by3);
+        } else {
+          drawEmojiBubble(ctx, cx, by3, emo);
+        }
       }
     }
 
+    // The visitor's soft ground shadow at (x,y) — one radial-gradient ellipse.
+    function drawVisitorShadow(c, x, y) {
+      var sh = c.createRadialGradient(x, y, 2, x, y, 16);
+      sh.addColorStop(0, 'rgba(20,40,30,0.28)'); sh.addColorStop(1, 'rgba(20,40,30,0)');
+      c.fillStyle = sh;
+      c.beginPath(); c.ellipse(x, y, 15, 7, 0, 0, Math.PI * 2); c.fill();
+    }
+    // A white speech bubble with a tail, holding one status emoji, centred at (x,y).
+    function drawEmojiBubble(c, x, y, emo) {
+      c.save();
+      c.fillStyle = 'rgba(255,255,255,0.94)';
+      c.beginPath(); c.arc(x, y, 11, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.moveTo(x - 4, y + 8); c.lineTo(x + 4, y + 8); c.lineTo(x, y + 13); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(15,20,30,0.22)'; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(x, y, 11, 0, Math.PI * 2); c.stroke();
+      c.font = '15px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(emo, x, y + 1);
+      c.restore();
+    }
+
     // Side-profile dog on a leash. (cx,cy) is the dog's centre on the ground.
-    function drawDog(v, cx, cy, faceRight) {
+    // `opts` (optional): { leash:false } draws the dog off the leash (no lead line),
+    // `run` is a gait phase that swings the legs, `wag` wags the tail. Defaults keep
+    // the on-leash, still pose for dogs walking beside their owner.
+    function drawDog(v, cx, cy, faceRight, opts) {
+      opts = opts || {};
       var sz = DOG_SIZE[v.pet] || 1, col = DOG_COLOR[v.pet] || '#9c6b43';
       var f = faceRight ? 1 : -1;
+      var sw = opts.run ? Math.sin(opts.run) * 2.4 * sz : 0;        // leg swing while running
+      var tw = opts.wag ? Math.sin(opts.wag * 9) * 3 * sz : 0;      // tail wag
       // shadow
       ctx.fillStyle = 'rgba(20,40,30,0.22)';
       ctx.beginPath(); ctx.ellipse(cx, cy, 11 * sz, 4 * sz, 0, 0, Math.PI * 2); ctx.fill();
-      // legs
+      // legs (swing fore/aft when running)
       ctx.fillStyle = shade(col, 0.85);
-      ctx.fillRect(cx - 7 * sz, cy - 7 * sz, 2.4 * sz, 7 * sz);
-      ctx.fillRect(cx + 4 * sz, cy - 7 * sz, 2.4 * sz, 7 * sz);
+      ctx.fillRect(cx - 7 * sz + sw, cy - 7 * sz, 2.4 * sz, 7 * sz);
+      ctx.fillRect(cx + 4 * sz - sw, cy - 7 * sz, 2.4 * sz, 7 * sz);
       // body
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.ellipse(cx, cy - 8 * sz, 9 * sz, 5.5 * sz, 0, 0, Math.PI * 2); ctx.fill();
-      // tail
+      // tail (wags when happy)
       ctx.strokeStyle = col; ctx.lineWidth = 2.4 * sz; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(cx - 8 * sz * f, cy - 9 * sz); ctx.lineTo(cx - 12 * sz * f, cy - 13 * sz); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - 8 * sz * f, cy - 9 * sz); ctx.lineTo(cx - 12 * sz * f, cy - 13 * sz - tw); ctx.stroke();
       ctx.lineCap = 'butt';
       // head
       var hx = cx + 8 * sz * f, hy = cy - 11 * sz;
@@ -1598,10 +2391,56 @@
       // red collar
       ctx.strokeStyle = '#d23b3b'; ctx.lineWidth = 1.6 * sz;
       ctx.beginPath(); ctx.arc(hx - 3 * sz * f, hy + 2 * sz, 2.4 * sz, -0.4, 1.4); ctx.stroke();
-      // leash up to the owner's hand
-      ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.moveTo(hx - 3 * sz * f, hy + 1 * sz);
-      ctx.lineTo(cx + (faceRight ? 12 : -12), cy - 28); ctx.stroke();
+      // leash up to the owner's hand (skipped when off the leash in the park)
+      if (opts.leash !== false) {
+        ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(hx - 3 * sz * f, hy + 1 * sz);
+        ctx.lineTo(cx + (faceRight ? 12 : -12), cy - 28); ctx.stroke();
+      }
+    }
+
+    // Side-profile cat, out of its carrier in the cat park. Same contract as
+    // drawDog ({ run, wag } opts) but smaller, grey, pointy-eared, upright tail.
+    function drawCat(v, cx, cy, faceRight, opts) {
+      opts = opts || {};
+      var sz = 0.75, col = '#8a8f98';
+      var f = faceRight ? 1 : -1;
+      var sw = opts.run ? Math.sin(opts.run) * 2.4 * sz : 0;        // leg swing while running
+      var tw = opts.wag ? Math.sin(opts.wag * 6) * 2.5 * sz : 0;    // lazy tail sway
+      // shadow
+      ctx.fillStyle = 'rgba(20,40,30,0.22)';
+      ctx.beginPath(); ctx.ellipse(cx, cy, 10 * sz, 3.6 * sz, 0, 0, Math.PI * 2); ctx.fill();
+      // legs
+      ctx.fillStyle = shade(col, 0.85);
+      ctx.fillRect(cx - 6 * sz + sw, cy - 6 * sz, 2.2 * sz, 6 * sz);
+      ctx.fillRect(cx + 4 * sz - sw, cy - 6 * sz, 2.2 * sz, 6 * sz);
+      // body
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(cx, cy - 7 * sz, 8 * sz, 4.8 * sz, 0, 0, Math.PI * 2); ctx.fill();
+      // upright curved tail (question-mark flick, sways when content)
+      ctx.strokeStyle = col; ctx.lineWidth = 2 * sz; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx - 7 * sz * f, cy - 8 * sz);
+      ctx.quadraticCurveTo(cx - 12 * sz * f, cy - 16 * sz, cx - 9 * sz * f + tw, cy - 19 * sz); ctx.stroke();
+      ctx.lineCap = 'butt';
+      // head
+      var hx = cx + 7 * sz * f, hy = cy - 10 * sz;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.ellipse(hx, hy, 4.2 * sz, 3.8 * sz, 0, 0, Math.PI * 2); ctx.fill();
+      // two triangular ears
+      ctx.fillStyle = shade(col, 0.82);
+      ctx.beginPath();
+      ctx.moveTo(hx - 3.4 * sz * f, hy - 2 * sz); ctx.lineTo(hx - 3.6 * sz * f, hy - 6.4 * sz); ctx.lineTo(hx - 0.6 * sz * f, hy - 3.4 * sz); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx + 0.4 * sz * f, hy - 3.2 * sz); ctx.lineTo(hx + 1.6 * sz * f, hy - 6.8 * sz); ctx.lineTo(hx + 3.2 * sz * f, hy - 2.6 * sz); ctx.closePath(); ctx.fill();
+      // eye + tiny pink nose
+      ctx.fillStyle = '#23201c';
+      ctx.beginPath(); ctx.arc(hx + 1.4 * sz * f, hy - 0.4 * sz, 0.8 * sz, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#d98a9c';
+      ctx.beginPath(); ctx.arc(hx + 3.8 * sz * f, hy + 0.8 * sz, 0.8 * sz, 0, Math.PI * 2); ctx.fill();
+      // whiskers
+      ctx.strokeStyle = 'rgba(240,244,248,0.8)'; ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.moveTo(hx + 3 * sz * f, hy + 1.4 * sz); ctx.lineTo(hx + 7 * sz * f, hy + 0.6 * sz); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx + 3 * sz * f, hy + 2 * sz); ctx.lineTo(hx + 7 * sz * f, hy + 2.4 * sz); ctx.stroke();
     }
 
     // Pet carrier (for cats): a coloured box with a grille door and a top handle.
@@ -1629,6 +2468,38 @@
       ctx.arc(x + w * 0.16, y + h * 0.5, 1.2, 0, Math.PI * 2);
       ctx.arc(x + w * 0.30, y + h * 0.5, 1.2, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Sprite-cached fronts for drawDog/drawCat/drawCarrier. The gait/wag sines are
+    // quantized to 7 buckets and mapped back through asin so the baked pose is the
+    // exact frame the bucket represents; leash geometry is a fixed offset from the
+    // dog's anchor, so it bakes safely too. Anchor = the pet's ground centre.
+    function cachedDog(v, cx, cy, faceRight, opts) {
+      if (!charSpritesOn) return drawDog(v, cx, cy, faceRight, opts);
+      opts = opts || {};
+      var swb = opts.run ? Math.round(Math.sin(opts.run) * 3) : 0;
+      var twb = opts.wag ? Math.round(Math.sin(opts.wag * 9) * 3) : 0;
+      var leash = opts.leash !== false;
+      var key = 'd' + v.pet + (faceRight ? 'R' : 'L') + swb + twb + (leash ? 'L' : '');
+      blitChar(charSprite(key, PET_BOX, function () {
+        drawDog(v, 0, 0, faceRight, { leash: leash, run: Math.asin(swb / 3), wag: Math.asin(twb / 3) / 9 });
+      }), PET_BOX, cx, cy);
+    }
+    function cachedCat(v, cx, cy, faceRight, opts) {
+      if (!charSpritesOn) return drawCat(v, cx, cy, faceRight, opts);
+      opts = opts || {};
+      var swb = opts.run ? Math.round(Math.sin(opts.run) * 3) : 0;
+      var twb = opts.wag ? Math.round(Math.sin(opts.wag * 6) * 3) : 0;
+      var key = 'c' + (faceRight ? 'R' : 'L') + swb + twb;
+      blitChar(charSprite(key, PET_BOX, function () {
+        drawCat(v, 0, 0, faceRight, { run: Math.asin(swb / 3), wag: Math.asin(twb / 3) / 6 });
+      }), PET_BOX, cx, cy);
+    }
+    function cachedCarrier(cx, cy, color, mirror) {
+      if (!charSpritesOn) return drawCarrier(cx, cy, color, mirror);
+      blitChar(charSprite('k' + color + mirror, CARRIER_BOX, function () {
+        drawCarrier(0, 0, color, mirror);
+      }), CARRIER_BOX, cx, cy);
     }
 
     // Lighten (>1) / darken (<1) a #rrggbb colour.
@@ -1820,7 +2691,7 @@
       c.beginPath(); c.moveTo(F.x, F.y - H); c.lineTo(R.x, R.y - H); c.lineTo(R.x, R.y - H + 5); c.lineTo(F.x, F.y - H + 5); c.closePath(); c.fill();
       c.fillStyle = '#a6e3d7';                 // top
       c.beginPath(); c.moveTo(T.x, T.y - H); c.lineTo(R.x, R.y - H); c.lineTo(F.x, F.y - H); c.lineTo(L.x, L.y - H); c.closePath(); c.fill();
-      if (occ) drawDog(occ, iso(gx, gy).x, iso(gx, gy).y - H, true);   // the pet being examined
+      if (occ) cachedDog(occ, iso(gx, gy).x, iso(gx, gy).y - H, true);   // the pet being examined
     }
 
     // A compact exam desk (white) with the computer on top.
@@ -1897,6 +2768,10 @@
         if (!isRoomFloor(t.x, t.y)) return false;
         if (occupied[t.x + ',' + t.y]) return false;
         if (t.x === vtx && t.y === vty) return false;          // can't drop on the player
+        // park toys only on the grass; regular furniture never on the grass
+        if (item.parkItem && !isPark(t.x, t.y)) return false;
+        if (item.catItem && !isCatFloor(t.x, t.y)) return false;   // cat items only on blank-room floor
+        if (!item.parkItem && isPark(t.x, t.y)) return false;
       }
       // every interaction square must be clear room floor, too
       var it = interactTiles(item, gx, gy, rot);
@@ -1987,6 +2862,29 @@
       ctx.restore();
     }
 
+    // Ghost for the Dog Park drag-rectangle: green turf tiles + running $cost when
+    // valid, red when the rect hits something or can't be afforded.
+    function drawParkGhost() {
+      var st = corridorDrag || { sx: pointer.gx, sy: pointer.gy };
+      var res = parkRectTiles(st.sx, st.sy, pointer.gx, pointer.gy);
+      ctx.save();
+      if (res.tiles.length && res.ok) {
+        res.tiles.forEach(function (t) {
+          var p = iso(t.x, t.y); diamondPath(ctx, p.x, p.y);
+          ctx.fillStyle = 'rgba(118,196,86,0.45)'; ctx.fill();
+          ctx.strokeStyle = 'rgba(96,170,66,0.95)'; ctx.lineWidth = 2; ctx.stroke();
+        });
+        var lp = iso(pointer.gx, pointer.gy);
+        ctx.font = '800 15px Nunito, sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,0.55)';
+        ctx.strokeText('$' + res.cost, lp.x, lp.y - 18);
+        ctx.fillStyle = '#ffd24a'; ctx.fillText('$' + res.cost, lp.x, lp.y - 18);
+      } else {
+        var tiles = res.tiles.length ? res.tiles : [{ x: pointer.gx, y: pointer.gy }];
+        tiles.forEach(function (t) { var p = iso(t.x, t.y); diamondPath(ctx, p.x, p.y); ctx.fillStyle = 'rgba(224,86,63,0.38)'; ctx.fill(); ctx.strokeStyle = 'rgba(224,86,63,0.9)'; ctx.lineWidth = 2; ctx.stroke(); });
+      }
+      ctx.restore();
+    }
     // Ghost for the 2×3 restroom: footprint tinted green only on buildable grass
     // that touches a corridor, plus a translucent toilet preview inside.
     function drawRestroomGhost(rot) {
@@ -2043,7 +2941,7 @@
       c.beginPath(); c.moveTo(F.x, F.y - H); c.lineTo(R.x, R.y - H); c.lineTo(R.x, R.y - H + 5); c.lineTo(F.x, F.y - H + 5); c.closePath(); c.fill();
       c.fillStyle = '#d7dee4';                 // bed surface
       c.beginPath(); c.moveTo(T.x, T.y - H); c.lineTo(R.x, R.y - H); c.lineTo(F.x, F.y - H); c.lineTo(L.x, L.y - H); c.closePath(); c.fill();
-      if (occ) drawDog(occ, iso(gx, gy).x, iso(gx, gy).y - H, true);   // the pet being scanned
+      if (occ) cachedDog(occ, iso(gx, gy).x, iso(gx, gy).y - H, true);   // the pet being scanned
       // overhead C-arm: post at the back corner, arm over the bed, emitter above the pet
       var base = iso(gx - 0.5, gy - 0.5), ctr = iso(gx, gy);
       c.strokeStyle = '#8b97a3'; c.lineWidth = 4; c.lineJoin = 'round'; c.lineCap = 'round';
@@ -2051,6 +2949,173 @@
       c.lineCap = 'butt';
       c.fillStyle = '#3a444e'; roundRect(c, ctr.x - 6, ctr.y - 50, 12, 9, 2); c.fill();   // emitter head
       c.fillStyle = '#6fd4e6'; c.fillRect(ctr.x - 3, ctr.y - 42, 6, 2);                    // lens
+    }
+
+    // ---- Back-wall decorations (exam + X-ray rooms) ----------------------
+    // These hang on the two TALL back walls of a room. Each drawer takes a `P`
+    // helper: P(t,h) maps a param t in [0,1] along the one-tile wall edge and a
+    // screen-height h above the floor to a point. Content is drawn UPRIGHT in
+    // screen space (centred on the tile), matching the billboarded pharmacy
+    // shelving, so it reads cleanly on either back wall.
+    function wallEdgeP(ax, ay, bx, by) {
+      var A = iso(ax, ay), B = iso(bx, by);
+      return function (t, h) { return { x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t - h }; };
+    }
+    function wallPanel(c, P, t0, t1, hTop, hBot, fill) {
+      var p0 = P(t0, hTop), p1 = P(t1, hTop), p2 = P(t1, hBot), p3 = P(t0, hBot);
+      c.fillStyle = fill; c.beginPath();
+      c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.lineTo(p3.x, p3.y);
+      c.closePath(); c.fill();
+    }
+    // A filled rectangle that lies IN the wall plane: centred at (tc along, hc up),
+    // half-extents dt (in tile-fraction along the wall) and dh (screen-px up).
+    // Mapping every corner through P shears it to the wall's isometric slope.
+    function wallTile(c, P, tc, hc, dt, dh, fill) {
+      var p0 = P(tc - dt, hc + dh), p1 = P(tc + dt, hc + dh), p2 = P(tc + dt, hc - dh), p3 = P(tc - dt, hc - dh);
+      c.fillStyle = fill; c.beginPath();
+      c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.lineTo(p3.x, p3.y);
+      c.closePath(); c.fill();
+    }
+    // A medical cross painted ON the wall: a vertical arm (narrow along, tall up)
+    // plus a horizontal arm (wide along, short up). Both arms map through P, so the
+    // horizontal arm slants with the wall instead of reading as a flat sticker.
+    function wallCross(c, P, tc, hc, s, fill) {
+      wallTile(c, P, tc, hc, 0.045 * s, 5 * s, fill);     // vertical arm
+      wallTile(c, P, tc, hc, 0.13 * s, 1.7 * s, fill);    // horizontal arm
+    }
+    // The hero: a wall-mounted light box (negatoscope) glowing behind a chest
+    // film — skull, spine and ribs — with a green power LED.
+    function drawXrayBoard(c, P) {
+      wallPanel(c, P, 0.13, 0.87, 55, 22, '#232b33');          // dark casing
+      var m = P(0.5, 39);
+      c.save();
+      c.shadowColor = 'rgba(150,225,255,0.95)'; c.shadowBlur = 13;
+      wallPanel(c, P, 0.17, 0.83, 52, 25, '#e8f6ff');          // glowing film
+      c.restore();
+      wallPanel(c, P, 0.17, 0.83, 52, 44, '#c7ebfd');          // cooler top band
+      c.strokeStyle = 'rgba(58,92,120,0.8)'; c.lineWidth = 1.5; c.lineCap = 'round';
+      c.fillStyle = 'rgba(58,92,120,0.5)';
+      c.beginPath(); c.ellipse(m.x, m.y - 12, 4.4, 3.5, 0, 0, Math.PI * 2); c.fill();   // skull
+      c.beginPath(); c.moveTo(m.x, m.y - 8); c.lineTo(m.x, m.y + 12); c.stroke();        // spine
+      for (var r = 0; r < 4; r++) {                                                      // rib pairs
+        var ry = m.y - 5 + r * 4.4;
+        c.beginPath(); c.moveTo(m.x, ry); c.quadraticCurveTo(m.x - 7, ry + 1.5, m.x - 8, ry + 5); c.stroke();
+        c.beginPath(); c.moveTo(m.x, ry); c.quadraticCurveTo(m.x + 7, ry + 1.5, m.x + 8, ry + 5); c.stroke();
+      }
+      c.lineCap = 'butt';
+      var led = P(0.8, 24); c.fillStyle = '#7CFC9A';
+      c.beginPath(); c.arc(led.x, led.y, 1.5, 0, Math.PI * 2); c.fill();
+    }
+    // Yellow radiation-warning trefoil.
+    function drawRadSign(c, P) {
+      var m = P(0.5, 40);
+      c.fillStyle = '#f2c200';
+      c.beginPath(); c.moveTo(m.x, m.y - 9); c.lineTo(m.x + 9, m.y + 7); c.lineTo(m.x - 9, m.y + 7); c.closePath(); c.fill();
+      c.strokeStyle = '#2b2b2b'; c.lineWidth = 1.3; c.lineJoin = 'round'; c.stroke();
+      c.fillStyle = '#2b2b2b'; var cy = m.y + 1.5;
+      c.beginPath(); c.arc(m.x, cy, 1.5, 0, Math.PI * 2); c.fill();
+      for (var a = 0; a < 3; a++) {
+        var ang = -Math.PI / 2 + a * (2 * Math.PI / 3);
+        c.beginPath(); c.moveTo(m.x, cy); c.arc(m.x, cy, 4.8, ang - 0.5, ang + 0.5); c.closePath(); c.fill();
+      }
+    }
+    // A simple round wall clock with a teal bezel.
+    function drawWallClock(c, P) {
+      var m = P(0.5, 41);
+      c.fillStyle = '#fbfdfe'; c.beginPath(); c.arc(m.x, m.y, 7.5, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#2f9e90'; c.lineWidth = 2; c.stroke();
+      c.strokeStyle = '#33414d'; c.lineWidth = 1.4; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(m.x, m.y); c.lineTo(m.x, m.y - 5); c.stroke();
+      c.beginPath(); c.moveTo(m.x, m.y); c.lineTo(m.x + 3.5, m.y + 1.5); c.stroke();
+      c.lineCap = 'butt';
+      c.fillStyle = '#33414d'; c.beginPath(); c.arc(m.x, m.y, 1, 0, Math.PI * 2); c.fill();
+    }
+    // A lead apron hanging on a hook (X-ray PPE).
+    function drawLeadApron(c, P) {
+      var t = P(0.5, 50);
+      c.strokeStyle = '#9aa6b0'; c.lineWidth = 2;
+      c.beginPath(); c.arc(t.x, t.y + 2, 2.5, Math.PI, 0); c.stroke();
+      c.fillStyle = '#3f6f8c';
+      c.beginPath();
+      c.moveTo(t.x - 5, t.y + 4); c.lineTo(t.x + 5, t.y + 4);
+      c.lineTo(t.x + 8, t.y + 24); c.quadraticCurveTo(t.x, t.y + 28, t.x - 8, t.y + 24);
+      c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(0,0,0,0.18)'; c.lineWidth = 1; c.stroke();
+      c.fillStyle = '#345d76'; c.fillRect(t.x - 2.5, t.y + 4, 5, 9);
+    }
+    // A wall storage cabinet; `cross` paints a red medical cross on one door.
+    function drawCabinet(c, P, cross) {
+      wallPanel(c, P, 0.21, 0.79, 50, 27, '#e7eef2');
+      wallPanel(c, P, 0.21, 0.79, 50, 47, '#cfdae1');          // top shade
+      var a = P(0.5, 49), b = P(0.5, 28), m = P(0.5, 38);
+      c.strokeStyle = '#aebcc6'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+      c.fillStyle = '#8fa0ab'; c.fillRect(m.x - 4, m.y - 1, 2, 5); c.fillRect(m.x + 2, m.y - 1, 2, 5);
+      if (cross) wallCross(c, P, 0.37, 39, 0.9, '#e0563f');   // red cross on the left door
+    }
+    // A framed pet-anatomy chart: dog silhouette + label pointer lines.
+    function drawAnatomyPoster(c, P) {
+      wallPanel(c, P, 0.19, 0.81, 52, 23, '#37b3a3');          // teal frame
+      wallPanel(c, P, 0.225, 0.775, 49, 26, '#f3f8fa');        // paper
+      var m = P(0.5, 38);
+      c.fillStyle = '#cfe0e6';
+      c.beginPath(); c.ellipse(m.x - 1, m.y, 8, 4.4, 0, 0, Math.PI * 2); c.fill();        // body
+      c.beginPath(); c.arc(m.x + 8, m.y - 3, 3.2, 0, Math.PI * 2); c.fill();              // head
+      c.fillRect(m.x - 6, m.y + 2, 1.6, 5); c.fillRect(m.x + 4, m.y + 2, 1.6, 5);          // legs
+      c.strokeStyle = '#9bb8c0'; c.lineWidth = 0.8;
+      c.beginPath(); c.moveTo(m.x - 9, m.y - 7); c.lineTo(m.x - 2, m.y - 2); c.stroke();
+      c.beginPath(); c.moveTo(m.x + 11, m.y - 8); c.lineTo(m.x + 7, m.y - 4); c.stroke();
+    }
+    // A small health poster with a red cross header.
+    function drawHealthPoster(c, P) {
+      wallPanel(c, P, 0.3, 0.7, 50, 27, '#fbfdfe');           // paper
+      wallPanel(c, P, 0.3, 0.7, 50, 46, '#37b3a3');           // header band
+      var m = P(0.5, 40);
+      wallCross(c, P, 0.5, 40, 0.85, '#e0563f');
+      c.strokeStyle = '#c4d2da'; c.lineWidth = 0.8;
+      [6, 9].forEach(function (dy) { c.beginPath(); c.moveTo(m.x - 6, m.y + dy); c.lineTo(m.x + 6, m.y + dy); c.stroke(); });
+    }
+    // A framed diploma with a wax seal.
+    function drawCertificate(c, P) {
+      wallPanel(c, P, 0.31, 0.69, 49, 29, '#caa45a');         // gold frame
+      wallPanel(c, P, 0.345, 0.655, 47, 31, '#fdfaf0');       // parchment
+      var m = P(0.5, 40);
+      c.strokeStyle = '#d9c7a0'; c.lineWidth = 0.8;
+      [-4, -1, 2].forEach(function (dy) { c.beginPath(); c.moveTo(m.x - 5, m.y + dy); c.lineTo(m.x + 5, m.y + dy); c.stroke(); });
+      c.fillStyle = '#c0392b'; c.beginPath(); c.arc(m.x + 3.5, m.y + 6, 2.2, 0, Math.PI * 2); c.fill();
+    }
+    // Hang a room's per-wall decorations on its two TALL back walls (north =
+    // each tile's y-1 neighbour, west = x-1), one item per wall tile at that
+    // wall's exact depth so a vet in front occludes it. Decorations go on EVERY
+    // back-wall tile except the doorway, so every room is decorated the same way
+    // regardless of placement. Where roomWalls drew no wall (a back edge facing
+    // open grass/perimeter rather than room floor), we add a matching tall wall
+    // first, so the room is enclosed and the decoration always has a surface.
+    // `north`/`west` are arrays of drawer fns (or null to skip a slot).
+    function hangBackWall(rm, w, h, north, west) {
+      var gx = rm.gx, gy = rm.gy, dr = rm.door;
+      function isDoor(nx, ny) { return dr && dr.x === nx && dr.y === ny; }
+      function fallback(ax, ay, bx, by, ft, fb, cap, trim) {
+        wallSegs.push({ d: (ax + ay + bx + by) / 2, _ax: ax, _ay: ay, _bx: bx, _by: by, _htop: BILLBOARD_H, _key: 'W' + WALL_H + ft + fb + cap + trim + 'bb', fn: function () {
+          wallFace(ctx, ax, ay, bx, by, WALL_H, ft, fb, cap, trim);
+        } });
+      }
+      for (var i = 0; i < w; i++) (function (i) {
+        var x = gx + i; if (isDoor(x, gy - 1)) return;       // doorway: stays open, no decor
+        if (!isRoomFloor(x, gy - 1)) fallback(x - 0.5, gy - 0.5, x + 0.5, gy - 0.5, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+        var fn = north[i]; if (!fn) return;
+        wallSegs.push({ d: x + gy - 0.5, _ax: x - 0.5, _ay: gy - 0.5, _bx: x + 0.5, _by: gy - 0.5, _htop: BILLBOARD_H, _key: 'bb' + fn.name, fn: function () {
+          fn(ctx, wallEdgeP(x - 0.5, gy - 0.5, x + 0.5, gy - 0.5));
+        } });
+      })(i);
+      for (var j = 0; j < h; j++) (function (j) {
+        var y = gy + j; if (isDoor(gx - 1, y)) return;
+        if (!isRoomFloor(gx - 1, y)) fallback(gx - 0.5, y - 0.5, gx - 0.5, y + 0.5, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+        var fn = west[j]; if (!fn) return;
+        wallSegs.push({ d: gx + y - 0.5, _ax: gx - 0.5, _ay: y - 0.5, _bx: gx - 0.5, _by: y + 0.5, _htop: BILLBOARD_H, _key: 'bb' + fn.name, fn: function () {
+          fn(ctx, wallEdgeP(gx - 0.5, y - 0.5, gx - 0.5, y + 0.5));
+        } });
+      })(j);
     }
 
     // Ghost for the 3×4 X-ray room: footprint tint + a preview of bed/desk/circle.
@@ -2087,7 +3152,202 @@
       }
     }
 
-    // Ghost for the 4×3 pharmacy: footprint tint + previews of the 2 counters/circles.
+    // Grooming shower station: a tiled back panel + chrome shower arm; runs water
+    // when a dog is being washed (`active`).
+    function drawGroomShower(c, gx, gy, active) {
+      furnShadow(c, gx - 0.42, gy - 0.4, gx + 0.42, gy + 0.42);
+      isoBox(c, gx - 0.4, gy - 0.28, gx + 0.4, gy + 0.4, 16, '#dfeef2', '#b9d2da', '#a7c3cc'); // base cabinet
+      var m = iso(gx, gy), topY = m.y - 16;
+      c.fillStyle = '#cfe6ee'; c.fillRect(m.x - 15, topY - 46, 30, 46);                          // tall tiled panel
+      c.fillStyle = '#bcd8e2';
+      for (var yy = 0; yy < 5; yy++) for (var xx = 0; xx < 3; xx++) c.fillRect(m.x - 14 + xx * 10, topY - 44 + yy * 9, 9, 8);
+      c.fillStyle = '#eef7fa'; c.fillRect(m.x - 15, topY - 46, 30, 3);                            // top trim
+      c.strokeStyle = '#9fb3bd'; c.lineWidth = 3; c.lineCap = 'round';                            // chrome arm
+      c.beginPath(); c.moveTo(m.x, topY - 40); c.lineTo(m.x, topY - 30); c.lineTo(m.x + 2, topY - 22); c.stroke();
+      c.fillStyle = '#c7d4da'; c.beginPath(); c.ellipse(m.x + 2, topY - 20, 6, 3, 0, 0, Math.PI * 2); c.fill(); // head
+      c.lineCap = 'butt';
+      if (active) {
+        c.strokeStyle = 'rgba(150,205,235,0.78)'; c.lineWidth = 1.4;
+        for (var w = 0; w < 6; w++) {
+          var ph = (animT * 3 + w * 0.6) % 1, wx = m.x - 5 + w * 2.2;
+          c.beginPath(); c.moveTo(wx, topY - 18); c.lineTo(wx - 1, topY - 18 + 10 + ph * 8); c.stroke();
+        }
+        c.fillStyle = 'rgba(150,205,235,0.32)'; c.beginPath(); c.ellipse(m.x + 3, m.y - 2, 12, 5, 0, 0, Math.PI * 2); c.fill();
+      }
+    }
+    // Grooming blow-dry station: a padded pedestal + a dryer on a boom arm; blows
+    // warm-air lines when a dog is being dried (`active`).
+    function drawGroomDryer(c, gx, gy, active) {
+      furnShadow(c, gx - 0.4, gy - 0.4, gx + 0.42, gy + 0.42);
+      isoBox(c, gx - 0.34, gy - 0.2, gx + 0.34, gy + 0.34, 20, '#e7d8c6', '#c9b299', '#b89f84'); // pedestal
+      var m = iso(gx, gy), topY = m.y - 20;
+      c.strokeStyle = '#8c98a2'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(m.x - 10, topY); c.lineTo(m.x - 10, topY - 34); c.stroke();          // pole
+      c.beginPath(); c.moveTo(m.x - 10, topY - 34); c.lineTo(m.x + 4, topY - 30); c.stroke();      // boom arm
+      c.fillStyle = '#eec23c'; roundRect(c, m.x + 2, topY - 36, 14, 10, 4); c.fill();              // dryer body
+      c.fillStyle = '#d9a92a'; roundRect(c, m.x + 13, topY - 33, 5, 5, 2); c.fill();               // nozzle
+      if (active) {
+        c.strokeStyle = 'rgba(255,224,150,0.72)'; c.lineWidth = 1.6; c.lineCap = 'round';
+        for (var a = 0; a < 4; a++) {
+          var off = (animT * 2 + a * 0.5) % 1;
+          c.beginPath();
+          c.moveTo(m.x + 18, topY - 30 + (a - 1.5) * 2.4);
+          c.lineTo(m.x + 18 + 8 + off * 7, topY - 30 + (a - 1.5) * 3.4);
+          c.stroke();
+        }
+        c.lineCap = 'butt';
+      }
+    }
+
+    // One tile-wide section of pharmacy shelving, billboarded flat on a back-wall
+    // edge running grid-corner (ax,ay)→(bx,by): a wood back-board, three shelves,
+    // and a row of colourful medicine boxes on each. `seed` shifts the box colours
+    // so neighbouring sections don't repeat. Heights are screen-px above the floor
+    // line, kept just under WALL_H (62) so they sit on the tall back walls.
+    function drawMedShelf(c, ax, ay, bx, by, seed) {
+      var A = iso(ax, ay), B = iso(bx, by), dx = B.x - A.x, dy = B.y - A.y;
+      function P(t, h) { return { x: A.x + dx * t, y: A.y + dy * t - h }; }
+      function band(t0, t1, hTop, hBot, fill) {
+        var p0 = P(t0, hTop), p1 = P(t1, hTop), p2 = P(t1, hBot), p3 = P(t0, hBot);
+        c.fillStyle = fill; c.beginPath();
+        c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.lineTo(p3.x, p3.y);
+        c.closePath(); c.fill();
+      }
+      var botH = 8, topH = 57;
+      band(0.03, 0.97, topH, botH, '#c7b08c');                  // back board
+      band(0.03, 0.10, topH, botH, '#a98f68');                  // left post
+      band(0.90, 0.97, topH, botH, '#a98f68');                  // right post
+      var cols = ['#e0683c', '#3d8fd0', '#7d5bbe', '#3bb1a2', '#e0a93c', '#d94f8a', '#5aa897'];
+      var shelfTops = [19, 34, 49];                             // surface height of each of 3 shelves
+      shelfTops.forEach(function (sh, si) {
+        band(0.05, 0.95, sh, sh - 2.5, '#8a7252');             // the shelf board itself
+        for (var i = 0; i < 4; i++) {                          // boxes standing on this shelf
+          var t = 0.16 + i * 0.225, p = P(t, sh);
+          c.fillStyle = cols[(seed + si * 2 + i * 3) % cols.length];
+          c.fillRect(p.x - 4, p.y - 12, 8, 12);
+          c.fillStyle = 'rgba(255,255,255,0.85)';               // pale label band
+          c.fillRect(p.x - 4, p.y - 8, 8, 3);
+        }
+      });
+    }
+
+    // A different ("other") shelving unit for the back-right wall: the same wooden
+    // carcass, but stocked with apothecary jars, pill bottles and gauze rolls
+    // instead of medicine boxes — so the two back walls read distinctly.
+    function drawSupplyShelf(c, ax, ay, bx, by, seed) {
+      var A = iso(ax, ay), B = iso(bx, by), dx = B.x - A.x, dy = B.y - A.y;
+      function P(t, h) { return { x: A.x + dx * t, y: A.y + dy * t - h }; }
+      function band(t0, t1, hTop, hBot, fill) {
+        var p0 = P(t0, hTop), p1 = P(t1, hTop), p2 = P(t1, hBot), p3 = P(t0, hBot);
+        c.fillStyle = fill; c.beginPath();
+        c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.lineTo(p3.x, p3.y);
+        c.closePath(); c.fill();
+      }
+      var botH = 8, topH = 57, caps = ['#e0563f', '#2f8fd0', '#2bb19a', '#e0a93c', '#d94f8a'];
+      band(0.03, 0.97, topH, botH, '#8a7252');                  // back board (warm wood, like the med shelf)
+      band(0.03, 0.10, topH, botH, '#6f5b3f');                  // left post
+      band(0.90, 0.97, topH, botH, '#6f5b3f');                  // right post
+      var shelfTops = [19, 34, 49];
+      shelfTops.forEach(function (sh, si) {
+        band(0.05, 0.95, sh, sh - 2.5, '#6f5b3f');             // shelf board
+        for (var i = 0; i < 4; i++) {
+          var t = 0.16 + i * 0.225, p = P(t, sh), kind = (seed + si * 3 + i) % 3;
+          if (kind === 0) {                                     // amber apothecary jar
+            c.fillStyle = '#b9741f'; roundRect(c, p.x - 4.5, p.y - 12, 9, 12, 2.5); c.fill();
+            c.fillStyle = 'rgba(255,240,200,0.45)'; c.fillRect(p.x - 3.5, p.y - 11, 2.5, 9); // glass highlight
+            c.fillStyle = '#5e4316'; roundRect(c, p.x - 5, p.y - 14, 10, 3, 1.5); c.fill();  // dark lid
+          } else if (kind === 1) {                              // pill bottle, bold cap + label
+            c.fillStyle = '#f4f8fa'; roundRect(c, p.x - 4, p.y - 12, 8, 12, 2); c.fill();
+            c.strokeStyle = '#b9c6cd'; c.lineWidth = 0.8; roundRect(c, p.x - 4, p.y - 12, 8, 12, 2); c.stroke();
+            c.fillStyle = caps[(seed + i) % caps.length];
+            roundRect(c, p.x - 4, p.y - 14.5, 8, 3.5, 1.5); c.fill();                        // cap
+            c.fillRect(p.x - 4, p.y - 7, 8, 4);                                              // colour label band
+          } else {                                              // gauze / bandage roll
+            c.fillStyle = '#f7f4ec'; c.beginPath(); c.arc(p.x, p.y - 6, 5.5, 0, Math.PI * 2); c.fill();
+            c.strokeStyle = '#c9c2b2'; c.lineWidth = 1; c.stroke();
+            c.fillStyle = '#e0563f';                                                          // red cross on the roll
+            c.fillRect(p.x - 1, p.y - 8.6, 2, 5.2); c.fillRect(p.x - 2.6, p.y - 7, 5.2, 2);
+          }
+        }
+      });
+    }
+
+    // One tile-wide section of SHOP shelving: a light retail-wood carcass stocked
+    // with a mix of product boxes, toy balls and food bags, so it reads as a store
+    // rather than a clinic shelf. `seed` shifts the goods so sections don't repeat.
+    function drawShopShelf(c, ax, ay, bx, by, seed) {
+      var A = iso(ax, ay), B = iso(bx, by), dx = B.x - A.x, dy = B.y - A.y;
+      function P(t, h) { return { x: A.x + dx * t, y: A.y + dy * t - h }; }
+      function band(t0, t1, hTop, hBot, fill) {
+        var p0 = P(t0, hTop), p1 = P(t1, hTop), p2 = P(t1, hBot), p3 = P(t0, hBot);
+        c.fillStyle = fill; c.beginPath();
+        c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.lineTo(p3.x, p3.y);
+        c.closePath(); c.fill();
+      }
+      var botH = 8, topH = 57, cols = ['#e0563f', '#3d8fd0', '#7d5bbe', '#3bb1a2', '#e0a93c', '#d94f8a', '#5aa897', '#f08a3c'];
+      band(0.03, 0.97, topH, botH, '#b9967a');                  // back board (warm retail wood)
+      band(0.03, 0.10, topH, botH, '#94725a');                  // left post
+      band(0.90, 0.97, topH, botH, '#94725a');                  // right post
+      var shelfTops = [19, 34, 49];
+      shelfTops.forEach(function (sh, si) {
+        band(0.05, 0.95, sh, sh - 2.5, '#7d6450');             // shelf board
+        for (var i = 0; i < 4; i++) {
+          var t = 0.16 + i * 0.225, p = P(t, sh), kind = (seed + si * 2 + i) % 3, col = cols[(seed + si * 3 + i * 2) % cols.length];
+          if (kind === 0) {                                     // FOOD — a bag of pet food (sack)
+            c.fillStyle = col; c.beginPath();
+            c.moveTo(p.x - 3.5, p.y); c.lineTo(p.x + 3.5, p.y); c.lineTo(p.x + 4.5, p.y - 11); c.lineTo(p.x - 4.5, p.y - 11); c.closePath(); c.fill();
+            c.fillStyle = 'rgba(255,255,255,0.82)'; c.fillRect(p.x - 4, p.y - 7, 9, 3);   // label
+          } else if (kind === 1) {                              // TOYS — a toy ball
+            c.fillStyle = col; c.beginPath(); c.arc(p.x, p.y - 5, 5, 0, Math.PI * 2); c.fill();
+            c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.arc(p.x - 1.6, p.y - 6.4, 1.5, 0, Math.PI * 2); c.fill();
+          } else {                                              // CLOTHES — a folded stack of garments
+            c.fillStyle = col; c.fillRect(p.x - 5, p.y - 4, 10, 4);                       // lower garment
+            c.fillStyle = cols[(seed + si + i + 3) % cols.length]; c.fillRect(p.x - 5, p.y - 8, 10, 4); // upper garment (contrasting)
+            c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 0.8;
+            c.beginPath(); c.moveTo(p.x - 5, p.y - 6); c.lineTo(p.x + 5, p.y - 6); c.stroke(); // fold line
+          }
+        }
+      });
+    }
+    // One tile of the shop's central display island: a waist-high counter with
+    // goods on top, or a cash register on the middle tile (`reg`).
+    function drawShopIsland(c, gx, gy, reg) {
+      var H = 20;
+      furnShadow(c, gx - 0.46, gy - 0.46, gx + 0.46, gy + 0.46);
+      isoBox(c, gx - 0.46, gy - 0.46, gx + 0.46, gy + 0.46, H, '#eef2f4', '#c4d2da', '#b0c0c9');
+      var m = iso(gx, gy), topY = m.y - H, cols = ['#e0563f', '#3d8fd0', '#7d5bbe', '#3bb1a2', '#e0a93c'];
+      if (reg) {                                               // cash register
+        c.fillStyle = '#3a444e'; roundRect(c, m.x - 6, topY - 12, 12, 12, 2); c.fill();
+        c.fillStyle = '#6fd4e6'; c.fillRect(m.x - 4, topY - 10, 8, 4);          // screen
+        c.fillStyle = '#aeb8c0'; c.fillRect(m.x - 5, topY - 4, 10, 3);          // keys
+      } else {                                                 // goods on the counter: folded clothes + a toy ball
+        c.fillStyle = cols[(Math.round(gx) * 2) % cols.length];                            // folded garment stack
+        c.fillRect(m.x - 10, topY - 8, 9, 8);
+        c.fillStyle = cols[(Math.round(gx) * 2 + 2) % cols.length]; c.fillRect(m.x - 10, topY - 8, 9, 3);
+        c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 0.8;
+        c.beginPath(); c.moveTo(m.x - 10, topY - 5); c.lineTo(m.x - 1, topY - 5); c.stroke();
+        c.fillStyle = cols[(Math.round(gx) * 2 + 4) % cols.length];                        // toy ball
+        c.beginPath(); c.arc(m.x + 6, topY - 4, 4, 0, Math.PI * 2); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.arc(m.x + 4.6, topY - 5, 1.2, 0, Math.PI * 2); c.fill();
+      }
+    }
+    // Ghost for the 5×5 shop: footprint tint + a preview of the display island.
+    function drawShopGhost(rot) {
+      var ok = canPlaceShop(pointer.gx, pointer.gy);
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.34)' : 'rgba(224,86,63,0.42)';
+      shopTiles(pointer.gx, pointer.gy).forEach(function (t) { var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill(); });
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      shopIslandTiles(pointer.gx, pointer.gy).forEach(function (t, i) { drawShopIsland(ghostCtx, t.x, t.y, i === 1); });
+      var gct = shopCashierTile(pointer.gx, pointer.gy); drawCashier(ghostCtx, gct.x, gct.y, 'male');
+      if (!ok) { ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop'; ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore(); }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
+    // Ghost for the 4×4 pharmacy: footprint tint + previews of the 2 counters/circles.
     function drawPharmGhost(rot) {
       var ok = canPlacePharmacy(pointer.gx, pointer.gy), st = pharmStations(pointer.gx, pointer.gy, rot);
       ctx.save();
@@ -2105,7 +3365,20 @@
     // A cleaner: the generic worker figure holding a mop.
     // A janitor: grey-blue coveralls, a red ball cap, and a mop — distinct from
     // the receptionist (purple top + headset). Drawn facing the camera.
-    function drawCleaner(c, gx, gy) {
+    // Shoulder-length side locks framing the face — the "female" gender cue. Drawn in
+    // the figure's local space (origin at the feet, head centred at (0,hy)), in the
+    // staffer's hair colour, just after the head so headwear still sits on top.
+    function drawLongHair(c, hy, color) {
+      c.fillStyle = color;
+      c.beginPath();                                   // left lock
+      c.moveTo(-8, hy - 3); c.quadraticCurveTo(-12, hy + 4, -9.5, hy + 13);
+      c.lineTo(-5.5, hy + 13); c.quadraticCurveTo(-7, hy + 4, -6, hy - 3); c.closePath(); c.fill();
+      c.beginPath();                                   // right lock
+      c.moveTo(8, hy - 3); c.quadraticCurveTo(12, hy + 4, 9.5, hy + 13);
+      c.lineTo(5.5, hy + 13); c.quadraticCurveTo(7, hy + 4, 6, hy - 3); c.closePath(); c.fill();
+    }
+
+    function drawCleaner(c, gx, gy, gender) {
       var s = iso(gx, gy);
       c.fillStyle = 'rgba(20,40,30,0.26)';
       c.beginPath(); c.ellipse(s.x, s.y, 13, 6, 0, 0, Math.PI * 2); c.fill();
@@ -2125,6 +3398,7 @@
       c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                            // neck
       var hy = bt - 13;
       c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill(); // head
+      if (gender === 'female') drawLongHair(c, hy, '#7a5a3a');
       c.fillStyle = '#7a5a3a'; c.fillRect(-8.5, hy + 1, 17, 4);                         // a bit of hair under the cap
       // red ball cap (crown + brim)
       c.fillStyle = '#c0392b';
@@ -2159,11 +3433,76 @@
       ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     }
 
+    // A hired Worker: teal grooming smock + apron, yellow rubber gloves, a polka-dot
+    // bandana and a slicker brush — reads distinct from the vet/cleaner at a glance.
+    function drawWorker(c, gx, gy, gender) {
+      var s = iso(gx, gy);
+      c.fillStyle = 'rgba(20,40,30,0.26)';
+      c.beginPath(); c.ellipse(s.x, s.y, 13, 6, 0, 0, Math.PI * 2); c.fill();
+      c.save(); c.translate(s.x, s.y);
+      c.fillStyle = '#3a4652'; c.fillRect(-6, -14, 5, 14); c.fillRect(1, -14, 5, 14);   // legs
+      c.fillStyle = '#22252b'; c.fillRect(-7, -3, 6, 4); c.fillRect(1, -3, 6, 4);        // shoes
+      var bt = -40;
+      c.fillStyle = gradL(c, 0, bt, 0, -12, [[0, '#3fb9a6'], [1, '#2b8f80']]); roundRect(c, -11, bt, 22, 28, 7); c.fill(); // teal smock
+      c.fillStyle = '#2b8f80'; roundRect(c, -14, bt + 2, 5, 13, 2.5); c.fill(); roundRect(c, 9, bt + 2, 5, 13, 2.5); c.fill(); // sleeves
+      c.fillStyle = '#eaf6f3'; roundRect(c, -7, bt + 6, 14, 18, 3); c.fill();            // apron panel
+      c.fillStyle = '#cfe8e2'; c.fillRect(-6, bt + 15, 12, 5);                            // apron pocket
+      c.fillStyle = '#f2c94c'; c.fillRect(-14, bt + 14, 5, 5); c.fillRect(9, bt + 14, 5, 5); // rubber gloves
+      c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                              // neck
+      var hy = bt - 13;
+      c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill(); // head
+      if (gender === 'female') drawLongHair(c, hy, '#5a3f2a');
+      c.fillStyle = '#5a3f2a'; c.fillRect(-8.5, hy + 1, 17, 4);                           // hair under bandana
+      c.fillStyle = '#2f9e90';                                                            // teal bandana
+      c.beginPath(); c.arc(0, hy - 1, 9, Math.PI, Math.PI * 2, false); c.closePath(); c.fill();
+      c.fillRect(-9, hy - 2, 18, 3);
+      c.fillStyle = '#fff';                                                               // polka dots
+      c.beginPath(); c.arc(-4, hy - 4, 1.1, 0, Math.PI * 2); c.arc(3, hy - 5, 1.1, 0, Math.PI * 2); c.arc(6, hy - 2, 1.1, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#2b2b33';                                                            // eyes
+      c.beginPath(); c.arc(-3, hy + 1.5, 1.3, 0, Math.PI * 2); c.arc(3, hy + 1.5, 1.3, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#9a5f44'; c.lineWidth = 1.2;                                       // smile
+      c.beginPath(); c.arc(0, hy + 4, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      c.fillStyle = '#9a6a3a'; roundRect(c, 12, -26, 4, 9, 2); c.fill();                  // brush handle
+      c.fillStyle = '#d8dee3'; c.fillRect(11, -18, 6, 3);                                 // brush bristles
+      c.restore();
+    }
+    function drawWorkerGhost() {
+      var ok = canPlaceCleaner(pointer.gx, pointer.gy), s = iso(pointer.gx, pointer.gy);
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, TILE_HW * 0.55, TILE_HH * 0.55, 0, 0, Math.PI * 2);
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.3)' : 'rgba(224,86,63,0.4)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = ok ? 'rgba(70,205,120,1)' : 'rgba(224,86,63,0.95)'; ctx.stroke();
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      drawWorker(ghostCtx, pointer.gx, pointer.gy);
+      if (!ok) { ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop'; ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore(); }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+    // Ghost for the 3×6 grooming parlour: footprint tint + previews of both stations.
+    function drawGroomGhost(rot) {
+      var ok = canPlaceGrooming(pointer.gx, pointer.gy), st = groomStations(pointer.gx, pointer.gy);
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.34)' : 'rgba(224,86,63,0.42)';
+      groomTiles(pointer.gx, pointer.gy).forEach(function (t) { var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill(); });
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      drawGroomShower(ghostCtx, st[0].fixture.x, st[0].fixture.y, false);
+      drawGroomDryer(ghostCtx, st[1].fixture.x, st[1].fixture.y, false);
+      st.forEach(function (s) { drawExamCircle(ghostCtx, s.circle.x, s.circle.y, false); });
+      if (!ok) { ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop'; ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore(); }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
     function drawGhost() {
       if (!placing) return;
       var item = placing.item, rot = placing.rot || 0;
       if (item.kind === 'corridor') { if (pointer.on || corridorDrag) drawCorridorGhost(); return; }
       if (item.kind === 'blank') { if (pointer.on || corridorDrag) drawBlankGhost(); return; }
+      if (item.kind === 'park') { if (pointer.on || corridorDrag) drawParkGhost(); return; }
       if (!pointer.on) return;
       if (item.kind === 'staff') { drawStaffGhost(); return; }
       if (item.kind === 'examstaff') { drawVetStaffGhost(); return; }
@@ -2171,8 +3510,11 @@
       if (item.kind === 'exam') { drawExamGhost(rot); return; }
       if (item.kind === 'xray') { drawXrayGhost(rot); return; }
       if (item.kind === 'pharmacy') { drawPharmGhost(rot); return; }
+      if (item.kind === 'shop') { drawShopGhost(rot); return; }
+      if (item.kind === 'grooming') { drawGroomGhost(rot); return; }
       if (item.kind === 'pharmstaff') { drawPharmStaffGhost(); return; }
       if (item.kind === 'cleaner') { drawCleanerGhost(); return; }
+      if (item.kind === 'worker') { drawWorkerGhost(); return; }
       var ok = canPlace(item, pointer.gx, pointer.gy, rot);
       // footprint tint on the floor (green = ok, red = blocked)
       ctx.save();
@@ -2252,12 +3594,16 @@
       for (i = examRooms.length - 1; i >= 0; i--) if (inTiles(examTiles(examRooms[i].gx, examRooms[i].gy))) return { kind: 'exam', room: examRooms[i], arr: examRooms, idx: i };
       for (i = xrayRooms.length - 1; i >= 0; i--) if (inTiles(xrayTiles(xrayRooms[i].gx, xrayRooms[i].gy))) return { kind: 'xray', room: xrayRooms[i], arr: xrayRooms, idx: i };
       for (i = pharmacies.length - 1; i >= 0; i--) if (inTiles(pharmTiles(pharmacies[i].gx, pharmacies[i].gy))) return { kind: 'pharmacy', room: pharmacies[i], arr: pharmacies, idx: i };
+      for (i = shops.length - 1; i >= 0; i--) if (inTiles(shopTiles(shops[i].gx, shops[i].gy))) return { kind: 'shop', room: shops[i], arr: shops, idx: i };
+      for (i = groomings.length - 1; i >= 0; i--) if (inTiles(groomTiles(groomings[i].gx, groomings[i].gy))) return { kind: 'grooming', room: groomings[i], arr: groomings, idx: i };
       for (i = restrooms.length - 1; i >= 0; i--) if (inTiles(footprintTiles(FURN_BY_ID.restroom, restrooms[i].gx, restrooms[i].gy, restrooms[i].rot || 0))) return { kind: 'restroom', room: restrooms[i], arr: restrooms, idx: i };
       return null;
     }
-    // A room with a patient (or pharmacy customer) in/incoming can't be moved.
+    // A room with a patient (or pharmacy customer / shop browser) in/incoming
+    // can't be moved.
     function roomBusy(rh) {
       if (rh.kind === 'pharmacy') return rh.room.stations.some(function (s) { return s.patient; });
+      if (rh.kind === 'shop') return visitors.some(function (v) { return v.shopRoom === rh.room; });
       return !!rh.room.occupant;
     }
     // Free a room's floor + fixtures and drop it from its array (reverse of place*).
@@ -2267,6 +3613,8 @@
       if (rh.kind === 'exam') { clearFloor(examTiles(r.gx, r.gy)); delete occupied[k.table.x + ',' + k.table.y]; }
       else if (rh.kind === 'xray') { clearFloor(xrayTiles(r.gx, r.gy)); delete occupied[k.table.x + ',' + k.table.y]; delete occupied[k.desk.x + ',' + k.desk.y]; }
       else if (rh.kind === 'pharmacy') { clearFloor(pharmTiles(r.gx, r.gy)); pharmStations(r.gx, r.gy, r.rot).forEach(function (s) { delete occupied[s.counter.x + ',' + s.counter.y]; }); }
+      else if (rh.kind === 'shop') { clearFloor(shopTiles(r.gx, r.gy)); shopIslandTiles(r.gx, r.gy).concat([shopCashierTile(r.gx, r.gy)]).forEach(function (t) { delete occupied[t.x + ',' + t.y]; }); }
+      else if (rh.kind === 'grooming') { clearFloor(groomTiles(r.gx, r.gy)); groomStations(r.gx, r.gy).forEach(function (s) { delete occupied[s.fixture.x + ',' + s.fixture.y]; }); }
       else if (rh.kind === 'restroom') { clearFloor(footprintTiles(FURN_BY_ID.restroom, r.gx, r.gy, r.rot || 0)); delete occupied[r.toilet.x + ',' + r.toilet.y]; }
       rh.arr.splice(rh.idx, 1);
     }
@@ -2290,8 +3638,8 @@
       if (item.kind === 'staff') {          // hire onto a desk station circle
         var st = nearestStation();
         if (pointer.on && st && st.ok) {
-          staff.push({ type: item.id, line: st.line });
-          money -= item.cost; renderMoney();
+          staff.push({ type: item.id, line: st.line, name: '', gender: randGender() });
+          chargeStaffHire(item);
           cancelPlacing();
         }
         return;
@@ -2299,8 +3647,8 @@
       if (item.kind === 'examstaff') {      // assign a Vet to an exam room's circle
         var ec = nearestExamCircle();
         if (pointer.on && ec && ec.ok) {
-          vets.push({ x: ec.x, y: ec.y, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0 });
-          money -= item.cost; renderMoney();
+          vets.push({ x: ec.x, y: ec.y, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, name: '', gender: randGender() });
+          chargeStaffHire(item);
           cancelPlacing();
         }
         return;
@@ -2329,9 +3677,25 @@
         }
         return;
       }
-      if (item.kind === 'pharmacy') {       // 4x4 walkable room with 3 medicine counters
+      if (item.kind === 'pharmacy') {       // 4x4 walkable room with 2 medicine counters
         if (pointer.on && canPlacePharmacy(pointer.gx, pointer.gy)) {
           placePharmacy(pointer.gx, pointer.gy, rot);
+          if (!placing.moving) { money -= item.cost; renderMoney(); }
+          placing.origRoom = null; cancelPlacing();
+        }
+        return;
+      }
+      if (item.kind === 'shop') {           // 5x5 retail room — clients browse it on the way out
+        if (pointer.on && canPlaceShop(pointer.gx, pointer.gy)) {
+          placeShop(pointer.gx, pointer.gy, rot);
+          if (!placing.moving) { money -= item.cost; renderMoney(); }
+          placing.origRoom = null; cancelPlacing();
+        }
+        return;
+      }
+      if (item.kind === 'grooming') {       // 3x6 parlour with a shower + blow-dry station
+        if (pointer.on && canPlaceGrooming(pointer.gx, pointer.gy)) {
+          placeGrooming(pointer.gx, pointer.gy, rot);
           if (!placing.moving) { money -= item.cost; renderMoney(); }
           placing.origRoom = null; cancelPlacing();
         }
@@ -2340,16 +3704,24 @@
       if (item.kind === 'pharmstaff') {     // hire a Pharmacist onto a counter circle
         var pc = nearestPharmCircle();
         if (pointer.on && pc && pc.ok) {
-          pc.station.pharm = true;
-          money -= item.cost; renderMoney();
+          pc.station.pharm = newPharm();
+          chargeStaffHire(item);
           cancelPlacing();
         }
         return;
       }
       if (item.kind === 'cleaner') {        // drop a roaming cleaner on clear room floor
         if (pointer.on && canPlaceCleaner(pointer.gx, pointer.gy)) {
-          cleaners.push({ x: pointer.gx, y: pointer.gy, speed: 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0 });
-          money -= item.cost; renderMoney();
+          cleaners.push({ x: pointer.gx, y: pointer.gy, speed: 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0, name: '', gender: randGender() });
+          chargeStaffHire(item);
+          cancelPlacing();
+        }
+        return;
+      }
+      if (item.kind === 'worker') {         // drop a roaming worker on clear room floor
+        if (pointer.on && canPlaceCleaner(pointer.gx, pointer.gy)) {
+          workers.push({ x: pointer.gx, y: pointer.gy, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, name: '', gender: randGender() });
+          chargeStaffHire(item);
           cancelPlacing();
         }
         return;
@@ -2378,6 +3750,8 @@
         else if (rr.kind === 'xray') placeXray(rr.gx, rr.gy, rr.rot);
         else if (rr.kind === 'restroom') placeRestroom(rr.gx, rr.gy, rr.rot);
         else if (rr.kind === 'pharmacy') placePharmacy(rr.gx, rr.gy, rr.rot);
+        else if (rr.kind === 'shop') placeShop(rr.gx, rr.gy, rr.rot);
+        else if (rr.kind === 'grooming') placeGrooming(rr.gx, rr.gy, rr.rot);
       }
       placing = null;
       document.body.classList.remove('placing');
@@ -2451,20 +3825,43 @@
       });
     }
 
+    // Staff shop icons rendered from the SAME sprite draw fns used in-world, so each
+    // card shows the actual character (front-facing) instead of a generic emoji.
+    // Cached as a data-URL <img> the first time a staff card is built.
+    var staffIconCache = {};
+    function staffIconURL(id) {
+      if (staffIconCache[id]) return staffIconCache[id];
+      var W = 48, H = 74, fx = 23, fy = 66;            // foot anchor inside the icon canvas
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      var c = cv.getContext('2d');
+      // invert iso() so the figure's feet land on (fx,fy) within THIS canvas
+      var ax = (fx - camera.x) / TILE_HW, ay = (fy - camera.y) / TILE_HH;
+      var gx = (ax + ay) / 2, gy = (ay - ax) / 2;
+      if (id === 'receptionist')    drawReceptionist(c, gx, gy, 'male');
+      else if (id === 'vet')        drawVetStaff(c, gx, gy, 0, 'SE', 'male');
+      else if (id === 'pharmacist') drawPharmacist(c, gx, gy, 'male');
+      else if (id === 'cleaner')    drawCleaner(c, gx, gy, 'male');
+      else if (id === 'worker')     drawWorker(c, gx, gy, 'male');
+      else return null;
+      staffIconCache[id] = '<img class="staff-ic" src="' + cv.toDataURL() + '" alt="" style="height:42px;width:auto;display:block">';
+      return staffIconCache[id];
+    }
+    function shopIcon(item) { return (item.cat === 'staff' && staffIconURL(item.id)) || item.icon; }
     function renderShop() {
       if (activeTab === 'skills') { renderSkillCards(); return; }
       shopItemsEl.innerHTML = '';
       FURNITURE.filter(function (item) { return (item.cat || 'reception') === activeTab; }).forEach(function (item) {
-        var afford = money >= item.cost;
+        var cost = itemCost(item);
+        var afford = money >= cost;
         var card = document.createElement('div');
         card.className = 'shop-item' + (afford ? '' : ' disabled') +
                          (placing && placing.item.id === item.id ? ' selected' : '');
         if (item.cat === 'staff') card.setAttribute('data-staff', item.id);  // hover → highlight this staff type
-        card.innerHTML = '<div class="ic">' + item.icon + '</div>' +
+        card.innerHTML = '<div class="ic">' + shopIcon(item) + '</div>' +
                          '<div class="nm">' + item.name + '</div>' +
-                         '<div class="pr">$' + item.cost + (item.perSquare ? '/sq' : '') + '</div>';
+                         '<div class="pr">$' + cost + (item.perSquare ? '/sq' : '') + '</div>';
         card.addEventListener('click', function () {
-          if (money < item.cost) return;
+          if (money < itemCost(item)) return;
           placing = (placing && placing.item.id === item.id) ? null : { item: item, rot: 0 };
           corridorDrag = null;
           document.body.classList.toggle('placing', !!placing);
@@ -2536,7 +3933,13 @@
         { x: DOOR_MID, y: ROOM - 1.4 }     // step inside, then head to the queue slot
       ];
       v.wp = 0;
-      queue[line].push(v);
+      // Some arrivals come ONLY for the dog park (scaled by its pull). They skip the
+      // reception queue entirely and head straight for the grass once inside. Cat
+      // owners may come just for the cat park instead. Appeal guards sit BEFORE the
+      // Math.random() draws so games without a (cat) park stay RNG-stream-identical.
+      if (v.pet === 'cat' && parkAppeal('cat') > 0 && freeParkSpot(null, 'cat') && Math.random() < parkAppeal('cat') * 0.7) { v.parkOnly = true; v.parkZone = 'cat'; }
+      else if (parkSize() && freeParkSpot() && Math.random() < parkAppeal() * 0.7) v.parkOnly = true;
+      if (!v.parkOnly) queue[line].push(v);
       visitors.push(v);
     }
 
@@ -2544,18 +3947,50 @@
       if (!v.left) {                        // tune arrival rate once per departure, by reason
         v.left = true;
         var rBefore = ratingValue();
-        if (v.served && !v.peed) frq = Math.max(3, frq - 1);    // happy (service complete) → arrivals speed up
-        else frq = Math.min(100, frq + 1.5);                    // unhappy (gave up / accident) → arrivals slow down (frq 100 = 1-star floor)
+        if (v.served && !v.peed) {
+          // happy (service complete) → arrivals speed up — UNLESS they had to use a
+          // dirty room, which cancels the positive rating effect (stays flat). As a
+          // clinic gets great (low frq), each happy visit speeds arrivals MORE, so an
+          // excellent, top-rated clinic can ride the pace all the way down to ~1/sec.
+          if (!v.usedDirtyRoom) { var boost = frq < 12 ? 1 + (12 - frq) / 12 : 1; frq = Math.max(1, frq - diff().up * boost); }
+        } else frq = Math.min(100, frq + diff().down);          // unhappy (gave up / accident) → arrivals slow down. This is the SELF-REGULATOR: if the pace outruns what reception can check in, give-ups pile up and push frq back to a servable rate, so a top clinic only *holds* ~1/sec while it keeps the queue moving.
         renderRating();                                         // arrival rate changed → refresh rating
         floatRatingDelta(ratingValue() - rBefore);              // animate the +/- change out of the chip
       }
-      v.phase = 'leaving';
       v.sideIdx = -1;                      // release any side spot
       if (v.chair) {                       // stand up off the seat onto its clear front tile
         v.x = v.chair.fx; v.y = v.chair.fy; v.seated = false; v.chair = null;
       }
       var qi = queue[v.line].indexOf(v);   // drop out of the queue so others advance
       if (qi >= 0) queue[v.line].splice(qi, 1);
+      // Chance to detour to the dog park on the way out — scales with how big + nice
+      // it is and shrinks as it fills up (parkAppeal). Once per visit (!parkDone).
+      // Cat owners detour to the cat park (a furnished blank room) instead.
+      if (!v.parkDone && v.pet === 'cat' && parkAppeal('cat') > 0 && Math.random() < parkAppeal('cat')) {
+        if (startDogPark(v, 'cat')) return; // off to the cat playground instead of leaving
+      }
+      if (!v.parkDone && parkSize() && Math.random() < parkAppeal()) {
+        if (startDogPark(v)) return;        // off to the grass instead of leaving
+      }
+      // Low chance to detour through the shop on the way out (once per visit). If a
+      // free aisle spot is found, head there to browse; otherwise just leave.
+      if (!v.shopped && shops.length && Math.random() < SHOP_CHANCE) {
+        var spot = claimShopSpot();
+        if (spot) {
+          var sp = examRoute(v.x, v.y, spot.x, spot.y);
+          if (examRouteReached) {            // only detour if the aisle is actually reachable
+            v.shopped = true; v.shopTile = { x: spot.x, y: spot.y }; v.shopRoom = spot.shop;
+            v.path = sp; v.wp = 0;
+            v.phase = 'toShop'; v.shopBrowseT = 2.4;
+            return;
+          }
+        }
+      }
+      headForExit(v);
+    }
+    // Route a departing client out through the doors and off down the sidewalk.
+    function headForExit(v) {
+      v.phase = 'leaving';
       // BFS back over the connected room floor (exam rooms / corridors -> clinic) so a
       // client leaving from an exam room routes out through the doors instead of
       // beelining into walls/furniture and jamming. Then out the front and away.
@@ -2571,16 +4006,31 @@
     function tileBlocked(x, y) { return !!occupied[Math.round(x) + ',' + Math.round(y)]; }
     // The vet may roam any room floor (clinic + corridors) but not step off it.
     function vetBlocked(x, y) { return tileBlocked(x, y) || !isRoomFloor(Math.round(x), Math.round(y)); }
+    // True if moving a→b crosses a tile boundary through a wall: an internal room
+    // wall (roomWallEdge) or the outer room-floor boundary — which is walled
+    // everywhere except the front-entrance door gap (tiles x 3/4 at the clinic's
+    // south edge). Walls are physically solid for EVERY actor; only doors pass.
+    function wallStep(ax, ay, bx, by) {
+      ax = Math.round(ax); ay = Math.round(ay); bx = Math.round(bx); by = Math.round(by);
+      if (ax === bx && ay === by) return false;              // same tile → nothing crossed
+      if (roomWallEdge(ax, ay, bx, by)) return true;
+      var fa = isRoomFloor(ax, ay), fb = isRoomFloor(bx, by);
+      if (fa === fb) return false;                           // both inside or both outside
+      var doorGap = (ax === bx) && (ax === 3 || ax === 4) && // entrance columns through the sliding doors
+                    Math.min(ay, by) === ROOM - 1 && Math.max(ay, by) === ROOM;
+      return !doorGap;
+    }
     // Axis-separated move so actors slide along furniture instead of stopping dead.
     // `blocked` defaults to furniture-only (visitors walk the path/road too).
     // If the actor is already standing ON a blocked tile (e.g. a seated client on a
     // bench/chair), let them move freely so they can escape it — otherwise the tile
-    // they occupy blocks every step and they get stuck getting up.
+    // they occupy blocks every step and they get stuck getting up. Walls are always
+    // solid — even an escaping actor may never cross one (wallStep).
     function moveActor(a, nx, ny, blocked) {
       blocked = blocked || tileBlocked;
       var escaping = blocked(a.x, a.y);
-      if (escaping || !blocked(nx, a.y)) a.x = nx;
-      if (escaping || !blocked(a.x, ny)) a.y = ny;
+      if ((escaping || !blocked(nx, a.y)) && !wallStep(a.x, a.y, nx, a.y)) a.x = nx;
+      if ((escaping || !blocked(a.x, ny)) && !wallStep(a.x, a.y, a.x, ny)) a.y = ny;
     }
 
     // A tile is taken if another, currently-stationary visitor is standing on it,
@@ -2597,12 +4047,14 @@
       return false;
     }
     // Move a visitor toward a target tile; returns true once essentially there.
-    function stepToward(v, tx, ty, dt, eps) {
+    // `blocked` overrides the default collision test — roaming staff pass vetBlocked
+    // so a crowd can never shove them off the room floor (which would teleport them).
+    function stepToward(v, tx, ty, dt, eps, blocked) {
       var dx = tx - v.x, dy = ty - v.y, dist = Math.hypot(dx, dy);
       if (dist < (eps || 0.05)) return true;
       var ux = dx / dist, uy = dy / dist;
       moveActor(v, v.x + ux * v.speed * dt, v.y + uy * v.speed * dt,
-                function (x, y) { return tileBlocked(x, y) || visitorOn(v, x, y); });
+                blocked || function (x, y) { return tileBlocked(x, y) || visitorOn(v, x, y); });
       v.dir = chooseDir(ux, uy); v.walkPhase += dt * 9; v.moving = true;
       return false;
     }
@@ -2625,6 +4077,7 @@
           var nx = c.x + dirs[i][0], ny = c.y + dirs[i][1], k = key(nx, ny);
           if (nx < 0 || ny < 0 || nx >= ROOM || ny >= ROOM || k in came) continue;
           if (!(nx === tx && ny === ty) && occupied[k]) continue;   // can't pass through furniture
+          if (roomWallEdge(c.x, c.y, nx, ny)) continue;             // seat paths respect walls too
           came[k] = { x: c.x, y: c.y }; q.push({ x: nx, y: ny });
         }
       }
@@ -2711,6 +4164,12 @@
       for (i = 0; i < pharmacies.length; i++) { rm = pharmacies[i];
         if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + PHARM_W && ay >= rm.gy && ay < rm.gy + PHARM_H,
                              bx >= rm.gx && bx < rm.gx + PHARM_W && by >= rm.gy && by < rm.gy + PHARM_H)) return true; }
+      for (i = 0; i < shops.length; i++) { rm = shops[i];
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + SHOP_W && ay >= rm.gy && ay < rm.gy + SHOP_H,
+                             bx >= rm.gx && bx < rm.gx + SHOP_W && by >= rm.gy && by < rm.gy + SHOP_H)) return true; }
+      for (i = 0; i < groomings.length; i++) { rm = groomings[i];
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + GROOM_W && ay >= rm.gy && ay < rm.gy + GROOM_H,
+                             bx >= rm.gx && bx < rm.gx + GROOM_W && by >= rm.gy && by < rm.gy + GROOM_H)) return true; }
       for (i = 0; i < restrooms.length; i++) { rm = restrooms[i];
         fp = footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot);
         inA = fp.some(function (t) { return t.x === ax && t.y === ay; });
@@ -2723,10 +4182,29 @@
     // avoiding furniture, so clients reach an exam table via the corridors instead
     // of beelining into a wall. Returns step tiles (start dropped); falls back to a
     // single direct step if no route exists.
+    var examRouteReached = false;   // did the LAST examRoute actually connect to its target? (false = fallback)
+    // When set (by the anti-stuck recovery, for one call), examRoute also treats
+    // tiles under OTHER stationary visitors as blocked, so a wedged walker gets a
+    // path AROUND whoever is parked on their old route. Normal routing stays
+    // visitor-blind (cheap, and walkers usually flow past each other fine).
+    var routeAvoidFor = null;
     function examRoute(sx, sy, tx, ty) {
       sx = Math.round(sx); sy = Math.round(sy); tx = Math.round(tx); ty = Math.round(ty);
       var key = function (x, y) { return x + ',' + y; };
-      var pass = function (x, y) { return isRoomFloor(x, y) && !occupied[key(x, y)]; };
+      var standing = null;
+      if (routeAvoidFor) {
+        standing = {};
+        for (var vi = 0; vi < visitors.length; vi++) {
+          var ov = visitors[vi];
+          if (ov === routeAvoidFor || ov.moving) continue;
+          standing[Math.round(ov.x) + ',' + Math.round(ov.y)] = true;
+        }
+      }
+      var pass = function (x, y) {
+        return isRoomFloor(x, y) && !occupied[key(x, y)] &&
+               !(standing && standing[key(x, y)] && !(x === tx && y === ty));
+      };
+      examRouteReached = false;
       if (!pass(tx, ty)) return [{ x: tx, y: ty }];
       var came = {}; came[key(sx, sy)] = null;
       var q = [{ x: sx, y: sy }], head = 0, dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]], n = 0;
@@ -2740,6 +4218,7 @@
         }
       }
       if (!(key(tx, ty) in came)) return [{ x: tx, y: ty }];
+      examRouteReached = true;
       var path = [], cur = { x: tx, y: ty };
       while (cur) { path.unshift(cur); cur = came[key(cur.x, cur.y)]; }
       if (path.length > 1) path.shift();
@@ -2752,17 +4231,26 @@
     // phase and waiting predicate come from the room descriptor, so the exam and
     // X-ray flows are the same code parameterized by type.
     function claimRoomGeneric(v, type) {
-      var d = ROOM_TYPES[type], rm = freeRoom(type);
-      if (!rm) return false;
-      var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
-      rm.occupant = v; rm[d.timer] = 0; v[d.vRoom] = rm;
-      v.seated = false; v.chair = null; v.sideIdx = -1;
-      v.patience = baseWait();              // fresh patience for the stage (restroom need persists)
-      // BFS a real route over connected room floor (clinic → corridors → room),
-      // around furniture, so clients don't beeline into walls and jam.
-      v.path = examRoute(v.x, v.y, k.visitor.x, k.visitor.y);
-      v.wp = 0; v.phase = d.toPhase;
-      return true;
+      // Try every free room of the type, ROUTE FIRST, and only claim one the
+      // visitor can actually reach — an unreachable room (door blocked, floor
+      // disconnected) must never be occupied by someone who can't get there.
+      var d = ROOM_TYPES[type], L = d.list;
+      for (var i = 0; i < L.length; i++) {
+        var rm = L[i];
+        if (rm.occupant || beingCleaned(rm)) continue;
+        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+        // BFS a real route over connected room floor (clinic → corridors → room),
+        // around furniture, so clients don't beeline into walls and jam.
+        var path = examRoute(v.x, v.y, k.visitor.x, k.visitor.y);
+        if (!examRouteReached) continue;    // can't reach this room → try the next
+        rm.occupant = v; rm[d.timer] = 0; v[d.vRoom] = rm;
+        if (rm.dirty) v.usedDirtyRoom = true;  // visiting a grimy room: faster frustration + no rating bonus
+        v.seated = false; v.chair = null; v.sideIdx = -1;
+        v.patience = baseWait();            // fresh patience for the stage (restroom need persists)
+        v.path = path; v.wp = 0; v.phase = d.toPhase;
+        return true;
+      }
+      return false;
     }
     function releaseRoomGeneric(v, type) {
       var d = ROOM_TYPES[type], rm = v[d.vRoom];
@@ -2774,7 +4262,11 @@
       if (!freeRoom(type)) return;
       var waiting = visitors.filter(ROOM_TYPES[type].waiting)
         .sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
-      for (var i = 0; i < waiting.length && freeRoom(type); i++) claimRoomGeneric(waiting[i], type);
+      // A failed claim means every free room is unreachable from that visitor —
+      // stop for this frame (one BFS sweep, retried next frame) instead of
+      // re-running the same failing search for everyone behind them.
+      for (var i = 0; i < waiting.length && freeRoom(type); i++)
+        if (!claimRoomGeneric(waiting[i], type)) break;
     }
     function claimExam(v) { return claimRoomGeneric(v, 'exam'); }
     function releaseExam(v) { releaseRoomGeneric(v, 'exam'); }
@@ -2795,15 +4287,22 @@
       return Math.round(vet.x) === sec.circle.x && Math.round(vet.y) === sec.circle.y;
     }
     function claimPharmacy(v) {
-      var f = freePharmStation();
-      if (!f) return false;
-      var sec = pharmStations(f.ph.gx, f.ph.gy, f.ph.rot)[f.idx];
-      f.ph.stations[f.idx].patient = v; f.ph.stations[f.idx].procT = 0;
-      v.pharmacy = f.ph; v.pharmIdx = f.idx;
-      v.seated = false; v.chair = null; v.sideIdx = -1; v.patience = baseWait();
-      v.path = examRoute(v.x, v.y, sec.patient.x, sec.patient.y);
-      v.wp = 0; v.phase = 'toPharm';
-      return true;
+      // Route first, claim only a reachable counter (mirrors claimRoomGeneric).
+      for (var p = 0; p < pharmacies.length; p++) {
+        var ph = pharmacies[p];
+        for (var j = 0; j < ph.stations.length; j++) {
+          if (ph.stations[j].patient) continue;
+          var sec = pharmStations(ph.gx, ph.gy, ph.rot)[j];
+          var path = examRoute(v.x, v.y, sec.patient.x, sec.patient.y);
+          if (!examRouteReached) continue;   // unreachable counter → try the next
+          ph.stations[j].patient = v; ph.stations[j].procT = 0;
+          v.pharmacy = ph; v.pharmIdx = j;
+          v.seated = false; v.chair = null; v.sideIdx = -1; v.patience = baseWait();
+          v.path = path; v.wp = 0; v.phase = 'toPharm';
+          return true;
+        }
+      }
+      return false;
     }
     function releasePharm(v) {
       if (v.pharmacy != null && v.pharmIdx != null) {
@@ -2820,13 +4319,60 @@
         return v.needsMeds && !v.medicated && v.pharmacy == null &&
           (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated' || v.phase === 'waitMeds');
       }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
-      for (var i = 0; i < waiting.length && freePharmStation(); i++) claimPharmacy(waiting[i]);
+      for (var i = 0; i < waiting.length && freePharmStation(); i++)
+        if (!claimPharmacy(waiting[i])) break;   // all free counters unreachable → retry next frame
+    }
+
+    // ---- Grooming patient flow -------------------------------------------
+    // A grooming room takes one dog at a time: it enters, showers, walks to the
+    // dry station, is blow-dried, then leaves — a full groom pays $80. Each station
+    // fills at procTime rate while an operator stands on its circle (the player at
+    // full rate, a hired Worker at half). No operator → the wait timer drains and
+    // the dog leaves unpaid, pressuring you to staff (or work) the parlour.
+    var GROOM_DURATION = 3;                 // ×procTime per station
+    function playerAtTile(t) { return Math.round(vet.x) === t.x && Math.round(vet.y) === t.y; }
+    function workerAtTile(t) { for (var i = 0; i < workers.length; i++) { var w = workers[i]; if (Math.round(w.x) === t.x && Math.round(w.y) === t.y) return true; } return false; }
+    function claimGrooming(v) {
+      // Route first, claim only a reachable parlour (mirrors claimRoomGeneric).
+      for (var i = 0; i < groomings.length; i++) {
+        var rm = groomings[i];
+        if (rm.occupant || beingCleaned(rm)) continue;
+        var st = groomStations(rm.gx, rm.gy);
+        var path = examRoute(v.x, v.y, st[0].dogSpot.x, st[0].dogSpot.y);
+        if (!examRouteReached) continue;    // unreachable parlour → try the next
+        rm.occupant = v; rm.showerT = 0; rm.dryT = 0;
+        v.groomRoom = rm; v.wantsGroom = true;
+        v.seated = false; v.chair = null; v.sideIdx = -1; v.patience = baseWait();
+        v.path = path; v.wp = 0; v.phase = 'toGroomShower';
+        return true;
+      }
+      return false;
+    }
+    function releaseGroom(v) {
+      if (v.groomRoom) { if (v.groomRoom.occupant === v) { v.groomRoom.occupant = null; v.groomRoom.showerT = 0; v.groomRoom.dryT = 0; } v.groomRoom = null; }
+    }
+    // Fill free grooming rooms with clients that rolled "wants a groom" (at reception
+    // or after the dog park), in check-in order — mirrors assignPharmacies.
+    function assignGrooming() {
+      if (!groomings.length) {              // parlour(s) demolished → groom-seekers rejoin the exam pool
+        visitors.forEach(function (v) {
+          if (v.wantsGroom && !v.groomed) { v.wantsGroom = false; if (v.phase === 'waitGroom') v.phase = 'idle'; }
+        });
+        return;
+      }
+      if (!freeRoom('grooming')) return;
+      var waiting = visitors.filter(function (v) {
+        return v.wantsGroom && !v.groomed && v.groomRoom == null &&
+          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated' || v.phase === 'waitGroom');
+      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
+      for (var i = 0; i < waiting.length && freeRoom('grooming'); i++)
+        if (!claimGrooming(waiting[i])) break;   // all free parlours unreachable → retry next frame
     }
 
     // ---- Cleaners --------------------------------------------------------
     function canPlaceCleaner(gx, gy) { return isRoomFloor(gx, gy) && !occupied[gx + ',' + gy]; }
     // Clean-up time for a mess: litter wipes in 2s, an accident takes 5s.
-    function messGoal(p) { return p.kind === 'litter' ? 2 : 5; }
+    function messGoal(p) { return p.kind === 'litter' ? 2 : p.kind === 'litterbox' ? 8 : p.kind === 'poo' ? 10 : 5; }
     // Whoever (player or a cleaner) stands on a mess scrubs it; the Cleaning skill
     // scrubs faster. A mess left alone slowly un-scrubs again.
     function updatePuddles(dt) {
@@ -2839,18 +4385,97 @@
         else if (pd.clean > 0) pd.clean = Math.max(0, pd.clean - dt * 0.5);
       }
     }
-    // A hired cleaner walks to the nearest reachable puddle and mops it (the mopping
-    // itself is handled by updatePuddles once they're standing on it).
+    // Every dirty room, paired with a walkable tile you scrub it from and the
+    // seconds it takes to scrub (`goal`). Operating rooms (exam/X-ray) scrub from
+    // their circle; non-operating rooms (pharmacy/shop) from an open interior lane;
+    // restrooms from the user's stand tile and take twice as long. Used by both the
+    // scrub loop and the cleaner's job-finder.
+    function dirtyRooms() {
+      var out = [];
+      ['exam', 'xray'].forEach(function (type) {
+        ROOM_TYPES[type].list.forEach(function (rm) {
+          if (rm.dirty) { var k = examKeyTiles(rm.gx, rm.gy, rm.rot); out.push({ rm: rm, x: k.circle.x, y: k.circle.y, goal: ROOM_CLEAN_TIME }); }
+        });
+      });
+      pharmacies.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.gx, y: rm.gy + 2, goal: ROOM_CLEAN_TIME }); });   // column-0 lane, front row
+      shops.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.gx + 2, y: rm.gy + 3, goal: ROOM_CLEAN_TIME }); });    // centre of the front aisle
+      restrooms.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.stand.x, y: rm.stand.y, goal: ROOM_CLEAN_TIME * 2 }); });
+      return out;
+    }
+    // A dirty room scrubs clean while the player or a cleaner stands on its scrub
+    // tile (Cleaning skill speeds it, mirroring puddles). On done: dirty clears, the
+    // use-count and grime timer reset.
+    function updateRoomDirt(dt) {
+      var rate = skills.cleaning.val;
+      dirtyRooms().forEach(function (j) {
+        var rm = j.rm;
+        var scrub = (Math.round(vet.x) === j.x && Math.round(vet.y) === j.y) ||
+                    cleaners.some(function (c) { return Math.round(c.x) === j.x && Math.round(c.y) === j.y; });
+        if (scrub) {
+          rm.cleanProg = (rm.cleanProg || 0) + dt * rate;
+          if (rm.cleanProg >= j.goal) { rm.dirty = false; rm.uses = 0; rm.cleanProg = 0; rm.grimeT = null; }
+        } else if (rm.cleanProg > 0) {
+          rm.cleanProg = Math.max(0, rm.cleanProg - dt * 0.5);   // un-scrubs if the cleaner wanders off, like a puddle
+        }
+      });
+    }
+    // Non-operating rooms (pharmacy/shop) accumulate grime over time and turn dirty
+    // once their grime timer runs out — regardless of how much they're used.
+    function updateRoomGrime(dt) {
+      pharmacies.concat(shops).forEach(function (rm) {
+        if (rm.dirty) return;
+        if (rm.grimeT == null) rm.grimeT = ROOM_GRIME_TIME * (0.7 + Math.random() * 0.6);
+        rm.grimeT -= dt;
+        if (rm.grimeT <= 0) rm.dirty = true;
+      });
+    }
+    // The clean jobs a cleaner can take: every puddle plus every dirty room's
+    // circle. Each carries a back-ref so the cleaner knows when its job is done.
+    function cleanTargets() {
+      var jobs = [];
+      puddles.forEach(function (pd) { jobs.push({ x: pd.x, y: pd.y, pd: pd }); });
+      dirtyRooms().forEach(function (j) { jobs.push({ x: j.x, y: j.y, room: j.rm }); });
+      return jobs;
+    }
+    function targetGone(t) {
+      if (!t) return true;
+      if (t.pd) return puddles.indexOf(t.pd) < 0;     // puddle mopped away
+      if (t.room) return !t.room.dirty;               // room scrubbed clean
+      return true;
+    }
+    // A hired cleaner walks to the nearest REACHABLE mess — puddle or dirty room —
+    // and scrubs it (the scrubbing itself is handled by updatePuddles/updateRoomDirt
+    // once they're standing on the spot). An unreachable job is skipped WITHOUT
+    // claiming it, so one blocked mess can never freeze the whole cleaning staff.
     function updateCleaner(c, dt) {
-      if (c.target && puddles.indexOf(c.target) < 0) { c.target = null; c.path = null; }
+      if (targetGone(c.target)) { c.target = null; c.path = null; }
       if (!c.target) {
-        var best = null, bd = 1e9;
-        puddles.forEach(function (pd) { var d = Math.abs(c.x - pd.x) + Math.abs(c.y - pd.y); if (d < bd) { bd = d; best = pd; } });
-        if (best) { var path = examRoute(c.x, c.y, best.x, best.y); if (path) { c.target = best; c.path = path; c.wp = 0; } }
+        c.retryT = (c.retryT || 0) - dt;
+        if (c.retryT > 0) { c.moving = false; return; }
+        // Skip any mess/room another cleaner has already claimed, so only ONE
+        // cleaner ever heads to a given job (extra cleaners idle or pick elsewhere).
+        var claimed = [];
+        cleaners.forEach(function (o) { if (o !== c && o.target) claimed.push(o.target.pd || o.target.room); });
+        var jobs = cleanTargets().filter(function (j) { return claimed.indexOf(j.pd || j.room) < 0; })
+          .sort(function (a, b) {
+            return (Math.abs(c.x - a.x) + Math.abs(c.y - a.y)) - (Math.abs(c.x - b.x) + Math.abs(c.y - b.y));
+          });
+        for (var i = 0; i < jobs.length; i++) {   // nearest job the cleaner can actually walk to
+          var path = examRoute(c.x, c.y, jobs[i].x, jobs[i].y);
+          if (examRouteReached) { c.target = jobs[i]; c.path = path; c.wp = 0; break; }
+        }
+        if (!c.target) c.retryT = 1;              // nothing reachable → rescan in 1s, hold no claim
       }
       if (c.target && c.path && c.wp < c.path.length) {
-        var t = c.path[c.wp];
-        if (stepToward(c, t.x, t.y, dt, 0.06)) c.wp++;
+        var t = c.path[c.wp], cpx = c.x, cpy = c.y;
+        if (stepToward(c, t.x, t.y, dt, 0.06,
+            function (x, y) { return vetBlocked(x, y) || visitorOn(c, x, y); })) c.wp++;
+        // Wedged en route (crowd/wall) for ~2.5s → drop the claim so another job
+        // (or another cleaner) can proceed; rescan shortly.
+        if (Math.hypot(c.x - cpx, c.y - cpy) < c.speed * dt * 0.15) {
+          c.stuckT = (c.stuckT || 0) + dt;
+          if (c.stuckT > 2.5) { c.stuckT = 0; c.target = null; c.path = null; c.retryT = 0.5; }
+        } else c.stuckT = 0;
       } else { c.moving = false; }
     }
     // The desk station nearest the cursor (for placing a receptionist), with validity.
@@ -2866,7 +4491,7 @@
     }
 
     // A receptionist figure (headset + name badge) standing at a desk station.
-    function drawReceptionist(c, gx, gy) {
+    function drawReceptionist(c, gx, gy, gender) {
       var s = iso(gx, gy);
       var f = FRONT[deskAnchor().rot || 0];
       var dir = chooseDir(f.x, f.y);              // face the customers
@@ -2885,6 +4510,7 @@
       c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                            // neck
       var hy = bt - 13;
       c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill();
+      if (gender === 'female') drawLongHair(c, hy, '#3a2c22');
       c.fillStyle = '#3a2c22'; c.beginPath(); c.arc(0, hy - 1, 8.5, Math.PI * (front ? 1.02 : 0.05), Math.PI * (front ? 1.98 : 0.95), false); c.fill();
       if (front) {
         c.fillStyle = '#2b2b33';
@@ -2899,9 +4525,87 @@
       c.restore();
     }
 
+    // A hired Pharmacist: white lab coat over a green shirt, square glasses and a
+    // green medical-cross badge — deliberately distinct from the headset-wearing
+    // receptionist (same desk pose, so they read as a different role at a glance).
+    function drawPharmacist(c, gx, gy, gender) {
+      var s = iso(gx, gy);
+      var f = FRONT[deskAnchor().rot || 0];
+      var dir = chooseDir(f.x, f.y);              // face the customers
+      var front = (dir === 'SE' || dir === 'SW');
+      var mirror = (dir === 'SW' || dir === 'NW') ? -1 : 1;
+      c.fillStyle = 'rgba(20,40,30,0.26)';
+      c.beginPath(); c.ellipse(s.x, s.y, 13, 6, 0, 0, Math.PI * 2); c.fill();
+      c.save(); c.translate(s.x, s.y);
+      c.fillStyle = '#3a4250'; c.fillRect(-6, -14, 5, 14); c.fillRect(1, -14, 5, 14); // legs (grey slacks)
+      c.fillStyle = '#23262d'; c.fillRect(-7, -2, 6, 3); c.fillRect(1, -2, 6, 3);      // shoes
+      var bt = -40;                                                                    // torso (white lab coat)
+      c.fillStyle = gradL(c, 0, bt, 0, -12, [[0, '#ffffff'], [1, '#dfe6ec']]); roundRect(c, -11, bt, 22, 28, 7); c.fill();
+      c.fillStyle = '#eef2f6'; roundRect(c, -14, bt + 2, 5, 13, 2.5); c.fill(); roundRect(c, 9, bt + 2, 5, 13, 2.5); c.fill(); // sleeves
+      c.fillStyle = '#f0c8a4'; c.fillRect(-14, bt + 14, 5, 4); c.fillRect(9, bt + 14, 5, 4); // hands
+      if (front) {
+        c.fillStyle = '#2f9e90';                                                       // green shirt down the coat opening
+        c.beginPath(); c.moveTo(-4, bt); c.lineTo(0, bt + 22); c.lineTo(4, bt); c.closePath(); c.fill();
+        c.strokeStyle = '#cdd6de'; c.lineWidth = 1;                                     // lab-coat lapels framing the shirt
+        c.beginPath(); c.moveTo(-4, bt - 1); c.lineTo(-1.5, bt + 12); c.moveTo(4, bt - 1); c.lineTo(1.5, bt + 12); c.stroke();
+        c.fillStyle = '#3cba54'; c.fillRect(-9, bt + 5, 5, 5);                          // green cross badge
+        c.fillStyle = '#fff'; c.fillRect(-7.4, bt + 5.8, 1.8, 3.4); c.fillRect(-8.6, bt + 7, 4.2, 1.4);
+      }
+      c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                            // neck
+      var hy = bt - 13;
+      c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill();
+      if (gender === 'female') drawLongHair(c, hy, '#4a3a2a');
+      c.fillStyle = '#4a3a2a'; c.beginPath(); c.arc(0, hy - 1, 8.5, Math.PI * (front ? 1.02 : 0.05), Math.PI * (front ? 1.98 : 0.95), false); c.fill();
+      if (front) {
+        c.fillStyle = '#2b2b33';                                                        // eyes
+        c.beginPath(); c.arc(-3 * mirror, hy, 1.3, 0, Math.PI * 2); c.arc(3 * mirror, hy, 1.3, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#3b4654'; c.lineWidth = 1.1;                                    // square glasses
+        roundRect(c, -5.4 * mirror, hy - 2.2, 4.4, 4.4, 1); c.stroke();
+        roundRect(c, 1 * mirror, hy - 2.2, 4.4, 4.4, 1); c.stroke();
+        c.beginPath(); c.moveTo(-1 * mirror, hy); c.lineTo(1 * mirror, hy); c.stroke();
+        c.strokeStyle = '#9a5f44'; c.lineWidth = 1.2;                                    // smile
+        c.beginPath(); c.arc(0, hy + 4, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      }
+      c.restore();
+    }
+
+    // The shop cashier: a retail clerk in a warm apron and a flat cap, standing behind
+    // the checkout counter facing the customers. Always front-on (no lab coat/glasses,
+    // so it reads as a shopkeeper, not a pharmacist).
+    function drawCashier(c, gx, gy, gender) {
+      var s = iso(gx, gy);
+      c.fillStyle = 'rgba(20,40,30,0.26)';
+      c.beginPath(); c.ellipse(s.x, s.y, 13, 6, 0, 0, Math.PI * 2); c.fill();
+      c.save(); c.translate(s.x, s.y);
+      c.fillStyle = '#33506b'; c.fillRect(-6, -14, 5, 14); c.fillRect(1, -14, 5, 14);     // legs (denim)
+      c.fillStyle = '#23262d'; c.fillRect(-7, -2, 6, 3); c.fillRect(1, -2, 6, 3);          // shoes
+      var bt = -40;
+      c.fillStyle = gradL(c, 0, bt, 0, -12, [[0, '#f3f6f8'], [1, '#dbe2e8']]); roundRect(c, -11, bt, 22, 28, 7); c.fill(); // light shirt
+      c.fillStyle = '#eef2f6'; roundRect(c, -14, bt + 2, 5, 13, 2.5); c.fill(); roundRect(c, 9, bt + 2, 5, 13, 2.5); c.fill(); // sleeves
+      c.fillStyle = '#f0c8a4'; c.fillRect(-14, bt + 14, 5, 4); c.fillRect(9, bt + 14, 5, 4);   // hands
+      c.fillStyle = '#e07b39'; c.beginPath();                                              // warm retail apron
+      c.moveTo(-8, bt + 6); c.lineTo(8, bt + 6); c.lineTo(9, bt + 26); c.lineTo(-9, bt + 26); c.closePath(); c.fill();
+      c.fillStyle = '#c5662b'; c.fillRect(-7, bt + 16, 14, 6);                             // apron pocket
+      c.strokeStyle = '#c5662b'; c.lineWidth = 1.4;                                        // neck strap
+      c.beginPath(); c.moveTo(-5, bt + 6); c.lineTo(-2, bt - 2); c.moveTo(5, bt + 6); c.lineTo(2, bt - 2); c.stroke();
+      c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                               // neck
+      var hy = bt - 13;
+      c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill(); // head
+      if (gender === 'female') drawLongHair(c, hy, '#3a2c22');
+      c.fillStyle = '#3a2c22'; c.beginPath(); c.arc(0, hy - 1, 8.5, Math.PI * 1.02, Math.PI * 1.98, false); c.fill(); // hair
+      c.fillStyle = '#2f9e90'; c.beginPath(); c.arc(0, hy - 2, 9, Math.PI, 0, false); c.fill(); // flat cap crown
+      c.fillRect(-9, hy - 2, 18, 2);
+      c.fillStyle = '#27867a'; c.fillRect(-11, hy - 1, 7, 2.4);                            // cap brim
+      c.fillStyle = '#2b2b33';                                                             // eyes
+      c.beginPath(); c.arc(-3, hy, 1.3, 0, Math.PI * 2); c.arc(3, hy, 1.3, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#9a5f44'; c.lineWidth = 1.2;                                        // smile
+      c.beginPath(); c.arc(0, hy + 4, 2.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      c.restore();
+    }
+
     // A hired Vet figure (teal scrubs, blue surgical cap, stethoscope) standing on
     // an exam room circle, facing the table. `rot` is the room's rotation.
-    function drawVetStaff(c, gx, gy, rot, dirOverride) {
+    function drawVetStaff(c, gx, gy, rot, dirOverride, gender) {
       var s = iso(gx, gy);
       var f = FRONT[rot || 0];
       var dir = dirOverride || chooseDir(f.x, f.y); // face movement while roaming, else the table
@@ -2919,6 +4623,7 @@
       c.fillStyle = '#e7bd98'; c.fillRect(-3, bt - 4, 6, 5);                            // neck
       var hy = bt - 13;
       c.fillStyle = '#f0c8a4'; c.beginPath(); c.arc(0, hy, 8.5, 0, Math.PI * 2); c.fill();
+      if (gender === 'female') drawLongHair(c, hy, '#6b4a32');
       c.fillStyle = '#3d8fd0';                                                          // blue surgical cap
       c.beginPath(); c.arc(0, hy - 1, 8.5, Math.PI * 1.02, Math.PI * 1.98, false); c.closePath(); c.fill();
       c.fillRect(-8.5, hy - 2, 17, 3);
@@ -2999,10 +4704,127 @@
       ctx.restore();
       ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       ghostCtx.clearRect(0, 0, view.w, view.h);
-      drawReceptionist(ghostCtx, pc.x, pc.y);
+      drawPharmacist(ghostCtx, pc.x, pc.y);
       if (!pc.ok) { ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop'; ghostCtx.fillStyle = 'rgba(222,58,44,0.62)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore(); }
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
       ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
+    // ---- Unified staff handle ---------------------------------------------
+    // The four staff kinds are stored four different ways (staff[]/vets[]/cleaners[]
+    // arrays + a `pharm` object on a pharmacy station). eachStaffHandle() is the ONE
+    // place that knows those shapes: it yields a uniform handle per staffer so the
+    // hit-test, name label, overlay, drag/relocate and test API never branch 4 ways.
+    function staffRefundCost(kind) { var d = FURN_BY_ID[kind]; return d ? d.cost : 0; }   // kind === FURN id
+    // canDropFn (non-mutating: is the current pointer a valid drop target?) is split from
+    // applyFn so the carry preview can tint the tile green/red without moving anyone.
+    function makeStaffHandle(kind, data, tileFn, canDropFn, applyFn, removeFn) {
+      var cost = staffRefundCost(kind);
+      return {
+        kind: kind, cost: cost, data: data,
+        getName: function () { return data.name || ''; },
+        setName: function (n) { data.name = n || ''; },
+        getGender: function () { return data.gender || 'male'; },
+        setGender: function (g) { data.gender = (g === 'female') ? 'female' : 'male'; },
+        tile: tileFn,                       // -> {x,y} grid tile where the figure is drawn
+        is: function (ref) { return data === ref; },
+        canDrop: canDropFn,                 // -> bool: pointer is a valid relocation target
+        relocate: function () { if (!canDropFn()) return false; applyFn(); return true; },
+        fire: function () { removeFn(); return Math.floor(cost * 0.5); }
+      };
+    }
+    function eachStaffHandle(cb) {
+      // receptionists (only when a desk exists — matches draw())
+      if (hasDesk()) staff.forEach(function (st) {
+        cb(makeStaffHandle('receptionist', st,
+          function () { var L = (staff.length === 1) ? loneStaffLine() : st.line; return stationTile(L); },
+          function () { var s = nearestStation(); return !!(s && s.ok); },
+          function () { var s = nearestStation(); if (s && s.ok) { st.line = s.line; st.curLine = s.line; } },
+          function () { var i = staff.indexOf(st); if (i >= 0) staff.splice(i, 1); }));
+      });
+      // roaming vets — drop on any clear floor tile
+      vets.forEach(function (vt) {
+        cb(makeStaffHandle('vet', vt,
+          function () { return { x: Math.round(vt.x), y: Math.round(vt.y) }; },
+          function () { return canPlaceCleaner(pointer.gx, pointer.gy); },
+          function () { vt.x = pointer.gx; vt.y = pointer.gy; vt.room = null; vt.path = null; vt.wp = 0; vt.working = false; vt.moving = false; },
+          function () { var i = vets.indexOf(vt); if (i >= 0) vets.splice(i, 1); }));
+      });
+      // roaming cleaners — drop on any clear floor tile
+      cleaners.forEach(function (cl) {
+        cb(makeStaffHandle('cleaner', cl,
+          function () { return { x: Math.round(cl.x), y: Math.round(cl.y) }; },
+          function () { return canPlaceCleaner(pointer.gx, pointer.gy); },
+          function () { cl.x = pointer.gx; cl.y = pointer.gy; cl.target = null; cl.path = null; cl.wp = 0; cl.moving = false; },
+          function () { var i = cleaners.indexOf(cl); if (i >= 0) cleaners.splice(i, 1); }));
+      });
+      // roaming workers — drop on any clear floor tile
+      workers.forEach(function (wk) {
+        cb(makeStaffHandle('worker', wk,
+          function () { return { x: Math.round(wk.x), y: Math.round(wk.y) }; },
+          function () { return canPlaceCleaner(pointer.gx, pointer.gy); },
+          function () { wk.x = pointer.gx; wk.y = pointer.gy; wk.room = null; wk.path = null; wk.wp = 0; wk.working = false; wk.moving = false; wk.shopTarget = null; },
+          function () { var i = workers.indexOf(wk); if (i >= 0) workers.splice(i, 1); }));
+      });
+      // pharmacists — the `pharm` object on a manned counter station
+      pharmacies.forEach(function (ph) {
+        pharmStations(ph.gx, ph.gy).forEach(function (sec, idx) {
+          var station = ph.stations[idx];
+          if (!station.pharm) return;
+          var pharmObj = station.pharm;
+          cb(makeStaffHandle('pharmacist', pharmObj,
+            function () { return { x: sec.circle.x, y: sec.circle.y }; },
+            function () { var pc = nearestPharmCircle(); return !!(pc && pc.ok); },
+            function () { var pc = nearestPharmCircle(); if (pc && pc.ok) { pc.station.pharm = pharmObj; station.pharm = false; } },
+            function () { station.pharm = false; }));
+        });
+      });
+    }
+    // The staffer whose drawn tile sits under (gx,gy), if any (topmost-ish by kind order).
+    function staffAt(gx, gy) {
+      var found = null;
+      eachStaffHandle(function (h) {
+        if (found) return;
+        var t = h.tile();
+        if (Math.round(t.x) === gx && Math.round(t.y) === gy) found = h;
+      });
+      return found;
+    }
+    // The grid spot a staffer is actually DRAWN at: roaming vets/cleaners carry live
+    // float coords, desk/pharmacy staff stand on their station tile.
+    function staffGridPos(h) {
+      var d = h.data;
+      if (typeof d.x === 'number' && typeof d.y === 'number') return { x: d.x, y: d.y };
+      return h.tile();
+    }
+    // Pixel hit-test over a staffer's FULL drawn body (+ a little slop), in canvas
+    // pixels. Used in dragStart layered ABOVE the drag-to-pan handler, so a click
+    // anywhere on the figure grabs them instead of starting a pan — the tile-only
+    // test missed the body, which floats well above its foot tile in iso. The body
+    // spans roughly x∈[-15,15], y∈[-62,+6] around the foot anchor; pad generously.
+    function staffAtPixel(clientX, clientY) {
+      var rect = canvas.getBoundingClientRect();
+      var cx = clientX - rect.left, cy = clientY - rect.top;
+      var best = null, bestDepth = -1e9;
+      eachStaffHandle(function (h) {
+        var gp = staffGridPos(h), s = iso(gp.x, gp.y);
+        if (cx >= s.x - 18 && cx <= s.x + 18 && cy >= s.y - 66 && cy <= s.y + 10) {
+          var depth = gp.x + gp.y;            // frontmost (drawn last/on top) wins overlaps
+          if (depth > bestDepth) { bestDepth = depth; best = h; }
+        }
+      });
+      return best;
+    }
+    // A teal selection ring under a staffer that's hovered or being grabbed, so it
+    // reads as draggable / double-clickable before you commit to the gesture.
+    function drawStaffHighlight(gx, gy) {
+      var s = iso(gx, gy);
+      ctx.save();
+      ctx.fillStyle = 'rgba(55,179,163,0.20)';
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, 17, 8.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(55,179,163,0.95)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, 17, 8.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
     }
 
     // Every seat slot across placed seating. A chair is one seat that ×2's the
@@ -3066,7 +4888,10 @@
       return puddles.some(function (p) { return Math.abs(p.x - vx) <= 3 && Math.abs(p.y - vy) <= 3; });
     }
     // Combined wait-drain multiplier: a TV halves it, nearby pee doubles it.
-    function drainMult(v) { return (nearTV(v) ? 0.5 : 1) * (nearPee(v) ? 2 : 1); }
+    // A patient assigned to (walking into or sitting in) a dirty operating room
+    // loses patience twice as fast — the grime doubles their wait frustration.
+    function inDirtyRoom(v) { var rm = v.examRoom || v.xrayRoom; return !!(rm && rm.dirty); }
+    function drainMult(v) { return (nearTV(v) ? 0.5 : 1) * (nearPee(v) ? 2 : 1) * (inDirtyRoom(v) ? 2 : 1); }
 
     // A reception client is served: pay out, pop a +10, give a fresh wait bar so
     // the queue advances. If a chair is free they head over to sit; otherwise
@@ -3086,6 +4911,9 @@
       // (which refills each phase), this need is a single persistent countdown — so
       // it actually fires before a comfortable (seated/TV) client is examined.
       v.bladder = Math.random() < 0.55 ? 20 + Math.random() * 30 : null;
+      // 20% of processed clients want a groom instead of an exam: flag them so they
+      // skip exam assignment and get pulled into a free grooming room by assignGrooming.
+      if (groomings.length && Math.random() < 0.20) v.wantsGroom = true;
       // exam rooms are assigned centrally, in check-in order, by assignExams()
       var seat = freeSeat(v);
       if (seat) {                            // go sit in an empty chair / bench seat
@@ -3115,11 +4943,11 @@
     // Waiting visitors occasionally drop a piece of litter where they stand; the
     // player (stand on it ~2s) or a cleaner mops it up like an accident.
     function maybeLitter(v, dt) {
-      if (v.litterT == null) v.litterT = 12 + Math.random() * 28;
+      if (v.litterT == null) v.litterT = 4 + Math.random() * 10;
       if (v.phase !== 'queuing' && v.phase !== 'idle' && v.phase !== 'seated' && v.phase !== 'served' && v.phase !== 'waitXray') return;
       v.litterT -= dt;
       if (v.litterT > 0) return;
-      v.litterT = 18 + Math.random() * 30;
+      v.litterT = 6 + Math.random() * 12;
       var lx = Math.round(v.x), ly = Math.round(v.y);
       if (isRoomFloor(lx, ly) && !occupied[lx + ',' + ly] && !messAt(lx, ly))
         puddles.push({ x: lx, y: ly, clean: 0, kind: 'litter' });
@@ -3157,6 +4985,8 @@
         if (rm[d.timer] >= d.duration * procTime()) {
           money += d.payout; renderMoney();
           floaters.push({ v: v, t: 0, amt: d.payout });
+          rm.uses = (rm.uses || 0) + 1;                          // count this procedure; grime builds up
+          if (rm.uses >= ROOM_DIRTY_USES) rm.dirty = true;       // 3 uses → dirty until scrubbed
           d.onDone(v);
         }
       } else {
@@ -3197,6 +5027,59 @@
       }
     }
 
+    // ---- Grooming care (shower → blow-dry) -------------------------------
+    // Walk to the current station's dog spot; on arrival, stand and face the
+    // fixture, and start the "waiting to be worked" timer. Drain patience en
+    // route; give up (releasing the room) if it runs out.
+    function groomWalk(v, dt) {
+      var rm = v.groomRoom;
+      if (!rm) { leaveOutbound(v); return; }
+      var idx = v.phase === 'toGroomShower' ? 0 : 1;
+      var st = groomStations(rm.gx, rm.gy)[idx], t = v.path[v.wp];
+      if (stepToward(v, t.x, t.y, dt, 0.06)) {
+        v.wp++;
+        if (v.wp >= v.path.length) {
+          v.x = st.dogSpot.x; v.y = st.dogSpot.y; v.moving = false;
+          v.phase = idx === 0 ? 'inGroomShower' : 'inGroomDry';
+          v.patience = baseWait(); v.groomWait = baseWait();
+          v.dir = chooseDir(st.fixture.x - v.x, st.fixture.y - v.y);   // face the shower/dryer
+        }
+      }
+      v.patience -= dt * drainMult(v);
+      if (v.patience <= 0) { releaseGroom(v); leaveOutbound(v); }
+    }
+    // At a station: an operator (player on the circle at full rate, or a Worker at
+    // half) fills the station timer. Shower done → walk to the dryer; dry done →
+    // pay $80 and leave happy. No operator → the wait timer drains and they leave.
+    function groomServe(v, dt, idx) {
+      v.moving = false;
+      var rm = v.groomRoom;
+      if (!rm) { leaveOutbound(v); return; }
+      var st = groomStations(rm.gx, rm.gy)[idx];
+      var full = playerAtTile(st.circle);
+      v.processing = full || workerAtTile(st.circle);
+      if (v.processing) {
+        var tf = idx === 0 ? 'showerT' : 'dryT';
+        rm[tf] = (rm[tf] || 0) + dt * (full ? 1 : 0.5);
+        if (rm[tf] >= GROOM_DURATION * procTime()) {
+          if (idx === 0) {                    // showered → head to the blow-dry station
+            var d1 = groomStations(rm.gx, rm.gy)[1];
+            v.path = examRoute(v.x, v.y, d1.dogSpot.x, d1.dogSpot.y);
+            v.wp = 0; v.phase = 'toGroomDry'; v.patience = baseWait();
+          } else {                            // fully groomed → pay out and leave happy
+            money += 80; renderMoney();
+            floaters.push({ v: v, t: 0, amt: 80 });
+            v.groomed = true; v.happy = true; v.served = true;
+            releaseGroom(v); leaveOutbound(v);
+          }
+        }
+      } else {
+        if (v.groomWait == null) v.groomWait = baseWait();
+        v.groomWait -= dt * drainMult(v);
+        if (v.groomWait <= 0) { releaseGroom(v); leaveOutbound(v); return; }
+      }
+    }
+
     function updateVisitor(v, dt) {
       maybeLitter(v, dt);                    // visitors randomly drop litter while waiting
       // After reception, the bladder ticks while the client waits; at zero they
@@ -3208,15 +5091,21 @@
       }
       if (v.phase === 'toRestroom') {      // break off to find/walk to a restroom
         v.relief -= dt;
-        if (!v.rm) {                       // claim a free restroom and route into the room
-          var rm = freeRestroom();
-          if (rm) {
-            rm.occupant = v; v.rm = rm;
+        if (!v.rm) {                       // claim a free, clean, REACHABLE restroom and route into it
+          v.moving = false;                // squirm in place until one is claimed
+          v.rmRetryT = (v.rmRetryT || 0) - dt;
+          if (v.rmRetryT > 0) { if (v.relief <= 0) peeAndLeave(v); return; }
+          v.rmRetryT = 0.5;                // rescan at most twice a second (each scan BFSes per restroom)
+          for (var ri = 0; ri < restrooms.length; ri++) {
+            var rm = restrooms[ri];
+            if (rm.occupant || rm.dirty) continue;
             // route internally over connected floor (clinic → corridor → restroom),
             // around furniture — same as exam rooms, not out the front doors
-            v.path = examRoute(v.x, v.y, rm.stand.x, rm.stand.y);
-            v.wp = 0;
-          } else { v.moving = false; }     // none free → squirm until one opens or time runs out
+            var rp = examRoute(v.x, v.y, rm.stand.x, rm.stand.y);
+            if (!examRouteReached) continue;   // unreachable → try the next restroom
+            rm.occupant = v; v.rm = rm; v.path = rp; v.wp = 0;
+            break;
+          }                                // none claimable → relief keeps draining → peeAndLeave
         }
         if (v.rm && v.path) {
           var tgt = v.path[v.wp];
@@ -3235,10 +5124,82 @@
       if (v.phase === 'inRestroom') {      // using the restroom inside the room, then head back in
         v.useT -= dt;
         if (v.useT <= 0) {
-          if (v.rm) { v.rm.occupant = null; v.rm = null; }
+          if (v.rm) { v.rm.dirty = true; v.rm.occupant = null; v.rm = null; }   // one use → dirty; unusable until a cleaner scrubs it
           v.relief = null; v.bladder = null;     // relieved for the rest of this visit
           var s = sideSpot();
           v.phase = 'served'; v.sideIdx = s.idx; v.sideX = s.x; v.sideY = s.y; v.patience = baseWait();
+          // Route back out through the restroom DOOR (walls are solid) — the
+          // 'served' handler walks this path first, then beelines to the spot.
+          v.path = examRoute(v.x, v.y, s.x, s.y); v.wp = 0;
+        }
+        return;
+      }
+      if (v.phase === 'toShop') {          // detouring into the shop on the way out
+        var sst = v.path[v.wp];
+        if (stepToward(v, sst.x, sst.y, dt, 0.08)) {
+          v.wp++;
+          if (v.wp >= v.path.length) {
+            v.x = v.shopTile.x; v.y = v.shopTile.y; v.moving = false; v.dir = 'SE';
+            v.phase = 'inShop';
+          }
+        }
+        return;
+      }
+      if (v.phase === 'inShop') {          // browsing: dwell, spend, then continue out
+        v.moving = false;
+        v.shopBrowseT -= dt;
+        if (v.shopBrowseT <= 0) {
+          var spend = shopSpend();
+          money += spend; renderMoney();
+          floaters.push({ v: v, t: 0, amt: spend });   // +$ pop over the shopper
+          v.shopTile = null; v.shopRoom = null;
+          headForExit(v);
+        }
+        return;
+      }
+      if (v.phase === 'toDogPark') {        // walking out to their spot of grass
+        var dpt = v.path[v.wp];
+        if (stepToward(v, dpt.x, dpt.y, dt, 0.08)) {
+          v.wp++;
+          if (v.wp >= v.path.length) {
+            v.x = v.parkSpot.x; v.y = v.parkSpot.y; v.moving = false; v.dir = 'SE';
+            v.phase = 'inDogPark';
+            startParkDog(v);                // let the dog off the leash
+            return;
+          }
+        }
+        v.patience -= dt * drainMult(v);    // safety net: if something blocks the walk, give up rather than freeze
+        if (v.patience <= 0) { v.parkSpot = null; headForExit(v); }
+        return;
+      }
+      if (v.phase === 'inDogPark') {        // the dog roams off-leash; owner waits, pays $20, then leaves
+        v.moving = false;
+        if (v.dog) updateParkDog(v, dt);
+        if (v.dogT > 0) {                   // still enjoying the park
+          v.dogT -= dt;
+          if (v.dogT <= 0 && v.dog) v.dog.recall = true;   // time's up → call the dog back
+          return;
+        }
+        // time's up: wait for the dog to trot back to its owner before leaving —
+        // but never forever: if the recall drags past ~6s (dog wedged on a toy,
+        // squat loop, etc.) the owner just scoops the dog up and moves on.
+        if (v.dog && (v.dog.squat > 0 || Math.hypot(v.dog.x - v.x, v.dog.y - v.y) > 0.6)) {
+          v.recallT = (v.recallT || 0) + dt;
+          if (v.recallT < 6) return;
+        }
+        v.recallT = 0;
+        v.dog = null;
+        money += 20; renderMoney();
+        floaters.push({ v: v, t: 0, amt: 20 });
+        v.served = true; v.parkDone = true; v.parkSpot = null;   // a happy paying customer
+        if (groomings.length && Math.random() < 0.3) {   // 30% head for a groom after the park
+          v.wantsGroom = true;
+          if (!claimGrooming(v)) { var gs = sideSpot(); v.path = examRoute(v.x, v.y, gs.x, gs.y); v.wp = 0; v.phase = 'waitGroom'; v.patience = baseWait(); }
+        } else if (Math.random() < 0.2) {   // 20% pop into the pharmacy afterward
+          v.needsMeds = true;
+          if (!claimPharmacy(v)) { var ps = sideSpot(); v.path = examRoute(v.x, v.y, ps.x, ps.y); v.wp = 0; v.phase = 'waitMeds'; v.patience = baseWait(); }
+        } else {
+          v.happy = true; leaveOutbound(v);
         }
         return;
       }
@@ -3284,6 +5245,12 @@
         }
         return;
       }
+      // Grooming: loiter until a room frees, walk to the shower, wash, walk to the
+      // dryer, blow-dry, then leave. Each station needs an operator (player/Worker).
+      if (v.phase === 'waitGroom') { waitRoomGeneric(v, dt); return; }
+      if (v.phase === 'toGroomShower' || v.phase === 'toGroomDry') { groomWalk(v, dt); return; }
+      if (v.phase === 'inGroomShower') { groomServe(v, dt, 0); return; }
+      if (v.phase === 'inGroomDry') { groomServe(v, dt, 1); return; }
       if (v.phase === 'queuing') {
         var t = slotPos(v);
         var reached = stepToward(v, t.x, t.y, dt);
@@ -3304,6 +5271,13 @@
         return;
       }
       if (v.phase === 'served') {          // walk aside after being served
+        // If a wall-aware path is set (e.g. exiting a restroom through its door),
+        // drain it first — the direct beeline below can't cross walls anymore.
+        if (v.path && v.wp < v.path.length) {
+          var svt = v.path[v.wp];
+          if (stepToward(v, svt.x, svt.y, dt, 0.08)) v.wp++;
+          return;
+        }
         if (stepToward(v, v.sideX, v.sideY, dt)) {
           v.x = v.sideX; v.y = v.sideY; v.moving = false; v.dir = 'SE';
           v.phase = 'idle'; v.patience = baseWait();  // bar resets and starts again
@@ -3311,7 +5285,8 @@
         return;
       }
       if (v.phase === 'idle') {            // standing aside, fresh wait bar
-        var openSeat = freeSeat(v);
+        if (v.noSeatT > 0) v.noSeatT -= dt;  // cooling off after an unreachable seat — don't re-grab it
+        var openSeat = v.noSeatT > 0 ? null : freeSeat(v);
         if (openSeat) {                    // a seat opened up (e.g. player built one) → go sit
           v.chair = { gx: openSeat.gx, gy: openSeat.gy, fx: openSeat.fx, fy: openSeat.fy, mult: openSeat.mult };
           headToSeat(v);
@@ -3346,10 +5321,46 @@
       if (stepToward(v, tgt.x, tgt.y, dt, 0.06)) {
         v.wp++;
         if (v.wp >= v.path.length) {
-          if (v.phase === 'arriving') { v.phase = 'queuing'; }   // stay moving: queuing handler walks them to their slot, not parked on the door funnel
+          if (v.phase === 'arriving') {
+            if (v.parkOnly) { if (!startDogPark(v, v.parkZone)) headForExit(v); }  // came just for the park (full → just leave)
+            else v.phase = 'queuing';      // stay moving: queuing handler walks them to their slot
+          }
           else { v.dead = true; }          // finished leaving → remove
         }
       }
+    }
+
+    // Recover a visitor the watchdog caught wedged (blocked by a wall, a crowd,
+    // or a stale/fallback path). Phase-appropriate: re-route path-followers around
+    // the obstruction; give beeliners a fresh routed target; despawn a leaver that
+    // stays stuck (e.g. stranded outside the walls by a pre-fix save).
+    function unstickVisitor(v) {
+      routeAvoidFor = v;                       // route AROUND parked visitors, not just furniture
+      if (v.phase === 'toChair') {             // seat unreachable → give it up, stand aside
+        v.chair = null; v.seatPath = null; v.seated = false;
+        v.noSeatT = 8;                         // don't re-grab a (likely still unreachable) seat at once
+        var cs = sideSpot();
+        v.phase = 'served'; v.sideIdx = cs.idx; v.sideX = cs.x; v.sideY = cs.y;
+        v.path = examRoute(v.x, v.y, cs.x, cs.y); v.wp = 0;
+      } else if (v.phase === 'served' && !(v.path && v.wp < v.path.length)) {
+        var ss = sideSpot();                   // beeline blocked → routed walk to a fresh spot
+        v.sideIdx = ss.idx; v.sideX = ss.x; v.sideY = ss.y;
+        v.path = examRoute(v.x, v.y, ss.x, ss.y); v.wp = 0;
+      } else if (v.phase === 'leaving') {      // re-route to the exit; stuck twice → despawn off-screen
+        if (v.unstuckOnce) { v.dead = true; routeAvoidFor = null; return; }
+        v.unstuckOnce = true;
+        headForExit(v);
+      } else if (v.phase === 'waitXray' || v.phase === 'waitMeds' || v.phase === 'waitGroom') {
+        var ws = sideSpot();                   // old drift spot occupied → loiter somewhere fresh
+        v.path = examRoute(v.x, v.y, ws.x, ws.y); v.wp = 0;
+      } else if (v.path && v.path.length) {    // generic: re-route to the path's own endpoint
+        var end = v.path[v.path.length - 1];
+        var rp = examRoute(v.x, v.y, end.x, end.y);
+        if (examRouteReached) { v.path = rp; v.wp = 0; }
+        // no visitor-avoiding route either → hold position; patience/relief
+        // timers (every routed phase has one) bail them out if it never clears
+      }
+      routeAvoidFor = null;
     }
 
     // ---- Update -----------------------------------------------------------
@@ -3358,6 +5369,7 @@
     // work (exam or X-ray) that has a patient and no other vet, works there, then
     // moves on. A room "has a vet" now means one is standing on its circle.
     var vets = [];   // [{x,y,room,working,speed,dir,walkPhase,moving,path,wp}]
+    var workers = []; // [{x,y,room,working,speed,dir,walkPhase,moving,path,wp,shopTarget}] roaming groomers
     function vetRooms() { return examRooms.concat(xrayRooms); }
     function roomNeedsVet(rm) {
       return !!rm.occupant && (rm.occupant.phase === 'inExam' || rm.occupant.phase === 'inXray');
@@ -3380,16 +5392,22 @@
         }
         if (!isRoomFloor(Math.round(v.x), Math.round(v.y))) { v.x = ROOM / 2 - 0.5; v.y = ROOM - 1.5; v.path = null; v.working = false; }  // stranded (room moved) -> back to clinic
         if (!v.room) {
-          var best = null, bd = 1e9;
+          // Pick the nearest room that needs a vet AND is actually reachable on foot.
+          // Skipping unreachable rooms means a vet never claims a room it can't walk
+          // to (which would jam that room and used to send the vet beelining off the
+          // map back to the clinic). Rooms are few, so routing each candidate is cheap.
+          var best = null, bd = 1e9, bestPath = null;
           for (var j = 0; j < rooms.length; j++) {
             var rm = rooms[j];
             if (!roomNeedsVet(rm) || roomClaimed(rm, v)) continue;
             var c = vetCircle(rm), d = Math.abs(c.x - v.x) + Math.abs(c.y - v.y);
-            if (d < bd) { bd = d; best = rm; }
+            if (d >= bd) continue;
+            var p = examRoute(v.x, v.y, c.x, c.y);
+            if (!examRouteReached) continue;                            // can't get there -> ignore
+            bd = d; best = rm; bestPath = p;
           }
-          if (!best) { v.moving = false; v.walkPhase = 0; continue; }   // nothing needs a vet
-          v.room = best; v.working = false;
-          var bc = vetCircle(best); v.path = examRoute(v.x, v.y, bc.x, bc.y); v.wp = 0;
+          if (!best) { v.moving = false; v.walkPhase = 0; continue; }   // nothing reachable needs a vet
+          v.room = best; v.working = false; v.path = bestPath; v.wp = 0;
         }
         var cc = vetCircle(v.room);
         if (Math.round(v.x) === cc.x && Math.round(v.y) === cc.y) {     // on the circle -> work
@@ -3397,11 +5415,82 @@
           var f = FRONT[v.room.rot || 0]; v.dir = chooseDir(f.x, f.y);  // face the table
         } else if (v.path && v.wp < v.path.length) {
           v.working = false;
-          if (stepToward(v, v.path[v.wp].x, v.path[v.wp].y, dt, 0.12)) v.wp++;
+          if (stepToward(v, v.path[v.wp].x, v.path[v.wp].y, dt, 0.12, vetBlocked)) v.wp++;   // stay on room floor, even in a crowd
         } else {
-          v.path = examRoute(v.x, v.y, cc.x, cc.y); v.wp = 0;           // stranded -> recompute
+          v.path = examRoute(v.x, v.y, cc.x, cc.y); v.wp = 0;           // arrived-but-not-on-circle: recompute
+          if (!examRouteReached) { v.room = null; v.working = false; v.path = null; }   // room became unreachable -> release it
         }
       }
+    }
+
+    // ---- Roaming hired workers -------------------------------------------
+    // A Worker operates grooming stations: it walks to the station circle of any
+    // grooming room whose dog is being (or about to be) washed/dried and no other
+    // worker has claimed, works there, then moves on. With nothing to groom, it
+    // goes and mans the shop floor. Mirrors the roaming-vet logic.
+    function groomWorkerCircle(rm) {
+      if (!rm.occupant) return null;
+      var ph = rm.occupant.phase, st = groomStations(rm.gx, rm.gy);
+      if (ph === 'toGroomShower' || ph === 'inGroomShower') return st[0].circle;
+      if (ph === 'toGroomDry' || ph === 'inGroomDry') return st[1].circle;
+      return null;
+    }
+    function roomNeedsWorker(rm) { return !!groomWorkerCircle(rm); }
+    function roomWorkerWorking(rm) { for (var i = 0; i < workers.length; i++) if (workers[i].room === rm && workers[i].working) return true; return false; }
+    function roomWorkerClaimed(rm, self) { for (var i = 0; i < workers.length; i++) if (workers[i] !== self && workers[i].room === rm) return true; return false; }
+    // Where a Worker stands to "man the shop": the front-aisle centre tile (a walkable
+    // browse spot in front of the register), for the nearest shop.
+    function workerShopTile() {
+      if (!shops.length) return null;
+      return { x: shops[0].gx + 2, y: shops[0].gy + 3 };
+    }
+    function updateWorkers(dt) {
+      var rooms = groomings;
+      for (var i = 0; i < workers.length; i++) {
+        var w = workers[i];
+        if (w.room && (rooms.indexOf(w.room) < 0 || !roomNeedsWorker(w.room))) { w.room = null; w.working = false; w.path = null; }
+        if (!isRoomFloor(Math.round(w.x), Math.round(w.y))) { w.x = ROOM / 2 - 0.5; w.y = ROOM - 1.5; w.path = null; w.working = false; }  // stranded → back to clinic
+        if (!w.room) {
+          var best = null, bd = 1e9, bestPath = null;
+          for (var j = 0; j < rooms.length; j++) {
+            var rm = rooms[j], cc = groomWorkerCircle(rm);
+            if (!cc || roomWorkerClaimed(rm, w)) continue;
+            var d = Math.abs(cc.x - w.x) + Math.abs(cc.y - w.y);
+            if (d >= bd) continue;
+            var p = examRoute(w.x, w.y, cc.x, cc.y);
+            if (!examRouteReached) continue;
+            bd = d; best = rm; bestPath = p;
+          }
+          if (best) { w.room = best; w.working = false; w.path = bestPath; w.wp = 0; }
+          else { workerManShop(w, dt); continue; }                     // nothing to groom → tend the shop
+        }
+        var c2 = groomWorkerCircle(w.room);
+        if (!c2) { w.room = null; w.working = false; w.path = null; continue; }
+        if (Math.round(w.x) === c2.x && Math.round(w.y) === c2.y) {     // on the circle → work
+          w.x = c2.x; w.y = c2.y; w.moving = false; w.walkPhase = 0; w.working = true;
+          var dog = w.room.occupant; if (dog) w.dir = chooseDir(dog.x - w.x, dog.y - w.y);   // face the dog
+        } else if (w.path && w.wp < w.path.length) {
+          w.working = false;
+          if (stepToward(w, w.path[w.wp].x, w.path[w.wp].y, dt, 0.12, vetBlocked)) w.wp++;
+        } else {
+          w.path = examRoute(w.x, w.y, c2.x, c2.y); w.wp = 0;
+          if (!examRouteReached) { w.room = null; w.working = false; w.path = null; }
+        }
+      }
+    }
+    // Idle behaviour: walk to and stand at the shop floor. Cosmetic (the shop serves
+    // itself), but it's where a Worker goes when there's no grooming to do.
+    function workerManShop(w, dt) {
+      w.working = false;
+      var t = workerShopTile();
+      if (!t) { w.moving = false; w.walkPhase = 0; w.path = null; return; }
+      if (Math.round(w.x) === t.x && Math.round(w.y) === t.y) { w.x = t.x; w.y = t.y; w.moving = false; w.walkPhase = 0; w.dir = 'SE'; w.path = null; return; }
+      var key = t.x + ',' + t.y;
+      if (!w.path || w.wp >= w.path.length || w.shopTarget !== key) {
+        w.path = examRoute(w.x, w.y, t.x, t.y); w.wp = 0; w.shopTarget = key;
+        if (!examRouteReached) { w.path = null; w.moving = false; return; }
+      }
+      if (w.path && w.wp < w.path.length) { if (stepToward(w, w.path[w.wp].x, w.path[w.wp].y, dt, 0.12, vetBlocked)) w.wp++; }
     }
 
     function update(dt) {
@@ -3443,15 +5532,27 @@
       if (spawnTimer <= 0) { spawnVisitor(); spawnTimer += frq; }
       updateReceptionist();                  // lone receptionist picks which queue to man
       for (var i = visitors.length - 1; i >= 0; i--) {
-        updateVisitor(visitors[i], dt);
+        var wv = visitors[i], wpx = wv.x, wpy = wv.y;
+        updateVisitor(wv, dt);
+        // Anti-stuck watchdog: a visitor that WANTS to move (moving flag) but
+        // barely displaces for ~2.5s is wedged (wall, crowd, stale path) — run a
+        // phase-appropriate recovery instead of letting them freeze forever.
+        if (wv.moving && Math.hypot(wv.x - wpx, wv.y - wpy) < wv.speed * dt * 0.15) {
+          wv.stuckT = (wv.stuckT || 0) + dt;
+          if (wv.stuckT > 2.5) { wv.stuckT = 0; unstickVisitor(wv); }
+        } else wv.stuckT = 0;
         if (visitors[i].dead) visitors.splice(i, 1);
       }
       assignExams();                         // hand free exam rooms to the longest-waiting clients
       assignXrays();                         // hand free X-ray rooms to pets that need one
       assignPharmacies();                    // hand free pharmacy counters to clients needing meds
+      assignGrooming();                      // hand free grooming rooms to clients wanting a groom
       updateVets(dt);                        // roaming vets move between rooms that need them
+      updateWorkers(dt);                     // roaming workers operate grooming stations / man the shop
       cleaners.forEach(function (c) { c.speed = 2.3 * skills.cleaning.val; updateCleaner(c, dt); }); // cleaners head to messes (Cleaning skill speeds them)
       updatePuddles(dt);                     // scrub puddles the player/cleaners stand on
+      updateRoomGrime(dt);                   // shops/pharmacies slowly grime up over time
+      updateRoomDirt(dt);                    // scrub dirty rooms (player/cleaner on the scrub tile)
       // advance + retire the +10 coin pops
       for (var fi = floaters.length - 1; fi >= 0; fi--) {
         floaters[fi].t += dt;
@@ -3516,6 +5617,28 @@
           ctx.moveTo(s.x + 3, s.y - 1); ctx.lineTo(s.x - 1, s.y + 3); ctx.stroke();
           ctx.fillStyle = '#d9a23c';
           ctx.beginPath(); ctx.ellipse(s.x + 4, s.y + 3, 2.4, 1.3, 0.5, 0, Math.PI * 2); ctx.fill();
+        } else if (p.kind === 'litterbox') { // spilled clumps of used litter + stink lines
+          ctx.fillStyle = 'rgba(20,40,30,0.18)';
+          ctx.beginPath(); ctx.ellipse(s.x, s.y + 4, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#d8c89a'; ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#c2ae7d'; ctx.beginPath(); ctx.ellipse(s.x, s.y, 4.4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#a89465'; ctx.beginPath(); ctx.ellipse(s.x, s.y - 1.8, 2.8, 1.7, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(150,160,120,0.55)'; ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(s.x - 2, s.y - 3); ctx.quadraticCurveTo(s.x - 3.5, s.y - 6, s.x - 1.5, s.y - 9);
+          ctx.moveTo(s.x + 2, s.y - 3); ctx.quadraticCurveTo(s.x + 3.5, s.y - 6, s.x + 1.5, s.y - 9);
+          ctx.stroke();
+        } else if (p.kind === 'poo') {       // a little coiled dog mess + stink lines
+          ctx.fillStyle = 'rgba(20,40,30,0.18)';
+          ctx.beginPath(); ctx.ellipse(s.x, s.y + 4, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#4f3318'; ctx.beginPath(); ctx.ellipse(s.x, s.y + 2, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#6b4824'; ctx.beginPath(); ctx.ellipse(s.x, s.y, 4.4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#7d562d'; ctx.beginPath(); ctx.ellipse(s.x, s.y - 1.8, 2.8, 1.7, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(150,160,120,0.55)'; ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(s.x - 2, s.y - 3); ctx.quadraticCurveTo(s.x - 3.5, s.y - 6, s.x - 1.5, s.y - 9);
+          ctx.moveTo(s.x + 2, s.y - 3); ctx.quadraticCurveTo(s.x + 3.5, s.y - 6, s.x + 1.5, s.y - 9);
+          ctx.stroke();
         } else {
           ctx.fillStyle = 'rgba(226,206,74,0.55)';
           ctx.beginPath(); ctx.ellipse(s.x, s.y + 3, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
@@ -3523,6 +5646,32 @@
           ctx.beginPath(); ctx.ellipse(s.x + 3, s.y + 4, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
         }
       });
+    }
+
+    // A grimy brown wash + dirt flecks over one tile of a dirty room.
+    function washDirtTile(t) {
+      var s = iso(t.x, t.y);
+      ctx.save();
+      diamondPath(ctx, s.x, s.y); ctx.clip();
+      ctx.fillStyle = 'rgba(86,70,40,0.30)';                  // grimy brown wash
+      ctx.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
+      fleck(ctx, s, t.x, t.y, 6, 0.92, 2, function (h) { return h < 0.5 ? 'rgba(58,44,22,0.55)' : 'rgba(120,150,70,0.4)'; });
+      ctx.restore();
+    }
+    // Wash every tile of every dirty room — operating rooms (grimy from use),
+    // non-operating rooms (grimy over time) and restrooms (dirty after one use) —
+    // so a filthy room reads as visibly filthy until scrubbed.
+    function drawRoomDirt() {
+      ['exam', 'xray'].forEach(function (type) {
+        ROOM_TYPES[type].list.forEach(function (rm) {
+          if (!rm.dirty) return;
+          var tiles = (type === 'xray') ? xrayTiles(rm.gx, rm.gy) : examTiles(rm.gx, rm.gy);
+          tiles.forEach(washDirtTile);
+        });
+      });
+      pharmacies.forEach(function (rm) { if (rm.dirty) pharmTiles(rm.gx, rm.gy).forEach(washDirtTile); });
+      shops.forEach(function (rm) { if (rm.dirty) shopTiles(rm.gx, rm.gy).forEach(washDirtTile); });
+      restrooms.forEach(function (rm) { if (rm.dirty) footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot).forEach(washDirtTile); });
     }
 
     // Clean-up bars float above whoever is mopping (drawn over the actors).
@@ -3533,9 +5682,62 @@
         ctx.fillStyle = 'rgba(15,20,30,0.6)'; roundRect(ctx, bx - 1.5, by - 1.5, bw + 3, 6, 3); ctx.fill();
         ctx.fillStyle = '#5ad17a'; roundRect(ctx, bx, by, bw * Math.min(1, p.clean / messGoal(p)), 3, 2); ctx.fill();
       });
+      dirtyRooms().forEach(function (j) {                     // scrub progress over a room being cleaned
+        if (!(j.rm.cleanProg > 0)) return;
+        var s = iso(j.x, j.y), bw = 26, bx = s.x - bw / 2, by = s.y - 30;
+        ctx.fillStyle = 'rgba(15,20,30,0.6)'; roundRect(ctx, bx - 1.5, by - 1.5, bw + 3, 6, 3); ctx.fill();
+        ctx.fillStyle = '#5ad17a'; roundRect(ctx, bx, by, bw * Math.min(1, j.rm.cleanProg / j.goal), 3, 2); ctx.fill();
+      });
     }
 
     // Floating "+10" coin pop-ups above served clients.
+    // A staffer's name tag, below their feet. Only shown once named (hires start blank);
+    // a ♀/♂ glyph prefixes the name as the gender cue. Reuses the floater text style.
+    function drawStaffLabel(gx, gy, name, gender) {
+      if (!name) return;
+      var s = iso(gx, gy), y = s.y + 15;
+      var txt = name;                                  // name only — gender is shown by the sprite, not the tag
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '800 11px Nunito, sans-serif';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(18,26,34,0.7)';
+      ctx.strokeText(txt, s.x, y);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(txt, s.x, y);
+      ctx.restore();
+    }
+    // The grabbed staffer, lifted off the ground and slightly pinched, following the
+    // cursor — with a green/red ring on the destination tile showing drop validity.
+    function drawCarried() {
+      if (!carrying) return;
+      var s = iso(pointer.gx, pointer.gy);
+      var ease = 1 - (1 - carryT) * (1 - carryT);   // ease-out
+      var lift = 20 * ease + 2 * Math.sin(animT * 7);
+      var sc = 1 + 0.08 * ease;
+      var ok = carrying.canDrop();
+      ctx.save();                                    // destination ring
+      ctx.fillStyle = ok ? 'rgba(60,180,90,0.34)' : 'rgba(210,70,55,0.34)';
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, TILE_HW * 0.55, TILE_HH * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.save();                                    // lifted + pinched figure (scaled about its feet)
+      ctx.translate(0, -lift);
+      ctx.translate(s.x, s.y); ctx.scale(sc, sc); ctx.translate(-s.x, -s.y);
+      var g = carrying.getGender();
+      if (carrying.kind === 'vet') drawVetStaff(ctx, pointer.gx, pointer.gy, 0, 'SE', g);
+      else if (carrying.kind === 'cleaner') drawCleaner(ctx, pointer.gx, pointer.gy, g);
+      else if (carrying.kind === 'pharmacist') drawPharmacist(ctx, pointer.gx, pointer.gy, g);
+      else drawReceptionist(ctx, pointer.gx, pointer.gy, g);
+      ctx.restore();
+    }
+    // One pass over all staff, drawn above the scene so a desk/counter can't occlude a tag.
+    function drawStaffLabels() {
+      eachStaffHandle(function (h) {
+        if (carrying && carrying.is(h.data)) return;     // the carried one's tag rides the lift sprite
+        var t = h.tile();
+        drawStaffLabel(t.x, t.y, h.getName(), h.getGender());
+      });
+    }
+
     function drawFloaters() {
       ctx.save();
       ctx.textAlign = 'center';
@@ -3569,6 +5771,7 @@
 
       // floor decals first, under everyone
       drawPuddles();                        // accidents on the floor
+      drawRoomDirt();                       // grime wash over dirty operating-room floors (under the circles)
       examRooms.forEach(function (rm) {     // exam circles
         var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
         drawExamCircle(ctx, k.circle.x, k.circle.y, vetAtExam(rm) || roomVetWorking(rm));
@@ -3580,6 +5783,11 @@
       pharmacies.forEach(function (ph) {    // pharmacy counter circles
         pharmStations(ph.gx, ph.gy, ph.rot).forEach(function (sec, idx) {
           drawExamCircle(ctx, sec.circle.x, sec.circle.y, playerAtPharm(ph, idx) || ph.stations[idx].pharm);
+        });
+      });
+      groomings.forEach(function (rm) {     // grooming station circles (lit when an operator is on them)
+        groomStations(rm.gx, rm.gy).forEach(function (st) {
+          drawExamCircle(ctx, st.circle.x, st.circle.y, playerAtTile(st.circle) || workerAtTile(st.circle));
         });
       });
 
@@ -3605,11 +5813,24 @@
         // seated visitors get a depth nudge so they draw in front of their own
         // seating furniture (a 2x1 bench's centre sits between its two tiles).
         scene.push({ d: v.x + v.y + (v.seated ? 0.6 : 0), who: 'visitor', fn: function () { drawVisitor(v); } });
+        // off-leash park pet: its own depth-sorted sprite at its roaming position
+        // (dogs on the turf; cats out of the carrier in a cat-park blank room)
+        if (v.phase === 'inDogPark' && v.dog && (v.pet.charAt(0) === 'd' || v.parkZone === 'cat')) {
+          var d = v.dog;
+          scene.push({ d: d.x + d.y, who: 'visitor', fn: function () {
+            var ds = iso(d.x, d.y);
+            var fn = v.pet === 'cat' ? cachedCat : cachedDog;
+            fn(v, ds.x, ds.y, d.face >= 0, { leash: false, run: d.moving ? d.gait : 0, wag: d.wag });
+          } });
+        }
       });
       if (hasDesk()) staff.forEach(function (st) {       // receptionists at their stations
+        if (carrying && carrying.is(st)) return;         // the carried one rides the lift sprite instead
         var L = (staff.length === 1) ? loneStaffLine() : st.line;   // lone one stands at the queue it's serving
         var p = stationTile(L);
-        scene.push({ d: p.x + p.y, who: 'receptionist', fn: function () { drawReceptionist(ctx, p.x, p.y); } });
+        scene.push({ d: p.x + p.y, who: 'receptionist', ref: st, hx: p.x, hy: p.y, fn: function () {
+          staffSprite('rec' + st.gender + (deskAnchor().rot || 0), p.x, p.y, function (c, gx, gy) { drawReceptionist(c, gx, gy, st.gender); });
+        } });
       });
       restrooms.forEach(function (rm) {                  // toilet fixture inside the walled room
         var tl = rm.toilet;
@@ -3627,28 +5848,64 @@
         scene.push({ d: k.table.x + k.table.y, fn: function () { drawXrayMachine(ctx, k.table.x, k.table.y, xpet); } });
       });
       vets.forEach(function (vt) {                       // roaming hired vets
-        scene.push({ d: vt.x + vt.y, who: 'vet', fn: function () { drawVetStaff(ctx, vt.x, vt.y, vt.room ? (vt.room.rot || 0) : 0, vt.moving ? vt.dir : null); } });
+        if (carrying && carrying.is(vt)) return;
+        scene.push({ d: vt.x + vt.y, who: 'vet', ref: vt, hx: vt.x, hy: vt.y, fn: function () {
+          var rot = vt.room ? (vt.room.rot || 0) : 0, dir = vt.moving ? vt.dir : null;
+          staffSprite('vet' + vt.gender + rot + (dir || '-'), vt.x, vt.y, function (c, gx, gy) { drawVetStaff(c, gx, gy, rot, dir, vt.gender); });
+        } });
       });
       cleaners.forEach(function (cl) {                   // roaming cleaners
-        scene.push({ d: cl.x + cl.y, who: 'cleaner', fn: function () { drawCleaner(ctx, cl.x, cl.y); } });
+        if (carrying && carrying.is(cl)) return;
+        scene.push({ d: cl.x + cl.y, who: 'cleaner', ref: cl, hx: cl.x, hy: cl.y, fn: function () {
+          staffSprite('cl' + cl.gender, cl.x, cl.y, function (c, gx, gy) { drawCleaner(c, gx, gy, cl.gender); });
+        } });
+      });
+      workers.forEach(function (wk) {                    // roaming workers (groomers)
+        if (carrying && carrying.is(wk)) return;
+        scene.push({ d: wk.x + wk.y, who: 'worker', ref: wk, hx: wk.x, hy: wk.y, fn: function () {
+          staffSprite('wk' + wk.gender, wk.x, wk.y, function (c, gx, gy) { drawWorker(c, gx, gy, wk.gender); });
+        } });
+      });
+      groomings.forEach(function (rm) {                  // grooming shower + blow-dry fixtures
+        groomStations(rm.gx, rm.gy).forEach(function (st, idx) {
+          var active = !!(rm.occupant && rm.occupant.phase === (idx === 0 ? 'inGroomShower' : 'inGroomDry'));
+          var f = st.fixture;
+          scene.push({ d: f.x + f.y, fn: function () { (idx === 0 ? drawGroomShower : drawGroomDryer)(ctx, f.x, f.y, active); } });
+        });
       });
       pharmacies.forEach(function (ph) {                 // pharmacy counters + hired pharmacists
         pharmStations(ph.gx, ph.gy, ph.rot).forEach(function (sec, idx) {
           scene.push({ d: sec.counter.x + sec.counter.y, fn: function () { drawPharmCounter(ctx, sec.counter.x, sec.counter.y); } });
-          if (ph.stations[idx].pharm) scene.push({ d: sec.circle.x + sec.circle.y, who: 'pharmacist', fn: function () { drawReceptionist(ctx, sec.circle.x, sec.circle.y); } });
+          var pharm = ph.stations[idx].pharm;
+          if (pharm && !(carrying && carrying.is(pharm))) scene.push({ d: sec.circle.x + sec.circle.y, who: 'pharmacist', ref: pharm, hx: sec.circle.x, hy: sec.circle.y, fn: function () {
+            staffSprite('ph' + pharm.gender + (deskAnchor().rot || 0), sec.circle.x, sec.circle.y, function (c, gx, gy) { drawPharmacist(c, gx, gy, pharm.gender); });
+          } });
         });
+      });
+      shops.forEach(function (sh) {                      // shop display island + cashier
+        shopIslandTiles(sh.gx, sh.gy).forEach(function (t, idx) {
+          scene.push({ d: t.x + t.y, fn: function () { drawShopIsland(ctx, t.x, t.y, idx === 1); } });
+        });
+        var ct = shopCashierTile(sh.gx, sh.gy);          // behind the register; counter (higher d) draws in front
+        scene.push({ d: ct.x + ct.y, fn: function () {
+          staffSprite('ca' + (sh.cashierGender || 'male'), ct.x, ct.y, function (c, gx, gy) { drawCashier(c, gx, gy, sh.cashierGender || 'male'); });
+        } });
       });
 
       scene.sort(function (a, b) { return a.d - b.d; });
+      var hiRef = staffHover ? staffHover.data : (staffGrab ? staffGrab.handle.data : null);
       scene.forEach(function (a) {
         // Hovering a Staff card dims every person except staff of that type.
         var dim = hoverStaff && a.who && a.who !== hoverStaff;
         if (dim) ctx.globalAlpha = 0.2;
+        if (a.ref && a.ref === hiRef) drawStaffHighlight(a.hx, a.hy);   // grab affordance, under the figure
         a.fn();
         if (dim) ctx.globalAlpha = 1;
       });
 
       drawDeskCircles();                    // station rings, drawn on top of the desk counter
+      drawStaffLabels();                    // name tags below staff, above the scene so a desk can't hide them
+      drawCarried();                        // the lifted staffer being dragged, on top of everyone
       drawGhost();                          // placement preview floats on top
       drawCleanBars();                      // mop-up progress, above whoever's cleaning
       drawFloaters();                       // +10 coin pops on top of everyone
@@ -3663,6 +5920,7 @@
       var dt = Math.min((ts - last) / 1000, 0.05);
       last = ts;
       update(dt);
+      if (carrying) carryT = Math.min(1, carryT + dt * 7);        // ramp the pick-up lift/pinch
       if (staticDirty) { staticDirty = false; renderStatic(); }   // one coalesced static redraw per frame
       draw();
       requestAnimationFrame(frame);
@@ -3681,6 +5939,7 @@
     }
     window.addEventListener('keydown', function (e) {
       if (typingInField(e)) return;
+      if (e.key === ']') { money += 1000; renderMoney(); e.preventDefault(); return; }   // cheat: +$1000
       var k = KEYMAP[e.key]; if (k) { input[k] = true; e.preventDefault(); }
     });
     window.addEventListener('keyup', function (e) {
@@ -3692,6 +5951,10 @@
     var origin = null;
     var panning = null;                      // mouse drag-to-pan: {x,y,camX,camY}
     var lastTap = { t: -1e9, x: 0, y: 0 };   // for double-click/tap pick-up
+    var staffGrab = null;                    // pending staff press: {handle, x, y} (tap→modal, drag→carry)
+    var staffHover = null;                   // staffer under the mouse: lit up as a grab affordance
+    var carrying = null;                     // a staff handle being dragged to a new spot
+    var carryT = 0;                          // 0→1 lift/pinch animation progress while carrying
     function getPoint(e) { var t = e.touches ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; }
     function setPointer(clientX, clientY) {
       var rect = canvas.getBoundingClientRect();
@@ -3699,7 +5962,7 @@
       pointer.gx = Math.round(g.gx); pointer.gy = Math.round(g.gy); pointer.on = true;
     }
     function dragStart(e) {
-      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {  // corridor/blank brush: drag
+      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank' || placing.item.kind === 'park')) {  // corridor/blank/park brush: drag
         var cp = getPoint(e); setPointer(cp.x, cp.y);
         corridorDrag = { sx: pointer.gx, sy: pointer.gy };
         e.preventDefault(); return;
@@ -3709,6 +5972,12 @@
         if (!e.touches) tryPlace();        // touch positions now and drops on lift)
         e.preventDefault(); return;
       }
+      // grab a staffer first: a tap (no drag) opens their overlay, a drag relocates
+      // them. Checked before pan/joystick so dragging staff never pans or moves the
+      // player; falls through to those when nothing's under the cursor.
+      var gp = getPoint(e); setPointer(gp.x, gp.y);
+      var sh = staffAtPixel(gp.x, gp.y);     // full-body pixel hit, layered over the pan handler
+      if (sh) { staffGrab = { handle: sh, x: gp.x, y: gp.y }; carrying = null; carryT = 0; e.preventDefault(); return; }
       // double-click / double-tap on a placed item picks it up to reposition
       var tp = getPoint(e);
       if (e.timeStamp - lastTap.t < 350 && Math.abs(tp.x - lastTap.x) < 24 && Math.abs(tp.y - lastTap.y) < 24) {
@@ -3727,6 +5996,11 @@
       e.preventDefault();
     }
     function dragMove(e) {
+      if (staffGrab) {                      // a staffer is grabbed: track the cursor; promote to a carry past a small move
+        var gp = getPoint(e); setPointer(gp.x, gp.y);
+        if (!carrying && Math.hypot(gp.x - staffGrab.x, gp.y - staffGrab.y) > 8) { carrying = staffGrab.handle; carryT = 0; }
+        e.preventDefault(); return;
+      }
       if (panning) {                        // pan the camera by translating the cached static buffer
         var mp = getPoint(e);
         camera.x = panning.camX + (mp.x - panning.x);
@@ -3737,7 +6011,7 @@
             Math.abs(camera.y - staticCamY) > STATIC_PAD - 8) staticDirty = true;
         e.preventDefault(); return;
       }
-      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
+      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank' || placing.item.kind === 'park')) {
         if (corridorDrag) { var cp = getPoint(e); setPointer(cp.x, cp.y); }
         e.preventDefault(); return;
       }
@@ -3754,10 +6028,16 @@
       e.preventDefault();
     }
     function dragEnd(e) {
+      if (staffGrab) {                      // released a grabbed staffer: drag→relocate (snap-back if invalid), tap→overlay
+        if (carrying) { carrying.relocate(); carrying = null; }
+        else openStaffModal(staffGrab.handle);
+        staffGrab = null; if (e && e.preventDefault) e.preventDefault(); return;
+      }
       if (panning) { panning = null; canvas.style.cursor = ''; staticDirty = true; if (e && e.preventDefault) e.preventDefault(); return; }   // walls back on (next frame)
-      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank')) {
+      if (placing && (placing.item.kind === 'corridor' || placing.item.kind === 'blank' || placing.item.kind === 'park')) {
         if (corridorDrag) {
           if (placing.item.kind === 'blank') commitBlank(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy);
+          else if (placing.item.kind === 'park') commitPark(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy);
           else commitCorridor(corridorDrag.sx, corridorDrag.sy, pointer.gx, pointer.gy);
           corridorDrag = null;
         }
@@ -3774,10 +6054,13 @@
     window.addEventListener('mousemove', dragMove);
     window.addEventListener('mouseup', dragEnd);
 
-    // Hover (mouse) tracks the tile under the cursor for the placement ghost.
+    // Hover (mouse) tracks the tile under the cursor for the placement ghost, and
+    // lights up a staffer under the cursor so it reads as grabbable (grab cursor too).
     window.addEventListener('mousemove', function (e) {
-      if (e.target.closest && e.target.closest('#shopbar')) { pointer.on = false; return; }
+      if (e.target.closest && e.target.closest('#shopbar')) { pointer.on = false; staffHover = null; return; }
       setPointer(e.clientX, e.clientY);
+      staffHover = (placing || panning || carrying) ? null : staffAtPixel(e.clientX, e.clientY);
+      if (!panning && !carrying) canvas.style.cursor = staffHover ? 'grab' : '';
     });
     // Esc / right-click cancels an in-progress placement.
     window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && placing) cancelPlacing(); });
@@ -3822,24 +6105,29 @@
     // Snapshot of persistent state only (transient fields excluded by construction).
     function buildSave(name) {
       return {
-        v: 1, name: name, savedAt: Date.now(), money: money,
-        skills: {
-          speed:      { val: skills.speed.val,      cost: skills.speed.cost },
-          processing: { val: skills.processing.val, cost: skills.processing.cost }
-        },
+        v: 1, name: name, savedAt: Date.now(), money: money, staffSurcharge: staffSurcharge,
+        // persist EVERY skill (speed / processing / cleaning / any future one),
+        // not a hand-listed subset — so none silently reset to 1 on reload
+        skills: (function () { var o = {}; for (var sk in skills) o[sk] = { val: skills[sk].val, cost: skills[sk].cost }; return o; })(),
         placed: (placed || []).map(function (p) { return { id: p.id, gx: p.gx, gy: p.gy, rot: p.rot || 0 }; }),
         corridor: Object.keys(corridor || {}),
-        examRooms:  (examRooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
-        xrayRooms:  (xrayRooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0, vet: !!r.vet }; }),
+        openRoom: Object.keys(openRoom || {}),       // blank-room tiles (else they reload as teal corridors)
+        park: Object.keys(park || {}),               // dog-park grass tiles (re-tag so they reload as turf, not vinyl)
+        examRooms:  (examRooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0, uses: r.uses || 0, dirty: !!r.dirty }; }),
+        xrayRooms:  (xrayRooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0, vet: !!r.vet, uses: r.uses || 0, dirty: !!r.dirty }; }),
         restrooms:  (restrooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
+        shops:      (shops || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
+        groomings:  (groomings || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
         pharmacies: (pharmacies || []).map(function (r) {
           return { gx: r.gx, gy: r.gy, rot: r.rot || 0,
-                   stations: (r.stations || []).map(function (s) { return { pharm: !!s.pharm }; }) };
+                   stations: (r.stations || []).map(function (s) { return { pharm: s.pharm ? { name: s.pharm.name || '', gender: s.pharm.gender || 'male' } : false }; }) };
         }),
-        staff: (staff || []).map(function (s) { return { type: s.type, line: s.line }; }),
-        vets:  (vets || []).map(function (v) { return { x: v.x, y: v.y, speed: v.speed }; }),
-        cleaners: (cleaners || []).map(function (c) { return { x: c.x, y: c.y, speed: c.speed }; }),
-        frq: frq
+        staff: (staff || []).map(function (s) { return { type: s.type, line: s.line, name: s.name || '', gender: s.gender || 'male' }; }),
+        vets:  (vets || []).map(function (v) { return { x: v.x, y: v.y, speed: v.speed, name: v.name || '', gender: v.gender || 'male' }; }),
+        cleaners: (cleaners || []).map(function (c) { return { x: c.x, y: c.y, speed: c.speed, name: c.name || '', gender: c.gender || 'male' }; }),
+        workers: (workers || []).map(function (w) { return { x: w.x, y: w.y, speed: w.speed, name: w.name || '', gender: w.gender || 'male' }; }),
+        frq: frq,
+        difficulty: difficulty
       };
     }
 
@@ -3853,28 +6141,34 @@
       spawnTimer = 0; visitorSeq = 0; examTicketSeq = 0; animT = 0;
       door.open = 0;
       for (var k in doorOpen) delete doorOpen[k];
-      examRooms.forEach(function (r) { r.occupant = null; r.examT = 0; });
-      xrayRooms.forEach(function (r) { r.occupant = null; r.xrayT = 0; });
+      examRooms.forEach(function (r) { r.occupant = null; r.examT = 0; r.cleanProg = 0; });
+      xrayRooms.forEach(function (r) { r.occupant = null; r.xrayT = 0; r.cleanProg = 0; });
       restrooms.forEach(function (r) { r.occupant = null; });
       pharmacies.forEach(function (p) { (p.stations || []).forEach(function (s) { s.patient = null; s.procT = 0; }); });
+      groomings.forEach(function (r) { r.occupant = null; r.showerT = 0; r.dryT = 0; });
       vets.forEach(function (v) { v.room = null; v.working = false; v.moving = false; v.path = null; v.wp = 0; });
       cleaners.forEach(function (c) { c.target = null; c.moving = false; c.path = null; c.wp = 0; });
+      workers.forEach(function (w) { w.room = null; w.working = false; w.moving = false; w.path = null; w.wp = 0; w.shopTarget = null; });
       placing = null; corridorDrag = null;
       try { document.body.classList.remove('placing'); } catch (e) {}
       vet.x = ROOM / 2 - 0.5; vet.y = ROOM / 2 - 0.5; vet.dir = 'SE'; vet.moving = false; vet.walkPhase = 0;
     }
 
     // Reset everything to a fresh, empty clinic.
-    function newGame() {
+    function newGame(diffKey) {
+      difficulty = DIFFICULTY[diffKey] ? diffKey : 'easy';
+      var D = diff();
       resetTransient();
       placed.length = 0; examRooms.length = 0; xrayRooms.length = 0;
-      restrooms.length = 0; pharmacies.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0;
+      restrooms.length = 0; pharmacies.length = 0; shops.length = 0; groomings.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0; workers.length = 0;
       for (var k in corridor) delete corridor[k];
+      for (var kor in openRoom) delete openRoom[kor];
+      for (var kpk in park) delete park[kpk];
       for (var k2 in occupied) delete occupied[k2];
-      money = 1000;
-      skills.speed.val = 1.0; skills.speed.cost = 10;
-      skills.processing.val = 1.0; skills.processing.cost = 10;
-      frq = 30; spawnTimer = 0; autoSaveTimer = 0;
+      money = D.money;
+      staffSurcharge = 0;                   // fresh clinic → staff back to base prices
+      for (var sk in skills) { skills[sk].val = 1.0; skills[sk].cost = 10; }   // reset EVERY skill (incl. cleaning) to base
+      frq = D.frq; wait = D.wait; spawnTimer = 0; autoSaveTimer = 0;
       currentName = '';
       try { localStorage.removeItem(LS_CURRENT); } catch (e) {}
       renderStatic(); renderMoney(); updateHospitalLabel();
@@ -3887,42 +6181,57 @@
       if (!data || data.v !== 1) return false;
       resetTransient();
       placed.length = 0; examRooms.length = 0; xrayRooms.length = 0;
-      restrooms.length = 0; pharmacies.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0;
+      restrooms.length = 0; pharmacies.length = 0; shops.length = 0; groomings.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0; workers.length = 0;
       for (var k in corridor) delete corridor[k];
+      for (var kor in openRoom) delete openRoom[kor];
+      for (var kpk in park) delete park[kpk];
       for (var k2 in occupied) delete occupied[k2];
 
       money = (typeof data.money === 'number') ? data.money : 1000;
-      if (data.skills) {
-        skills.speed.val = data.skills.speed.val; skills.speed.cost = data.skills.speed.cost;
-        skills.processing.val = data.skills.processing.val; skills.processing.cost = data.skills.processing.cost;
+      staffSurcharge = (typeof data.staffSurcharge === 'number') ? data.staffSurcharge : 0;
+      if (data.skills) {                       // restore every saved skill we still have (skips unknown/removed ones)
+        for (var sk in skills) if (data.skills[sk]) { skills[sk].val = data.skills[sk].val; skills[sk].cost = data.skills[sk].cost; }
       }
+      difficulty = DIFFICULTY[data.difficulty] ? data.difficulty : 'easy';   // legacy saves had no difficulty → Easy
       frq = (typeof data.frq === 'number') ? data.frq : 30;
+      wait = diff().wait;                                                     // patience is a difficulty knob, not saved directly
 
       (data.corridor || []).forEach(function (key) { corridor[key] = true; });
+      // Restore blank rooms BEFORE placing walled rooms, so floor rendering, wall
+      // openings, and door-finding all see them as open rooms (not plain corridors).
+      (data.openRoom || []).forEach(function (key) { openRoom[key] = true; });
+      (data.park || []).forEach(function (key) { park[key] = true; });   // re-tag dog-park grass
       (data.placed || []).forEach(function (p) {
         placed.push({ id: p.id, gx: p.gx, gy: p.gy, rot: p.rot || 0 });
         var def = FURN_BY_ID[p.id];
         if (def) footprintTiles(def, p.gx, p.gy, p.rot || 0).forEach(function (t) { occupied[t.x + ',' + t.y] = true; });
       });
       _suspendStatic = true;                    // bake once after all rooms (below), not per room
-      if (typeof placeExam === 'function')     (data.examRooms || []).forEach(function (r) { placeExam(r.gx, r.gy, r.rot || 0); });
-      if (typeof placeXray === 'function')     (data.xrayRooms || []).forEach(function (r) { placeXray(r.gx, r.gy, r.rot || 0); });
+      if (typeof placeExam === 'function')     (data.examRooms || []).forEach(function (r) { var rm = placeExam(r.gx, r.gy, r.rot || 0); if (rm) { rm.uses = r.uses || 0; rm.dirty = !!r.dirty; } });
+      if (typeof placeXray === 'function')     (data.xrayRooms || []).forEach(function (r) { var rm = placeXray(r.gx, r.gy, r.rot || 0); if (rm) { rm.uses = r.uses || 0; rm.dirty = !!r.dirty; } });
       if (typeof placeRestroom === 'function') (data.restrooms || []).forEach(function (r) { placeRestroom(r.gx, r.gy, r.rot || 0); });
       if (typeof placePharmacy === 'function') (data.pharmacies || []).forEach(function (r) { placePharmacy(r.gx, r.gy, r.rot || 0); });
+      if (typeof placeShop === 'function')     (data.shops || []).forEach(function (r) { placeShop(r.gx, r.gy, r.rot || 0); });
+      if (typeof placeGrooming === 'function') (data.groomings || []).forEach(function (r) { placeGrooming(r.gx, r.gy, r.rot || 0); });
       _suspendStatic = false;
       // per-room persistent extras, by index (push order matches save order)
       (data.xrayRooms || []).forEach(function (r, i) { if (xrayRooms[i]) xrayRooms[i].vet = !!r.vet; });
       (data.pharmacies || []).forEach(function (r, i) {
         if (pharmacies[i]) (r.stations || []).forEach(function (s, j) {
-          if (pharmacies[i].stations[j]) pharmacies[i].stations[j].pharm = !!s.pharm;
+          // legacy saves stored pharm as a bare boolean; upgrade to a {name,gender} object
+          if (pharmacies[i].stations[j]) pharmacies[i].stations[j].pharm =
+            s.pharm ? (typeof s.pharm === 'object' ? { name: s.pharm.name || '', gender: s.pharm.gender || 'male' } : newPharm()) : false;
         });
       });
-      (data.staff || []).forEach(function (s) { staff.push({ type: s.type, line: s.line }); });
+      (data.staff || []).forEach(function (s) { staff.push({ type: s.type, line: s.line, name: s.name || '', gender: s.gender || randGender() }); });
       (data.vets || []).forEach(function (v) {
-        vets.push({ x: v.x, y: v.y, room: null, working: false, speed: v.speed || 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0 });
+        vets.push({ x: v.x, y: v.y, room: null, working: false, speed: v.speed || 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, name: v.name || '', gender: v.gender || randGender() });
       });
       (data.cleaners || []).forEach(function (c) {
-        cleaners.push({ x: c.x, y: c.y, speed: c.speed || 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0 });
+        cleaners.push({ x: c.x, y: c.y, speed: c.speed || 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0, name: c.name || '', gender: c.gender || randGender() });
+      });
+      (data.workers || []).forEach(function (w) {
+        workers.push({ x: w.x, y: w.y, room: null, working: false, speed: w.speed || 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, name: w.name || '', gender: w.gender || randGender() });
       });
 
       resetTransient();                       // clear anything the place-fns seeded
@@ -3942,7 +6251,7 @@
 
     function updateHospitalLabel() {
       if (!hospEl) return;
-      hospEl.textContent = currentName ? '🏥 ' + currentName : '';
+      hospEl.textContent = currentName ? '🏥 ' + currentName + ' · ' + diff().label : '';
       hospEl.style.display = currentName ? '' : 'none';
     }
     function openSaveModal() {
@@ -3963,9 +6272,10 @@
         var rooms = (s.examRooms || []).length + (s.xrayRooms || []).length + (s.pharmacies || []).length + (s.restrooms || []).length;
         var when = '';
         try { when = new Date(s.savedAt || 0).toLocaleDateString(); } catch (e) {}
+        var dl = (DIFFICULTY[s.difficulty] || DIFFICULTY.easy).label;
         var row = document.createElement('div');
         row.className = 'save-row' + (s.name === currentName ? ' current' : '');
-        row.innerHTML = '<div class="save-meta"><div class="nm"></div><div class="sub">$' + (s.money || 0) + ' · ' + rooms + (rooms === 1 ? ' room · ' : ' rooms · ') + when + '</div></div>' +
+        row.innerHTML = '<div class="save-meta"><div class="nm"></div><div class="sub">' + dl + ' · $' + (s.money || 0) + ' · ' + rooms + (rooms === 1 ? ' room · ' : ' rooms · ') + when + '</div></div>' +
                         '<button class="save-load">Load</button><button class="save-del">Delete</button>';
         row.querySelector('.nm').textContent = s.name;
         row.querySelector('.save-load').addEventListener('click', function () { applySave(readSave(s.name)); closeSaveModal(); });
@@ -3978,6 +6288,45 @@
     document.getElementById('savesBtn').addEventListener('click', openSaveModal);
     document.getElementById('saveClose').addEventListener('click', closeSaveModal);
     saveModal.addEventListener('click', function (e) { if (e.target === saveModal) closeSaveModal(); });
+
+    // ---- Staff customization overlay -------------------------------------
+    var staffModal = document.getElementById('staffModal');
+    var staffNameEl = document.getElementById('staffName');
+    var staffTitleEl = document.getElementById('staffTitle');
+    var staffFireEl = document.getElementById('staffFire');
+    var staffGenderEl = document.getElementById('staffGender');
+    var staffHandleOpen = null;            // the handle the overlay is editing
+    var STAFF_TITLE = { receptionist: 'Receptionist', vet: 'Vet', cleaner: 'Cleaner', pharmacist: 'Pharmacist' };
+    function syncGenderButtons(g) {
+      var btns = staffGenderEl.querySelectorAll('.modal-toggle');
+      for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', btns[i].getAttribute('data-g') === g);
+    }
+    function openStaffModal(h) {
+      if (placing) cancelPlacing();
+      input.up = input.down = input.left = input.right = false;   // no stuck movement while typing
+      staffHandleOpen = h;
+      staffTitleEl.textContent = STAFF_TITLE[h.kind] || 'Staff';
+      staffNameEl.value = h.getName();
+      syncGenderButtons(h.getGender());
+      staffFireEl.textContent = 'Fire (+$' + Math.floor(h.cost * 0.5) + ')';
+      staffModal.hidden = false;
+      try { staffNameEl.focus(); } catch (e) {}
+    }
+    function closeStaffModal() { staffModal.hidden = true; staffHandleOpen = null; }
+    staffNameEl.addEventListener('input', function () { if (staffHandleOpen) staffHandleOpen.setName(staffNameEl.value); });
+    staffGenderEl.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.modal-toggle');
+      if (!btn || !staffHandleOpen) return;
+      var g = btn.getAttribute('data-g');
+      staffHandleOpen.setGender(g); syncGenderButtons(g);
+    });
+    staffFireEl.addEventListener('click', function () {
+      if (!staffHandleOpen) return;
+      var r = staffHandleOpen.fire(); money += r; renderMoney();
+      closeStaffModal();
+    });
+    document.getElementById('staffClose').addEventListener('click', closeStaffModal);
+    staffModal.addEventListener('click', function (e) { if (e.target === staffModal) closeStaffModal(); });
     document.getElementById('saveBtn').addEventListener('click', function () {
       var name = (saveNameEl.value || '').trim();
       if (!name) { try { saveNameEl.focus(); } catch (e) {} return; }
@@ -3985,8 +6334,18 @@
       updateHospitalLabel(); renderSaveList();
     });
     saveNameEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') document.getElementById('saveBtn').click(); });
-    document.getElementById('newGameBtn').addEventListener('click', function () {
-      if (confirm('Start a new game? Unsaved progress in the current hospital will be lost.')) { newGame(); closeSaveModal(); }
+    // "+ New Game" → pick a difficulty (Easy/Medium/Hard), which then starts a fresh game.
+    var difficultyModal = document.getElementById('difficultyModal');
+    function openDifficultyModal() { difficultyModal.hidden = false; }
+    function closeDifficultyModal() { difficultyModal.hidden = true; }
+    document.getElementById('newGameBtn').addEventListener('click', openDifficultyModal);
+    document.getElementById('diffClose').addEventListener('click', closeDifficultyModal);
+    difficultyModal.addEventListener('click', function (e) { if (e.target === difficultyModal) closeDifficultyModal(); });
+    Array.prototype.forEach.call(difficultyModal.querySelectorAll('.diff-opt'), function (btn) {
+      btn.addEventListener('click', function () {
+        newGame(btn.getAttribute('data-diff'));
+        closeDifficultyModal(); closeSaveModal();
+      });
     });
 
     // ---- Boot -------------------------------------------------------------
@@ -4018,6 +6377,14 @@
     window.__t = {
       draw: draw,
       step: function (n) { for (var i = 0; i < (n || 1); i++) update(1 / 30); },
+      // perf probes: doorway registry size (leak check), wall-segment count, and a
+      // baked/unbaked toggle so benchmarks can A/B the sprite cache on one build
+      doorwayCount: function () { return doorways.length; },
+      wallSegCount: function () { return wallSegs.length; },
+      setWallSprites: function (on) { wallSpritesOn = !!on; renderStatic(); return wallSpritesOn; },
+      setCharSprites: function (on) { charSpritesOn = !!on; charSpriteCache = {}; charSpriteN = 0; return charSpritesOn; },
+      charSpriteCount: function () { return charSpriteN; },
+      timeDraw: function (n) { var t0 = performance.now(); for (var i = 0; i < (n || 100); i++) draw(); return (performance.now() - t0) / (n || 100); },
       money: function () { return money; },
       frq: function () { return frq; },
       spawn: spawnVisitor,
@@ -4028,30 +6395,68 @@
       visitors: function () { return visitors.map(function (v) { return { phase: v.phase, seated: !!v.seated, pet: v.pet, patience: Math.round(v.patience * 10) / 10, x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100, chair: v.chair || null }; }); },
       buildCorridor: function (sx, sy, ex, ey) { commitCorridor(sx, sy, ex, ey); return Object.keys(corridor); },
       buildBlank: function (sx, sy, ex, ey) { commitBlank(sx, sy, ex, ey); return Object.keys(openRoom); },
+      buildPark: function (sx, sy, ex, ey) { commitPark(sx, sy, ex, ey); return Object.keys(park); },
+      parkInfo: function () { return { size: parkSize(), quality: parkQuality(), busy: Math.round(parkBusy() * 100) / 100, appeal: Math.round(parkAppeal() * 1000) / 1000, goers: parkGoers(), spots: parkStandTiles().length }; },
+      catParkInfo: function () { return { size: catFloorSize(), quality: parkQuality('cat'), busy: Math.round(parkBusy('cat') * 100) / 100, appeal: Math.round(parkAppeal('cat') * 1000) / 1000, goers: parkGoers('cat'), spots: parkStandTiles('cat').length }; },
+      puddleList: function () { return puddles.map(function (p) { return { x: p.x, y: p.y, kind: p.kind || 'pee', clean: Math.round((p.clean || 0) * 10) / 10 }; }); },
+      setPet: function (i, p) { if (visitors[i]) { visitors[i].pet = p; return true; } return false; },
       canExam: function (gx, gy) { return canPlaceExam(gx, gy); },
       canXray: function (gx, gy) { return canPlaceXray(gx, gy); },
       canPharm: function (gx, gy) { return canPlacePharmacy(gx, gy); },
       canRestroom: function (gx, gy, rot) { return canPlaceRestroom(gx, gy, rot || 0); },
       placeExam: function (gx, gy, rot) { placeExam(gx, gy, rot); return examKeyTiles(gx, gy, rot || 0); },
       placeXray: function (gx, gy, rot) { placeXray(gx, gy, rot); return examKeyTiles(gx, gy, rot || 0); },
-      exams: function () { return examRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet, examT: Math.round((r.examT||0)*10)/10 }; }); },
-      xrays: function () { return xrayRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet }; }); },
+      exams: function () { return examRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet, examT: Math.round((r.examT||0)*10)/10, uses: r.uses||0, dirty: !!r.dirty, cleanProg: Math.round((r.cleanProg||0)*10)/10 }; }); },
+      xrays: function () { return xrayRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet, uses: r.uses||0, dirty: !!r.dirty, cleanProg: Math.round((r.cleanProg||0)*10)/10 }; }); },
       pharms: function () { return pharmacies.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, stations: r.stations.map(function (s) { return { pharm: !!s.pharm, busy: !!s.patient }; }) }; }); },
       placePharm: function (gx, gy, rot) { if (!canPlacePharmacy(gx, gy)) return false; placePharmacy(gx, gy, rot || 0); return pharmacies[pharmacies.length - 1]; },
+      canShop: function (gx, gy) { return canPlaceShop(gx, gy); },
+      placeShop: function (gx, gy, rot) { if (!canPlaceShop(gx, gy)) return false; placeShop(gx, gy, rot || 0); return shops[shops.length - 1]; },
+      shops: function () { return shops.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot }; }); },
+      shopSpend: function () { return shopSpend(); },
+      canGroom: function (gx, gy) { return canPlaceGrooming(gx, gy); },
+      placeGroom: function (gx, gy, rot) { if (!canPlaceGrooming(gx, gy)) return false; placeGrooming(gx, gy, rot || 0); var rm = groomings[groomings.length - 1]; return { gx: rm.gx, gy: rm.gy, door: rm.door, stations: groomStations(rm.gx, rm.gy) }; },
+      grooms: function () { return groomings.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, phase: r.occupant ? r.occupant.phase : null, showerT: Math.round((r.showerT||0)*100)/100, dryT: Math.round((r.dryT||0)*100)/100 }; }); },
+      hireWorker: function (gx, gy) { workers.push({ x: gx != null ? gx : ROOM / 2 - 0.5, y: gy != null ? gy : ROOM - 1.5, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, name: '', gender: randGender() }); return workers.length; },
+      workerList: function () { return workers.map(function (w) { return { x: Math.round(w.x*100)/100, y: Math.round(w.y*100)/100, working: !!w.working, room: !!w.room }; }); },
+      route: function (sx, sy, tx, ty) { var p = examRoute(sx, sy, tx, ty); return { reached: examRouteReached, len: p.length, path: p }; },
       save: function (name) { return buildSave(name || 'test'); },
       load: function (d) { return applySave(d); },
+      newGame: function (d) { newGame(d); return difficulty; },
+      diffInfo: function () { var D = diff(); return { difficulty: difficulty, money: money, frq: frq, wait: wait, up: D.up, down: D.down, rating: Math.round((100 / frq) * 100) / 100 }; },
       corridors: function () { return Object.keys(corridor); },
       setInput: function (k, v) { input[k] = v; },
       can: function (id, gx, gy, rot) { return canPlace(FURN_BY_ID[id], gx, gy, rot || 0); },
       buildRestroom: function (gx, gy, rot) { if (!canPlaceRestroom(gx, gy, rot || 0)) return false; placeRestroom(gx, gy, rot || 0); return restrooms[restrooms.length - 1]; },
-      restroomList: function () { return restrooms.map(function (r) { return { gx: r.gx, gy: r.gy, toilet: r.toilet, stand: r.stand, door: r.door, occ: !!r.occupant }; }); },
+      restroomList: function () { return restrooms.map(function (r) { return { gx: r.gx, gy: r.gy, toilet: r.toilet, stand: r.stand, door: r.door, occ: !!r.occupant, dirty: !!r.dirty, cleanProg: Math.round((r.cleanProg||0)*100)/100 }; }); },
+      dirtyRoomList: function () { return dirtyRooms().map(function (j) { return { x: j.x, y: j.y, goal: j.goal, cleanProg: Math.round((j.rm.cleanProg||0)*100)/100 }; }); },
+      cleanerList: function () { return cleaners.map(function (c) { return { x: Math.round(c.x*100)/100, y: Math.round(c.y*100)/100, target: c.target ? { x: c.target.x, y: c.target.y } : null }; }); },
+      setDirty: function (kind, n) { var L = kind === 'restroom' ? restrooms : kind === 'shop' ? shops : kind === 'pharmacy' ? pharmacies : kind === 'xray' ? xrayRooms : examRooms; if (L[n||0]) { L[n||0].dirty = true; return true; } return false; },
+      wallEdge: function (ax, ay, bx, by) { return wallStep(ax, ay, bx, by); },
+      clearGroomRooms: function () { groomings.length = 0; return 0; },
+      setBladder: function (i, s) { if (visitors[i]) { visitors[i].bladder = s; return true; } return false; },
+      vpos: function () { return visitors.map(function (v) { return { id: v.id, phase: v.phase, x: v.x, y: v.y, moving: !!v.moving, seated: !!v.seated }; }); },
+      setFrq: function (f) { frq = f; if (typeof renderRating === 'function') renderRating(); return { frq: frq, rating: Math.round((100 / frq) * 100) / 100 }; },
+      countSpawns: function (secs) { var n0 = visitorSeq; var steps = Math.round((secs || 5) * 30); for (var i = 0; i < steps; i++) update(1 / 30); return { spawned: visitorSeq - n0, secs: secs || 5, frq: frq }; },
+      staffCost: function (id) { var it = FURN_BY_ID[id]; return it ? itemCost(it) : null; },
+      buyStaff: function (id) { var it = FURN_BY_ID[id]; if (!it || it.cat !== 'staff') return null; var paid = itemCost(it); chargeStaffHire(it); return { paid: paid, money: money, surcharge: staffSurcharge }; },
       emojis: function () { return visitors.map(function (v) { return { phase: v.phase, served: !!v.served, examined: !!v.examined, happy: !!v.happy, emoji: visitorEmoji(v) }; }); },
-      hireReceptionist: function (line) { staff.push({ type: 'receptionist', line: line || 0 }); return staff.length; },
-      hireVet: function () { vets.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0 }); return vets.length; },
-      hirePharmacists: function () { pharmacies.forEach(function (ph) { ph.stations.forEach(function (s) { s.pharm = true; }); }); return pharmacies.length; },
-      hireCleaner: function () { cleaners.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, speed: 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0 }); return cleaners.length; },
+      hireReceptionist: function (line) { staff.push({ type: 'receptionist', line: line || 0, name: '', gender: randGender() }); return staff.length; },
+      hireVet: function () { vets.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, name: '', gender: randGender() }); return vets.length; },
+      hirePharmacists: function () { pharmacies.forEach(function (ph) { ph.stations.forEach(function (s) { s.pharm = newPharm(); }); }); return pharmacies.length; },
+      hireCleaner: function () { cleaners.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, speed: 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0, name: '', gender: randGender() }); return cleaners.length; },
       overlaps: function () { var occ = {}, n = 0; visitors.forEach(function (v) { if (v.moving) return; var k = Math.round(v.x) + ',' + Math.round(v.y); if (occ[k]) n++; occ[k] = 1; }); return n; },
       overlapInfo: function () { var occ = {}, hits = []; visitors.forEach(function (v) { if (v.moving) return; var k = Math.round(v.x) + ',' + Math.round(v.y); if (occ[k]) hits.push({ tile: k, a: occ[k], b: v.phase }); else occ[k] = v.phase; }); return hits; },
-      qat: function (x, y) { return visitors.filter(function (v) { return Math.round(v.x) === x && Math.round(v.y) === y; }).map(function (v) { return { ph: v.phase, line: v.line, idx: (v.line != null && queue[v.line]) ? queue[v.line].indexOf(v) : '-', slot: v.phase === 'queuing' ? slotPos(v) : null, mv: !!v.moving }; }); }
+      qat: function (x, y) { return visitors.filter(function (v) { return Math.round(v.x) === x && Math.round(v.y) === y; }).map(function (v) { return { ph: v.phase, line: v.line, idx: (v.line != null && queue[v.line]) ? queue[v.line].indexOf(v) : '-', slot: v.phase === 'queuing' ? slotPos(v) : null, mv: !!v.moving }; }); },
+      staffList: function () { var a = []; eachStaffHandle(function (h) { var t = h.tile(); a.push({ kind: h.kind, name: h.getName(), gender: h.getGender(), cost: h.cost, tile: { x: t.x, y: t.y } }); }); return a; },
+      staffAt: function (gx, gy) { var h = staffAt(gx, gy); return h ? { kind: h.kind, name: h.getName(), gender: h.getGender() } : null; },
+      _handle: function (kind, n) { var c = 0, out = null; eachStaffHandle(function (h) { if (h.kind === kind && c++ === (n || 0)) out = h; }); return out; },   // Nth handle of a kind
+      setStaff: function (kind, n, name, gender) { var h = window.__t._handle(kind, n); if (!h) return false; if (name != null) h.setName(name); if (gender != null) h.setGender(gender); return { name: h.getName(), gender: h.getGender() }; },
+      fireStaff: function (kind, n) { var h = window.__t._handle(kind, n); if (!h) return false; var r = h.fire(); money += r; renderMoney(); return r; },
+      relocateStaff: function (kind, n, gx, gy) { var h = window.__t._handle(kind, n); if (!h) return false; pointer.gx = gx; pointer.gy = gy; pointer.on = true; return h.relocate(); },
+      openStaff: function (kind, n) { var h = window.__t._handle(kind, n); if (!h) return false; openStaffModal(h); return true; },
+      staffAtPx: function (clientX, clientY) { setPointer(clientX, clientY); var h = staffAt(pointer.gx, pointer.gy); return h ? { kind: h.kind, tile: h.tile() } : null; },
+      screenOf: function (gx, gy) { var p = iso(gx, gy), r = canvas.getBoundingClientRect(); return { x: r.left + p.x, y: r.top + p.y }; },
+      carryState: function () { return { grab: !!staffGrab, carrying: carrying ? carrying.kind : null, carryT: Math.round(carryT * 100) / 100 }; }
     };
   })();

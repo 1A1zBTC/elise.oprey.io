@@ -194,6 +194,14 @@
       background: transparent; border: 2px solid #2f6fd0; border-radius: 12px; padding: 8px 14px;
       cursor: pointer; margin-bottom: 12px; align-self: flex-start; }
     .modal-new:hover { background: rgba(47,111,208,0.18); }
+    /* Difficulty picker (New Game). */
+    .diff-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    .diff-opt { text-align: left; font-family: inherit; cursor: pointer; color: #eaf0ff;
+      background: #0f3460; border: 2px solid #163a6b; border-radius: 12px; padding: 11px 13px;
+      display: flex; flex-direction: column; gap: 3px; transition: border-color .12s, transform .12s; }
+    .diff-opt:hover { border-color: #2f6fd0; transform: translateY(-1px); }
+    .diff-opt b { font-size: 1rem; font-weight: 900; }
+    .diff-opt span { font-size: 0.78rem; color: #a8b4d4; font-weight: 600; }
     .modal-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
     .save-row { display: flex; align-items: center; gap: 10px; background: #0f3460;
       border: 2px solid #0f3460; border-radius: 12px; padding: 8px 10px; }
@@ -209,6 +217,16 @@
     .save-del { background: transparent; color: #d94f6e; border: 2px solid #d94f6e; }
     .save-del:hover { background: rgba(217,79,110,0.16); }
     .modal-empty { color: #a0a8c0; font-size: 0.85rem; text-align: center; padding: 14px 6px; }
+    /* Staff overlay: gender toggle + fire button. */
+    .modal-toggle { flex: 1; font-family: inherit; font-weight: 800; font-size: 0.92rem;
+      color: #cfe0ff; background: transparent; border: 2px solid #2f6fd0; border-radius: 12px;
+      padding: 10px 0; cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
+    .modal-toggle:hover { background: rgba(47,111,208,0.18); }
+    .modal-toggle.active { background: #2f6fd0; color: #fff; }
+    .modal-fire { width: 100%; font-family: inherit; font-weight: 800; font-size: 0.9rem;
+      color: #fff; background: #d94f6e; border: none; border-radius: 12px; padding: 11px 16px;
+      cursor: pointer; margin-top: 4px; }
+    .modal-fire:hover { background: #e3637f; }
   </style>
 </head>
 <body>
@@ -231,6 +249,7 @@
       <button class="shop-tab" data-tab="rooms">Rooms</button>
       <button class="shop-tab active" data-tab="reception">Items</button>
       <button class="shop-tab" data-tab="staff">Staff</button>
+      <button class="shop-tab" data-tab="park">Park</button>
       <button class="shop-tab" data-tab="skills">Skills</button>
     </div>
     <div class="shop-items" id="shopItems"></div>
@@ -248,6 +267,38 @@
       </div>
       <button class="modal-new" id="newGameBtn">+ New Game</button>
       <div class="modal-list" id="saveList"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="difficultyModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <span class="modal-title">New Game</span>
+        <button class="modal-x" id="diffClose" aria-label="Close">✕</button>
+      </div>
+      <div class="diff-list">
+        <button class="diff-opt" data-diff="easy"><b>Easy</b><span>$1000 to start, forgiving rating. A relaxed build.</span></button>
+        <button class="diff-opt" data-diff="medium"><b>Medium</b><span>$600 to start, lower rating, unhappy clients sting more.</span></button>
+        <button class="diff-opt" data-diff="hard"><b>Hard</b><span>$300 to start, low rating, harsh penalties. Build it up from scratch.</span></button>
+      </div>
+      <div class="modal-empty">Starting a new game ends your current unsaved hospital.</div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="staffModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <span class="modal-title" id="staffTitle">Staff</span>
+        <button class="modal-x" id="staffClose" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-row">
+        <input id="staffName" class="modal-input" type="text" maxlength="20" placeholder="Name this staff member…" />
+      </div>
+      <div class="modal-row" id="staffGender">
+        <button class="modal-toggle" data-g="male">♂ Male</button>
+        <button class="modal-toggle" data-g="female">♀ Female</button>
+      </div>
+      <button class="modal-fire" id="staffFire">Fire (+$0)</button>
     </div>
   </div>
 

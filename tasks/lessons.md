@@ -1,5 +1,41 @@
 # Lessons
 
+## Never mutate state inside a per-frame draw closure
+- 2026-07-04: Pet Vet's `drawDoorOpening()` ended with `doorways.push(...)`. It was written
+  to run once at collect time, but the refactor moved it into a per-frame wallSegs draw
+  closure — so every frame added duplicate doorway entries, and update()/draw() loops over
+  `doorways` grew unboundedly. Symptom: performance degrades over minutes of play, resets
+  when renderStatic runs (e.g. entering build mode) — which misdirects blame to "walls".
+- Rule: draw functions must be pure rasterization. Registration/state mutation belongs at
+  collect/build time. When perf degrades OVER TIME (not constant-slow), hunt for an
+  unbounded collection first: log `.length` of every array touched per frame.
+- Companion fix: static geometry drawn per frame (walls/shelves/decor) can be sprite-cached
+  at collect time — rasterize each depth-sorted segment once to a small offscreen canvas and
+  swap its fn for a drawImage blit; depth interleaving with actors is preserved because only
+  the fn body changes. Camera translation (no zoom) ⇒ sprites are camera-invariant, no
+  re-bake on pan. 2.6× draw speedup in Pet Vet with 0 visual diff.
+- Extensions that compounded it: (a) key wall sprites by CONTENT + edge DELTA (not absolute
+  position) so identical segments share one sprite and the cache survives rebuilds — kills
+  the re-bake hitch; (b) the same lazy sprite cache works for ANIMATED characters by
+  quantizing the walk/gait sine into ~7 buckets (≤0.5px error, invisible) and mapping the
+  bucket back through asin for an exact baked pose; (c) don't forget the cheap-looking
+  killers — per-frame createRadialGradient (shadows) and fillText (emoji bubbles) cost as
+  much as whole figures; cache those as shared sprites too. Crowd draw 6.96→4.31ms (1.61×).
+
+## Pet Vet: adding a room type needs more than the ROOM_TYPES descriptor
+- 2026-07-04: Added a Grooming room. The `ROOM_TYPES` registry drives place/canPlace/free/door,
+  but several sibling functions enumerate the room arrays by hand and each must be extended too:
+  `inWalledRoom()` (MISSING it makes the new room's floor render as a corridor carpet + breaks
+  isPlainCorridor/isOpenAdj/door classification), `roomWallEdge()` (visitors phase through the
+  walls without it), `roomAt()`/`removeRoom()`/`cancelPlacing()` (pickup/remove/abort), the
+  `['exam','xray','restroom','pharmacy','shop']` list in the wall-render pass, `inWalledRoom`,
+  save (`buildSave`) + load (`applySave`) + `resetTransient`/`newGame` array clears, and
+  `tryPlace`/`drawGhost` dispatch. Grep the shop's id across the file (`shops.some/forEach`,
+  `=== 'shop'`) to find every parallel site before declaring done.
+- Verify a new room by driving a real dog through it headlessly (window.__t) AND screenshotting —
+  the carpet-floor bug was invisible to node --check + smoke; only the screenshot caught it.
+
+
 ## Don't assume a game's genre from its name — research the actual mechanics first
 - 2026-06-29: Asked to add "Burgle Cats" (a PONOS game). I assumed from the PONOS/Battle Cats
   connection that it was a lane-pushing battler and built a whole lane-battler. Wrong genre —
