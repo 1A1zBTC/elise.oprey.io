@@ -84,6 +84,20 @@
     };
     var difficulty = 'easy';               // current mode (persisted per save; legacy saves → easy)
     function diff() { return DIFFICULTY[difficulty] || DIFFICULTY.easy; }
+    // ---- Visitor journey balance ----------------------------------------
+    // Every visitor checks in at reception, then rolls ONE primary intent with
+    // these FIXED weights — deliberately NOT gated on whether the facility is
+    // built or free: a client whose service is missing/full waits, drains
+    // patience, and leaves UNHAPPY, pressuring the player to build it out.
+    // Must sum to 1; rollIntent walks it in insertion order.
+    var INTENT_WEIGHTS = { exam: 0.55, pharm: 0.13, park: 0.12, shop: 0.10, groom: 0.10 };
+    // Follow-up chances chained after a completed service (same not-gated rule).
+    var FOLLOWUP = { examXray: 0.20, examMeds: 0.30, examGroom: 0.08, xrayMeds: 0.40, surgMeds: 0.50, parkGroom: 0.30, parkMeds: 0.20 };
+    function rollIntent() {
+      var r = Math.random(), acc = 0;
+      for (var k in INTENT_WEIGHTS) { acc += INTENT_WEIGHTS[k]; if (r < acc) return k; }
+      return 'exam';
+    }
     var ROOM_DIRTY_USES = 3;               // an operating room (exam/X-ray) grimes up after this many procedures
     var ROOM_GRIME_TIME = 45;              // a non-operating room (shop/pharmacy) grimes up after ~this many seconds of use
     var ROOM_CLEAN_TIME = 20;              // seconds to scrub a dirty room clean (at Cleaning skill 1.0)
@@ -847,7 +861,10 @@
         // occupant-claim service flow (see claimRoomGeneric/assignRoomGeneric):
         timer: 'examT', vRoom: 'examRoom', toPhase: 'toExam',
         waiting: function (v) {
-          return v.served && !v.examined && !v.examRoom && !v.wantsGroom && !v.wantsHotel &&
+          // Only exam-INTENT clients queue for exams — park/shop/pharm intents
+          // wait for their own service (or leave unhappy), never divert here.
+          return v.served && (v.intent == null || v.intent === 'exam') &&
+            !v.examined && !v.examRoom && !v.wantsGroom && !v.wantsHotel &&
             (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
         },
         // in-room service (see toRoomGeneric/inRoomGeneric): operated by the
@@ -878,16 +895,17 @@
         operator: function (rm) { return vetAtXray(rm) || roomVetWorking(rm); },
         fullRate: function (rm) { return vetAtXray(rm) ? 1 : 0.5; },
         release: function (v) { releaseXray(v); },
-        // 35% of X-rayed pets turn out to need surgery; the rest leave happy.
+        // Post-X-ray chain: 35% turn out to need surgery; otherwise some need
+        // meds (FOLLOWUP.xrayMeds of the rest); the remainder leave happy.
+        // ONE draw with cumulative thresholds (constant RNG count).
         onDone: function (v) {
           v.xrayed = true; releaseXray(v);
-          if (Math.random() < 0.35) {
+          var r = Math.random();
+          if (r < 0.35) {
             v.needsSurgery = true;
-            if (!claimSurgery(v)) {          // no free/reachable theatre → loiter for one
-              var ss = sideSpot();
-              v.path = examRoute(v.x, v.y, ss.x, ss.y);
-              v.wp = 0; v.phase = 'waitSurgery'; v.patience = baseWait();
-            }
+            if (!claimSurgery(v)) waitAside(v, 'waitSurgery');   // no free/reachable theatre → loiter for one
+          } else if (r < 0.35 + FOLLOWUP.xrayMeds * (1 - 0.35)) {
+            medsOrWait(v);                   // imaging → prescription to fill
           } else { v.happy = true; leaveOutbound(v); }
         }
       },
@@ -949,7 +967,12 @@
         operator: function (rm) { return surgeryStaffed(rm); },
         fullRate: function () { return 1; },
         release: function (v) { releaseSurgery(v); },
-        onDone: function (v) { v.operated = true; v.happy = true; releaseSurgery(v); leaveOutbound(v); }
+        // Post-op: half go home with a prescription (meds chain); the rest leave happy.
+        onDone: function (v) {
+          v.operated = true; releaseSurgery(v);
+          if (Math.random() < FOLLOWUP.surgMeds) medsOrWait(v);
+          else { v.happy = true; leaveOutbound(v); }
+        }
       }
     };
     // The corridor/clinic/blank tile a room's footprint opens onto, or null. The
@@ -980,12 +1003,45 @@
     // A room's fixture (solid) tiles, from its descriptor — these depend only on
     // (gx,gy,rot), so they're known before a door is chosen. make() has no side effects.
     function roomSolids(type, gx, gy, rot) { return ROOM_TYPES[type].make(gx, gy, rot, null).solid; }
+    // Any existing room's door tile? Building on a doorway seals that room forever
+    // (patients can't enter and its dirt can never be scrubbed — cleaners would
+    // idle-loop on the unreachable job), so placement treats door tiles as off-limits.
+    function isAnyRoomDoor(x, y) {
+      for (var type in ROOM_TYPES) {
+        if (!ROOM_TYPES.hasOwnProperty(type)) continue;
+        var L = ROOM_TYPES[type].list;
+        for (var i = 0; i < L.length; i++) { var d = L[i].door; if (d && d.x === x && d.y === y) return true; }
+      }
+      return false;
+    }
+    // Re-derive the door of any room whose doorway got sealed (layouts built before
+    // the door guard, or save load orders that shadow an earlier room's door).
+    // Restrooms are skipped — their door/entry/stand come from restroomLayout(rot)
+    // and can't be re-picked freely.
+    function repairRoomDoors() {
+      var changed = false;
+      for (var type in ROOM_TYPES) {
+        if (!ROOM_TYPES.hasOwnProperty(type) || type === 'restroom') continue;
+        var d = ROOM_TYPES[type];
+        d.list.forEach(function (rm) {
+          if (rm.door && isOpenAdj(rm.door.x, rm.door.y)) return;   // doorway still opens onto walkable floor
+          var ts = d.tiles(rm.gx, rm.gy, rm.rot || 0);
+          var nd = roomDoorFor(ts, roomSolids(type, rm.gx, rm.gy, rm.rot || 0));
+          if (nd && (!rm.door || nd.x !== rm.door.x || nd.y !== rm.door.y)) { rm.door = nd; changed = true; }
+        });
+      }
+      return changed;
+    }
     function canPlaceRoom(type, gx, gy, rot) {
       rot = rot || 0;
       var ts = ROOM_TYPES[type].tiles(gx, gy, rot);
       // Every tile must be clear grass or unoccupied blank-room floor (rooms may sit
-      // wall-to-wall, or be carved inside a blank room as long as nothing clashes)...
-      for (var i = 0; i < ts.length; i++) if (!isRoomBuildable(ts[i].x, ts[i].y)) return false;
+      // wall-to-wall, or be carved inside a blank room as long as nothing clashes),
+      // must not pave over another room's doorway (that would seal it)...
+      for (var i = 0; i < ts.length; i++) {
+        if (!isRoomBuildable(ts[i].x, ts[i].y)) return false;
+        if (isAnyRoomDoor(ts[i].x, ts[i].y)) return false;
+      }
       return !!roomDoorFor(ts, roomSolids(type, gx, gy, rot));   // ...and must open (walkably) onto a corridor/blank
     }
     function placeRoom(type, gx, gy, rot) {
@@ -995,6 +1051,7 @@
       ts.forEach(function (t) { corridor[t.x + ',' + t.y] = true; delete openRoom[t.x + ',' + t.y]; });   // walkable room floor; no longer open (it's walled now)
       m.solid.forEach(function (t) { occupied[t.x + ',' + t.y] = true; }); // fixtures block movement
       d.list.push(m.room);
+      repairRoomDoors();                                    // a new room can shadow an old doorway (legacy layouts)
       renderStatic();                                       // floor + walls around the new room
       return m.room;
     }
@@ -3024,6 +3081,7 @@
         if (!isRoomFloor(t.x, t.y)) return false;
         if (occupied[t.x + ',' + t.y]) return false;
         if (t.x === vtx && t.y === vty) return false;          // can't drop on the player
+        if (isAnyRoomDoor(t.x, t.y)) return false;             // never block a room's doorway
         // park toys only on the grass; regular furniture never on the grass
         if (item.parkItem && !isPark(t.x, t.y)) return false;
         if (item.catItem && !isCatFloor(t.x, t.y)) return false;   // cat items only on blank-room floor
@@ -4374,11 +4432,42 @@
     });
 
     // ---- Visitors ---------------------------------------------------------
-    // The reception desk visitors queue at (first placed desk, or a back-of-room
-    // fallback before one is bought). Two lines form on its front (+gy) side.
-    function deskAnchor() {
-      for (var i = 0; i < placed.length; i++) if (placed[i].id === 'desk') return placed[i];
+    // Visitors queue at the reception desks (or a back-of-room fallback before
+    // one is bought). Every desk hosts TWO lines on its front side, so line
+    // indices are global: line L belongs to desk L>>1 and is its side L&1.
+    function deskList() { return placed.filter(function (f) { return f.id === 'desk'; }); }
+    function deskAnchor(i) {
+      var ds = deskList();
+      if (ds.length) return ds[Math.min(i || 0, ds.length - 1)];
       return { gx: 3, gy: 1, rot: 0 };
+    }
+    function deskForLine(L) { return deskAnchor((L || 0) >> 1); }
+    function numLines() { return 2 * Math.max(1, deskList().length); }
+    // Keep one queue pair per desk. Desks can be bought, moved, or picked up at
+    // any time, so the line list is resynced each frame: visitors caught in a
+    // removed line rejoin the shortest surviving one, and receptionists on a
+    // removed station step to the first free surviving station.
+    function ensureQueues() {
+      var n = numLines();
+      while (queue.length < n) queue.push([]);
+      if (queue.length > n) {
+        var orphans = [];
+        while (queue.length > n) orphans = orphans.concat(queue.pop());
+        orphans.forEach(function (v) { v.line = shortestLine(); queue[v.line].push(v); });
+        staff.forEach(function (s) {
+          if ((s.line || 0) >= n) { s.line = freeLine(); s.curLine = s.line; }
+        });
+      }
+    }
+    function shortestLine() {
+      var best = 0;
+      for (var L = 1; L < queue.length; L++) if (queue[L].length < queue[best].length) best = L;
+      return best;
+    }
+    function freeLine() {
+      for (var L = 0; L < numLines(); L++)
+        if (!staff.some(function (s) { return (s.line || 0) === L; })) return L;
+      return 0;
     }
     // The two desk tiles (one per queue line), accounting for rotation.
     function deskLineTiles(d) {
@@ -4389,8 +4478,8 @@
     }
     // A visitor's target tile in its line: front of its desk tile + its position back.
     function slotPos(v) {
-      var d = deskAnchor(), f = FRONT[d.rot || 0];
-      var base = deskLineTiles(d)[v.line], idx = queue[v.line].indexOf(v);
+      var d = deskForLine(v.line), f = FRONT[d.rot || 0];
+      var base = deskLineTiles(d)[v.line & 1], idx = (queue[v.line] || []).indexOf(v);
       if (idx < 0) idx = 0;
       var sx = base.x + f.x * (1 + idx), sy = base.y + f.y * (1 + idx);
       return { x: sx, y: sy };   // no clamp: long lines extend out in front, not stacked on the edge tile
@@ -4398,10 +4487,14 @@
 
     function spawnVisitor() {
       var seq = visitorSeq++;
-      // join the shorter line (random on a tie)
-      var line = queue[0].length < queue[1].length ? 0
-               : queue[1].length < queue[0].length ? 1
-               : (Math.random() < 0.5 ? 0 : 1);
+      // join the shortest line across every desk (random among ties)
+      ensureQueues();
+      var best = 1e9, ties = [];
+      for (var L = 0; L < queue.length; L++) {
+        if (queue[L].length < best) { best = queue[L].length; ties = [L]; }
+        else if (queue[L].length === best) ties.push(L);
+      }
+      var line = ties.length > 1 ? ties[Math.floor(Math.random() * ties.length)] : ties[0];
       var v = {
         id: seq, line: line,
         x: ROOM + 5, y: ROOM + 5,          // start on the near sidewalk, off to the side
@@ -4422,27 +4515,26 @@
         { x: DOOR_MID, y: ROOM - 1.4 }     // step inside, then head to the queue slot
       ];
       v.wp = 0;
-      // Some arrivals come ONLY for the dog park (scaled by its pull). They skip the
-      // reception queue entirely and head straight for the grass once inside. Cat
-      // owners may come just for the cat park instead. Appeal guards sit BEFORE the
-      // Math.random() draws so games without a (cat) park stay RNG-stream-identical.
-      if (v.pet === 'cat' && parkAppeal('cat') > 0 && freeParkSpot(null, 'cat') && Math.random() < parkAppeal('cat') * 0.7) { v.parkOnly = true; v.parkZone = 'cat'; }
-      else if (parkSize() && freeParkSpot() && Math.random() < parkAppeal() * 0.7) v.parkOnly = true;
-      if (!v.parkOnly) queue[line].push(v);
+      // EVERY visitor checks in at reception first — their journey (exam, park,
+      // shop, pharmacy, groom) is rolled at the desk (see serveVisitor/rollIntent).
+      queue[line].push(v);
       visitors.push(v);
     }
 
+    var departStats = { happy: 0, unhappy: 0 };   // running tally of rated departures (debug/balance)
     function leaveOutbound(v) {
       if (!v.left) {                        // tune arrival rate once per departure, by reason
         v.left = true;
         var rBefore = ratingValue();
-        if (v.served && !v.peed) {
-          // happy (service complete) → arrivals speed up — UNLESS they had to use a
-          // dirty room, which cancels the positive rating effect (stays flat). As a
-          // clinic gets great (low frq), each happy visit speeds arrivals MORE, so an
-          // excellent, top-rated clinic can ride the pace all the way down to ~1/sec.
+        departStats[(v.happy && !v.peed) ? 'happy' : 'unhappy']++;
+        if (v.happy && !v.peed) {
+          // happy = the client COMPLETED their whole journey (intent + every
+          // follow-up terminal sets v.happy) → arrivals speed up — UNLESS they had
+          // to use a dirty room, which cancels the positive effect (stays flat).
+          // As a clinic gets great (low frq), each happy visit speeds arrivals
+          // MORE, so an excellent clinic can ride the pace all the way to ~1/sec.
           if (!v.usedDirtyRoom) { var boost = frq < 12 ? 1 + (12 - frq) / 12 : 1; frq = Math.max(1, frq - diff().up * boost); }
-        } else frq = Math.min(100, frq + diff().down);          // unhappy (gave up / accident) → arrivals slow down. This is the SELF-REGULATOR: if the pace outruns what reception can check in, give-ups pile up and push frq back to a servable rate, so a top clinic only *holds* ~1/sec while it keeps the queue moving.
+        } else frq = Math.min(100, frq + diff().down);          // unhappy (gave up / accident / service never completed — even if the room was never built) → arrivals slow down. This is the SELF-REGULATOR: an over-promising clinic gets pushed back to a rate it can actually serve.
         renderRating();                                         // arrival rate changed → refresh rating
         floatRatingDelta(ratingValue() - rBefore);              // animate the +/- change out of the chip
       }
@@ -4450,30 +4542,23 @@
       if (v.chair) {                       // stand up off the seat onto its clear front tile
         v.x = v.chair.fx; v.y = v.chair.fy; v.seated = false; v.chair = null;
       }
-      var qi = queue[v.line].indexOf(v);   // drop out of the queue so others advance
+      var qi = queue[v.line] ? queue[v.line].indexOf(v) : -1;   // drop out of the queue so others advance
       if (qi >= 0) queue[v.line].splice(qi, 1);
       // Chance to detour to the dog park on the way out — scales with how big + nice
       // it is and shrinks as it fills up (parkAppeal). Once per visit (!parkDone).
       // Cat owners detour to the cat park (a furnished blank room) instead.
-      if (!v.parkDone && v.pet === 'cat' && parkAppeal('cat') > 0 && Math.random() < parkAppeal('cat')) {
+      // Detours are for CHECKED-IN clients only — a queue give-up who never
+      // reached the desk walks straight out (everyone checks in before service).
+      if (v.served && !v.parkDone && v.pet === 'cat' && parkAppeal('cat') > 0 && Math.random() < parkAppeal('cat')) {
         if (startDogPark(v, 'cat')) return; // off to the cat playground instead of leaving
       }
-      if (!v.parkDone && parkSize() && Math.random() < parkAppeal()) {
+      if (v.served && !v.parkDone && parkSize() && Math.random() < parkAppeal()) {
         if (startDogPark(v)) return;        // off to the grass instead of leaving
       }
       // Low chance to detour through the shop on the way out (once per visit). If a
       // free aisle spot is found, head there to browse; otherwise just leave.
-      if (!v.shopped && shops.length && Math.random() < SHOP_CHANCE) {
-        var spot = claimShopSpot();
-        if (spot) {
-          var sp = examRoute(v.x, v.y, spot.x, spot.y);
-          if (examRouteReached) {            // only detour if the aisle is actually reachable
-            v.shopped = true; v.shopTile = { x: spot.x, y: spot.y }; v.shopRoom = spot.shop;
-            v.path = sp; v.wp = 0;
-            v.phase = 'toShop'; v.shopBrowseT = 2.4;
-            return;
-          }
-        }
+      if (v.served && !v.shopped && shops.length && Math.random() < SHOP_CHANCE) {
+        if (tryShop(v)) return;              // browse on the way out (rating already recorded above)
       }
       headForExit(v);
     }
@@ -4873,12 +4958,9 @@
     // Fill free grooming rooms with clients that rolled "wants a groom" (at reception
     // or after the dog park), in check-in order — mirrors assignPharmacies.
     function assignGrooming() {
-      if (!groomings.length) {              // parlour(s) demolished → groom-seekers rejoin the exam pool
-        visitors.forEach(function (v) {
-          if (v.wantsGroom && !v.groomed) { v.wantsGroom = false; if (v.phase === 'waitGroom') v.phase = 'idle'; }
-        });
-        return;
-      }
+      // NOTE: no demolished-parlour fallback — a groom-seeker with no parlour
+      // waits, drains patience, and leaves UNHAPPY (missing facility = failed
+      // journey, by design).
       if (!freeRoom('grooming')) return;
       var waiting = visitors.filter(function (v) {
         return v.wantsGroom && !v.groomed && v.groomRoom == null &&
@@ -4886,6 +4968,47 @@
       }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
       for (var i = 0; i < waiting.length && freeRoom('grooming'); i++)
         if (!claimGrooming(waiting[i])) break;   // all free parlours unreachable → retry next frame
+    }
+    // Send waiting park-INTENT clients out to their zone (dogs → the turf, cats →
+    // the furnished cat room). No zone / bare cat room / zone full → they keep
+    // waiting and patience bails them out unhappy. Per-zone fail latch so a full
+    // cat room doesn't waste BFS on every dog behind it (and vice versa).
+    function assignParks() {
+      var full = { dog: false, cat: false };
+      var waiting = visitors.filter(function (v) {
+        return v.intent === 'park' && !v.parkDone && !v.parkSpot &&
+          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
+      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
+      for (var i = 0; i < waiting.length; i++) {
+        var v = waiting[i], zone = v.pet === 'cat' ? 'cat' : 'dog';
+        if (full[zone]) continue;
+        if (zone === 'cat' && !parkQuality('cat')) { full.cat = true; continue; }  // a bare blank room attracts no cats
+        if (!freeParkSpot(null, zone)) { full[zone] = true; continue; }            // cheap pre-check before the BFS
+        if (startDogPark(v, zone)) { v.seated = false; v.chair = null; v.sideIdx = -1; }
+        else full[zone] = true;              // free spots all unreachable → retry next frame
+      }
+    }
+    // Claim a free, REACHABLE shop aisle spot and route v there (route-before-
+    // claim, like every other service). Shared by the shop intent and the
+    // on-the-way-out browse detour in leaveOutbound.
+    function tryShop(v) {
+      var spot = claimShopSpot();
+      if (!spot) return false;
+      var sp = examRoute(v.x, v.y, spot.x, spot.y);
+      if (!examRouteReached) return false;
+      v.shopped = true; v.shopTile = { x: spot.x, y: spot.y }; v.shopRoom = spot.shop;
+      v.seated = false; v.chair = null; v.sideIdx = -1;
+      v.path = sp; v.wp = 0; v.phase = 'toShop'; v.shopBrowseT = 2.4;
+      return true;
+    }
+    // Send waiting shop-INTENT clients to a free aisle spot to browse and buy.
+    function assignShops() {
+      var waiting = visitors.filter(function (v) {
+        return v.intent === 'shop' && !v.shopped &&
+          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
+      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
+      for (var i = 0; i < waiting.length; i++)
+        if (!tryShop(waiting[i])) break;     // no free/reachable aisle → retry next frame
     }
 
     // ---- Hotel boarding flow ----------------------------------------------
@@ -5563,20 +5686,24 @@
       if (staff.length === 1 && !vetAtStation(v.line) && loneStaffLine() === v.line && queue[1 - v.line].length > 0) {
         staff[0].curLine = 1 - v.line;
       }
-      v.served = true;                       // service complete → counts as a happy departure later
+      v.served = true;                       // checked in (rating needs v.happy too — set only when the whole journey completes)
       v.ticket = examTicketSeq++;            // check-in order → examined first-come-first-served
       v.procT = 0; v.patience = baseWait();
       // ~55% of clients will need the loo, 20–50s into their wait. Unlike patience
       // (which refills each phase), this need is a single persistent countdown — so
       // it actually fires before a comfortable (seated/TV) client is examined.
       v.bladder = Math.random() < 0.55 ? 20 + Math.random() * 30 : null;
-      // 20% of processed clients want a groom instead of an exam: flag them so they
-      // skip exam assignment and get pulled into a free grooming room by assignGrooming.
-      if (groomings.length && Math.random() < 0.20) v.wantsGroom = true;
-      // 15% board their pet at the hotel instead (needs 3 workers on post, a clean
-      // wing + free bed). Guards sit BEFORE the draw so hotel-less games keep an
-      // identical RNG stream (same trick as the cat park).
-      if (!v.wantsGroom && hotels.length && hotelAccepts(v.pet) && Math.random() < 0.15) v.wantsHotel = true;
+      // Roll the client's PRIMARY intent — one unconditional draw (facility-
+      // independent RNG count), fixed weights from INTENT_WEIGHTS. pharm/groom
+      // just set the existing flags; the central assigners take it from there.
+      // park/shop get their own assigners (assignParks/assignShops).
+      v.intent = rollIntent();
+      if (v.intent === 'pharm') v.needsMeds = true;
+      if (v.intent === 'groom') v.wantsGroom = true;
+      // 15% of exam-goers board their pet at the hotel instead (needs 3 workers
+      // on post, a clean wing + free bed). Guards sit BEFORE the draw so
+      // hotel-less games keep an identical RNG stream.
+      if (v.intent === 'exam' && hotels.length && hotelAccepts(v.pet) && Math.random() < 0.15) v.wantsHotel = true;
       // exam rooms are assigned centrally, in check-in order, by assignExams()
       var seat = freeSeat(v);
       if (seat) {                            // go sit in an empty chair / bench seat
@@ -5662,7 +5789,20 @@
     // to a side spot, draining patience; leave if it expires.
     function waitRoomGeneric(v, dt) {
       if (v.path && v.wp < v.path.length) { var wt = v.path[v.wp]; if (stepToward(v, wt.x, wt.y, dt, 0.08)) v.wp++; }
-      else { v.moving = false; }
+      else {
+        v.moving = false;
+        // Done drifting: take a free seat instead of standing around. The wait is
+        // carried by the needs flags (needsXray/needsMeds/…), not the phase, and
+        // every assigner's waiting() accepts seated/toChair clients — so they're
+        // still pulled in the moment their room frees up, just comfier meanwhile.
+        if (v.noSeatT > 0) v.noSeatT -= dt;   // cooling off after an unreachable seat
+        var os = v.noSeatT > 0 ? null : freeSeat(v);
+        if (os) {
+          v.chair = { gx: os.gx, gy: os.gy, fx: os.fx, fy: os.fy, mult: os.mult };
+          headToSeat(v);
+          return;
+        }
+      }
       v.patience -= dt * drainMult(v);
       if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); }
     }
@@ -5670,23 +5810,39 @@
     // that room exists yet — if none is free, the client waits and eventually
     // leaves unhappy, pressuring you to build it. (Roll order is load-bearing for
     // determinism — keep the 0.2 then 0.4 sequence.)
+    // Step aside to a free spot and loiter in `phase` until the wanted service
+    // frees up (the central assigners re-grab from the wait phases) or patience
+    // runs out (→ unhappy departure). Shared by every follow-up chain.
+    function waitAside(v, phase) {
+      v.phase = phase; v.patience = baseWait();
+      var seat = v.noSeatT > 0 ? null : freeSeat(v);
+      if (seat) {                            // sit while waiting rather than stand aside
+        v.chair = { gx: seat.gx, gy: seat.gy, fx: seat.fx, fy: seat.fy, mult: seat.mult };
+        v.path = null; v.wp = 0;
+        headToSeat(v);
+        return;
+      }
+      var s = sideSpot();
+      v.path = examRoute(v.x, v.y, s.x, s.y);
+      v.wp = 0;
+    }
+    function medsOrWait(v)  { v.needsMeds = true; if (!claimPharmacy(v)) waitAside(v, 'waitMeds'); }
+    function groomOrWait(v) { if (!claimGrooming(v)) { v.wantsGroom = true; waitAside(v, 'waitGroom'); } }
+    // After an exam the pet may need follow-up care, rolled regardless of whether
+    // that facility exists yet — if none is free, the client waits and eventually
+    // leaves unhappy, pressuring you to build it. ONE cumulative draw over the
+    // FOLLOWUP thresholds keeps the RNG draw count constant (determinism-friendly).
     function examFollowUp(v) {
-      if (Math.random() < 0.2) {             // 20% need an X-ray
+      var r = Math.random();
+      if (r < FOLLOWUP.examXray) {
         v.needsXray = true;
-        if (!claimXray(v)) {                 // no free X-ray room → go wait for one
-          var ss = sideSpot();
-          v.path = examRoute(v.x, v.y, ss.x, ss.y);
-          v.wp = 0; v.phase = 'waitXray'; v.patience = baseWait();
-        }
-      } else if (Math.random() < 0.4) {      // 40% of the rest need medicine
-        v.needsMeds = true;
-        if (!claimPharmacy(v)) {             // no free pharmacy counter → wait for one
-          var ps = sideSpot();
-          v.path = examRoute(v.x, v.y, ps.x, ps.y);
-          v.wp = 0; v.phase = 'waitMeds'; v.patience = baseWait();
-        }
+        if (!claimXray(v)) waitAside(v, 'waitXray');
+      } else if (r < FOLLOWUP.examXray + FOLLOWUP.examMeds) {
+        medsOrWait(v);
+      } else if (r < FOLLOWUP.examXray + FOLLOWUP.examMeds + FOLLOWUP.examGroom) {
+        groomOrWait(v);
       } else {
-        v.happy = true; leaveOutbound(v);    // done → leaves happy
+        v.happy = true; leaveOutbound(v);    // journey complete → leaves happy
       }
     }
 
@@ -5818,7 +5974,7 @@
           }
         }
         v.patience -= dt * drainMult(v);    // safety net: blocked walk → give up rather than freeze
-        if (v.patience <= 0) { v.hotelRoom = null; v.wantsHotel = false; headForExit(v); }
+        if (v.patience <= 0) { v.hotelRoom = null; v.wantsHotel = false; leaveOutbound(v); }   // failed journey → rated unhappy
         return;
       }
       if (v.phase === 'toHotelPickup') {   // returning owner: collect the pet, pay the stay
@@ -5842,6 +5998,7 @@
               floaters.push({ v: v, t: 0, amt: pet.fee });
               hr.pets.splice(hr.pets.indexOf(pet), 1);
               v.petBoarded = false; v.hotelPet = null; v.hotelRoom = null;   // pet back on the leash / in the carrier
+              v.served = true; v.happy = true;   // pickup completed → a happy departure
               leaveOutbound(v);
             }
           }
@@ -5872,7 +6029,9 @@
             floaters.push({ v: v, t: 0, amt: spend });   // +$ pop over the shopper
           }
           v.shopTile = null; v.shopRoom = null;
-          headForExit(v);
+          if (spend > 0) v.happy = true;     // a real purchase completes the journey (voided sale ≠ served)
+          if (!v.left) leaveOutbound(v);     // shop-INTENT client: record the rating (+ exit garnish rolls)
+          else headForExit(v);               // exit-detour browser: already rated, just leave
         }
         return;
       }
@@ -5888,7 +6047,11 @@
           }
         }
         v.patience -= dt * drainMult(v);    // safety net: if something blocks the walk, give up rather than freeze
-        if (v.patience <= 0) { v.parkSpot = null; headForExit(v); }
+        if (v.patience <= 0) {
+          v.parkSpot = null;
+          if (v.left) headForExit(v);        // exit-detour parker: already rated, just leave
+          else { v.parkDone = true; leaveOutbound(v); }  // park-intent: failed journey → rated unhappy (parkDone stops a re-detour bounce)
+        }
         return;
       }
       if (v.phase === 'inDogPark') {        // the dog roams off-leash; owner waits, pays $20, then leaves
@@ -5910,16 +6073,14 @@
         v.dog = null;
         money += 20; renderMoney();
         floaters.push({ v: v, t: 0, amt: 20 });
-        v.served = true; v.parkDone = true; v.parkSpot = null;   // a happy paying customer
-        if (groomings.length && Math.random() < 0.3) {   // 30% head for a groom after the park
-          v.wantsGroom = true;
-          if (!claimGrooming(v)) { var gs = sideSpot(); v.path = examRoute(v.x, v.y, gs.x, gs.y); v.wp = 0; v.phase = 'waitGroom'; v.patience = baseWait(); }
-        } else if (Math.random() < 0.2) {   // 20% pop into the pharmacy afterward
-          v.needsMeds = true;
-          if (!claimPharmacy(v)) { var ps = sideSpot(); v.path = examRoute(v.x, v.y, ps.x, ps.y); v.wp = 0; v.phase = 'waitMeds'; v.patience = baseWait(); }
-        } else {
-          v.happy = true; leaveOutbound(v);
-        }
+        v.served = true; v.parkDone = true; v.parkSpot = null;   // a paying customer
+        // Post-park chain (ONE draw, cumulative FOLLOWUP thresholds; NOT gated on
+        // the facility existing — a missing parlour means an unhappy wait-out):
+        // some head for a groom, some pick up meds, the rest leave happy.
+        var pr = Math.random();
+        if (pr < FOLLOWUP.parkGroom) groomOrWait(v);
+        else if (pr < FOLLOWUP.parkGroom + FOLLOWUP.parkMeds) medsOrWait(v);
+        else { v.happy = true; leaveOutbound(v); }
         return;
       }
       // Occupant-room care (exam + X-ray) runs through the generic walk / serve /
@@ -6043,8 +6204,7 @@
         v.wp++;
         if (v.wp >= v.path.length) {
           if (v.phase === 'arriving') {
-            if (v.parkOnly) { if (!startDogPark(v, v.parkZone)) headForExit(v); }  // came just for the park (full → just leave)
-            else v.phase = 'queuing';      // stay moving: queuing handler walks them to their slot
+            v.phase = 'queuing';           // everyone checks in: queuing handler walks them to their slot
           }
           else { v.dead = true; }          // finished leaving → remove
         }
@@ -6326,6 +6486,8 @@
       assignSurgeries();                     // hand free operating theatres to pets that need one
       assignPharmacies();                    // hand free pharmacy counters to clients needing meds
       assignGrooming();                      // hand free grooming rooms to clients wanting a groom
+      assignParks();                         // send park-intent clients to the turf / cat room
+      assignShops();                         // send shop-intent clients to a free aisle spot
       assignHotels();                        // route boarding clients to a hotel desk
       updateVets(dt);                        // roaming vets move between rooms that need them
       updateWorkers(dt);                     // one worker pool staffs grooming, the hotel and the shop (posts)
@@ -6970,6 +7132,7 @@
     // Wipe in-flight visitors / progress so a load (or new game) starts clean.
     function resetTransient() {
       visitors.length = 0;
+      departStats.happy = 0; departStats.unhappy = 0;
       queue.forEach(function (q) { q.length = 0; });
       floaters.length = 0;
       puddles.length = 0;
@@ -7318,6 +7481,11 @@
       workerPostList: function () { return workers.map(function (w) { return { post: w.post, working: !!w.working, x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 }; }); },
       setWantHotel: function (i) { if (visitors[i]) { visitors[i].wantsHotel = true; return true; } return false; },
       setBladder: function (i, s) { if (visitors[i]) { visitors[i].bladder = s; return true; } return false; },
+      intents: function () { return visitors.map(function (v) { return { id: v.id, intent: v.intent || null, phase: v.phase, pet: v.pet, happy: !!v.happy, left: !!v.left, parkZone: v.parkZone || null, xrayed: !!v.xrayed, operated: !!v.operated, medicated: !!v.medicated, groomed: !!v.groomed, shopped: !!v.shopped, parkDone: !!v.parkDone, served: !!v.served }; }); },
+      setIntent: function (i, k) { var v = visitors[i]; if (!v) return false; v.intent = k; if (k === 'pharm') v.needsMeds = true; if (k === 'groom') v.wantsGroom = true; return true; },
+      happyStats: function () { return { happy: departStats.happy, unhappy: departStats.unhappy }; },
+      setIntentWeights: function (o) { for (var k in o) INTENT_WEIGHTS[k] = o[k]; return INTENT_WEIGHTS; },
+      rollIntents: function (n) { var c = {}; for (var i = 0; i < (n || 1000); i++) { var k = rollIntent(); c[k] = (c[k] || 0) + 1; } return c; },
       vpos: function () { return visitors.map(function (v) { return { id: v.id, phase: v.phase, x: v.x, y: v.y, moving: !!v.moving, seated: !!v.seated }; }); },
       setFrq: function (f) { frq = f; if (typeof renderRating === 'function') renderRating(); return { frq: frq, rating: Math.round((100 / frq) * 100) / 100 }; },
       countSpawns: function (secs) { var n0 = visitorSeq; var steps = Math.round((secs || 5) * 30); for (var i = 0; i < steps; i++) update(1 / 30); return { spawned: visitorSeq - n0, secs: secs || 5, frq: frq }; },
