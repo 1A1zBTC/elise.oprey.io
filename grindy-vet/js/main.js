@@ -224,6 +224,8 @@
       if (pharmacies.some(function (ph) { return x >= ph.gx && x < ph.gx + PHARM_W && y >= ph.gy && y < ph.gy + PHARM_H; })) return true;
       if (shops.some(function (sh) { return x >= sh.gx && x < sh.gx + SHOP_W && y >= sh.gy && y < sh.gy + SHOP_H; })) return true;
       if (groomings.some(function (gm) { return x >= gm.gx && x < gm.gx + GROOM_W && y >= gm.gy && y < gm.gy + GROOM_H; })) return true;
+      if (hotels.some(function (h) { return x >= h.gx && x < h.gx + HOTEL_W && y >= h.gy && y < h.gy + HOTEL_H; })) return true;
+      if (surgeries.some(function (sg) { return x >= sg.gx && x < sg.gx + SURG_W && y >= sg.gy && y < sg.gy + SURG_H; })) return true;
       if (restrooms.some(function (rm) { return footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot).some(function (t) { return t.x === x && t.y === y; }); })) return true;
       return false;
     }
@@ -651,6 +653,20 @@
     // Random spend $20–$200, skewed low — pow(r,2.4) bunches most spends near $20,
     // with the odd big splurge toward $200. Rounded to the nearest $5.
     function shopSpend() { return Math.round((20 + Math.pow(Math.random(), 2.4) * 180) / 5) * 5; }
+    // The shop only rings up sales while a Worker mans it (post keys 'shop:k:s');
+    // a 2nd and 3rd clerk upsell: spend x1 / x1.25 / x1.5. Zero clerks → browsers
+    // walk out without buying.
+    function shopWorkersAssigned(s) {
+      var pre = 'shop:' + shops.indexOf(s) + ':', n = 0;
+      for (var i = 0; i < workers.length; i++) if (workers[i].post && workers[i].post.indexOf(pre) === 0) n++;
+      return n;
+    }
+    function shopWorkersPresent(s) {
+      var pre = 'shop:' + shops.indexOf(s) + ':', n = 0;
+      for (var i = 0; i < workers.length; i++) { var w = workers[i]; if (w.post && w.working && w.post.indexOf(pre) === 0) n++; }
+      return n;
+    }
+    function shopSpendMult(n) { return n >= 3 ? 1.5 : n === 2 ? 1.25 : n === 1 ? 1 : 0; }
     // A free aisle spot in some shop for a departing client, or null. Skips spots
     // another client is already heading to / standing on, and any blocked tile.
     function claimShopSpot() {
@@ -695,6 +711,116 @@
     function placeGrooming(gx, gy, rot) { return placeRoom('grooming', gx, gy, rot); }
     function freeGroomRoom() { return freeRoom('grooming'); }
 
+    // ---- Pet Hotel ---------------------------------------------------------
+    // A 6x5 boarding hotel. Owners drop their pet at the desk and leave; the pet
+    // sleeps in a bed in its species' wing (dog wing west, cat wing east, 3 beds
+    // each), takes play trips to the dog park / cat rooms, and is collected by a
+    // returning owner who pays a fee scaled to the stay length. Needs 3 Workers
+    // on post (reception + one per wing) to accept new check-ins; below that the
+    // hotel keeps caring for pets already boarded. Each wing gets dirty on its
+    // own while occupied and blocks new check-ins for that species until scrubbed.
+    var HOTEL_W = 6, HOTEL_H = 5;
+    var HOTEL_STAY_MIN = 60, HOTEL_STAY_SPAN = 180;   // stay 60-240s → fee $120-$300
+    var HOTEL_WORKERS_NEEDED = 3;
+    var hotels = [];   // [{gx,gy,rot,door,wings:{dog:{dirty,cleanProg,grimeT},cat:{...}},pets:[]}]
+    function hotelTiles(gx, gy) {
+      var t = [];
+      for (var j = 0; j < HOTEL_H; j++) for (var i = 0; i < HOTEL_W; i++) t.push({ x: gx + i, y: gy + j });
+      return t;
+    }
+    // Beds line the back wall (all visible under the PET HOTEL sign): dog wing
+    // cols 0-2, cat wing cols 3-5, back row (solid).
+    function hotelBeds(h, species) {
+      var c0 = species === 'dog' ? h.gx : h.gx + 3, out = [];
+      for (var i = 0; i < 3; i++) out.push({ x: c0 + i, y: h.gy });
+      return out;
+    }
+    function bedTile(h, p) { return hotelBeds(h, p.species)[p.bed]; }
+    // The walkable lane tile in front of a bed (where pets step on/off and path from).
+    function bedLaneTile(h, p) { var b = bedTile(h, p); return { x: b.x, y: h.gy + 1 }; }
+    function hotelDeskTiles(gx, gy) { return [{ x: gx + 2, y: gy + 3 }, { x: gx + 3, y: gy + 3 }]; }
+    function hotelPlantTiles(gx, gy) { return [{ x: gx, y: gy + 4 }, { x: gx + 5, y: gy + 4 }]; }
+    // Worker posts: reception behind the desk + a minder at each wing's side.
+    function hotelWorkTiles(h) { return [{ x: h.gx + 2, y: h.gy + 2 }, { x: h.gx, y: h.gy + 2 }, { x: h.gx + 5, y: h.gy + 2 }]; }
+    function hotelDropTile(h) { return { x: h.gx + 2, y: h.gy + 4 }; }   // in front of the desk
+    function hotelWingTiles(h, species) {
+      var c0 = species === 'dog' ? h.gx : h.gx + 3, out = [];
+      for (var j = 0; j < 3; j++) for (var i = 0; i < 3; i++) out.push({ x: c0 + i, y: h.gy + j });
+      return out;
+    }
+    function hotelWingScrub(h, species) { return { x: species === 'dog' ? h.gx + 1 : h.gx + 4, y: h.gy + 1 }; }
+    function canPlaceHotel(gx, gy) { return canPlaceRoom('hotel', gx, gy); }
+    function placeHotel(gx, gy, rot) { return placeRoom('hotel', gx, gy, rot); }
+    function hotelAt(x, y) {
+      for (var i = 0; i < hotels.length; i++) { var h = hotels[i]; if (x >= h.gx && x < h.gx + HOTEL_W && y >= h.gy && y < h.gy + HOTEL_H) return h; }
+      return null;
+    }
+    // Warm cream/tan wall faces (per edge: [face-top, face-bottom, cap, trim]) so
+    // the hotel reads as a cosy lobby, not another teal clinic room.
+    var HOTEL_PAL = {
+      w: ['#fdf8ee', '#efe1c8', '#fffbf2', '#b98a4e'],
+      n: ['#f4ead7', '#decbab', '#f9f1e1', '#a87c42'],
+      e: ['#ecdfc9', '#d6c3a2', '#f3ead7', '#a87c42'],
+      s: ['#f8f2e5', '#e6d7bd', '#fcf6eb', '#b98a4e']
+    };
+    // Workers on hotel posts (post keys 'hotel:<index>:<slot>'), and whether the
+    // hotel is currently taking new guests of a species.
+    function hotelWorkersAssigned(h) {
+      var pre = 'hotel:' + hotels.indexOf(h) + ':', n = 0;
+      for (var i = 0; i < workers.length; i++) if (workers[i].post && workers[i].post.indexOf(pre) === 0) n++;
+      return n;
+    }
+    function hotelFreeBed(h, species) {
+      var used = {};
+      h.pets.forEach(function (p) { if (p.species === species) used[p.bed] = true; });
+      visitors.forEach(function (v) {                 // beds promised to owners already walking in
+        if (v.hotelRoom === h && v.phase === 'toHotel' && petSpecies(v.pet) === species) used[v.hotelBed] = true;
+      });
+      for (var b = 0; b < 3; b++) if (!used[b]) return b;
+      return -1;
+    }
+    function petSpecies(kind) { return kind.charAt(0) === 'd' ? 'dog' : 'cat'; }
+    function hotelTaking(h, species) {
+      return hotelWorkersAssigned(h) >= HOTEL_WORKERS_NEEDED && !h.wings[species].dirty && hotelFreeBed(h, species) >= 0;
+    }
+    function hotelAccepts(kind) {
+      var sp = petSpecies(kind);
+      for (var i = 0; i < hotels.length; i++) if (hotelTaking(hotels[i], sp)) return hotels[i];
+      return null;
+    }
+
+    // ---- Surgery ---------------------------------------------------------
+    // A 4×5 operating theatre — the most expensive ($1500) and slowest (18×
+    // procTime = 90s at base skill) room in the game. 35% of X-rayed pets need
+    // surgery. Uniquely it needs THREE staff at once: two vets flanking the
+    // table plus one worker (nurse) behind it; the timer only advances while
+    // all three circles are manned (the player standing on any circle fills
+    // that slot). Fixed orientation like the pharmacy/shop/grooming; column
+    // gx+3 and rows gy+0 / gy+4 stay open as walking lanes.
+    var SURG_W = 4, SURG_H = 5;
+    var surgeries = [];                    // [{gx,gy,rot,occupant,surgT,door,uses,dirty,cleanProg}]
+    function surgeryTiles(gx, gy) {        // all 20 floor tiles (4 wide × 5 deep)
+      var t = [];
+      for (var j = 0; j < SURG_H; j++) for (var i = 0; i < SURG_W; i++) t.push({ x: gx + i, y: gy + j });
+      return t;
+    }
+    function surgeryKeyTiles(gx, gy) {
+      return {
+        table:   { x: gx + 1, y: gy + 2 },   // operating table (solid; pet lies on it)
+        vetA:    { x: gx + 0, y: gy + 2 },   // surgeon circle, left flank
+        vetB:    { x: gx + 2, y: gy + 2 },   // surgeon circle, right flank
+        worker:  { x: gx + 1, y: gy + 1 },   // nurse circle, behind the table
+        visitor: { x: gx + 1, y: gy + 3 },   // owner + pet spot, in front of the table
+        monitor: { x: gx + 0, y: gy + 1 },   // ECG cart (solid)
+        trolley: { x: gx + 2, y: gy + 1 },   // instrument trolley (solid)
+        circle:  { x: gx + 1, y: gy + 1 }    // scrub anchor for dirtyRooms (= nurse tile)
+      };
+    }
+    function surgeryDoor(gx, gy) { return roomDoorFor(surgeryTiles(gx, gy)); }
+    function canPlaceSurgery(gx, gy) { return canPlaceRoom('surgery', gx, gy); }
+    function placeSurgery(gx, gy, rot) { return placeRoom('surgery', gx, gy, rot); }
+    function freeSurgeryRoom() { return freeRoom('surgery'); }
+
     // ---- Room registry ---------------------------------------------------
     // One descriptor per walled-room type drives the (previously duplicated)
     // place / canPlace / free / door logic. Each declares: its `list` array, a
@@ -721,7 +847,7 @@
         // occupant-claim service flow (see claimRoomGeneric/assignRoomGeneric):
         timer: 'examT', vRoom: 'examRoom', toPhase: 'toExam',
         waiting: function (v) {
-          return v.served && !v.examined && !v.examRoom && !v.wantsGroom &&
+          return v.served && !v.examined && !v.examRoom && !v.wantsGroom && !v.wantsHotel &&
             (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
         },
         // in-room service (see toRoomGeneric/inRoomGeneric): operated by the
@@ -752,7 +878,18 @@
         operator: function (rm) { return vetAtXray(rm) || roomVetWorking(rm); },
         fullRate: function (rm) { return vetAtXray(rm) ? 1 : 0.5; },
         release: function (v) { releaseXray(v); },
-        onDone: function (v) { v.xrayed = true; v.happy = true; releaseXray(v); leaveOutbound(v); }
+        // 35% of X-rayed pets turn out to need surgery; the rest leave happy.
+        onDone: function (v) {
+          v.xrayed = true; releaseXray(v);
+          if (Math.random() < 0.35) {
+            v.needsSurgery = true;
+            if (!claimSurgery(v)) {          // no free/reachable theatre → loiter for one
+              var ss = sideSpot();
+              v.path = examRoute(v.x, v.y, ss.x, ss.y);
+              v.wp = 0; v.phase = 'waitSurgery'; v.patience = baseWait();
+            }
+          } else { v.happy = true; leaveOutbound(v); }
+        }
       },
       pharmacy: {
         list: pharmacies,
@@ -778,6 +915,41 @@
           return { room: { gx: gx, gy: gy, rot: rot, door: door, occupant: null, showerT: 0, dryT: 0, dirty: false, cleanProg: 0, grimeT: null },
                    solid: [st[0].fixture, st[1].fixture] };
         }
+      },
+      hotel: {
+        list: hotels,
+        tiles: function (gx, gy) { return hotelTiles(gx, gy); },
+        make: function (gx, gy, rot, door) {
+          var h = { gx: gx, gy: gy, rot: rot, door: door,
+                    wings: { dog: { dirty: false, cleanProg: 0, grimeT: null },
+                             cat: { dirty: false, cleanProg: 0, grimeT: null } },
+                    pets: [] };
+          return { room: h,
+                   solid: hotelBeds(h, 'dog').concat(hotelBeds(h, 'cat'), hotelDeskTiles(gx, gy), hotelPlantTiles(gx, gy)) };
+        }
+      },
+      surgery: {
+        list: surgeries,
+        tiles: function (gx, gy) { return surgeryTiles(gx, gy); },
+        key: surgeryKeyTiles,
+        make: function (gx, gy, rot, door) {
+          var k = surgeryKeyTiles(gx, gy);
+          return { room: { gx: gx, gy: gy, rot: rot, occupant: null, surgT: 0, door: door, uses: 0, dirty: false, cleanProg: 0 },
+                   solid: [k.table, k.monitor, k.trolley] };
+        },
+        timer: 'surgT', vRoom: 'surgeryRoom', toPhase: 'toSurgery',
+        waiting: function (v) {
+          return v.needsSurgery && !v.operated && !v.surgeryRoom &&
+            (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' ||
+             v.phase === 'seated' || v.phase === 'waitSurgery');
+        },
+        // Surgery: 2 vets + 1 worker at once; 18× procTime (3× an X-ray) and the
+        // top payout. Full staffing IS the price of admission — no half-rate.
+        inPhase: 'inSurgery', waitField: 'surgWait', duration: 18, payout: 400,
+        operator: function (rm) { return surgeryStaffed(rm); },
+        fullRate: function () { return 1; },
+        release: function (v) { releaseSurgery(v); },
+        onDone: function (v) { v.operated = true; v.happy = true; releaseSurgery(v); leaveOutbound(v); }
       }
     };
     // The corridor/clinic/blank tile a room's footprint opens onto, or null. The
@@ -786,13 +958,20 @@
     // (pathing fails, the patient jams at the wall). `solid` lists the room's fixture
     // tiles to skip as door positions.
     function roomDoorFor(tiles, solid) {
-      var blocked = {};
+      var blocked = {}, inRoom = {};
       if (solid) solid.forEach(function (t) { blocked[t.x + ',' + t.y] = true; });
+      // The room's own footprint can never be its door. Without this, a door
+      // candidate INSIDE the room can win whenever the footprint already reads
+      // as open floor at door-pick time — on save-load (footprints are saved in
+      // `corridor` and restored before the room re-places) or when a room is
+      // carved inside a blank room — leaving the room fully walled/unenterable.
+      tiles.forEach(function (t) { inRoom[t.x + ',' + t.y] = true; });
       var n = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       for (var i = 0; i < tiles.length; i++) {
         if (blocked[tiles[i].x + ',' + tiles[i].y]) continue;   // inner tile is a fixture — can't enter here
         for (var j = 0; j < 4; j++) {
           var dx = tiles[i].x + n[j][0], dy = tiles[i].y + n[j][1];
+          if (inRoom[dx + ',' + dy]) continue;                  // own floor, not a doorway
           if (isOpenAdj(dx, dy)) return { x: dx, y: dy };
         }
       }
@@ -953,6 +1132,8 @@
       { id: 'pharmacy', name: 'Pharmacy', cost: 400, w: 4, h: 4, icon: '💊', cat: 'rooms', kind: 'pharmacy' },
       { id: 'shop', name: 'Shop', cost: 500, w: 5, h: 5, icon: '🛒', cat: 'rooms', kind: 'shop' },
       { id: 'grooming', name: 'Grooming', cost: 450, w: 3, h: 6, icon: '🛁', cat: 'rooms', kind: 'grooming' },
+      { id: 'hotel', name: 'Pet Hotel', cost: 1100, w: 6, h: 5, icon: '🏨', cat: 'rooms', kind: 'hotel' },
+      { id: 'surgery', name: 'Surgery', cost: 1500, w: 4, h: 5, icon: '⚕️', cat: 'rooms', kind: 'surgery' },
       { id: 'pharmacist', name: 'Pharmacist', cost: 600, w: 1, h: 1, icon: '🧑‍🔬', cat: 'staff', kind: 'pharmstaff' },
       { id: 'cleaner', name: 'Cleaner', cost: 400, w: 1, h: 1, icon: '🧹', cat: 'staff', kind: 'cleaner' },
       { id: 'worker', name: 'Worker', cost: 350, w: 1, h: 1, icon: '🧼', cat: 'staff', kind: 'worker' },
@@ -1269,6 +1450,37 @@
       diamondPath(c, s.x, s.y); c.stroke();
     }
 
+    // Hotel lobby floor: warm honey parquet-style tiles overdrawn on the room's
+    // footprint (like the restroom ceramic), with a pale rug across the centre.
+    function hotelFloorTile(c, gx, gy) {
+      var s = iso(gx, gy);
+      var h = hash(gx + 31, gy + 17);
+      diamondPath(c, s.x, s.y);
+      c.fillStyle = ((gx + gy) % 2 === 0) ? '#e4c99a' : '#dcbf8e';
+      c.fill();
+      c.save();
+      diamondPath(c, s.x, s.y); c.clip();
+      c.fillStyle = 'rgba(122,84,40,' + (0.04 + h * 0.05).toFixed(3) + ')';
+      c.fillRect(s.x - TILE_HW, s.y - TILE_HH, TILE_W, TILE_H);
+      // plank grain
+      c.strokeStyle = 'rgba(122,84,40,0.18)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(s.x - TILE_HW * 0.5, s.y - TILE_HH * 0.25); c.lineTo(s.x + TILE_HW * 0.5, s.y + TILE_HH * 0.25); c.stroke();
+      c.restore();
+      bevel(c, s, 1, 'rgba(255,250,238,0.30)', 'rgba(122,84,40,0.28)');
+      c.strokeStyle = 'rgba(140,100,50,0.4)'; c.lineWidth = 1;
+      diamondPath(c, s.x, s.y); c.stroke();
+    }
+    function hotelRugTile(c, gx, gy) {
+      var s = iso(gx, gy);
+      diamondPath(c, s.x, s.y);
+      c.fillStyle = ((gx + gy) % 2 === 0) ? '#c96f4a' : '#c2683f';
+      c.fill();
+      c.save(); diamondPath(c, s.x, s.y); c.clip();
+      fleck(c, s, gx + 5, gy + 9, 10, 0.7, 1.0, function () { return 'rgba(255,236,214,0.16)'; });
+      c.restore();
+      bevel(c, s, 1, 'rgba(255,236,214,0.25)', 'rgba(120,50,28,0.30)');
+    }
+
     // Dog-park turf: the lawn base + a faint mowed stripe so it reads as a tended
     // park rather than the wild grass outside.
     function parkTile(c, gx, gy) {
@@ -1537,10 +1749,11 @@
         if (!corridor.hasOwnProperty(key)) continue;
         if (park[key]) continue;             // dog-park tiles get a fence, not walls (below)
         var p = key.split(','), x = +p[0], y = +p[1];
-        if (!isRoomFloor(x - 1, y)) W(true,  x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
-        if (!isRoomFloor(x, y - 1)) W(true,  x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
-        if (!isRoomFloor(x + 1, y)) W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90');
-        if (!isRoomFloor(x, y + 1)) W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3');
+        var hp = hotelAt(x, y) ? HOTEL_PAL : null;   // hotel perimeter walls keep the warm palette
+        if (!isRoomFloor(x - 1, y)) { var c1 = hp ? hp.w : ['#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3']; W(true,  x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, c1[0], c1[1], c1[2], c1[3]); }
+        if (!isRoomFloor(x, y - 1)) { var c2 = hp ? hp.n : ['#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90']; W(true,  x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, c2[0], c2[1], c2[2], c2[3]); }
+        if (!isRoomFloor(x + 1, y)) { var c3 = hp ? hp.e : ['#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90']; W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, c3[0], c3[1], c3[2], c3[3]); }
+        if (!isRoomFloor(x, y + 1)) { var c4 = hp ? hp.s : ['#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3']; W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, c4[0], c4[1], c4[2], c4[3]); }
       }
       // dog-park borders: a low fence on each edge that faces open grass (edges
       // facing the building stay open so visitors can walk in). Pushed as scene
@@ -1560,23 +1773,28 @@
       // pass over the room registry — membership is a tile-set lookup so it works
       // for any footprint (rectangular or rotated). Order matches the registry so
       // equal-depth segments sort identically to before.
-      function roomWalls(rm, tiles) {
+      function roomWalls(rm, tiles, pal) {
         var door = rm.door, set = {};
+        var pw = (pal && pal.w) || ['#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3'];
+        var pn = (pal && pal.n) || ['#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90'];
+        var pe = (pal && pal.e) || ['#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90'];
+        var ps = (pal && pal.s) || ['#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3'];
         tiles.forEach(function (t) { set[t.x + ',' + t.y] = true; });
         function mine(x, y) { return !!set[x + ',' + y]; }
         function isDoor(x, y) { return door && door.x === x && door.y === y; }
         tiles.forEach(function (t) {
           var x = t.x, y = t.y;
-          if (!mine(x - 1, y) && isRoomFloor(x - 1, y)) { if (isDoor(x - 1, y)) D(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, { style: 'brown', inx: 1, iny: 0 }); else W(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3'); }
-          if (!mine(x, y - 1) && isRoomFloor(x, y - 1)) { if (isDoor(x, y - 1)) D(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, { style: 'brown', inx: 0, iny: 1 }); else W(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90'); }
-          if (!mine(x + 1, y) && isRoomFloor(x + 1, y)) { if (isDoor(x + 1, y)) D(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: -1, iny: 0 }); else W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#dbe7ed', '#c2d3dd', '#e9f1f4', '#2f9e90'); }
-          if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) { if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 }); else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, '#eef5f8', '#d7e4eb', '#f6fafb', '#37b3a3'); }
+          if (!mine(x - 1, y) && isRoomFloor(x - 1, y)) { if (isDoor(x - 1, y)) D(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, { style: 'brown', inx: 1, iny: 0 }); else W(true, x - 0.5, y - 0.5, x - 0.5, y + 0.5, WALL_H, pw[0], pw[1], pw[2], pw[3]); }
+          if (!mine(x, y - 1) && isRoomFloor(x, y - 1)) { if (isDoor(x, y - 1)) D(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, { style: 'brown', inx: 0, iny: 1 }); else W(true, x - 0.5, y - 0.5, x + 0.5, y - 0.5, WALL_H, pn[0], pn[1], pn[2], pn[3]); }
+          if (!mine(x + 1, y) && isRoomFloor(x + 1, y)) { if (isDoor(x + 1, y)) D(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: -1, iny: 0 }); else W(false, x + 0.5, y - 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, pe[0], pe[1], pe[2], pe[3]); }
+          if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) { if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 }); else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, ps[0], ps[1], ps[2], ps[3]); }
         });
       }
-      ['exam', 'xray', 'restroom', 'pharmacy', 'shop', 'grooming'].forEach(function (type) {
+      ['exam', 'xray', 'restroom', 'pharmacy', 'shop', 'grooming', 'surgery'].forEach(function (type) {
         var d = ROOM_TYPES[type];
         d.list.forEach(function (rm) { roomWalls(rm, d.tiles(rm.gx, rm.gy, rm.rot || 0)); });
       });
+      hotels.forEach(function (rm) { roomWalls(rm, hotelTiles(rm.gx, rm.gy), HOTEL_PAL); });   // warm lobby tones
       // Pharmacy: shelving billboarded on the two TALL back walls — the north edge
       // (each tile's y-1 neighbour) and the west edge (x-1 neighbour). The
       // back-right (north) wall carries the apothecary-jar/bottle supply shelves;
@@ -1625,6 +1843,14 @@
           } });
         })(gy + j);
       });
+      // Hotel (6 × 5): PET HOTEL sign + awning centred on the back-right wall,
+      // flanked by paw plaques, a clock and framed pet portraits; the back-left
+      // (dog-wing) wall carries a dog portrait and a paw plaque.
+      hotels.forEach(function (h) {
+        hangBackWall(h, HOTEL_W, HOTEL_H,
+          [drawDogPortrait, drawPawPlaque, drawHotelSign, drawWallClock, drawPawPlaque, drawCatPortrait],
+          [drawDogPortrait, null, drawPawPlaque, null, null], HOTEL_PAL);
+      });
       // X-ray rooms (3 wide × 4 deep): the light-up viewing box is the centrepiece
       // of the back-right wall, flanked by a radiation sign + clock; the back-left
       // wall carries a lead apron and a film cabinet.
@@ -1632,6 +1858,14 @@
         hangBackWall(rm, 3, 4,
           [drawRadSign, drawXrayBoard, drawWallClock],
           [drawLeadApron, function cabinetPlain(c, P) { drawCabinet(c, P, false); }, null, null]);
+      });
+      // Surgery theatres (4 wide × 5 deep): anatomy chart + red-cross cabinet on
+      // the back-right wall with a clock; certificate, health poster and a plain
+      // supply cabinet down the back-left wall.
+      surgeries.forEach(function (rm) {
+        hangBackWall(rm, SURG_W, SURG_H,
+          [drawCertificate, drawAnatomyPoster, function cabinetCross2(c, P) { drawCabinet(c, P, true); }, drawWallClock],
+          [drawHealthPoster, null, function cabinetPlain2(c, P) { drawCabinet(c, P, false); }, null, null]);
       });
       // Exam rooms (3 × 3): an anatomy chart centred on the back-right wall, framed
       // by a diploma + clock; the back-left wall has a red-cross supply cabinet and
@@ -1919,6 +2153,11 @@
           restroomTile(bgx, t.x, t.y);
         });
       });
+      // hotels overdraw warm parquet + a rug strip in front of the desk
+      hotels.forEach(function (h) {
+        hotelTiles(h.gx, h.gy).forEach(function (t) { hotelFloorTile(bgx, t.x, t.y); });
+        hotelRugTile(bgx, h.gx + 2, h.gy + 2); hotelRugTile(bgx, h.gx + 3, h.gy + 2);
+      });
       // soft warm light pool, clipped to the floor diamond
       (function () {
         var ctr = iso(ROOM / 2 - 0.5, ROOM / 2 - 0.5);
@@ -2063,12 +2302,14 @@
     function visitorEmoji(v) {
       if (v.phase === 'leaving') return v.happy ? '🙂' : '😡';
       if (v.phase === 'toRestroom' || v.phase === 'inRestroom') return '🚻';
+      if (v.wantsHotel || v.phase === 'toHotel' || v.phase === 'toHotelPickup') return '🏨';
       if (v.phase === 'toShop' || v.phase === 'inShop') return '🛍️';
       if (v.phase === 'toDogPark' || v.phase === 'inDogPark') return '🐾';
       if (v.wantsGroom && !v.groomed) return '🛁'; // wants / getting a groom
       if (!v.served) return '💻';                 // arriving / in line → needs reception
       if (!v.examined) return '🩺';               // seen reception → needs an exam room
       if (v.needsXray && !v.xrayed) return '🩻';  // examined → needs an X-ray
+      if (v.needsSurgery && !v.operated) return '⚕️'; // X-rayed → needs surgery
       if (v.needsMeds && !v.medicated) return '💊'; // examined → needs medicine
       return null;
     }
@@ -2161,7 +2402,7 @@
       // seated, or holding for a free X-ray room / pharmacy counter. (In-room waits
       // — inExam/inXray/inPharm — draw their own bars below.)
       var waiting = (v.phase === 'queuing' || v.phase === 'idle' || seated ||
-                     v.phase === 'waitXray' || v.phase === 'waitMeds');
+                     v.phase === 'waitXray' || v.phase === 'waitMeds' || v.phase === 'waitSurgery');
       var maxWait = (seated ? 2 : 1) * baseWait();   // TV doubles the room's base; seated doubles again
       var p = waiting ? v.patience / maxWait : 1;
       var angry = waiting && p < 0.34;
@@ -2187,8 +2428,9 @@
       // camera). When seated the pet is placed in front of the owner instead (below).
       var isDog = v.pet.charAt(0) === 'd';
       // In the park the dog is off the leash and drawn separately at its own
-      // position (see the off-leash scene pass), so don't also draw it beside the owner.
-      var dogLoose = isDog && v.phase === 'inDogPark' && !!v.dog;
+      // position (see the off-leash scene pass), so don't also draw it beside the
+      // owner. A boarded pet is at the hotel — the owner walks without it.
+      var dogLoose = isDog && ((v.phase === 'inDogPark' && !!v.dog) || !!v.petBoarded);
       if (isDog && !dogLoose && front && !seated) cachedDog(v, cx - 17 * mirror, s.y + 3, mirror > 0);
 
       // Body: sprite-cached per (variant, facing, pose bucket) — see drawVisitorBody.
@@ -2210,10 +2452,10 @@
       if (seated) {
         // pet set down on the floor in front of the seated owner (at their feet)
         if (isDog && !dogLoose) cachedDog(v, cx + 9, s.y + 13, false);
-        else cachedCarrier(cx, s.y + 2, v.carrier, mirror);
+        else if (!isDog && !v.petBoarded) cachedCarrier(cx, s.y + 2, v.carrier, mirror);
       } else {
-        // cat carrier held in front of the body
-        if (!isDog) cachedCarrier(cx, baseY - 14, v.carrier, mirror);
+        // cat carrier held in front of the body (empty-handed while the cat boards)
+        if (!isDog && !v.petBoarded) cachedCarrier(cx, baseY - 14, v.carrier, mirror);
         // dog drawn after the body when it should appear in front (walking up, back to us)
         if (isDog && !dogLoose && !front) cachedDog(v, cx - 16 * mirror, s.y + 4, mirror > 0);
       }
@@ -2285,6 +2527,20 @@
           var xp = Math.max(0, (v.xrayWait || 0) / baseWait());
           ctx.fillStyle = xp > 0.6 ? '#4cc46a' : xp > 0.33 ? '#e8c34a' : '#e0563f';
           roundRect(ctx, xx, xy, Math.max(0, xw2 * xp), 4, 2); ctx.fill();
+        }
+      }
+      if (v.phase === 'inSurgery' && v.surgeryRoom) {
+        var sw2 = 26, sx2 = cx - sw2 / 2, sy2 = baseY - 66;
+        ctx.fillStyle = 'rgba(15,20,30,0.65)';
+        roundRect(ctx, sx2 - 1.5, sy2 - 1.5, sw2 + 3, 7, 3); ctx.fill();
+        if (v.processing) {                    // surgical pink so the long op reads differently
+          var sprog = Math.min(1, (v.surgeryRoom.surgT || 0) / (18 * procTime()));
+          ctx.fillStyle = '#e05a8a';
+          roundRect(ctx, sx2, sy2, Math.max(0, sw2 * sprog), 4, 2); ctx.fill();
+        } else {                               // waiting for the full 2-vet + nurse team
+          var sp2 = Math.max(0, (v.surgWait || 0) / baseWait());
+          ctx.fillStyle = sp2 > 0.6 ? '#4cc46a' : sp2 > 0.33 ? '#e8c34a' : '#e0563f';
+          roundRect(ctx, sx2, sy2, Math.max(0, sw2 * sp2), 4, 2); ctx.fill();
         }
       }
       if (v.phase === 'inPharm' && v.pharmacy) {
@@ -2927,6 +3183,100 @@
       ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     }
 
+    // ---- Surgery theatre furniture ----------------------------------------
+    // Operating table: steel slab with a sterile teal drape, the patient lying
+    // on it, and an overhead surgical lamp that lights up mid-procedure.
+    function drawSurgTable(c, gx, gy, occ) {
+      var H = 16;
+      furnShadow(c, gx - 0.42, gy - 0.42, gx + 0.42, gy + 0.42);
+      c.fillStyle = '#b8c2cc';                 // legs
+      [[-0.32, -0.32], [0.32, -0.32], [0.32, 0.32], [-0.32, 0.32]].forEach(function (o) {
+        var p = iso(gx + o[0], gy + o[1]); c.fillRect(p.x - 1.5, p.y - H, 3, H);
+      });
+      var T = iso(gx - 0.42, gy - 0.42), R = iso(gx + 0.42, gy - 0.42), F = iso(gx + 0.42, gy + 0.42), L = iso(gx - 0.42, gy + 0.42);
+      c.fillStyle = '#4e5a66';                 // slab thickness (front faces)
+      c.beginPath(); c.moveTo(L.x, L.y - H); c.lineTo(F.x, F.y - H); c.lineTo(F.x, F.y - H + 5); c.lineTo(L.x, L.y - H + 5); c.closePath(); c.fill();
+      c.beginPath(); c.moveTo(F.x, F.y - H); c.lineTo(R.x, R.y - H); c.lineTo(R.x, R.y - H + 5); c.lineTo(F.x, F.y - H + 5); c.closePath(); c.fill();
+      c.fillStyle = '#39ac97';                 // sterile drape
+      c.beginPath(); c.moveTo(T.x, T.y - H); c.lineTo(R.x, R.y - H); c.lineTo(F.x, F.y - H); c.lineTo(L.x, L.y - H); c.closePath(); c.fill();
+      var m = iso(gx, gy);
+      if (occ) cachedDog(occ, m.x, m.y - H, true);   // the patient under the lamp
+      // overhead lamp: post at the back corner, arm over the table, wide dome
+      var base = iso(gx + 0.5, gy - 0.5);
+      c.strokeStyle = '#8b97a3'; c.lineWidth = 4; c.lineJoin = 'round'; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(base.x, base.y - 2); c.lineTo(base.x, base.y - 58); c.lineTo(m.x, m.y - 54); c.stroke();
+      c.lineCap = 'butt';
+      if (occ) {                               // warm light cone while operating
+        var lg = c.createLinearGradient(m.x, m.y - 48, m.x, m.y - H);
+        lg.addColorStop(0, 'rgba(255,240,190,0.4)'); lg.addColorStop(1, 'rgba(255,240,190,0)');
+        c.fillStyle = lg;
+        c.beginPath(); c.moveTo(m.x - 7, m.y - 48); c.lineTo(m.x + 7, m.y - 48);
+        c.lineTo(m.x + 22, m.y - H); c.lineTo(m.x - 22, m.y - H); c.closePath(); c.fill();
+      }
+      c.fillStyle = '#dde5ea';                 // lamp dome
+      c.beginPath(); c.ellipse(m.x, m.y - 52, 10, 5.5, 0, Math.PI, Math.PI * 2); c.closePath(); c.fill();
+      c.fillStyle = occ ? '#fff3c2' : '#aeb9c2';
+      c.beginPath(); c.ellipse(m.x, m.y - 50.5, 7, 3, 0, 0, Math.PI); c.fill();   // lamp face, lit mid-op
+    }
+    // ECG monitor cart: pole-mounted screen with a green heartbeat trace.
+    function drawSurgMonitor(c, gx, gy) {
+      var s = iso(gx, gy), H = 26;
+      furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
+      c.fillStyle = '#9aa6b0'; c.beginPath(); c.ellipse(s.x, s.y, 8, 3.5, 0, 0, Math.PI * 2); c.fill();   // base
+      c.fillStyle = '#8b97a3'; c.fillRect(s.x - 2, s.y - H + 2, 4, H - 2);                                // pole
+      c.fillStyle = '#232b33'; roundRect(c, s.x - 12, s.y - H - 10, 24, 16, 2); c.fill();                 // casing
+      c.fillStyle = '#0c211a'; c.fillRect(s.x - 10, s.y - H - 8, 20, 12);                                 // screen
+      c.strokeStyle = '#57e389'; c.lineWidth = 1.2; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(s.x - 9, s.y - H - 2); c.lineTo(s.x - 4, s.y - H - 2);
+      c.lineTo(s.x - 2, s.y - H - 7); c.lineTo(s.x, s.y - H + 1); c.lineTo(s.x + 2, s.y - H - 2);
+      c.lineTo(s.x + 9, s.y - H - 2); c.stroke();                                                          // heartbeat
+      c.lineCap = 'butt';
+    }
+    // Instrument trolley: a steel tray with tools laid out on a cloth.
+    function drawSurgTrolley(c, gx, gy) {
+      var H = 14;
+      furnShadow(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34);
+      c.fillStyle = '#b8c2cc';                 // legs
+      [[-0.26, -0.26], [0.26, -0.26], [0.26, 0.26], [-0.26, 0.26]].forEach(function (o) {
+        var p = iso(gx + o[0], gy + o[1]); c.fillRect(p.x - 1.2, p.y - H, 2.4, H);
+      });
+      var T = iso(gx - 0.34, gy - 0.34), R = iso(gx + 0.34, gy - 0.34), F = iso(gx + 0.34, gy + 0.34), L = iso(gx - 0.34, gy + 0.34);
+      c.fillStyle = '#cfd8de';                 // tray
+      c.beginPath(); c.moveTo(T.x, T.y - H); c.lineTo(R.x, R.y - H); c.lineTo(F.x, F.y - H); c.lineTo(L.x, L.y - H); c.closePath(); c.fill();
+      var m = iso(gx, gy), ty = m.y - H;
+      c.fillStyle = '#eef8f4';                 // sterile cloth
+      c.beginPath(); c.moveTo(m.x - 10, ty); c.lineTo(m.x + 2, ty - 5); c.lineTo(m.x + 10, ty - 1); c.lineTo(m.x - 2, ty + 4); c.closePath(); c.fill();
+      c.strokeStyle = '#8b97a3'; c.lineWidth = 1.4; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(m.x - 5, ty + 1); c.lineTo(m.x + 1, ty - 2); c.stroke();   // forceps
+      c.beginPath(); c.moveTo(m.x - 2, ty + 2); c.lineTo(m.x + 4, ty - 1); c.stroke();   // scalpel shaft
+      c.fillStyle = '#e0563f'; c.fillRect(m.x + 3, ty - 3, 3, 2);                        // scalpel handle
+      c.lineCap = 'butt';
+    }
+    // Ghost for the 4×5 surgery: footprint tint + table/monitor/trolley and the
+    // THREE staff circles (two surgeon flanks + the nurse spot).
+    function drawSurgeryGhost(rot) {
+      var ok = canPlaceSurgery(pointer.gx, pointer.gy);
+      var k = surgeryKeyTiles(pointer.gx, pointer.gy);
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.34)' : 'rgba(224,86,63,0.42)';
+      surgeryTiles(pointer.gx, pointer.gy).forEach(function (t) { var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill(); });
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      drawExamCircle(ghostCtx, k.vetA.x, k.vetA.y, false);
+      drawExamCircle(ghostCtx, k.vetB.x, k.vetB.y, false);
+      drawExamCircle(ghostCtx, k.worker.x, k.worker.y, false);
+      drawSurgMonitor(ghostCtx, k.monitor.x, k.monitor.y);
+      drawSurgTrolley(ghostCtx, k.trolley.x, k.trolley.y);
+      drawSurgTable(ghostCtx, k.table.x, k.table.y, null);
+      if (!ok) {
+        ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop';
+        ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
+
     // X-ray machine — a grey scanner bed with an overhead C-arm + emitter head.
     function drawXrayMachine(c, gx, gy, occ) {
       var H = 16;
@@ -3092,8 +3442,56 @@
     // open grass/perimeter rather than room floor), we add a matching tall wall
     // first, so the room is enclosed and the decoration always has a surface.
     // `north`/`west` are arrays of drawer fns (or null to skip a slot).
-    function hangBackWall(rm, w, h, north, west) {
+    // ---- Hotel wall decor (billboarded on the back walls) ------------------
+    function drawHotelSign(c, P) {
+      // awning strip + the PET HOTEL plaque
+      for (var i = 0; i < 4; i++) wallPanel(c, P, 0.06 + i * 0.22, 0.06 + i * 0.22 + 0.22, 62, 54, i % 2 ? '#fdf6ec' : '#c96f4a');
+      wallPanel(c, P, 0.08, 0.92, 50, 26, '#8a5a2b');
+      wallPanel(c, P, 0.11, 0.89, 48, 28, '#fdf6ec');
+      var m = P(0.5, 37);
+      c.fillStyle = '#8a5a2b'; c.font = 'bold 6.5px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('PET HOTEL', m.x, m.y);
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    }
+    function drawPawPlaque(c, P) {
+      wallPanel(c, P, 0.26, 0.74, 52, 24, '#b98a4e');
+      wallPanel(c, P, 0.30, 0.70, 49, 27, '#fdf6ec');
+      var m = P(0.5, 38);
+      c.fillStyle = '#c96f4a';
+      c.beginPath(); c.ellipse(m.x, m.y + 3, 4, 3.2, 0, 0, Math.PI * 2); c.fill();  // pad
+      c.beginPath(); c.arc(m.x - 4.5, m.y - 2, 1.7, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(m.x - 1.5, m.y - 4, 1.7, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(m.x + 1.5, m.y - 4, 1.7, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(m.x + 4.5, m.y - 2, 1.7, 0, Math.PI * 2); c.fill();
+    }
+    function drawDogPortrait(c, P) {
+      wallPanel(c, P, 0.28, 0.72, 54, 24, '#8a5a2b');
+      wallPanel(c, P, 0.32, 0.68, 51, 27, '#cfe4dd');
+      var m = P(0.5, 39);
+      c.fillStyle = '#9c6b43';
+      c.beginPath(); c.ellipse(m.x, m.y + 2, 4.4, 3.6, 0, 0, Math.PI * 2); c.fill();  // head
+      c.beginPath(); c.ellipse(m.x - 3.6, m.y - 2.2, 1.6, 2.6, -0.5, 0, Math.PI * 2); c.fill();  // floppy ears
+      c.beginPath(); c.ellipse(m.x + 3.6, m.y - 2.2, 1.6, 2.6, 0.5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#23201c';
+      c.beginPath(); c.arc(m.x - 1.4, m.y + 1, 0.7, 0, Math.PI * 2); c.arc(m.x + 1.4, m.y + 1, 0.7, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(m.x, m.y + 3.4, 1, 0, Math.PI * 2); c.fill();
+    }
+    function drawCatPortrait(c, P) {
+      wallPanel(c, P, 0.28, 0.72, 54, 24, '#8a5a2b');
+      wallPanel(c, P, 0.32, 0.68, 51, 27, '#f2dfd3');
+      var m = P(0.5, 39);
+      c.fillStyle = '#8a8f98';
+      c.beginPath(); c.ellipse(m.x, m.y + 2, 4.2, 3.4, 0, 0, Math.PI * 2); c.fill();  // head
+      c.beginPath(); c.moveTo(m.x - 3.6, m.y); c.lineTo(m.x - 4.4, m.y - 4.4); c.lineTo(m.x - 1.2, m.y - 2.4); c.closePath(); c.fill();  // ears
+      c.beginPath(); c.moveTo(m.x + 3.6, m.y); c.lineTo(m.x + 4.4, m.y - 4.4); c.lineTo(m.x + 1.2, m.y - 2.4); c.closePath(); c.fill();
+      c.fillStyle = '#23201c';
+      c.beginPath(); c.arc(m.x - 1.4, m.y + 1, 0.7, 0, Math.PI * 2); c.arc(m.x + 1.4, m.y + 1, 0.7, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#d98a9c'; c.beginPath(); c.arc(m.x, m.y + 3.2, 0.8, 0, Math.PI * 2); c.fill();
+    }
+    function hangBackWall(rm, w, h, north, west, pal) {
       var gx = rm.gx, gy = rm.gy, dr = rm.door;
+      var fn2 = (pal && pal.n) || ['#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90'];   // fallback wall colors
+      var fw2 = (pal && pal.w) || ['#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3'];
       function isDoor(nx, ny) { return dr && dr.x === nx && dr.y === ny; }
       function fallback(ax, ay, bx, by, ft, fb, cap, trim) {
         wallSegs.push({ d: (ax + ay + bx + by) / 2, _ax: ax, _ay: ay, _bx: bx, _by: by, _htop: BILLBOARD_H, _key: 'W' + WALL_H + ft + fb + cap + trim + 'bb', fn: function () {
@@ -3102,7 +3500,7 @@
       }
       for (var i = 0; i < w; i++) (function (i) {
         var x = gx + i; if (isDoor(x, gy - 1)) return;       // doorway: stays open, no decor
-        if (!isRoomFloor(x, gy - 1)) fallback(x - 0.5, gy - 0.5, x + 0.5, gy - 0.5, '#e4edf2', '#cad9e2', '#eef4f7', '#2f9e90');
+        if (!isRoomFloor(x, gy - 1)) fallback(x - 0.5, gy - 0.5, x + 0.5, gy - 0.5, fn2[0], fn2[1], fn2[2], fn2[3]);
         var fn = north[i]; if (!fn) return;
         wallSegs.push({ d: x + gy - 0.5, _ax: x - 0.5, _ay: gy - 0.5, _bx: x + 0.5, _by: gy - 0.5, _htop: BILLBOARD_H, _key: 'bb' + fn.name, fn: function () {
           fn(ctx, wallEdgeP(x - 0.5, gy - 0.5, x + 0.5, gy - 0.5));
@@ -3110,7 +3508,7 @@
       })(i);
       for (var j = 0; j < h; j++) (function (j) {
         var y = gy + j; if (isDoor(gx - 1, y)) return;
-        if (!isRoomFloor(gx - 1, y)) fallback(gx - 0.5, y - 0.5, gx - 0.5, y + 0.5, '#fbfdfe', '#e2ecf1', '#ffffff', '#37b3a3');
+        if (!isRoomFloor(gx - 1, y)) fallback(gx - 0.5, y - 0.5, gx - 0.5, y + 0.5, fw2[0], fw2[1], fw2[2], fw2[3]);
         var fn = west[j]; if (!fn) return;
         wallSegs.push({ d: gx + y - 0.5, _ax: gx - 0.5, _ay: y - 0.5, _bx: gx - 0.5, _by: y + 0.5, _htop: BILLBOARD_H, _key: 'bb' + fn.name, fn: function () {
           fn(ctx, wallEdgeP(gx - 0.5, y - 0.5, gx - 0.5, y + 0.5));
@@ -3197,6 +3595,55 @@
         }
         c.lineCap = 'butt';
       }
+    }
+
+    // ---- Hotel fixtures ----------------------------------------------------
+    // A round wicker pet bed with a cushion; `big` for the dog wing. `seed`
+    // varies the cushion colour so the row of beds isn't uniform.
+    function drawPetBed(c, gx, gy, big, seed) {
+      var sc = big ? 1 : 0.78;
+      furnShadow(c, gx - 0.36 * sc, gy - 0.36 * sc, gx + 0.36 * sc, gy + 0.36 * sc);
+      var s = iso(gx, gy);
+      var cols = ['#c96f4a', '#5aa0e8', '#4cc46a', '#9678d0', '#e8c34a', '#d94f6e'];
+      var cush = cols[((hash(gx * 3 + (seed || 0), gy * 7) * cols.length) | 0) % cols.length];
+      c.fillStyle = '#a8834f';                                                 // wicker rim
+      c.beginPath(); c.ellipse(s.x, s.y - 2, 15 * sc, 8.5 * sc, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#93713f';
+      c.beginPath(); c.ellipse(s.x, s.y - 4, 13.5 * sc, 7.4 * sc, 0, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = 'rgba(120,84,40,0.5)'; c.lineWidth = 1;                  // weave lines
+      for (var i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(s.x + i * 5 * sc, s.y - 9 * sc); c.lineTo(s.x + i * 5 * sc + 2, s.y + 3 * sc); c.stroke(); }
+      c.fillStyle = cush;                                                       // cushion
+      c.beginPath(); c.ellipse(s.x, s.y - 5, 11 * sc, 5.8 * sc, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = shade(cush, 1.16);
+      c.beginPath(); c.ellipse(s.x, s.y - 6, 8 * sc, 4 * sc, 0, 0, Math.PI * 2); c.fill();
+    }
+    // Two-tile warm-wood reception desk; `left` is the west half (holds the bell).
+    function drawHotelDesk(c, gx, gy, left) {
+      furnShadow(c, gx - 0.44, gy - 0.4, gx + 0.44, gy + 0.4);
+      isoBox(c, gx - 0.46, gy - 0.34, gx + 0.46, gy + 0.34, 22, '#c79a63', '#a87c42', '#8f6a38');
+      var s = iso(gx, gy);
+      c.fillStyle = '#8a5a2b'; c.fillRect(s.x - 15, s.y - 24, 30, 2.4);        // counter lip
+      if (left) {                                                              // service bell
+        c.fillStyle = '#e8c34a'; c.beginPath(); c.arc(s.x + 4, s.y - 27, 3.2, Math.PI, 0); c.fill();
+        c.fillStyle = '#c9a52e'; c.fillRect(s.x + 1, s.y - 27, 6.4, 1.6);
+        c.fillStyle = '#8a5a2b'; c.beginPath(); c.arc(s.x + 4, s.y - 30, 1, 0, Math.PI * 2); c.fill();
+      } else {                                                                 // guest book
+        c.fillStyle = '#fdf6ec'; c.fillRect(s.x - 8, s.y - 27, 12, 6);
+        c.strokeStyle = '#b0a58f'; c.lineWidth = 0.8;
+        c.beginPath(); c.moveTo(s.x - 6, s.y - 25); c.lineTo(s.x + 2, s.y - 25);
+        c.moveTo(s.x - 6, s.y - 23.4); c.lineTo(s.x + 2, s.y - 23.4); c.stroke();
+      }
+    }
+    // A potted ficus for the lobby corners.
+    function drawFicus(c, gx, gy) {
+      furnShadow(c, gx - 0.26, gy - 0.26, gx + 0.26, gy + 0.26);
+      isoBox(c, gx - 0.24, gy - 0.24, gx + 0.24, gy + 0.24, 11, '#c96f4a', '#a55538', '#8f4930'); // terracotta
+      var s = iso(gx, gy);
+      c.strokeStyle = '#8a6a42'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(s.x, s.y - 11); c.lineTo(s.x, s.y - 26); c.stroke();               // trunk
+      c.fillStyle = '#3f9e58'; c.beginPath(); c.ellipse(s.x, s.y - 32, 9, 7, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#4cc46a'; c.beginPath(); c.ellipse(s.x - 4, s.y - 36, 6, 4.6, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#6fdc8b'; c.beginPath(); c.ellipse(s.x + 5, s.y - 35, 5, 3.8, 0, 0, Math.PI * 2); c.fill();
     }
 
     // One tile-wide section of pharmacy shelving, billboarded flat on a back-wall
@@ -3496,6 +3943,23 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
       ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     }
+    function drawHotelGhost() {
+      var gx = pointer.gx, gy = pointer.gy, ok = canPlaceHotel(gx, gy);
+      var fake = { gx: gx, gy: gy };
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.34)' : 'rgba(224,86,63,0.42)';
+      hotelTiles(gx, gy).forEach(function (t) { var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill(); });
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      hotelBeds(fake, 'dog').forEach(function (t) { drawPetBed(ghostCtx, t.x, t.y, true, 0); });
+      hotelBeds(fake, 'cat').forEach(function (t) { drawPetBed(ghostCtx, t.x, t.y, false, 0); });
+      hotelDeskTiles(gx, gy).forEach(function (t, i) { drawHotelDesk(ghostCtx, t.x, t.y, i === 0); });
+      hotelPlantTiles(gx, gy).forEach(function (t) { drawFicus(ghostCtx, t.x, t.y); });
+      if (!ok) { ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop'; ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore(); }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
 
     function drawGhost() {
       if (!placing) return;
@@ -3512,6 +3976,8 @@
       if (item.kind === 'pharmacy') { drawPharmGhost(rot); return; }
       if (item.kind === 'shop') { drawShopGhost(rot); return; }
       if (item.kind === 'grooming') { drawGroomGhost(rot); return; }
+      if (item.kind === 'hotel') { drawHotelGhost(); return; }
+      if (item.kind === 'surgery') { drawSurgeryGhost(rot); return; }
       if (item.kind === 'pharmstaff') { drawPharmStaffGhost(); return; }
       if (item.kind === 'cleaner') { drawCleanerGhost(); return; }
       if (item.kind === 'worker') { drawWorkerGhost(); return; }
@@ -3596,6 +4062,8 @@
       for (i = pharmacies.length - 1; i >= 0; i--) if (inTiles(pharmTiles(pharmacies[i].gx, pharmacies[i].gy))) return { kind: 'pharmacy', room: pharmacies[i], arr: pharmacies, idx: i };
       for (i = shops.length - 1; i >= 0; i--) if (inTiles(shopTiles(shops[i].gx, shops[i].gy))) return { kind: 'shop', room: shops[i], arr: shops, idx: i };
       for (i = groomings.length - 1; i >= 0; i--) if (inTiles(groomTiles(groomings[i].gx, groomings[i].gy))) return { kind: 'grooming', room: groomings[i], arr: groomings, idx: i };
+      for (i = hotels.length - 1; i >= 0; i--) if (inTiles(hotelTiles(hotels[i].gx, hotels[i].gy))) return { kind: 'hotel', room: hotels[i], arr: hotels, idx: i };
+      for (i = surgeries.length - 1; i >= 0; i--) if (inTiles(surgeryTiles(surgeries[i].gx, surgeries[i].gy))) return { kind: 'surgery', room: surgeries[i], arr: surgeries, idx: i };
       for (i = restrooms.length - 1; i >= 0; i--) if (inTiles(footprintTiles(FURN_BY_ID.restroom, restrooms[i].gx, restrooms[i].gy, restrooms[i].rot || 0))) return { kind: 'restroom', room: restrooms[i], arr: restrooms, idx: i };
       return null;
     }
@@ -3604,6 +4072,7 @@
     function roomBusy(rh) {
       if (rh.kind === 'pharmacy') return rh.room.stations.some(function (s) { return s.patient; });
       if (rh.kind === 'shop') return visitors.some(function (v) { return v.shopRoom === rh.room; });
+      if (rh.kind === 'hotel') return rh.room.pets.length > 0 || visitors.some(function (v) { return v.hotelRoom === rh.room; });
       return !!rh.room.occupant;
     }
     // Free a room's floor + fixtures and drop it from its array (reverse of place*).
@@ -3615,6 +4084,8 @@
       else if (rh.kind === 'pharmacy') { clearFloor(pharmTiles(r.gx, r.gy)); pharmStations(r.gx, r.gy, r.rot).forEach(function (s) { delete occupied[s.counter.x + ',' + s.counter.y]; }); }
       else if (rh.kind === 'shop') { clearFloor(shopTiles(r.gx, r.gy)); shopIslandTiles(r.gx, r.gy).concat([shopCashierTile(r.gx, r.gy)]).forEach(function (t) { delete occupied[t.x + ',' + t.y]; }); }
       else if (rh.kind === 'grooming') { clearFloor(groomTiles(r.gx, r.gy)); groomStations(r.gx, r.gy).forEach(function (s) { delete occupied[s.fixture.x + ',' + s.fixture.y]; }); }
+      else if (rh.kind === 'hotel') { clearFloor(hotelTiles(r.gx, r.gy)); hotelBeds(r, 'dog').concat(hotelBeds(r, 'cat'), hotelDeskTiles(r.gx, r.gy), hotelPlantTiles(r.gx, r.gy)).forEach(function (t) { delete occupied[t.x + ',' + t.y]; }); }
+      else if (rh.kind === 'surgery') { var sk = surgeryKeyTiles(r.gx, r.gy); clearFloor(surgeryTiles(r.gx, r.gy)); [sk.table, sk.monitor, sk.trolley].forEach(function (t) { delete occupied[t.x + ',' + t.y]; }); }
       else if (rh.kind === 'restroom') { clearFloor(footprintTiles(FURN_BY_ID.restroom, r.gx, r.gy, r.rot || 0)); delete occupied[r.toilet.x + ',' + r.toilet.y]; }
       rh.arr.splice(rh.idx, 1);
     }
@@ -3701,6 +4172,22 @@
         }
         return;
       }
+      if (item.kind === 'hotel') {          // 6x5 boarding hotel: two bed wings + desk
+        if (pointer.on && canPlaceHotel(pointer.gx, pointer.gy)) {
+          placeHotel(pointer.gx, pointer.gy, rot);
+          if (!placing.moving) { money -= item.cost; renderMoney(); }
+          placing.origRoom = null; cancelPlacing();
+        }
+        return;
+      }
+      if (item.kind === 'surgery') {        // 4x5 operating theatre (2 vets + 1 worker to run)
+        if (pointer.on && canPlaceSurgery(pointer.gx, pointer.gy)) {
+          placeSurgery(pointer.gx, pointer.gy, rot);
+          if (!placing.moving) { money -= item.cost; renderMoney(); }
+          placing.origRoom = null; cancelPlacing();
+        }
+        return;
+      }
       if (item.kind === 'pharmstaff') {     // hire a Pharmacist onto a counter circle
         var pc = nearestPharmCircle();
         if (pointer.on && pc && pc.ok) {
@@ -3720,7 +4207,7 @@
       }
       if (item.kind === 'worker') {         // drop a roaming worker on clear room floor
         if (pointer.on && canPlaceCleaner(pointer.gx, pointer.gy)) {
-          workers.push({ x: pointer.gx, y: pointer.gy, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, name: '', gender: randGender() });
+          workers.push({ x: pointer.gx, y: pointer.gy, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, post: null, name: '', gender: randGender() });
           chargeStaffHire(item);
           cancelPlacing();
         }
@@ -3752,6 +4239,8 @@
         else if (rr.kind === 'pharmacy') placePharmacy(rr.gx, rr.gy, rr.rot);
         else if (rr.kind === 'shop') placeShop(rr.gx, rr.gy, rr.rot);
         else if (rr.kind === 'grooming') placeGrooming(rr.gx, rr.gy, rr.rot);
+        else if (rr.kind === 'hotel') placeHotel(rr.gx, rr.gy, rr.rot);
+        else if (rr.kind === 'surgery') placeSurgery(rr.gx, rr.gy, rr.rot);
       }
       placing = null;
       document.body.classList.remove('placing');
@@ -4170,6 +4659,9 @@
       for (i = 0; i < groomings.length; i++) { rm = groomings[i];
         if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + GROOM_W && ay >= rm.gy && ay < rm.gy + GROOM_H,
                              bx >= rm.gx && bx < rm.gx + GROOM_W && by >= rm.gy && by < rm.gy + GROOM_H)) return true; }
+      for (i = 0; i < surgeries.length; i++) { rm = surgeries[i];
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + SURG_W && ay >= rm.gy && ay < rm.gy + SURG_H,
+                             bx >= rm.gx && bx < rm.gx + SURG_W && by >= rm.gy && by < rm.gy + SURG_H)) return true; }
       for (i = 0; i < restrooms.length; i++) { rm = restrooms[i];
         fp = footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot);
         inA = fp.some(function (t) { return t.x === ax && t.y === ay; });
@@ -4230,6 +4722,9 @@
     // it keeps its own claim below). The per-type room field, timer field, target
     // phase and waiting predicate come from the room descriptor, so the exam and
     // X-ray flows are the same code parameterized by type.
+    // A room type's key tiles (table/circle/visitor/...): the exam 3×3 layout by
+    // default, or the descriptor's own `key` fn (surgery's 4×5 theatre).
+    function roomKey(type, rm) { return (ROOM_TYPES[type].key || examKeyTiles)(rm.gx, rm.gy, rm.rot); }
     function claimRoomGeneric(v, type) {
       // Try every free room of the type, ROUTE FIRST, and only claim one the
       // visitor can actually reach — an unreachable room (door blocked, floor
@@ -4238,7 +4733,7 @@
       for (var i = 0; i < L.length; i++) {
         var rm = L[i];
         if (rm.occupant || beingCleaned(rm)) continue;
-        var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+        var k = roomKey(type, rm);
         // BFS a real route over connected room floor (clinic → corridors → room),
         // around furniture, so clients don't beeline into walls and jam.
         var path = examRoute(v.x, v.y, k.visitor.x, k.visitor.y);
@@ -4280,6 +4775,25 @@
     function claimXray(v) { return claimRoomGeneric(v, 'xray'); }
     function releaseXray(v) { releaseRoomGeneric(v, 'xray'); }
     function assignXrays() { assignRoomGeneric('xray'); }
+
+    // ---- Surgery flow (mirrors X-ray, but staffed by 2 vets + 1 worker) ----
+    function claimSurgery(v) { return claimRoomGeneric(v, 'surgery'); }
+    function releaseSurgery(v) { releaseRoomGeneric(v, 'surgery'); }
+    function assignSurgeries() { assignRoomGeneric('surgery'); }
+    // A vet slot is filled by the player OR any hired vet standing on the tile.
+    function vetOnTile(t) {
+      if (playerAtTile(t)) return true;
+      for (var i = 0; i < vets.length; i++)
+        if (Math.round(vets[i].x) === t.x && Math.round(vets[i].y) === t.y) return true;
+      return false;
+    }
+    // Fully staffed = both surgeon circles + the nurse circle manned. One body
+    // per tile, so three slots always means three people (player counts as one).
+    function surgeryStaffed(rm) {
+      var k = surgeryKeyTiles(rm.gx, rm.gy);
+      return vetOnTile(k.vetA) && vetOnTile(k.vetB) &&
+             (playerAtTile(k.worker) || workerAtTile(k.worker));
+    }
 
     // ---- Pharmacy patient flow ------------------------------------------
     function playerAtPharm(ph, idx) {
@@ -4369,6 +4883,128 @@
         if (!claimGrooming(waiting[i])) break;   // all free parlours unreachable → retry next frame
     }
 
+    // ---- Hotel boarding flow ----------------------------------------------
+    // Owners flagged wantsHotel walk to the desk, hand the pet over and leave; the
+    // pet lives on h.pets (persisted) and naps/plays until its stay runs out, when
+    // a pickup owner spawns, walks in, collects it and pays the stay fee.
+    function claimHotel(v) {
+      var sp = petSpecies(v.pet);
+      for (var i = 0; i < hotels.length; i++) {
+        var h = hotels[i];
+        if (!hotelTaking(h, sp)) continue;
+        var drop = hotelDropTile(h);
+        var path = examRoute(v.x, v.y, drop.x, drop.y);
+        if (!examRouteReached) continue;
+        v.hotelRoom = h; v.hotelBed = hotelFreeBed(h, sp);
+        v.seated = false; v.chair = null; v.sideIdx = -1; v.patience = baseWait();
+        v.path = path; v.wp = 0; v.phase = 'toHotel';
+        return true;
+      }
+      return false;
+    }
+    function assignHotels() {
+      var boarders = visitors.filter(function (v) {
+        return v.wantsHotel && !v.hotelRoom &&
+          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
+      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
+      for (var i = 0; i < boarders.length; i++) {
+        var v = boarders[i];
+        if (!hotelAccepts(v.pet)) { v.wantsHotel = false; continue; }   // no hotel can take them → exam path instead
+        claimHotel(v);                                                   // unreachable desk → retry next frame
+      }
+    }
+    // Spawn the returning owner for pet p — idempotent (no-op while one is inbound),
+    // so give-ups, demolished corridors and save/loads all self-heal.
+    function spawnHotelPickup(h, p) {
+      for (var i = 0; i < visitors.length; i++) if (visitors[i].hotelPet === p) return;
+      var seq = visitorSeq++;
+      var v = {
+        id: seq, line: 0,
+        x: ROOM + 5, y: ROOM + 5,
+        speed: 1.7 + (seq % 3) * 0.12,
+        dir: 'NE', moving: true, walkPhase: (seq % 2) * Math.PI,
+        phase: 'toHotelPickup',
+        patience: baseWait(),
+        shirt: V_SHIRT[seq % V_SHIRT.length], legs: V_LEGS[seq % V_LEGS.length],
+        skin: V_SKIN[seq % V_SKIN.length], hair: V_HAIR[seq % V_HAIR.length],
+        pet: p.kind, carrier: CARRIER[seq % CARRIER.length],
+        served: true, happy: true, petBoarded: true, parkDone: true, shopped: true,
+        hotelRoom: h, hotelPet: p
+      };
+      var drop = hotelDropTile(h);
+      v.path = [
+        { x: DOOR_MID, y: ROOM + 5 },
+        { x: DOOR_MID, y: ROOM + 0.2 },
+        { x: DOOR_MID, y: ROOM - 1.4 }
+      ].concat(examRoute(DOOR_MID, ROOM - 1.4, drop.x, drop.y) || []);
+      v.wp = 0;
+      visitors.push(v);
+    }
+    // Advance every boarded pet: stay countdown, park/cat-room play trips (reusing
+    // the whole off-leash roaming system via a tiny host shim whose x/y sit at the
+    // hotel door — d.recall then IS the walk-home trigger), and pickup spawning.
+    function updateHotels(dt) {
+      for (var i = 0; i < hotels.length; i++) {
+        var h = hotels[i], door = h.door || hotelDropTile(h);
+        for (var j = 0; j < h.pets.length; j++) {
+          var p = h.pets[j];
+          p.stayT -= dt;
+          if (p.state === 'inBed') {
+            if (p.stayT <= 0) { spawnHotelPickup(h, p); continue; }
+            p.tripT -= dt;
+            if (p.tripT <= 0) {
+              p.tripT = 6;
+              var zone = p.species === 'cat' ? 'cat' : 'dog';
+              var parkOk = zone === 'dog' ? parkSize() > 0 : (catFloorSize() > 0 && parkQuality('cat') > 0);
+              if (parkOk && p.stayT > 25 && Math.random() < 0.5) {   // guards before the draw (RNG parity)
+                var lane = bedLaneTile(h, p);
+                var spot = freeParkSpot({ x: lane.x, y: lane.y }, zone);
+                if (spot) {
+                  var path = examRoute(lane.x, lane.y, spot.x, spot.y);
+                  if (examRouteReached) {
+                    var b0 = bedTile(h, p);
+                    p.x = b0.x; p.y = b0.y; p.path = path; p.wp = 0; p.state = 'toPark'; p.zone = zone;
+                  }
+                }
+              }
+            }
+          } else if (p.state === 'toPark' || p.state === 'toHome') {
+            if (p.path && p.wp < p.path.length) {
+              var t = p.path[p.wp], dx = t.x - p.x, dy = t.y - p.y, dist = Math.hypot(dx, dy);
+              var step = Math.min(PARK_DOG_SPEED * dt, dist);
+              if (dist < 0.1) p.wp++;
+              else { p.x += dx / dist * step; p.y += dy / dist * step; p.face = dx >= 0 ? 1 : -1; }
+            }
+            if (!p.path || p.wp >= p.path.length) {
+              if (p.state === 'toPark') {
+                p.state = 'atPark'; p.playT = 8 + Math.random() * 8;
+                p.host = { x: door.x, y: door.y, parkZone: p.zone, pet: p.kind, phase: 'inDogPark',
+                           dog: { x: p.x, y: p.y, tx: p.x, ty: p.y, face: 1, gait: 0, wag: 0, pause: 0.3, squat: 0, moving: false } };
+                if (Math.random() < 0.8) p.host.dog.pooT = 1.2 + Math.random() * 4;   // same messes as any park pet
+                pickParkDogTarget(p.host);
+              } else {
+                var b1 = bedTile(h, p);
+                p.x = b1.x; p.y = b1.y; p.path = null; p.state = 'inBed';
+              }
+            }
+          } else if (p.state === 'atPark') {
+            updateParkDog(p.host, dt);
+            var d = p.host.dog;
+            p.x = d.x; p.y = d.y;
+            p.playT -= dt;
+            if ((p.playT <= 0 || p.stayT <= 10) && !(d.squat > 0)) {   // playtime over → trot home
+              var lane2 = bedLaneTile(h, p);
+              var home = examRoute(Math.round(d.x), Math.round(d.y), lane2.x, lane2.y);
+              p.host = null;
+              if (examRouteReached) { p.path = home; p.wp = 0; p.state = 'toHome'; }
+              else { p.path = null; p.state = 'inBed'; var b2 = bedTile(h, p); p.x = b2.x; p.y = b2.y; }   // wedged → pop back to bed
+            }
+          }
+          // 'out' (walking to the pickup owner) is advanced by the owner's phase handler
+        }
+      }
+    }
+
     // ---- Cleaners --------------------------------------------------------
     function canPlaceCleaner(gx, gy) { return isRoomFloor(gx, gy) && !occupied[gx + ',' + gy]; }
     // Clean-up time for a mess: litter wipes in 2s, an accident takes 5s.
@@ -4392,14 +5028,18 @@
     // scrub loop and the cleaner's job-finder.
     function dirtyRooms() {
       var out = [];
-      ['exam', 'xray'].forEach(function (type) {
+      ['exam', 'xray', 'surgery'].forEach(function (type) {
         ROOM_TYPES[type].list.forEach(function (rm) {
-          if (rm.dirty) { var k = examKeyTiles(rm.gx, rm.gy, rm.rot); out.push({ rm: rm, x: k.circle.x, y: k.circle.y, goal: ROOM_CLEAN_TIME }); }
+          if (rm.dirty) { var k = roomKey(type, rm); out.push({ rm: rm, x: k.circle.x, y: k.circle.y, goal: ROOM_CLEAN_TIME }); }
         });
       });
       pharmacies.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.gx, y: rm.gy + 2, goal: ROOM_CLEAN_TIME }); });   // column-0 lane, front row
       shops.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.gx + 2, y: rm.gy + 3, goal: ROOM_CLEAN_TIME }); });    // centre of the front aisle
       restrooms.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.stand.x, y: rm.stand.y, goal: ROOM_CLEAN_TIME * 2 }); });
+      hotels.forEach(function (h) {          // each wing is its own scrub job (they dirty independently)
+        if (h.wings.dog.dirty) { var sd = hotelWingScrub(h, 'dog'); out.push({ rm: h.wings.dog, x: sd.x, y: sd.y, goal: ROOM_CLEAN_TIME }); }
+        if (h.wings.cat.dirty) { var sc = hotelWingScrub(h, 'cat'); out.push({ rm: h.wings.cat, x: sc.x, y: sc.y, goal: ROOM_CLEAN_TIME }); }
+      });
       return out;
     }
     // A dirty room scrubs clean while the player or a cleaner stands on its scrub
@@ -4427,6 +5067,19 @@
         if (rm.grimeT == null) rm.grimeT = ROOM_GRIME_TIME * (0.7 + Math.random() * 0.6);
         rm.grimeT -= dt;
         if (rm.grimeT <= 0) rm.dirty = true;
+      });
+      // Hotel wings grime up only while they have guests (an empty wing stays
+      // clean); a dirty wing stops taking that species until a cleaner scrubs it.
+      hotels.forEach(function (h) {
+        ['dog', 'cat'].forEach(function (sp) {
+          var wing = h.wings[sp];
+          if (wing.dirty) return;
+          var occupied2 = h.pets.some(function (p) { return p.species === sp; });
+          if (!occupied2) return;                      // timer pauses while the wing is empty
+          if (wing.grimeT == null) wing.grimeT = ROOM_GRIME_TIME * (0.5 + Math.random() * 0.4);
+          wing.grimeT -= dt;
+          if (wing.grimeT <= 0) wing.dirty = true;
+        });
       });
     }
     // The clean jobs a cleaner can take: every puddle plus every dirty room's
@@ -4763,7 +5416,7 @@
         cb(makeStaffHandle('worker', wk,
           function () { return { x: Math.round(wk.x), y: Math.round(wk.y) }; },
           function () { return canPlaceCleaner(pointer.gx, pointer.gy); },
-          function () { wk.x = pointer.gx; wk.y = pointer.gy; wk.room = null; wk.path = null; wk.wp = 0; wk.working = false; wk.moving = false; wk.shopTarget = null; },
+          function () { wk.x = pointer.gx; wk.y = pointer.gy; wk.room = null; wk.path = null; wk.wp = 0; wk.working = false; wk.moving = false; wk.shopTarget = null; wk.post = null; },
           function () { var i = workers.indexOf(wk); if (i >= 0) workers.splice(i, 1); }));
       });
       // pharmacists — the `pharm` object on a manned counter station
@@ -4850,6 +5503,7 @@
     function waitTarget(v) {
       var rooms = [];
       if (v.needsMeds && !v.medicated) pharmacies.forEach(function (ph) { rooms.push({ x: ph.gx + 1.5, y: ph.gy + 1.5 }); });
+      else if (v.needsSurgery && !v.operated) surgeries.forEach(function (rm) { rooms.push({ x: rm.gx + 1.5, y: rm.gy + 2 }); });
       else if (v.needsXray && !v.xrayed) xrayRooms.forEach(function (rm) { rooms.push({ x: rm.gx + 1, y: rm.gy + 1.5 }); });
       else examRooms.forEach(function (rm) { rooms.push({ x: rm.gx + 1, y: rm.gy + 1 }); });
       if (!rooms.length) return { x: v.x, y: v.y };
@@ -4890,7 +5544,7 @@
     // Combined wait-drain multiplier: a TV halves it, nearby pee doubles it.
     // A patient assigned to (walking into or sitting in) a dirty operating room
     // loses patience twice as fast — the grime doubles their wait frustration.
-    function inDirtyRoom(v) { var rm = v.examRoom || v.xrayRoom; return !!(rm && rm.dirty); }
+    function inDirtyRoom(v) { var rm = v.examRoom || v.xrayRoom || v.surgeryRoom; return !!(rm && rm.dirty); }
     function drainMult(v) { return (nearTV(v) ? 0.5 : 1) * (nearPee(v) ? 2 : 1) * (inDirtyRoom(v) ? 2 : 1); }
 
     // A reception client is served: pay out, pop a +10, give a fresh wait bar so
@@ -4914,6 +5568,10 @@
       // 20% of processed clients want a groom instead of an exam: flag them so they
       // skip exam assignment and get pulled into a free grooming room by assignGrooming.
       if (groomings.length && Math.random() < 0.20) v.wantsGroom = true;
+      // 15% board their pet at the hotel instead (needs 3 workers on post, a clean
+      // wing + free bed). Guards sit BEFORE the draw so hotel-less games keep an
+      // identical RNG stream (same trick as the cat park).
+      if (!v.wantsGroom && hotels.length && hotelAccepts(v.pet) && Math.random() < 0.15) v.wantsHotel = true;
       // exam rooms are assigned centrally, in check-in order, by assignExams()
       var seat = freeSeat(v);
       if (seat) {                            // go sit in an empty chair / bench seat
@@ -4964,7 +5622,7 @@
         if (v.wp >= v.path.length) {
           v.x = t.x; v.y = t.y; v.moving = false; v.phase = d.inPhase;
           v.patience = baseWait(); v[d.waitField] = baseWait();   // fresh "waiting to be seen" timer
-          var rm = v[d.vRoom], k = examKeyTiles(rm.gx, rm.gy, rm.rot);
+          var rm = v[d.vRoom], k = roomKey(type, rm);
           v.dir = chooseDir(k.table.x - v.x, k.table.y - v.y);    // face the table/bed
         }
       }
@@ -5134,6 +5792,59 @@
         }
         return;
       }
+      if (v.phase === 'toHotel') {         // walking to the hotel desk to drop the pet off
+        var hst = v.path[v.wp];
+        if (stepToward(v, hst.x, hst.y, dt, 0.08)) {
+          v.wp++;
+          if (v.wp >= v.path.length) {
+            var hh = v.hotelRoom, hsp = petSpecies(v.pet);
+            var bed = v.hotelBed;
+            var bedTaken = hh.pets.some(function (q) { return q.species === hsp && q.bed === bed; });
+            v.hotelRoom = null; v.wantsHotel = false;
+            if (bedTaken || hh.wings[hsp].dirty || hotelWorkersAssigned(hh) < HOTEL_WORKERS_NEEDED) { v.phase = 'idle'; return; }   // lost the bed → back to the floor
+            var stay = HOTEL_STAY_MIN + Math.random() * HOTEL_STAY_SPAN;
+            var bt = hotelBeds(hh, hsp)[bed];
+            hh.pets.push({ kind: v.pet, species: hsp, bed: bed,
+                           stayT: stay, fee: 60 + Math.round(stay / 5) * 5,
+                           state: 'inBed', x: bt.x, y: bt.y, path: null, wp: 0, tripT: 6, playT: 0, host: null });
+            v.petBoarded = true; v.parkDone = true;   // their pet is boarded — no odd petless park detour
+            v.happy = true;
+            leaveOutbound(v);
+          }
+        }
+        v.patience -= dt * drainMult(v);    // safety net: blocked walk → give up rather than freeze
+        if (v.patience <= 0) { v.hotelRoom = null; v.wantsHotel = false; headForExit(v); }
+        return;
+      }
+      if (v.phase === 'toHotelPickup') {   // returning owner: collect the pet, pay the stay
+        var pkt = v.path[v.wp];
+        if (v.wp < v.path.length && stepToward(v, pkt.x, pkt.y, dt, 0.08)) v.wp++;
+        if (v.wp >= v.path.length) {
+          v.moving = false; v.dir = 'NE';
+          var pet = v.hotelPet, hr = v.hotelRoom;
+          if (!pet || hr.pets.indexOf(pet) < 0) { headForExit(v); return; }   // pet gone (edge) → just leave
+          if (pet.state === 'inBed') {                 // call the pet over
+            pet.state = 'out';
+            var b = bedTile(hr, pet); pet.x = b.x; pet.y = b.y; pet.path = null;
+          }
+          if (pet.state === 'out') {                   // pet trots to its owner
+            var pdx = v.x - pet.x, pdy = v.y - pet.y, pdist = Math.hypot(pdx, pdy);
+            if (pdist > 0.6) {
+              var pstep = Math.min(PARK_DOG_SPEED * dt, pdist);
+              pet.x += pdx / pdist * pstep; pet.y += pdy / pdist * pstep; pet.face = pdx >= 0 ? 1 : -1;
+            } else {                                   // reunited → pay and go
+              money += pet.fee; renderMoney();
+              floaters.push({ v: v, t: 0, amt: pet.fee });
+              hr.pets.splice(hr.pets.indexOf(pet), 1);
+              v.petBoarded = false; v.hotelPet = null; v.hotelRoom = null;   // pet back on the leash / in the carrier
+              leaveOutbound(v);
+            }
+          }
+          // pets still at the park walk themselves home first (updateHotels recalls
+          // them once stayT runs low); the owner just waits at the desk meanwhile
+        }
+        return;                             // no patience drain: the pet may still be trotting back
+      }
       if (v.phase === 'toShop') {          // detouring into the shop on the way out
         var sst = v.path[v.wp];
         if (stepToward(v, sst.x, sst.y, dt, 0.08)) {
@@ -5149,9 +5860,12 @@
         v.moving = false;
         v.shopBrowseT -= dt;
         if (v.shopBrowseT <= 0) {
-          var spend = shopSpend();
-          money += spend; renderMoney();
-          floaters.push({ v: v, t: 0, amt: spend });   // +$ pop over the shopper
+          // shopSpend() is ALWAYS drawn (RNG parity); an unmanned shop just voids the sale
+          var spend = Math.round(shopSpend() * shopSpendMult(shopWorkersPresent(v.shopRoom)) / 5) * 5;
+          if (spend > 0) {
+            money += spend; renderMoney();
+            floaters.push({ v: v, t: 0, amt: spend });   // +$ pop over the shopper
+          }
           v.shopTile = null; v.shopRoom = null;
           headForExit(v);
         }
@@ -5210,7 +5924,9 @@
       if (v.phase === 'inExam') { inRoomGeneric(v, dt, 'exam'); return; }
       if (v.phase === 'toXray') { toRoomGeneric(v, dt, 'xray'); return; }
       if (v.phase === 'inXray') { inRoomGeneric(v, dt, 'xray'); return; }
-      if (v.phase === 'waitXray' || v.phase === 'waitMeds') { waitRoomGeneric(v, dt); return; }
+      if (v.phase === 'toSurgery') { toRoomGeneric(v, dt, 'surgery'); return; }
+      if (v.phase === 'inSurgery') { inRoomGeneric(v, dt, 'surgery'); return; }
+      if (v.phase === 'waitXray' || v.phase === 'waitMeds' || v.phase === 'waitSurgery') { waitRoomGeneric(v, dt); return; }
       if (v.phase === 'toPharm') {          // walk to the counter's patient-side tile
         var pt = v.path[v.wp];
         if (stepToward(v, pt.x, pt.y, dt, 0.06)) {
@@ -5350,7 +6066,7 @@
         if (v.unstuckOnce) { v.dead = true; routeAvoidFor = null; return; }
         v.unstuckOnce = true;
         headForExit(v);
-      } else if (v.phase === 'waitXray' || v.phase === 'waitMeds' || v.phase === 'waitGroom') {
+      } else if (v.phase === 'waitXray' || v.phase === 'waitMeds' || v.phase === 'waitGroom' || v.phase === 'waitSurgery') {
         var ws = sideSpot();                   // old drift spot occupied → loiter somewhere fresh
         v.path = examRoute(v.x, v.y, ws.x, ws.y); v.wp = 0;
       } else if (v.path && v.path.length) {    // generic: re-route to the path's own endpoint
@@ -5370,25 +6086,41 @@
     // moves on. A room "has a vet" now means one is standing on its circle.
     var vets = [];   // [{x,y,room,working,speed,dir,walkPhase,moving,path,wp}]
     var workers = []; // [{x,y,room,working,speed,dir,walkPhase,moving,path,wp,shopTarget}] roaming groomers
-    function vetRooms() { return examRooms.concat(xrayRooms); }
+    function vetRooms() { return examRooms.concat(xrayRooms, surgeries); }
     function roomNeedsVet(rm) {
-      return !!rm.occupant && (rm.occupant.phase === 'inExam' || rm.occupant.phase === 'inXray');
+      return !!rm.occupant && (rm.occupant.phase === 'inExam' || rm.occupant.phase === 'inXray' || rm.occupant.phase === 'inSurgery');
     }
     function roomVetWorking(rm) {
       for (var i = 0; i < vets.length; i++) if (vets[i].room === rm && vets[i].working) return true;
       return false;
     }
+    // Surgery seats TWO vets (one per flank circle); everything else seats one.
+    function isSurgeryRoom(rm) { return surgeries.indexOf(rm) >= 0; }
+    function roomVetSlots(rm) { return isSurgeryRoom(rm) ? 2 : 1; }
     function roomClaimed(rm, self) {
-      for (var i = 0; i < vets.length; i++) if (vets[i] !== self && vets[i].room === rm) return true;
-      return false;
+      var n = 0;
+      for (var i = 0; i < vets.length; i++) if (vets[i] !== self && vets[i].room === rm) n++;
+      return n >= roomVetSlots(rm);
     }
-    function vetCircle(rm) { return examKeyTiles(rm.gx, rm.gy, rm.rot).circle; }
+    // Where a vet stands to work rm. For surgery each claimant takes a free flank
+    // (slot 0 = vetA, 1 = vetB), remembered on the vet so both don't fight over one
+    // tile; pass v=null for a neutral distance probe (uses flank A).
+    function vetCircle(rm, v) {
+      if (!isSurgeryRoom(rm)) return examKeyTiles(rm.gx, rm.gy, rm.rot).circle;
+      var k = surgeryKeyTiles(rm.gx, rm.gy);
+      if (v && v.slot == null) {
+        var used = {};
+        for (var i = 0; i < vets.length; i++) if (vets[i] !== v && vets[i].room === rm && vets[i].slot != null) used[vets[i].slot] = true;
+        v.slot = used[0] ? 1 : 0;
+      }
+      return (v && v.slot === 1) ? k.vetB : k.vetA;
+    }
     function updateVets(dt) {
       var rooms = vetRooms();
       for (var i = 0; i < vets.length; i++) {
         var v = vets[i];
         if (v.room && (rooms.indexOf(v.room) < 0 || !roomNeedsVet(v.room))) {
-          v.room = null; v.working = false; v.path = null;   // patient finished / room gone
+          v.room = null; v.slot = null; v.working = false; v.path = null;   // patient finished / room gone
         }
         if (!isRoomFloor(Math.round(v.x), Math.round(v.y))) { v.x = ROOM / 2 - 0.5; v.y = ROOM - 1.5; v.path = null; v.working = false; }  // stranded (room moved) -> back to clinic
         if (!v.room) {
@@ -5400,34 +6132,45 @@
           for (var j = 0; j < rooms.length; j++) {
             var rm = rooms[j];
             if (!roomNeedsVet(rm) || roomClaimed(rm, v)) continue;
-            var c = vetCircle(rm), d = Math.abs(c.x - v.x) + Math.abs(c.y - v.y);
+            var c = vetCircle(rm, null), d = Math.abs(c.x - v.x) + Math.abs(c.y - v.y);
             if (d >= bd) continue;
             var p = examRoute(v.x, v.y, c.x, c.y);
             if (!examRouteReached) continue;                            // can't get there -> ignore
             bd = d; best = rm; bestPath = p;
           }
           if (!best) { v.moving = false; v.walkPhase = 0; continue; }   // nothing reachable needs a vet
-          v.room = best; v.working = false; v.path = bestPath; v.wp = 0;
+          v.room = best; v.slot = null; v.working = false; v.path = bestPath; v.wp = 0;
         }
-        var cc = vetCircle(v.room);
+        var cc = vetCircle(v.room, v);
         if (Math.round(v.x) === cc.x && Math.round(v.y) === cc.y) {     // on the circle -> work
           v.x = cc.x; v.y = cc.y; v.moving = false; v.walkPhase = 0; v.working = true;
-          var f = FRONT[v.room.rot || 0]; v.dir = chooseDir(f.x, f.y);  // face the table
+          if (isSurgeryRoom(v.room)) {                                  // face the operating table
+            var st = surgeryKeyTiles(v.room.gx, v.room.gy).table;
+            v.dir = chooseDir(st.x - v.x, st.y - v.y);
+          } else {
+            var f = FRONT[v.room.rot || 0]; v.dir = chooseDir(f.x, f.y);  // face the table
+          }
         } else if (v.path && v.wp < v.path.length) {
           v.working = false;
           if (stepToward(v, v.path[v.wp].x, v.path[v.wp].y, dt, 0.12, vetBlocked)) v.wp++;   // stay on room floor, even in a crowd
         } else {
           v.path = examRoute(v.x, v.y, cc.x, cc.y); v.wp = 0;           // arrived-but-not-on-circle: recompute
-          if (!examRouteReached) { v.room = null; v.working = false; v.path = null; }   // room became unreachable -> release it
+          if (!examRouteReached) { v.room = null; v.slot = null; v.working = false; v.path = null; }   // room became unreachable -> release it
         }
       }
     }
 
     // ---- Roaming hired workers -------------------------------------------
-    // A Worker operates grooming stations: it walks to the station circle of any
-    // grooming room whose dog is being (or about to be) washed/dried and no other
-    // worker has claimed, works there, then moves on. With nothing to groom, it
-    // goes and mans the shop floor. Mirrors the roaming-vet logic.
+    // One Worker pool staffs grooming, surgery, the hotel and the shop through
+    // POSTS. Each room publishes posts with a stable key + priority: grooming
+    // 'groom:i' and surgery 'surg:i' (pri 0 — medical first,
+    // only while its client is in a groom/surgery phase, tile = the circle), hotel
+    // 'hotel:h:s' (pri 1, reception + a minder per wing), shop 'shop:k:s' (pri 2,
+    // up to 3 — sales need at least one, extras boost spend). Posts are filled
+    // greedily in priority order by the nearest worker; a scarce worker is stolen
+    // only from a strictly LOWER-priority post (shop before hotel), so a groom rush
+    // pulls the shop clerk away and never the reverse. The fill pass runs ~3x/sec
+    // for stickiness; vanished posts are dropped every frame.
     function groomWorkerCircle(rm) {
       if (!rm.occupant) return null;
       var ph = rm.occupant.phase, st = groomStations(rm.gx, rm.gy);
@@ -5435,62 +6178,92 @@
       if (ph === 'toGroomDry' || ph === 'inGroomDry') return st[1].circle;
       return null;
     }
-    function roomNeedsWorker(rm) { return !!groomWorkerCircle(rm); }
-    function roomWorkerWorking(rm) { for (var i = 0; i < workers.length; i++) if (workers[i].room === rm && workers[i].working) return true; return false; }
-    function roomWorkerClaimed(rm, self) { for (var i = 0; i < workers.length; i++) if (workers[i] !== self && workers[i].room === rm) return true; return false; }
-    // Where a Worker stands to "man the shop": the front-aisle centre tile (a walkable
-    // browse spot in front of the register), for the nearest shop.
-    function workerShopTile() {
-      if (!shops.length) return null;
-      return { x: shops[0].gx + 2, y: shops[0].gy + 3 };
+    // Surgery post: the nurse circle behind the table, live while a patient is
+    // walking in or on the table (same medical tier as grooming, pri 0).
+    function surgeryWorkerCircle(rm) {
+      var o = rm.occupant;
+      if (!o || (o.phase !== 'toSurgery' && o.phase !== 'inSurgery')) return null;
+      return surgeryKeyTiles(rm.gx, rm.gy).worker;
+    }
+    // Shop posts: the two back aisles beside the register + the old front-aisle spot.
+    function shopWorkTiles(s) {
+      return [{ x: s.gx + 1, y: s.gy + 1 }, { x: s.gx + 3, y: s.gy + 1 }, { x: s.gx + 2, y: s.gy + 3 }];
+    }
+    function workerPosts() {
+      var out = [], i, j;
+      for (i = 0; i < groomings.length; i++) {
+        var cc = groomWorkerCircle(groomings[i]);
+        if (cc) out.push({ key: 'groom:' + i, pri: 0, tile: cc, room: groomings[i] });
+      }
+      for (i = 0; i < surgeries.length; i++) {
+        var sc = surgeryWorkerCircle(surgeries[i]);
+        if (sc) out.push({ key: 'surg:' + i, pri: 0, tile: sc, room: surgeries[i] });
+      }
+      for (i = 0; i < hotels.length; i++) {
+        var wt = hotelWorkTiles(hotels[i]);
+        for (j = 0; j < wt.length; j++) out.push({ key: 'hotel:' + i + ':' + j, pri: 1, tile: wt[j], room: hotels[i] });
+      }
+      for (i = 0; i < shops.length; i++) {
+        var st = shopWorkTiles(shops[i]);
+        for (j = 0; j < st.length; j++) out.push({ key: 'shop:' + i + ':' + j, pri: 2, tile: st[j], room: shops[i] });
+      }
+      return out;
+    }
+    function postIndex(posts) { var m = {}; for (var i = 0; i < posts.length; i++) m[posts[i].key] = posts[i]; return m; }
+    var postScanT = 0;
+    // Fill unheld posts, best (lowest pri) first. Candidates per post: free workers,
+    // else the holder of a strictly lower-priority post (cheapest victim = highest
+    // pri number). Holders are never moved within the same tier, so no oscillation.
+    function assignWorkerPosts(posts, byKey) {
+      posts = posts.slice().sort(function (a, b) { return a.pri - b.pri; });
+      var claimed = {}, i, j;
+      for (i = 0; i < workers.length; i++) if (workers[i].post) claimed[workers[i].post] = true;
+      for (i = 0; i < posts.length; i++) {
+        var p = posts[i];
+        if (claimed[p.key]) continue;
+        var best = null, bestCls = -1, bd = 1e9;
+        for (j = 0; j < workers.length; j++) {
+          var w = workers[j], cls;
+          if (!w.post) cls = 99;                                        // free worker: always preferred
+          else { var held = byKey[w.post]; if (!held || held.pri <= p.pri) continue; cls = held.pri; }
+          var d = Math.abs(p.tile.x - w.x) + Math.abs(p.tile.y - w.y);
+          if (cls > bestCls || (cls === bestCls && d < bd)) { best = w; bestCls = cls; bd = d; }
+        }
+        if (!best) continue;
+        var path = examRoute(best.x, best.y, p.tile.x, p.tile.y);
+        if (!examRouteReached) continue;                                // unreachable → retry next scan
+        if (best.post) delete claimed[best.post];                       // vacated post refillable this pass
+        best.post = p.key; best.room = p.room; best.working = false;
+        best.path = path; best.wp = 0; best.shopTarget = p.tile.x + ',' + p.tile.y;
+        claimed[p.key] = true;
+      }
     }
     function updateWorkers(dt) {
-      var rooms = groomings;
-      for (var i = 0; i < workers.length; i++) {
-        var w = workers[i];
-        if (w.room && (rooms.indexOf(w.room) < 0 || !roomNeedsWorker(w.room))) { w.room = null; w.working = false; w.path = null; }
+      var posts = workerPosts(), byKey = postIndex(posts), i, w;
+      for (i = 0; i < workers.length; i++) {                            // groom done / room demolished → free
+        w = workers[i];
+        if (w.post && !byKey[w.post]) { w.post = null; w.room = null; w.working = false; w.path = null; }
+      }
+      postScanT -= dt;
+      if (postScanT <= 0) { postScanT = 0.35; assignWorkerPosts(posts, byKey); }
+      for (i = 0; i < workers.length; i++) {
+        w = workers[i];
         if (!isRoomFloor(Math.round(w.x), Math.round(w.y))) { w.x = ROOM / 2 - 0.5; w.y = ROOM - 1.5; w.path = null; w.working = false; }  // stranded → back to clinic
-        if (!w.room) {
-          var best = null, bd = 1e9, bestPath = null;
-          for (var j = 0; j < rooms.length; j++) {
-            var rm = rooms[j], cc = groomWorkerCircle(rm);
-            if (!cc || roomWorkerClaimed(rm, w)) continue;
-            var d = Math.abs(cc.x - w.x) + Math.abs(cc.y - w.y);
-            if (d >= bd) continue;
-            var p = examRoute(w.x, w.y, cc.x, cc.y);
-            if (!examRouteReached) continue;
-            bd = d; best = rm; bestPath = p;
-          }
-          if (best) { w.room = best; w.working = false; w.path = bestPath; w.wp = 0; }
-          else { workerManShop(w, dt); continue; }                     // nothing to groom → tend the shop
+        if (!w.post) { w.moving = false; w.walkPhase = 0; continue; }   // no job → stand
+        var p = byKey[w.post], t = p.tile, tk = t.x + ',' + t.y;
+        if (Math.round(w.x) === t.x && Math.round(w.y) === t.y) {       // on post → work
+          w.x = t.x; w.y = t.y; w.moving = false; w.walkPhase = 0; w.working = true;
+          if (w.post.charAt(0) === 'g') { var dog = p.room.occupant; if (dog) w.dir = chooseDir(dog.x - w.x, dog.y - w.y); }  // face the dog
+          else w.dir = 'SE';
+          continue;
         }
-        var c2 = groomWorkerCircle(w.room);
-        if (!c2) { w.room = null; w.working = false; w.path = null; continue; }
-        if (Math.round(w.x) === c2.x && Math.round(w.y) === c2.y) {     // on the circle → work
-          w.x = c2.x; w.y = c2.y; w.moving = false; w.walkPhase = 0; w.working = true;
-          var dog = w.room.occupant; if (dog) w.dir = chooseDir(dog.x - w.x, dog.y - w.y);   // face the dog
-        } else if (w.path && w.wp < w.path.length) {
-          w.working = false;
-          if (stepToward(w, w.path[w.wp].x, w.path[w.wp].y, dt, 0.12, vetBlocked)) w.wp++;
-        } else {
-          w.path = examRoute(w.x, w.y, c2.x, c2.y); w.wp = 0;
-          if (!examRouteReached) { w.room = null; w.working = false; w.path = null; }
+        w.working = false;
+        if (!w.path || w.wp >= w.path.length || w.shopTarget !== tk) {  // groom circle hops shower→dry: same key, new tile
+          w.path = examRoute(w.x, w.y, t.x, t.y); w.wp = 0; w.shopTarget = tk;
+          if (!examRouteReached) { w.post = null; w.room = null; w.path = null; continue; }
         }
+        if (stepToward(w, w.path[w.wp].x, w.path[w.wp].y, dt, 0.12, vetBlocked)) w.wp++;
       }
-    }
-    // Idle behaviour: walk to and stand at the shop floor. Cosmetic (the shop serves
-    // itself), but it's where a Worker goes when there's no grooming to do.
-    function workerManShop(w, dt) {
-      w.working = false;
-      var t = workerShopTile();
-      if (!t) { w.moving = false; w.walkPhase = 0; w.path = null; return; }
-      if (Math.round(w.x) === t.x && Math.round(w.y) === t.y) { w.x = t.x; w.y = t.y; w.moving = false; w.walkPhase = 0; w.dir = 'SE'; w.path = null; return; }
-      var key = t.x + ',' + t.y;
-      if (!w.path || w.wp >= w.path.length || w.shopTarget !== key) {
-        w.path = examRoute(w.x, w.y, t.x, t.y); w.wp = 0; w.shopTarget = key;
-        if (!examRouteReached) { w.path = null; w.moving = false; return; }
-      }
-      if (w.path && w.wp < w.path.length) { if (stepToward(w, w.path[w.wp].x, w.path[w.wp].y, dt, 0.12, vetBlocked)) w.wp++; }
     }
 
     function update(dt) {
@@ -5545,10 +6318,13 @@
       }
       assignExams();                         // hand free exam rooms to the longest-waiting clients
       assignXrays();                         // hand free X-ray rooms to pets that need one
+      assignSurgeries();                     // hand free operating theatres to pets that need one
       assignPharmacies();                    // hand free pharmacy counters to clients needing meds
       assignGrooming();                      // hand free grooming rooms to clients wanting a groom
+      assignHotels();                        // route boarding clients to a hotel desk
       updateVets(dt);                        // roaming vets move between rooms that need them
-      updateWorkers(dt);                     // roaming workers operate grooming stations / man the shop
+      updateWorkers(dt);                     // one worker pool staffs grooming, the hotel and the shop (posts)
+      updateHotels(dt);                      // boarded pets: stays tick down, play trips, pickups
       cleaners.forEach(function (c) { c.speed = 2.3 * skills.cleaning.val; updateCleaner(c, dt); }); // cleaners head to messes (Cleaning skill speeds them)
       updatePuddles(dt);                     // scrub puddles the player/cleaners stand on
       updateRoomGrime(dt);                   // shops/pharmacies slowly grime up over time
@@ -5662,15 +6438,18 @@
     // non-operating rooms (grimy over time) and restrooms (dirty after one use) —
     // so a filthy room reads as visibly filthy until scrubbed.
     function drawRoomDirt() {
-      ['exam', 'xray'].forEach(function (type) {
+      ['exam', 'xray', 'surgery'].forEach(function (type) {
         ROOM_TYPES[type].list.forEach(function (rm) {
           if (!rm.dirty) return;
-          var tiles = (type === 'xray') ? xrayTiles(rm.gx, rm.gy) : examTiles(rm.gx, rm.gy);
-          tiles.forEach(washDirtTile);
+          ROOM_TYPES[type].tiles(rm.gx, rm.gy, rm.rot || 0).forEach(washDirtTile);
         });
       });
       pharmacies.forEach(function (rm) { if (rm.dirty) pharmTiles(rm.gx, rm.gy).forEach(washDirtTile); });
       shops.forEach(function (rm) { if (rm.dirty) shopTiles(rm.gx, rm.gy).forEach(washDirtTile); });
+      hotels.forEach(function (h) {                     // grime wash stays confined to the dirty wing
+        if (h.wings.dog.dirty) hotelWingTiles(h, 'dog').forEach(washDirtTile);
+        if (h.wings.cat.dirty) hotelWingTiles(h, 'cat').forEach(washDirtTile);
+      });
       restrooms.forEach(function (rm) { if (rm.dirty) footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot).forEach(washDirtTile); });
     }
 
@@ -5790,6 +6569,12 @@
           drawExamCircle(ctx, st.circle.x, st.circle.y, playerAtTile(st.circle) || workerAtTile(st.circle));
         });
       });
+      surgeries.forEach(function (rm) {     // surgery: 2 surgeon flanks + the nurse circle
+        var k = surgeryKeyTiles(rm.gx, rm.gy);
+        drawExamCircle(ctx, k.vetA.x, k.vetA.y, vetOnTile(k.vetA));
+        drawExamCircle(ctx, k.vetB.x, k.vetB.y, vetOnTile(k.vetB));
+        drawExamCircle(ctx, k.worker.x, k.worker.y, playerAtTile(k.worker) || workerAtTile(k.worker));
+      });
 
       var scene = wallSegs.slice();         // walls + doors + decorations + entrance frame
       if (!placing) {                       // animated doors share their opening's depth
@@ -5847,6 +6632,13 @@
         var xpet = (rm.occupant && rm.occupant.phase === 'inXray') ? rm.occupant : null;
         scene.push({ d: k.table.x + k.table.y, fn: function () { drawXrayMachine(ctx, k.table.x, k.table.y, xpet); } });
       });
+      surgeries.forEach(function (rm) {                  // surgery-theatre furniture
+        var k = surgeryKeyTiles(rm.gx, rm.gy);
+        scene.push({ d: k.monitor.x + k.monitor.y, fn: function () { drawSurgMonitor(ctx, k.monitor.x, k.monitor.y); } });
+        scene.push({ d: k.trolley.x + k.trolley.y, fn: function () { drawSurgTrolley(ctx, k.trolley.x, k.trolley.y); } });
+        var spet = (rm.occupant && rm.occupant.phase === 'inSurgery') ? rm.occupant : null;
+        scene.push({ d: k.table.x + k.table.y, fn: function () { drawSurgTable(ctx, k.table.x, k.table.y, spet); } });
+      });
       vets.forEach(function (vt) {                       // roaming hired vets
         if (carrying && carrying.is(vt)) return;
         scene.push({ d: vt.x + vt.y, who: 'vet', ref: vt, hx: vt.x, hy: vt.y, fn: function () {
@@ -5887,9 +6679,44 @@
           scene.push({ d: t.x + t.y, fn: function () { drawShopIsland(ctx, t.x, t.y, idx === 1); } });
         });
         var ct = shopCashierTile(sh.gx, sh.gy);          // behind the register; counter (higher d) draws in front
-        scene.push({ d: ct.x + ct.y, fn: function () {
-          staffSprite('ca' + (sh.cashierGender || 'male'), ct.x, ct.y, function (c, gx, gy) { drawCashier(c, gx, gy, sh.cashierGender || 'male'); });
-        } });
+        if (shopWorkersAssigned(sh) > 0)                 // cashier appears only while the shop is staffed
+          scene.push({ d: ct.x + ct.y, fn: function () {
+            staffSprite('ca' + (sh.cashierGender || 'male'), ct.x, ct.y, function (c, gx, gy) { drawCashier(c, gx, gy, sh.cashierGender || 'male'); });
+          } });
+      });
+      hotels.forEach(function (h) {                      // hotel beds (+ sleeping guests), desk, plants, roaming pets
+        ['dog', 'cat'].forEach(function (sp) {
+          hotelBeds(h, sp).forEach(function (b, bi) {
+            var guest = null;
+            for (var pi = 0; pi < h.pets.length; pi++) { var q = h.pets[pi]; if (q.species === sp && q.bed === bi && q.state === 'inBed') { guest = q; break; } }
+            scene.push({ d: b.x + b.y, fn: function () {
+              drawPetBed(ctx, b.x, b.y, sp === 'dog', bi);
+              if (guest) {                               // snoozing on the cushion, gently breathing
+                var gs = iso(b.x, b.y), bob2 = Math.sin(animT * 1.6 + bi) * 0.7;
+                (sp === 'dog' ? cachedDog : cachedCat)({ pet: guest.kind }, gs.x, gs.y - 6 + bob2, bi % 2 === 0, { leash: false });
+              }
+            } });
+          });
+        });
+        hotelDeskTiles(h.gx, h.gy).forEach(function (t, i) {
+          scene.push({ d: t.x + t.y, fn: function () { drawHotelDesk(ctx, t.x, t.y, i === 0); } });
+        });
+        hotelPlantTiles(h.gx, h.gy).forEach(function (t) {
+          scene.push({ d: t.x + t.y, fn: function () { drawFicus(ctx, t.x, t.y); } });
+        });
+        h.pets.forEach(function (p) {                    // guests out and about (park trips / pickup trot)
+          if (p.state === 'inBed') return;
+          var px2 = p.state === 'atPark' && p.host ? p.host.dog.x : p.x;
+          var py2 = p.state === 'atPark' && p.host ? p.host.dog.y : p.y;
+          var moving = p.state !== 'atPark' || (p.host && p.host.dog.moving);
+          var gait = p.state === 'atPark' && p.host ? (p.host.dog.moving ? p.host.dog.gait : 0) : animT * 14;
+          var wag = p.state === 'atPark' && p.host ? p.host.dog.wag : 0;
+          var face = p.state === 'atPark' && p.host ? p.host.dog.face >= 0 : (p.face || 1) >= 0;
+          scene.push({ d: px2 + py2, fn: function () {
+            var ps2 = iso(px2, py2);
+            (p.species === 'dog' ? cachedDog : cachedCat)({ pet: p.kind }, ps2.x, ps2.y, face, { leash: false, run: moving ? gait : 0, wag: wag });
+          } });
+        });
       });
 
       scene.sort(function (a, b) { return a.d - b.d; });
@@ -6118,6 +6945,10 @@
         restrooms:  (restrooms || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
         shops:      (shops || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
         groomings:  (groomings || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0 }; }),
+        hotels:     (hotels || []).map(function (h) { return { gx: h.gx, gy: h.gy, rot: h.rot || 0,
+          dogDirty: !!h.wings.dog.dirty, catDirty: !!h.wings.cat.dirty,
+          pets: (h.pets || []).map(function (p) { return { kind: p.kind, bed: p.bed, stayT: Math.round(p.stayT * 10) / 10, fee: p.fee }; }) }; }),
+        surgeries:  (surgeries || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0, uses: r.uses || 0, dirty: !!r.dirty }; }),
         pharmacies: (pharmacies || []).map(function (r) {
           return { gx: r.gx, gy: r.gy, rot: r.rot || 0,
                    stations: (r.stations || []).map(function (s) { return { pharm: s.pharm ? { name: s.pharm.name || '', gender: s.pharm.gender || 'male' } : false }; }) };
@@ -6143,12 +6974,20 @@
       for (var k in doorOpen) delete doorOpen[k];
       examRooms.forEach(function (r) { r.occupant = null; r.examT = 0; r.cleanProg = 0; });
       xrayRooms.forEach(function (r) { r.occupant = null; r.xrayT = 0; r.cleanProg = 0; });
+      surgeries.forEach(function (r) { r.occupant = null; r.surgT = 0; r.cleanProg = 0; });
       restrooms.forEach(function (r) { r.occupant = null; });
       pharmacies.forEach(function (p) { (p.stations || []).forEach(function (s) { s.patient = null; s.procT = 0; }); });
       groomings.forEach(function (r) { r.occupant = null; r.showerT = 0; r.dryT = 0; });
-      vets.forEach(function (v) { v.room = null; v.working = false; v.moving = false; v.path = null; v.wp = 0; });
+      hotels.forEach(function (h) {           // pets stay boarded (persisted) — just settle them into bed
+        h.wings.dog.cleanProg = 0; h.wings.cat.cleanProg = 0;
+        h.pets.forEach(function (p) {
+          p.state = 'inBed'; p.host = null; p.path = null; p.wp = 0; p.tripT = 6; p.playT = 0;
+          var b = bedTile(h, p); p.x = b.x; p.y = b.y;
+        });
+      });
+      vets.forEach(function (v) { v.room = null; v.slot = null; v.working = false; v.moving = false; v.path = null; v.wp = 0; });
       cleaners.forEach(function (c) { c.target = null; c.moving = false; c.path = null; c.wp = 0; });
-      workers.forEach(function (w) { w.room = null; w.working = false; w.moving = false; w.path = null; w.wp = 0; w.shopTarget = null; });
+      workers.forEach(function (w) { w.room = null; w.working = false; w.moving = false; w.path = null; w.wp = 0; w.shopTarget = null; w.post = null; });
       placing = null; corridorDrag = null;
       try { document.body.classList.remove('placing'); } catch (e) {}
       vet.x = ROOM / 2 - 0.5; vet.y = ROOM / 2 - 0.5; vet.dir = 'SE'; vet.moving = false; vet.walkPhase = 0;
@@ -6159,8 +6998,8 @@
       difficulty = DIFFICULTY[diffKey] ? diffKey : 'easy';
       var D = diff();
       resetTransient();
-      placed.length = 0; examRooms.length = 0; xrayRooms.length = 0;
-      restrooms.length = 0; pharmacies.length = 0; shops.length = 0; groomings.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0; workers.length = 0;
+      placed.length = 0; examRooms.length = 0; xrayRooms.length = 0; surgeries.length = 0;
+      restrooms.length = 0; pharmacies.length = 0; shops.length = 0; groomings.length = 0; hotels.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0; workers.length = 0;
       for (var k in corridor) delete corridor[k];
       for (var kor in openRoom) delete openRoom[kor];
       for (var kpk in park) delete park[kpk];
@@ -6180,8 +7019,8 @@
     function applySave(data) {
       if (!data || data.v !== 1) return false;
       resetTransient();
-      placed.length = 0; examRooms.length = 0; xrayRooms.length = 0;
-      restrooms.length = 0; pharmacies.length = 0; shops.length = 0; groomings.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0; workers.length = 0;
+      placed.length = 0; examRooms.length = 0; xrayRooms.length = 0; surgeries.length = 0;
+      restrooms.length = 0; pharmacies.length = 0; shops.length = 0; groomings.length = 0; hotels.length = 0; staff.length = 0; vets.length = 0; cleaners.length = 0; workers.length = 0;
       for (var k in corridor) delete corridor[k];
       for (var kor in openRoom) delete openRoom[kor];
       for (var kpk in park) delete park[kpk];
@@ -6213,9 +7052,20 @@
       if (typeof placePharmacy === 'function') (data.pharmacies || []).forEach(function (r) { placePharmacy(r.gx, r.gy, r.rot || 0); });
       if (typeof placeShop === 'function')     (data.shops || []).forEach(function (r) { placeShop(r.gx, r.gy, r.rot || 0); });
       if (typeof placeGrooming === 'function') (data.groomings || []).forEach(function (r) { placeGrooming(r.gx, r.gy, r.rot || 0); });
+      if (typeof placeHotel === 'function')    (data.hotels || []).forEach(function (r) { placeHotel(r.gx, r.gy, r.rot || 0); });
+      if (typeof placeSurgery === 'function')  (data.surgeries || []).forEach(function (r) { var rm = placeSurgery(r.gx, r.gy, r.rot || 0); if (rm) { rm.uses = r.uses || 0; rm.dirty = !!r.dirty; } });
       _suspendStatic = false;
       // per-room persistent extras, by index (push order matches save order)
       (data.xrayRooms || []).forEach(function (r, i) { if (xrayRooms[i]) xrayRooms[i].vet = !!r.vet; });
+      (data.hotels || []).forEach(function (r, i) {          // wings' dirty state + the boarded pets
+        var h = hotels[i]; if (!h) return;
+        h.wings.dog.dirty = !!r.dogDirty; h.wings.cat.dirty = !!r.catDirty;
+        (r.pets || []).forEach(function (p) {
+          h.pets.push({ kind: p.kind, species: petSpecies(p.kind), bed: p.bed || 0,
+                        stayT: typeof p.stayT === 'number' ? p.stayT : 0, fee: p.fee || 60,
+                        state: 'inBed', x: 0, y: 0, path: null, wp: 0, tripT: 6, playT: 0, host: null });
+        });
+      });
       (data.pharmacies || []).forEach(function (r, i) {
         if (pharmacies[i]) (r.stations || []).forEach(function (s, j) {
           // legacy saves stored pharm as a bare boolean; upgrade to a {name,gender} object
@@ -6231,7 +7081,7 @@
         cleaners.push({ x: c.x, y: c.y, speed: c.speed || 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0, name: c.name || '', gender: c.gender || randGender() });
       });
       (data.workers || []).forEach(function (w) {
-        workers.push({ x: w.x, y: w.y, room: null, working: false, speed: w.speed || 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, name: w.name || '', gender: w.gender || randGender() });
+        workers.push({ x: w.x, y: w.y, room: null, working: false, speed: w.speed || 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, post: null, name: w.name || '', gender: w.gender || randGender() });
       });
 
       resetTransient();                       // clear anything the place-fns seeded
@@ -6410,6 +7260,10 @@
       xrays: function () { return xrayRooms.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, vet: !!r.vet, uses: r.uses||0, dirty: !!r.dirty, cleanProg: Math.round((r.cleanProg||0)*10)/10 }; }); },
       pharms: function () { return pharmacies.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, stations: r.stations.map(function (s) { return { pharm: !!s.pharm, busy: !!s.patient }; }) }; }); },
       placePharm: function (gx, gy, rot) { if (!canPlacePharmacy(gx, gy)) return false; placePharmacy(gx, gy, rot || 0); return pharmacies[pharmacies.length - 1]; },
+      canSurgery: function (gx, gy) { return canPlaceSurgery(gx, gy); },
+      placeSurgery: function (gx, gy, rot) { if (!canPlaceSurgery(gx, gy)) return false; placeSurgery(gx, gy, rot || 0); return surgeryKeyTiles(gx, gy); },
+      surgeries: function () { return surgeries.map(function (r) { return { gx: r.gx, gy: r.gy, occupied: !!r.occupant, surgT: Math.round((r.surgT||0)*10)/10, uses: r.uses||0, dirty: !!r.dirty, staffed: surgeryStaffed(r), door: r.door, cleanProg: Math.round((r.cleanProg||0)*10)/10 }; }); },
+      surgSend: function (i) { var v = visitors[i || 0]; if (!v) return false; v.needsSurgery = true; return claimSurgery(v); },
       canShop: function (gx, gy) { return canPlaceShop(gx, gy); },
       placeShop: function (gx, gy, rot) { if (!canPlaceShop(gx, gy)) return false; placeShop(gx, gy, rot || 0); return shops[shops.length - 1]; },
       shops: function () { return shops.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot }; }); },
@@ -6417,7 +7271,7 @@
       canGroom: function (gx, gy) { return canPlaceGrooming(gx, gy); },
       placeGroom: function (gx, gy, rot) { if (!canPlaceGrooming(gx, gy)) return false; placeGrooming(gx, gy, rot || 0); var rm = groomings[groomings.length - 1]; return { gx: rm.gx, gy: rm.gy, door: rm.door, stations: groomStations(rm.gx, rm.gy) }; },
       grooms: function () { return groomings.map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot, occupied: !!r.occupant, phase: r.occupant ? r.occupant.phase : null, showerT: Math.round((r.showerT||0)*100)/100, dryT: Math.round((r.dryT||0)*100)/100 }; }); },
-      hireWorker: function (gx, gy) { workers.push({ x: gx != null ? gx : ROOM / 2 - 0.5, y: gy != null ? gy : ROOM - 1.5, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, name: '', gender: randGender() }); return workers.length; },
+      hireWorker: function (gx, gy) { workers.push({ x: gx != null ? gx : ROOM / 2 - 0.5, y: gy != null ? gy : ROOM - 1.5, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, shopTarget: null, post: null, name: '', gender: randGender() }); return workers.length; },
       workerList: function () { return workers.map(function (w) { return { x: Math.round(w.x*100)/100, y: Math.round(w.y*100)/100, working: !!w.working, room: !!w.room }; }); },
       route: function (sx, sy, tx, ty) { var p = examRoute(sx, sy, tx, ty); return { reached: examRouteReached, len: p.length, path: p }; },
       save: function (name) { return buildSave(name || 'test'); },
@@ -6431,9 +7285,33 @@
       restroomList: function () { return restrooms.map(function (r) { return { gx: r.gx, gy: r.gy, toilet: r.toilet, stand: r.stand, door: r.door, occ: !!r.occupant, dirty: !!r.dirty, cleanProg: Math.round((r.cleanProg||0)*100)/100 }; }); },
       dirtyRoomList: function () { return dirtyRooms().map(function (j) { return { x: j.x, y: j.y, goal: j.goal, cleanProg: Math.round((j.rm.cleanProg||0)*100)/100 }; }); },
       cleanerList: function () { return cleaners.map(function (c) { return { x: Math.round(c.x*100)/100, y: Math.round(c.y*100)/100, target: c.target ? { x: c.target.x, y: c.target.y } : null }; }); },
-      setDirty: function (kind, n) { var L = kind === 'restroom' ? restrooms : kind === 'shop' ? shops : kind === 'pharmacy' ? pharmacies : kind === 'xray' ? xrayRooms : examRooms; if (L[n||0]) { L[n||0].dirty = true; return true; } return false; },
+      setDirty: function (kind, n) {
+        if (kind === 'hotelDog' || kind === 'hotelCat') { var hh = hotels[n || 0]; if (!hh) return false; hh.wings[kind === 'hotelDog' ? 'dog' : 'cat'].dirty = true; return true; }
+        var L = kind === 'restroom' ? restrooms : kind === 'shop' ? shops : kind === 'pharmacy' ? pharmacies : kind === 'xray' ? xrayRooms : kind === 'surgery' ? surgeries : examRooms; if (L[n||0]) { L[n||0].dirty = true; return true; } return false; },
       wallEdge: function (ax, ay, bx, by) { return wallStep(ax, ay, bx, by); },
       clearGroomRooms: function () { groomings.length = 0; return 0; },
+      canHotel: function (gx, gy) { return canPlaceHotel(gx, gy); },
+      placeHotel: function (gx, gy, rot) { if (!canPlaceHotel(gx, gy)) return false; placeHotel(gx, gy, rot || 0); var h = hotels[hotels.length - 1]; return { gx: h.gx, gy: h.gy, door: h.door, work: hotelWorkTiles(h), drop: hotelDropTile(h) }; },
+      hotelList: function () { return hotels.map(function (h) { return { gx: h.gx, gy: h.gy }; }); },
+      hotelInfo: function (i) {
+        var h = hotels[i || 0]; if (!h) return null;
+        function wing(sp) { var used = h.pets.filter(function (p) { return p.species === sp; }).length; return { dirty: !!h.wings[sp].dirty, beds: 3, used: used, taking: hotelTaking(h, sp) }; }
+        return { workersAssigned: hotelWorkersAssigned(h),
+                 workersPresent: workers.filter(function (w) { return w.working && w.post && w.post.indexOf('hotel:' + hotels.indexOf(h) + ':') === 0; }).length,
+                 dog: wing('dog'), cat: wing('cat'),
+                 pets: h.pets.map(function (p) { return { kind: p.kind, species: p.species, bed: p.bed, stayT: Math.round(p.stayT * 10) / 10, fee: p.fee, state: p.state }; }) };
+      },
+      hotelCheckIn: function (i, kind, stayT, fee) {
+        var h = hotels[i || 0]; if (!h) return false;
+        var sp = petSpecies(kind), bed = hotelFreeBed(h, sp); if (bed < 0) return false;
+        var b = hotelBeds(h, sp)[bed];
+        h.pets.push({ kind: kind, species: sp, bed: bed, stayT: stayT != null ? stayT : 120, fee: fee != null ? fee : 180,
+                      state: 'inBed', x: b.x, y: b.y, path: null, wp: 0, tripT: 6, playT: 0, host: null });
+        return { bed: bed, pets: h.pets.length };
+      },
+      shopInfo: function (i) { var s = shops[i || 0]; if (!s) return null; var n = shopWorkersPresent(s); return { workersAssigned: shopWorkersAssigned(s), workersPresent: n, mult: shopSpendMult(n) }; },
+      workerPostList: function () { return workers.map(function (w) { return { post: w.post, working: !!w.working, x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 }; }); },
+      setWantHotel: function (i) { if (visitors[i]) { visitors[i].wantsHotel = true; return true; } return false; },
       setBladder: function (i, s) { if (visitors[i]) { visitors[i].bladder = s; return true; } return false; },
       vpos: function () { return visitors.map(function (v) { return { id: v.id, phase: v.phase, x: v.x, y: v.y, moving: !!v.moving, seated: !!v.seated }; }); },
       setFrq: function (f) { frq = f; if (typeof renderRating === 'function') renderRating(); return { frq: frq, rating: Math.round((100 / frq) * 100) / 100 }; },

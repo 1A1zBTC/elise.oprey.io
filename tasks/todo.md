@@ -128,3 +128,68 @@ main.js is shared with another active instance; left commit + `aws s3 sync` / Cl
 
 ### Not done (didn't deploy or commit)
 Same as above — Dan commits + deploys (build-sw + s3 sync + CloudFront invalidation).
+
+## Pet Vet: shared worker pool + Pet Hotel (2026-07-04, session "hotel")
+
+### Plan
+- [x] Worker POST system: one pool staffs grooming (pri 0) > hotel (pri 1) > shop (pri 2); stable keys, 0.35s fill throttle, preemption only steals from strictly lower priority
+- [x] Shop needs >=1 worker to ring up sales, supports 3 (spend x1/x1.25/x1.5); browsers walk out unpaid when unstaffed; cashier sprite only when staffed
+- [x] Pet Hotel room: 6x5, $1100, Rooms tab. 3 dog + 3 cat beds along the back wall, reception desk, ficus plants, warm cream/tan walls + parquet + rug, PET HOTEL sign/portraits/paw plaques
+- [x] Boarding: 15% of served clients (guarded roll) drop pet off; stay 60-240s, fee $60+round5(stay) = $120-300 fixed at check-in; pickup owner spawns on expiry (idempotent), pet trots to them, fee paid, both leave
+- [x] Requires 3 workers on post for check-ins; boarded pets still cared for below 3
+- [x] Wings dirty independently (grime only while occupied); dirty wing blocks that species; cleaners scrub via dirtyRooms()
+- [x] Park interplay: boarded dogs visit the dog park, cats the cat rooms, reusing updateParkDog verbatim via a host shim (incl. poop/litter-box messes); walk out and back via examRoute
+- [x] Save/load: hotels + pets {kind,bed,stayT,fee} + wing dirty round-trip (v:1 unchanged); expired stay on load re-triggers pickup
+- [x] __t: canHotel/placeHotel/hotelList/hotelInfo/hotelCheckIn/shopInfo/workerPostList/setWantHotel/setDirty('hotelDog'/'hotelCat')
+
+### Verification (headless browse, file://)
+- 2 workers -> not taking; 3 assigned+present -> taking. Priority: 3 workers all pick hotel over shop; 4th/5th spill to shop; placing a hotel steals all 3 shop workers (preemption).
+- Boarding: 2 pets x $150 -> exactly +$300, frq boosted twice, pets collected by walk-in owners.
+- Trips: dog reached dog park and returned to bed; cat reached cat room and returned; park messes appear.
+- Wing dirt: wings grime independently while occupied; setDirty('hotelDog') -> scrub job at (gx+1,gy+1), check-ins blocked for dogs only; cleaner scrubs clean.
+- Shop: unstaffed 120s of traffic -> $0; staffed x1.5 -> +$2585.
+- Save/load: pets + wing dirt + workers restored; expired-stay pet collected after load.
+- RNG parity: Math.random draw counts current vs HEAD baseline overlap fully within RAF noise (179-192 vs 182-187 over 3 runs each); all new draws behind hotels.length/occupancy guards.
+- node --check clean, zero console errors. Screenshots confirm hotel look + pets on beds + workers at posts.
+- NOTE pre-existing (also on HEAD baseline): __t placeDesk+hireReceptionist alone doesn't serve queues in headless tests; not a regression.
+
+### Concurrency
+Other instance actively edited main.js mid-session (three edit-conflict retries; waited for 60s-stable window). All hotel/worker code re-verified on the merged file.
+
+### Not done (didn't deploy or commit)
+Left to Dan: commit + aws s3 sync + CloudFront invalidation (EDR208IJW4SS7).
+
+## Surgery room (Jul 4, separate instance)
+
+Plan: ~/.claude/plans/create-a-plan-to-toasty-raven.md (approved). Parameters confirmed with Dan:
+35% of X-rayed pets need surgery; $1500 build / $400 payout / 18×procTime (90s base, 3× X-ray);
+requires 2 vets + 1 worker simultaneously on the three staff circles (player fills any one slot).
+
+- [x] 4×5 surgeries room type: surgeryTiles/surgeryKeyTiles (table + monitor + trolley solid,
+      2 vet flanks + nurse circle + visitor spot), ROOM_TYPES.surgery descriptor
+- [x] roomKey(type, rm) generalization — claimRoomGeneric/toRoomGeneric/dirtyRooms now honor a
+      descriptor `key` fn instead of hardcoding examKeyTiles (exam/xray hit the default, unchanged)
+- [x] X-ray onDone rolls 0.35 → needsSurgery → claimSurgery / waitSurgery loiter
+- [x] Multi-staff: roomVetSlots (2 for surgery) in roomClaimed, vetCircle assigns flank slots,
+      surgeryStaffed = both flanks + nurse tile manned; worker via 'surg:i' post at pri 0
+- [x] Integration: inWalledRoom, collectWalls + hangBackWall decor, roomAt/removeRoom/tryPlace/
+      cancelPlacing/roomWallEdge/dirtyRooms/drawRoomDirt, FURN row, save/load/newGame/resetTransient
+- [x] Visuals: drawSurgTable (lamp lights mid-op) / drawSurgMonitor / drawSurgTrolley, 3 lit circles,
+      ghost + drawGhost dispatch, pink inSurgery progress bar, ⚕️ emoji
+- [x] __t: canSurgery/placeSurgery/surgeries()/surgSend/setDirty('surgery')
+
+### Bug found + fixed (pre-existing, all room types)
+roomDoorFor could pick a tile INSIDE the room's own footprint as the door — on save/load
+(footprints are persisted in `corridor` and restored before rooms re-place) and when carving a room
+inside a blank room — leaving the room fully walled/unenterable after reload. Fix: door candidates
+now skip the room's own tiles. Verified door identical before/after save/load.
+
+### Verified (headless __t, file:// tab)
+Happy path: claim → walk in → 2 vets + worker converge → 90s at rate 1 only while staffed → +$400,
+uses++. Understaffed (no worker): timer frozen, $0, pet bails at 60s, room + staff release cleanly.
+Full RNG chain (Math.random stubbed 0.1 only during inExam/inXray): exam→X-ray→⚕️→surgery, +$710 total.
+Dirt: scrub job at nurse circle, goal 20s. Save/load round-trips uses/dirty/door. node --check clean.
+Note: the game ALSO advances via RAF in the live tab — assertions must run inside one js call.
+
+### Not done (didn't deploy or commit)
+Same as above — Dan commits + deploys.
