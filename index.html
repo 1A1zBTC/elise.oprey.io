@@ -648,13 +648,15 @@
 
         if (!hasGame) return;   // blank pane — nothing to do
 
-        // The games are standalone pages with their own "‹ Games" topbar. In this pane
-        // it's redundant (the sidebar is the nav) and its back link would load the
-        // homepage inside the pane — so hide it. Same-origin only.
+        // The games are standalone pages with their own "‹ Games" back link. In this
+        // pane it's redundant (the sidebar is the nav) and it would load the homepage
+        // inside the pane — so hide JUST the link, not the whole topbar: some games
+        // keep real controls up there (Pet Vet's "Saves" button). visibility (not
+        // display) keeps the flex layout so centered titles don't shift. Same-origin only.
         try {
           var doc = stage.contentDocument;
-          var t = doc && doc.querySelector('.topbar');
-          if (t) t.style.display = 'none';
+          var t = doc && doc.querySelector('.topbar .back');
+          if (t) t.style.visibility = 'hidden';
         } catch (e) { /* cross-origin — leave the game's own topbar visible */ }
 
         // Move keyboard focus into the game so its key handlers (Space, Right Ctrl, etc.)
