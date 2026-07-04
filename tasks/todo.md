@@ -193,3 +193,30 @@ Note: the game ALSO advances via RAF in the live tab — assertions must run ins
 
 ### Not done (didn't deploy or commit)
 Same as above — Dan commits + deploys.
+
+## Pet Vet: fix — cleaners idle while rooms stay dirty (2026-07-04, session "hotel")
+
+### Root cause
+Building a room (or furniture) over ANOTHER room's door tile sealed that room: canPlaceRoom
+only validated the new room's own footprint + door, so a later room could pave over an
+earlier room's doorway. Sealed rooms are unenterable (patients silently skip them), stay
+dirty forever, and every cleaner idle-loops retrying the unreachable scrub job.
+Reproduced headlessly: 6 dirty exam rooms + 6 cleaners -> 2 rooms unreachable from every
+cleaner (route matrix all-false), never cleaned.
+
+### Fix
+- isAnyRoomDoor(x,y): placement guard — canPlaceRoom AND furniture canPlace now reject any
+  tile that is an existing room's door.
+- repairRoomDoors(): re-derives a room's door when its doorway is no longer isOpenAdj;
+  runs after every placeRoom (which also covers save-load, since applySave places through
+  placeRoom). Restrooms skipped (door fixed by restroomLayout rot).
+
+### Verification (headless)
+- Same greedy build that previously sealed 2 rooms: guard prevents it; all 6 dirty rooms
+  now cleaned. Legacy sealed save: repairable room's door re-derived on load and cleaned;
+  a room with NO adjacent walkable tile stays sealed by construction (player can pick it
+  up to relocate). Hotel/shop/worker regression re-run: all green.
+
+### Not committed
+Other instance is mid-feature on the same file (smoke test running); left for Dan or the
+next commit sweep.
