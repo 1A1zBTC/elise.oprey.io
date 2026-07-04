@@ -4542,7 +4542,12 @@
       var dx = tx - v.x, dy = ty - v.y, dist = Math.hypot(dx, dy);
       if (dist < (eps || 0.05)) return true;
       var ux = dx / dist, uy = dy / dist;
-      moveActor(v, v.x + ux * v.speed * dt, v.y + uy * v.speed * dt,
+      // Clamp the step to the remaining distance: a fast actor (e.g. a cleaner
+      // at high Cleaning skill, speed = 2.3×val) otherwise overshoots the
+      // waypoint every frame and ping-pongs around it forever, since one step
+      // can be far larger than the eps arrival radius.
+      var step = Math.min(v.speed * dt, dist);
+      moveActor(v, v.x + ux * step, v.y + uy * step,
                 blocked || function (x, y) { return tileBlocked(x, y) || visitorOn(v, x, y); });
       v.dir = chooseDir(ux, uy); v.walkPhase += dt * 9; v.moving = true;
       return false;
