@@ -323,39 +323,52 @@
   function vg(g,x,y,w,h,c0,c1){ const gd=g.createLinearGradient(x,y,x,y+h); gd.addColorStop(0,c0); gd.addColorStop(1,c1); g.fillStyle=gd; g.fillRect(x,y,w,h); }
   function rrf(g,x,y,w,h,r){ if(g.roundRect){ g.beginPath(); g.roundRect(x,y,w,h,r); g.fill(); } else g.fillRect(x,y,w,h); }
   function bshadow(g,w,h,rw){ g.fillStyle='rgba(0,0,0,0.24)'; g.beginPath(); g.ellipse(w/2,h-5,(rw||w*0.44),8,0,0,7); g.fill(); }
-  // unique, shaded 3D-ish furniture sprites. sh/sw = billboard size in tiles.
-  const FURN = {
-    couch:{ sh:0.36, sw:1.0, img:spriteCanvas(180,128,(g,w,h)=>{ bshadow(g,w,h); const c=pick(['#b5544b','#3f7e8c','#7a6cae','#4f8a5c','#c98a3a']);
-      vg(g,16,28,w-32,46,jitC(c,1.18),jitC(c,0.96)); rrf(g,16,28,w-32,48,14);
-      vg(g,8,58,w-16,50,jitC(c,1.06),jitC(c,0.72)); rrf(g,8,58,w-16,52,16);
-      for(let i=0;i<3;i++){ const cw=(w-44)/3; vg(g,22+i*cw,62,cw-6,38,jitC(c,1.24),jitC(c,0.98)); rrf(g,22+i*cw,62,cw-6,38,9); }
-      g.fillStyle=jitC(c,0.8); rrf(g,2,50,24,58,12); rrf(g,w-26,50,24,58,12);
-      g.fillStyle='#2a1e12'; g.fillRect(20,h-16,12,12); g.fillRect(w-32,h-16,12,12); }) },
-    armchair:{ sh:0.36, sw:0.5, img:spriteCanvas(104,128,(g,w,h)=>{ bshadow(g,w,h,w*0.42); const c=pick(['#c2554d','#5a6fb0','#3f8e6a','#b08a3a']);
-      vg(g,18,18,w-36,58,jitC(c,1.18),jitC(c,0.9)); rrf(g,18,18,w-36,60,16);
-      vg(g,12,60,w-24,46,jitC(c,1.08),jitC(c,0.74)); rrf(g,12,60,w-24,48,14);
-      g.fillStyle=jitC(c,0.8); rrf(g,4,40,18,64,10); rrf(g,w-22,40,18,64,10);
-      g.fillStyle='#2a1e12'; g.fillRect(18,h-14,10,10); g.fillRect(w-28,h-14,10,10); }) },
-    tv:{ sh:0.4, sw:0.72, img:spriteCanvas(130,120,(g,w,h)=>{ bshadow(g,w,h,w*0.4); vg(g,w/2-40,h-34,80,30,'#8a6a3e','#54401f'); g.fillStyle='#3a2c16'; g.fillRect(w/2-40,h-34,80,5);
-      g.fillStyle='#0b0d11'; rrf(g,10,6,w-20,h-46,7); const sg=g.createLinearGradient(16,10,w-16,h-50); sg.addColorStop(0,'#2b3744'); sg.addColorStop(1,'#0e141b'); g.fillStyle=sg; g.fillRect(16,12,w-32,h-58);
-      g.fillStyle='rgba(255,255,255,0.10)'; g.beginPath(); g.moveTo(20,14); g.lineTo(54,14); g.lineTo(24,h-50); g.lineTo(20,h-50); g.closePath(); g.fill(); }) },
-    bookshelf:{ sh:0.66, sw:0.56, img:spriteCanvas(120,210,(g,w,h)=>{ bshadow(g,w,h,w*0.42); vg(g,6,4,w-12,h-12,'#7a5630','#4e351c');
-      const rows=5, rh=(h-22)/rows; for(let r=0;r<rows;r++){ const sy=10+r*rh; g.fillStyle='#2e1f10'; g.fillRect(10,sy+rh-6,w-20,6);
-        let bx=14; while(bx<w-16){ const bw=6+Math.random()*10, bh=rh*(0.5+Math.random()*0.36); g.fillStyle=jitC(pick(['#c23b54','#2f7fb0','#3c8e4f','#caa14a','#7a4bb0','#e0712e','#d8d2c4']),0.85+Math.random()*0.4); g.fillRect(bx,sy+rh-6-bh,bw,bh); bx+=bw+2; } } }) },
-    cabinet:{ sh:0.5, sw:0.62, img:spriteCanvas(130,150,(g,w,h)=>{ bshadow(g,w,h,w*0.42); vg(g,8,6,w-16,h-14,'#9a6a3c','#5e3c1f');
-      g.strokeStyle='rgba(0,0,0,0.3)'; g.lineWidth=2; for(let r=0;r<3;r++){ const y=14+r*((h-26)/3); g.strokeRect(16,y,w-32,(h-26)/3-6); g.fillStyle='#d8c089'; g.beginPath(); g.arc(w/2,y+((h-26)/3-6)/2,4,0,7); g.fill(); } }) },
-    table:{ sh:0.26, sw:0.7, img:spriteCanvas(140,90,(g,w,h)=>{ bshadow(g,w,h,w*0.42); vg(g,10,18,w-20,16,'#a9763f','#7a4f28'); rrf(g,10,18,w-20,16,5);
-      g.fillStyle='#5e3c1f'; g.fillRect(18,34,9,h-40); g.fillRect(w-27,34,9,h-40);
-      vg(g,w/2-9,2,18,18,'#86c5d8','#3f8eb0'); g.beginPath(); g.ellipse(w/2,4,9,4,0,0,7); g.fill(); }) },
-    plant:{ sh:0.46, sw:0.5, img:spriteCanvas(96,140,(g,w,h)=>{ bshadow(g,w,h,28); vg(g,w/2-17,h-32,34,28,'#c98a55','#7a4f2a'); rrf(g,w/2-17,h-32,34,28,4);
-      for(let k=0;k<13;k++){ const a=-1.57+rnd(-1.25,1.25); g.save(); g.translate(w/2,h-30); g.rotate(a); g.fillStyle=jitC(pick(['#2f8f4c','#3faf5c','#57c06a','#247a40','#6bbf55']),rnd(0.9,1.12)); g.beginPath(); g.ellipse(0,-34,8,34,0,0,7); g.fill(); g.restore(); } }) },
-    lamp:{ sh:0.6, sw:0.4, img:spriteCanvas(80,180,(g,w,h)=>{ bshadow(g,w,h,18); g.fillStyle='#3a3a42'; g.beginPath(); g.ellipse(w/2,h-6,16,5,0,0,7); g.fill();
-      g.strokeStyle='#4a4a52'; g.lineWidth=5; g.beginPath(); g.moveTo(w/2,h-8); g.lineTo(w/2,52); g.stroke();
-      const gl=g.createRadialGradient(w/2,40,4,w/2,46,70); gl.addColorStop(0,'rgba(255,238,180,0.55)'); gl.addColorStop(1,'rgba(255,238,180,0)'); g.fillStyle=gl; g.beginPath(); g.ellipse(w/2,46,46,60,0,0,7); g.fill();
-      vg(g,w/2-28,8,56,46,'#f6e6ab','#d6b667'); g.beginPath(); g.moveTo(w/2-28,52); g.lineTo(w/2+28,52); g.lineTo(w/2+16,8); g.lineTo(w/2-16,8); g.closePath(); g.fill(); }) },
-    crate:{ sh:0.32, sw:0.42, img:spriteCanvas(90,90,(g,w,h)=>{ bshadow(g,w,h,w*0.4); vg(g,10,8,w-20,h-18,'#b9893f','#7c5526'); g.strokeStyle='#5e3c1f'; g.lineWidth=4; g.strokeRect(10,8,w-20,h-18);
-      g.beginPath(); g.moveTo(10,8); g.lineTo(w-10,h-10); g.moveTo(w-10,8); g.lineTo(10,h-10); g.stroke(); g.strokeRect(10,8,w-20,(h-18)/2); }) }
-  };
+  // Volumetric furniture billboards: each placed instance is drawn fresh (so
+  // colours vary), anchored on the floor at its tile. A faux top-face + rounded
+  // forms + contact shadow read as real 3D objects, not floor-to-ceiling boxes.
+  // sh/sw = billboard size in tiles.  `draw(g,w,h)` paints into a w×h canvas.
+  function topFace(g,x,y,w,d,col){ // little parallelogram "lid" for a box, gives volume
+    g.fillStyle=col; g.beginPath(); g.moveTo(x,y); g.lineTo(x+w,y); g.lineTo(x+w-d,y-d*0.6); g.lineTo(x-d,y-d*0.6); g.closePath(); g.fill();
+  }
+  // Furniture is REAL 3D geometry that lives in the room like the walls: short
+  // axis-aligned boxes (a few shaded prisms each, so it reads as furniture not a
+  // cube). You see different sides as you walk; they never turn to face you.
+  // Footprint coords are tile-local (−0.5..0.5); z is height in wall units
+  // (0=floor, 1=ceiling). Colours are hex so jitC() can shade each face.
+  const WD='#6e4a26', WD2='#7a5630', WDL='#9a6e40', MTL='#26282f';
+  function furnLegs(x,y,h,col){ const s=0.055; return [
+    {x0:-x,y0:-y,x1:-x+s,y1:-y+s,z0:0,z1:h,col}, {x0:x-s,y0:-y,x1:x,y1:-y+s,z0:0,z1:h,col},
+    {x0:-x,y0:y-s,x1:-x+s,y1:y,z0:0,z1:h,col}, {x0:x-s,y0:y-s,x1:x,y1:y,z0:0,z1:h,col} ]; }
+  function rotPt(x,y,r){ return r===0?[x,y]:r===1?[-y,x]:r===2?[-x,-y]:[y,-x]; }
+  function rotBox(b,r){ const a=rotPt(b.x0,b.y0,r), c=rotPt(b.x1,b.y1,r);
+    return {x0:Math.min(a[0],c[0]),x1:Math.max(a[0],c[0]),y0:Math.min(a[1],c[1]),y1:Math.max(a[1],c[1]),z0:b.z0,z1:b.z1,col:b.col}; }
+  const FURN = [
+    ()=> furnLegs(0.30,0.26,0.30,WD2).concat([{x0:-0.34,y0:-0.30,x1:0.34,y1:0.30,z0:0.30,z1:0.355,col:WD}]),                 // table
+    ()=>{ const u=pick(['#b5544b','#3f7e8c','#7a6cae','#4f8a5c','#9a6f4a']); return [                                   // armchair
+      {x0:-0.22,y0:-0.20,x1:0.22,y1:0.18,z0:0,z1:0.22,col:u}, {x0:-0.22,y0:0.18,x1:0.22,y1:0.28,z0:0,z1:0.46,col:u},
+      {x0:-0.30,y0:-0.20,x1:-0.20,y1:0.28,z0:0,z1:0.30,col:u}, {x0:0.20,y0:-0.20,x1:0.30,y1:0.28,z0:0,z1:0.30,col:u} ]; },
+    ()=>{ const u=pick(['#b5544b','#3f7e8c','#7a6cae','#4f8a5c','#c98a3a']); return [                                   // couch
+      {x0:-0.42,y0:-0.18,x1:0.42,y1:0.16,z0:0,z1:0.22,col:u}, {x0:-0.42,y0:0.16,x1:0.42,y1:0.26,z0:0,z1:0.42,col:u},
+      {x0:-0.46,y0:-0.18,x1:-0.36,y1:0.26,z0:0,z1:0.30,col:u}, {x0:0.36,y0:-0.18,x1:0.46,y1:0.26,z0:0,z1:0.30,col:u} ]; },
+    ()=> [                                                                                                              // bookshelf
+      {x0:-0.30,y0:0.04,x1:0.30,y1:0.20,z0:0,z1:0.64,col:WD},
+      {x0:-0.27,y0:-0.02,x1:0.27,y1:0.04,z0:0.04,z1:0.60,col:pick(['#7a4bb0','#2f7fb0','#3c8e4f','#c23b54'])},
+      {x0:-0.32,y0:0.02,x1:0.32,y1:0.22,z0:0.64,z1:0.67,col:WDL} ],
+    ()=> [ {x0:-0.30,y0:-0.15,x1:0.30,y1:0.15,z0:0,z1:0.46,col:'#9a6a3c'},                                              // cabinet
+           {x0:-0.33,y0:-0.18,x1:0.33,y1:0.18,z0:0.46,z1:0.50,col:WDL} ],
+    ()=> [ {x0:-0.24,y0:-0.24,x1:0.24,y1:0.24,z0:0,z1:0.34,col:'#a9763f'} ],                                            // crate
+    ()=> [                                                                                                              // bed
+      {x0:-0.40,y0:-0.30,x1:0.40,y1:0.30,z0:0,z1:0.14,col:'#6b5840'},
+      {x0:-0.38,y0:-0.26,x1:0.38,y1:0.30,z0:0.14,z1:0.24,col:'#d8d2c4'},
+      {x0:-0.36,y0:-0.24,x1:-0.08,y1:0.24,z0:0.24,z1:0.30,col:pick(['#d98a8a','#86c5d8','#caa14a'])},
+      {x0:-0.42,y0:-0.34,x1:0.42,y1:-0.28,z0:0,z1:0.42,col:WD} ],
+    ()=> furnLegs(0.32,0.20,0.30,WD2).concat([                                                                             // desk
+      {x0:-0.36,y0:-0.22,x1:0.36,y1:0.22,z0:0.30,z1:0.345,col:WD}, {x0:0.16,y0:-0.22,x1:0.36,y1:0.22,z0:0,z1:0.30,col:WD2} ]),
+    ()=> [ {x0:-0.34,y0:-0.14,x1:0.34,y1:0.14,z0:0,z1:0.18,col:WD2},                                                    // tv unit
+           {x0:-0.30,y0:0.06,x1:0.30,y1:0.10,z0:0.18,z1:0.50,col:MTL} ],
+    ()=>{ const u=pick(['#c2554d','#3f8e6a','#5a6fb0','#caa14a']); return furnLegs(0.14,0.14,0.24,WD2).concat([             // stool
+      {x0:-0.17,y0:-0.17,x1:0.17,y1:0.17,z0:0.24,z1:0.30,col:u} ]); }
+  ];
 
   // ---------- person silhouettes (one mask per pose) ----------
   const BW=76, BH=104;
@@ -398,18 +411,25 @@
   let map, mapW, mapH, theme, curTex;
   function mapAt(x,y){ const ix=Math.floor(x), iy=Math.floor(y); if(ix<0||iy<0||ix>=mapW||iy>=mapH) return 1; return map[iy][ix]; }
   let furniture=[];
+  // solid if the point (with a small body radius) lands inside a piece's real
+  // footprint — tight to the object, not the whole tile, so you can walk right
+  // up to and around it but never through it.
+  function furnSolid(x,y){ const r=0.16; for(const f of furniture){ if(x>f.fx0-r && x<f.fx1+r && y>f.fy0-r && y<f.fy1+r) return true; } return false; }
   function buildMap(){
     theme = pick(['lounge','gallery']); curTex=THEMES[theme];
     mapW=15; mapH=11; map=[];
     for(let y=0;y<mapH;y++){ const row=[]; for(let x=0;x<mapW;x++){ row.push((x===0||y===0||x===mapW-1||y===mapH-1)?1:0); } map.push(row); }
-    furniture=[];   // (furniture is now real blocks in the map, not billboards)
-    // interior furniture BLOCKS — solid objects you walk around & blend into (value 30+idx). Spaced out so paths stay open.
+    furniture=[];   // 3D props that sit on the floor — decorative, you walk freely through them
+    // interior furniture, spaced out so the room doesn't get crowded.
     let inner=[]; for(let y=2;y<mapH-2;y++)for(let x=2;x<mapW-2;x++) inner.push([x,y]);
-    const nf=theme==='gallery'?5:8;
+    const nf=theme==='gallery'?6:9;
     for(let i=0;i<nf && inner.length;i++){ const k=rint(0,inner.length-1); const c=inner.splice(k,1)[0];
       if(Math.hypot(c[0]+0.5-1.5,c[1]+0.5-1.5)<2.4) continue;
-      map[c[1]][c[0]]=30+rint(0,FURN_TEX.length-1);
-      // keep neighbours clear so blocks don't seal corridors
+      const def=FURN[rint(0,FURN.length-1)], rot=rint(0,3);
+      const boxes=def().map(b=>rotBox(b,rot)), fx=c[0]+0.5, fy=c[1]+0.5;
+      let bx0=9,by0=9,bx1=-9,by1=-9; for(const b of boxes){ if(b.x0<bx0)bx0=b.x0; if(b.y0<by0)by0=b.y0; if(b.x1>bx1)bx1=b.x1; if(b.y1>by1)by1=b.y1; }
+      furniture.push({ x:fx, y:fy, boxes, fx0:fx+bx0, fy0:fy+by0, fx1:fx+bx1, fy1:fy+by1 });
+      // keep neighbours clear so props don't seal corridors
       inner=inner.filter(q=>Math.abs(q[0]-c[0])>1||Math.abs(q[1]-c[1])>1);
     }
     // assign paintings to visible border-wall cells (value 10+art)
@@ -470,18 +490,23 @@
         buf[y*RW+x]=(0xff000000 | (((wd[ti+2]*shade)|0)<<16) | (((wd[ti+1]*shade)|0)<<8) | ((wd[ti]*shade)|0))>>>0; tPos+=tStep; }
     }
     sceneCtx.putImageData(sceneImg,0,0);
+    // Draw furniture into the scene buffer too, so it becomes part of the
+    // player-free world that the eyedropper (sampleWall) and the camouflage
+    // scorer (computeCamo) read — you can colour-match & hide against furniture,
+    // exactly like the walls. (The crisp on-screen pass below overdraws this.)
+    { const fs=furniture.map(f=>({f,d:camDepth(f.x,f.y)})).sort((a,b)=>b.d-a.d); for(const o of fs) drawFurn(sceneCtx,o.f,RW,RH); }
     ctx.drawImage(sceneCanvas,0,0,RW,RH,0,0,W,H);
 
-    // sprites: furniture + players
-    const sprites=[];
-    for(const f of furniture) sprites.push({img:f.img,x:f.x,y:f.y,sh:f.sh,sw:f.sw,bright:1});
+    // world objects: real 3D furniture boxes + player billboards, drawn far→near
+    const objs=[];
+    for(const f of furniture) objs.push({fu:f, tY:camDepth(f.x,f.y)});
     if(phase==='seek'){ for(let i=0;i<nPlayers;i++){ const fore=foreOf(i);
       // hide better: face-on (at the hide angle) the wall texture bleeds through + colours match → nearly invisible; off-angle = opaque + mismatched → sticks out
       const a=pFound[i]?1:clamp(0.96-fore*0.5,0.46,0.96);
-      sprites.push({img:pSprite[i], x:pX[i], y:pY[i], sh:POSE_SH[pPose[i]], sw:POSE_SH[pPose[i]]*0.72*fore, bright:a, pid:i}); } }
-    for(const s of sprites){ const sx=s.x-cx2, sy=s.y-cy2; const invDet=1/(planeX*dirY-dirX*planeY); s.tY=invDet*(-planeY*sx+planeX*sy); }
-    sprites.sort((a,b)=>b.tY-a.tY);
-    for(const s of sprites) drawSprite(s);
+      const s={img:pSprite[i], x:pX[i], y:pY[i], sh:POSE_SH[pPose[i]], sw:POSE_SH[pPose[i]]*0.72*fore, bright:a, pid:i};
+      s.tY=camDepth(s.x,s.y); objs.push({sp:s, tY:s.tY}); } }
+    objs.sort((a,b)=>b.tY-a.tY);
+    for(const o of objs){ if(o.fu) drawFurn(ctx,o.fu,W,H); else drawSprite(o.sp); }
 
     // third-person: draw the current player centered, in front of camera (walk-animate when moving)
     if(phase==='hide'){
@@ -514,6 +539,34 @@
       if((!vis||x===endX)&&runStart>=0){ const runEnd=vis?x:x-1; const srcX=((runStart-startX)/spW)*img.width; const srcW=((runEnd-runStart+1)/spW)*img.width;
         ctx.drawImage(img, srcX,0,srcW,img.height, runStart,topY,runEnd-runStart+1,spH); runStart=-1; } }
     ctx.globalAlpha=1;
+  }
+  // ----- 3D furniture: project a world point at height z (0=floor,1=ceil) to a
+  // target of width Wd × height Hd (the main canvas OR the low-res scene buffer) -----
+  function camDepth(wx,wy){ const sx=wx-cx2, sy=wy-cy2; const invDet=1/(planeX*dirY-dirX*planeY); return invDet*(-planeY*sx+planeX*sy); }
+  function projP(wx,wy,z,Wd,Hd){ const sx=wx-cx2, sy=wy-cy2; const invDet=1/(planeX*dirY-dirX*planeY);
+    const tX=invDet*(dirY*sx-dirX*sy), tY=invDet*(-planeY*sx+planeX*sy);
+    if(tY<=0.08) return null; const lineH=Hd/tY; return { x:(Wd/2)*(1+tX/tY), y:Hd/2+lineH/2 - z*lineH }; }
+  function drawFurn(g,f,Wd,Hd){
+    const fx=f.x, fy=f.y;
+    // soft contact shadow under the footprint
+    let nx=9,ny=9,xx=-9,xy=-9; for(const b of f.boxes){ if(b.x0<nx)nx=b.x0; if(b.y0<ny)ny=b.y0; if(b.x1>xx)xx=b.x1; if(b.y1>xy)xy=b.y1; }
+    const sc=[projP(fx+nx,fy+ny,0,Wd,Hd),projP(fx+xx,fy+ny,0,Wd,Hd),projP(fx+xx,fy+xy,0,Wd,Hd),projP(fx+nx,fy+xy,0,Wd,Hd)];
+    if(sc.every(Boolean)){ g.fillStyle='rgba(0,0,0,0.22)'; g.beginPath(); g.moveTo(sc[0].x,sc[0].y); for(let i=1;i<4;i++)g.lineTo(sc[i].x,sc[i].y); g.closePath(); g.fill(); }
+    // sub-boxes far→near so nearer parts overdraw
+    const bs=f.boxes.map(b=>({b, d:camDepth(fx+(b.x0+b.x1)/2, fy+(b.y0+b.y1)/2)})).sort((a,b)=>b.d-a.d);
+    for(const o of bs) drawBox(g,fx,fy,o.b,Wd,Hd);
+  }
+  function fillFace(g,pts,fill,edge){ for(const p of pts) if(!p) return; g.beginPath(); g.moveTo(pts[0].x,pts[0].y); for(let i=1;i<pts.length;i++)g.lineTo(pts[i].x,pts[i].y); g.closePath(); g.fillStyle=fill; g.fill(); g.strokeStyle=edge; g.lineWidth=1; g.stroke(); }
+  function drawBox(g,fx,fy,b,Wd,Hd){
+    const x0=fx+b.x0,x1=fx+b.x1,y0=fy+b.y0,y1=fy+b.y1,z0=b.z0,z1=b.z1,col=b.col;
+    const sides=[];
+    if(cx2< x0) sides.push({c:[[x0,y0,z0],[x0,y1,z0],[x0,y1,z1],[x0,y0,z1]], sh:0.66, d:camDepth(x0,(y0+y1)/2)});
+    if(cx2> x1) sides.push({c:[[x1,y1,z0],[x1,y0,z0],[x1,y0,z1],[x1,y1,z1]], sh:0.66, d:camDepth(x1,(y0+y1)/2)});
+    if(cy2< y0) sides.push({c:[[x1,y0,z0],[x0,y0,z0],[x0,y0,z1],[x1,y0,z1]], sh:0.82, d:camDepth((x0+x1)/2,y0)});
+    if(cy2> y1) sides.push({c:[[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]], sh:0.82, d:camDepth((x0+x1)/2,y1)});
+    sides.sort((a,b)=>b.d-a.d);
+    for(const s of sides) fillFace(g, s.c.map(q=>projP(q[0],q[1],q[2],Wd,Hd)), jitC(col,s.sh), jitC(col,s.sh*0.6));
+    if(z1<0.5) fillFace(g, [[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]].map(q=>projP(q[0],q[1],q[2],Wd,Hd)), jitC(col,1.05), jitC(col,0.7));   // top (only if below eye)
   }
   function drawReticle(){ ctx.save(); ctx.translate(W/2,H/2); ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=Math.max(2,W/380);
     const r=Math.max(12,W*0.02); ctx.beginPath(); ctx.arc(0,0,r,0,7); ctx.moveTo(-r*1.6,0); ctx.lineTo(-r*0.5,0); ctx.moveTo(r*0.5,0); ctx.lineTo(r*1.6,0); ctx.moveTo(0,-r*1.6); ctx.lineTo(0,-r*0.5); ctx.moveTo(0,r*0.5); ctx.lineTo(0,r*1.6); ctx.stroke(); ctx.restore(); }
@@ -693,7 +746,9 @@
   function showHint(t){ const h=document.getElementById('hintpill'); h.textContent=t; h.hidden=false; }
   function update(dt){ let mv=0,tn=0; if(moveDir.up)mv+=1; if(moveDir.down)mv-=1; if(moveDir.left)tn-=1; if(moveDir.right)tn+=1;
     if(tn) dir+=tn*TURN*dt;
-    if(mv){ const nx=px+dirX*mv*MOVE*dt, ny=py+dirY*mv*MOVE*dt; if(mapAt(nx,py)===0) px=nx; if(mapAt(px,ny)===0) py=ny; }
+    if(mv){ const nx=px+dirX*mv*MOVE*dt, ny=py+dirY*mv*MOVE*dt;
+      if(mapAt(nx,py)===0 && !furnSolid(nx,py)) px=nx;
+      if(mapAt(px,ny)===0 && !furnSolid(px,ny)) py=ny; }
     updateCamera(); }
   let last=0;
   function frame(ts){ requestAnimationFrame(frame); if(!last) last=ts; let dt=(ts-last)/1000; last=ts; if(dt>0.05)dt=0.05;

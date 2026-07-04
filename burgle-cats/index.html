@@ -63,6 +63,61 @@
     .brief .r { display: flex; align-items: center; gap: 9px; font-size: 0.82rem; color: var(--muted); }
     .brief .r b { color: var(--fg); }
     .brief .e { font-size: 1.3rem; width: 26px; text-align: center; flex-shrink: 0; }
+
+    /* ---- main menu ---- */
+    .menu .panel { position: relative; padding-bottom: 22px; }
+    .menu .logo { font-size: 3rem; line-height: 1; margin-bottom: 2px; }
+    .best-line { margin-top: 14px; color: var(--muted); font-size: 0.85rem; font-weight: 700; }
+    .best-line b { color: var(--gold); }
+    /* Play button anchored in the bottom corner of the screen */
+    .play-corner {
+      position: fixed; right: 22px; bottom: 22px; z-index: 30;
+      display: flex; align-items: center; gap: 9px;
+      font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 1.15rem; color: #fff;
+      background: var(--accent); border: none; border-radius: 999px;
+      padding: 15px 26px 15px 22px; cursor: pointer;
+      box-shadow: 0 7px 0 var(--accent-shadow), 0 10px 26px rgba(233,69,96,0.45);
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+      animation: playpop 1.6s ease-in-out infinite;
+    }
+    .play-corner .tri { font-size: 1rem; }
+    .play-corner:active { transform: translateY(5px); box-shadow: 0 2px 0 var(--accent-shadow); animation: none; }
+    @keyframes playpop { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+    .reward { color: var(--gold); font-weight: 800; font-size: 1rem; margin: 6px 0 2px; min-height: 1.1em; }
+
+    /* ---- menu / gacha buttons ---- */
+    .menu-btns { display: flex; gap: 10px; margin-top: 14px; }
+    .menu-btn { flex: 1; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.9rem; color: #fff; background: #19223e; border: 2px solid var(--border); border-radius: 14px; padding: 11px 8px; cursor: pointer; box-shadow: 0 4px 0 #0b1326; transition: transform 0.08s ease, box-shadow 0.08s ease; }
+    .menu-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #0b1326; }
+    .menu-btn.wide { width: 100%; margin-top: 10px; }
+
+    /* ---- gacha + collection ---- */
+    #gacha, #collection { z-index: 40; }
+    .panel .x { position: absolute; top: 8px; right: 12px; background: transparent; border: none; color: var(--muted); font-size: 1.3rem; font-weight: 900; cursor: pointer; line-height: 1; }
+    .gacha-panel, .coll-panel { position: relative; max-width: 400px; }
+    .gem-line { color: var(--muted); font-weight: 800; margin: 4px 0 8px; }
+    .gem-line b { color: var(--gold); font-size: 1.1rem; }
+    .reveal { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 12px; min-height: 250px; justify-content: center; }
+    .reveal canvas { width: 200px; height: 200px; }
+    .reveal.pop { animation: revealpop 0.5s ease; }
+    @keyframes revealpop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+    .reveal-name { font-weight: 900; font-size: 1.15rem; color: var(--fg); }
+    .reveal-stars { font-weight: 800; font-size: 0.85rem; letter-spacing: 1px; min-height: 1em; }
+    .start-btn:disabled { opacity: 0.45; cursor: default; box-shadow: 0 6px 0 var(--accent-shadow); }
+
+    .coll-panel { max-height: 84vh; overflow-y: auto; }
+    .coll-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+    .coll-grid .cell { position: relative; aspect-ratio: 1; background: #141d2e; border: 2px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 2px; }
+    .coll-grid .cell canvas { width: 78%; height: auto; }
+    .coll-grid .cell .cn { font-size: 0.48rem; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 96%; }
+    .coll-grid .cell .dup { position: absolute; top: 2px; right: 4px; font-size: 0.55rem; font-weight: 900; color: var(--gold); }
+    .coll-grid .cell.locked .qm { color: rgba(255,255,255,0.18); font-size: 1.5rem; font-weight: 900; }
+    .coll-grid .cell.shiny { box-shadow: inset 0 0 12px rgba(226,169,59,0.45); }
+    .coll-grid .cell.equipped { outline: 3px solid #5fd07a; outline-offset: -1px; }
+    .coll-grid .cell.equipped::after { content: '✓'; position: absolute; bottom: 1px; left: 4px; font-size: 0.6rem; font-weight: 900; color: #5fd07a; }
+    .equip-line { font-size: 0.74rem; color: var(--muted); margin: 4px 0 2px; line-height: 1.4; }
+    .equip-line b { color: var(--gold); }
   </style>
 </head>
 <body>
@@ -76,21 +131,26 @@
   <div class="stage">
     <canvas id="game" width="500" height="660"></canvas>
 
-    <!-- Briefing -->
-    <div class="overlay" id="setup">
+    <!-- Main menu -->
+    <div class="overlay menu" id="setup">
       <div class="panel">
+        <div class="logo">🐱</div>
         <h2>Burgle Cats</h2>
-        <div class="sub">Break into the manor, crack the <b>real vault</b> among the decoys, and slip back out a door — with a crew of <b>3 cats</b> and your wits.</div>
+        <div class="sub">Break into the manor, crack the <b>real vault</b> among the decoys, and slip back out a door — with a crew of <b>4 cats</b> and your wits.</div>
         <div class="brief">
           <div class="r"><span class="e">🚪</span><span><b>Pick an entry door</b> on any wall to send a cat in</span></div>
-          <div class="r"><span class="e">🐾</span><span>Tap a neighbouring room to <b>tip-paw</b> through</span></div>
+          <div class="r"><span class="e">🐾</span><span>Tap a doorway (or use <b>arrow keys</b>) to creep through</span></div>
           <div class="r"><span class="e">💥</span><span><b>Traps</b> drain your <b>health</b> — empty &amp; you're done</span></div>
           <div class="r"><span class="e">🐕</span><span><b>Guard dogs roam</b> — get caught &amp; a cat is captured</span></div>
-          <div class="r"><span class="e">📜</span><span><b>Ledgers</b> expose the fake vaults</span></div>
           <div class="r"><span class="e">💎</span><span>Loot the real vault, then reach any <b>door</b> to escape</span></div>
         </div>
-        <button class="start-btn" id="start-btn">Start the Heist</button>
+        <div class="best-line">Best heist: <b id="menu-best">0</b> &nbsp;·&nbsp; <b id="menu-gems">0</b> 💎</div>
+        <div class="menu-btns">
+          <button class="menu-btn" id="open-collection">🐾 Collection</button>
+          <button class="menu-btn" id="open-gacha">🎁 Cat Gacha</button>
+        </div>
       </div>
+      <button class="play-corner" id="start-btn"><span class="tri">▶</span><span class="lbl">Play</span></button>
     </div>
 
     <!-- Round end -->
@@ -100,7 +160,36 @@
         <div class="sub" id="over-sub"></div>
         <div class="scoreline"><span class="lbl">Heist</span><span class="big" id="over-score">1</span></div>
         <div class="scoreline"><span class="lbl">Best</span><span class="big" id="over-best">0</span></div>
+        <div class="reward" id="over-reward"></div>
         <button class="start-btn" id="again-btn">Next Heist</button>
+        <button class="menu-btn wide" id="over-gacha">🎁 Cat Gacha (<span id="over-gems">0</span> 💎)</button>
+      </div>
+    </div>
+
+    <!-- Cat Gacha -->
+    <div class="overlay" id="gacha" hidden>
+      <div class="panel gacha-panel">
+        <button class="x" id="gacha-close">✕</button>
+        <h2>Cat Gacha</h2>
+        <div class="sub">Adopt new cats! Each pull costs <b>1 💎</b> — win a heist to earn one.</div>
+        <div class="gem-line">You have <b id="gacha-gems">0</b> 💎</div>
+        <div class="reveal" id="gacha-reveal">
+          <canvas id="gacha-canvas" width="240" height="240"></canvas>
+          <div class="reveal-name" id="reveal-name">Tap Pull to adopt a cat!</div>
+          <div class="reveal-stars" id="reveal-stars"></div>
+        </div>
+        <button class="start-btn" id="pull-btn">Pull 🎁 &nbsp;(1 💎)</button>
+      </div>
+    </div>
+
+    <!-- Cat Collection -->
+    <div class="overlay" id="collection" hidden>
+      <div class="panel coll-panel">
+        <button class="x" id="coll-close">✕</button>
+        <h2>Cat Collection</h2>
+        <div class="sub"><b id="coll-count">0</b> / 300 cats adopted</div>
+        <div class="equip-line" id="coll-equip">Tap a cat to equip it — rarer cats have better stats &amp; abilities.</div>
+        <div class="coll-grid" id="coll-grid"></div>
       </div>
     </div>
   </div>
@@ -117,17 +206,17 @@
   </div>
   <div class="meta">
     <div class="chip">Heist <span class="v" id="m-level">1</span></div>
-    <div class="chip">Ledgers <b id="m-notes">0/2</b></div>
     <div class="chip">Loot <span class="v" id="m-loot">0</span></div>
   </div>
 
-  <p class="hint">Pick an entry <b>door</b> on the wall 🚪 &nbsp;·&nbsp; dodge <b>traps</b> (they drain health) &nbsp;·&nbsp; dogs <b>roam</b> — get caught &amp; a cat is captured &nbsp;·&nbsp; grab both <b>ledgers</b> to spot the real vault</p>
+  <p class="hint">Pick an entry <b>door</b> on the wall 🚪 &nbsp;·&nbsp; the view <b>zooms in</b> — use the minimap to navigate &nbsp;·&nbsp; dodge <b>traps</b> (they drain health) &nbsp;·&nbsp; dogs <b>roam</b> — get caught &amp; a cat is captured &nbsp;·&nbsp; vaults look <b>identical</b>, so open carefully!</p>
 
   <script src="../shared/game.js"></script>
   <script>
   (function () {
     'use strict';
-    var clamp = EL.clamp, rint = EL.rint, pick = EL.pick, shuffle = EL.shuffle;
+    var clamp = EL.clamp, rint = EL.rint, pick = EL.pick, shuffle = EL.shuffle, lerp = EL.lerp;
+    var VIEW_ACROSS = 3;     // rooms visible across the zoomed play view
 
     var canvas = document.getElementById('game');
     var ctx = canvas.getContext('2d');
@@ -135,21 +224,20 @@
 
     var best = EL.best('burgle-cats.best');
 
-    var CREW = 3;            // cats you bring on the heist (captures you can survive)
+    var CREW = 4;            // cats you bring on the heist (captures you can survive)
     var MAX_HP = 100;        // shared crew health, drained by traps
 
-    // ---- per-level configuration ----
+    // ---- per-level configuration (tuned slightly forgiving, like the real game) ----
     function config(level) {
-      var rows = clamp(5 + Math.floor((level - 1) / 2), 5, 7);
+      var cols = 9, rows = 5;          // fixed 9 x 5 = 45 rooms (incl. exits)
       return {
-        cols: 5,
+        cols: cols,
         rows: rows,
-        doges: clamp(2 + Math.floor(level / 2), 2, 6),   // dogs that roam the manor
-        traps: clamp(2 + level, 2, rows * 5 - 12),
-        notes: 2,                                          // ledgers -> flag decoys
-        trapDmg: clamp(20 + level * 3, 20, 45),            // health lost per trap
-        wakeR: level >= 4 ? 2 : 1,                         // trap noise radius (Chebyshev)
-        chase: 4 + level,                                  // turns a roused dog hunts you
+        dogsPerRow: 2,                                        // 2 dogs in every row
+        traps: clamp(4 + level, 4, 20),
+        trapDmg: clamp(15 + level * 2, 15, 30),               // gentler health loss
+        wakeR: level >= 5 ? 2 : 1,                            // trap noise radius (Chebyshev)
+        chase: 3 + level,                                     // shorter chases
         loot: 100 * level
       };
     }
@@ -165,11 +253,16 @@
     // ---- build a manor ----
     function newGame(level) {
       var cfg = config(level), cols = cfg.cols, rows = cfg.rows;
+      var eq = equipInfo();                       // equipped cat's stats & abilities
+      var maxHp = MAX_HP + eq.bonusHp;
       var st = {
         level: level, cfg: cfg, cols: cols, rows: rows,
         grid: [], doges: [], cat: null, entry: null,
         phase: 'entry',                 // 'entry' = pick a door; 'play' = sneak
-        captures: 0, hp: MAX_HP, looted: false, notes: 0, loot: 0,
+        captures: 0, maxHp: maxHp, hp: maxHp, dispHp: maxHp, pendingDeath: false, looted: false, loot: 0,
+        tough: eq.tough, speedy: eq.speedy, guide: eq.guide, dogTick: 0,
+        tr: null,                       // room-move / jump-down animation
+        shakeT: 0, shakeMag: 0, flash: null, pops: [], bursts: [],
         running: true, ended: false, win: false,
         msg: '', msgT: 0
       };
@@ -177,38 +270,41 @@
       var i, x, y;
       for (i = 0; i < cols * rows; i++) {
         st.grid.push({ x: i % cols, y: (i / cols) | 0, type: 'empty', seen: false,
-                       shutter: false, vault: null, note: false, trap: false, sprung: false });
+                       shutter: false, vault: null, trap: false, trapKind: null, sprung: false });
       }
 
-      // shutters: ~10 of the border rooms are doors
-      var border = st.grid.filter(function (r) { return isBorder(r.x, r.y); });
-      shuffle(border);
-      var nShut = Math.min(10, Math.max(6, (border.length * 0.5) | 0));
-      for (i = 0; i < nShut; i++) border[i].shutter = true;
+      // EVERY room on the left & right walls is an entry/exit door
+      for (i = 0; i < st.grid.length; i++) {
+        var rr0 = st.grid[i];
+        if (rr0.x === 0 || rr0.x === cols - 1) rr0.shutter = true;
+      }
 
-      // interior pool (non-border) for vaults / notes / doges / traps
+      // interior pool (non-border) for vaults / doges / traps
       var interior = st.grid.filter(function (r) { return !isBorder(r.x, r.y); });
       // small manors barely have interior — fall back to any non-shutter room
       if (interior.length < 8) interior = st.grid.filter(function (r) { return !r.shutter; });
       shuffle(interior);
       var p = 0, r;
 
-      // 3 vaults — one real, two decoys
+      // 3 vaults — one real, two decoys (you can't tell which until you open one)
       var vaultRooms = [];
-      for (i = 0; i < 3; i++) { r = interior[p++]; r.vault = { real: false, opened: false, flagged: false }; vaultRooms.push(r); }
+      for (i = 0; i < 3; i++) { r = interior[p++]; r.vault = { real: false, opened: false }; vaultRooms.push(r); }
       pick(vaultRooms).vault.real = true;
       st.vaults = vaultRooms;
 
-      // 2 ledger notes
-      for (i = 0; i < cfg.notes; i++) { r = interior[p++]; r.note = true; }
-
-      // roaming guard dogs (wander each turn; rouse into a chase on noise)
-      for (i = 0; i < cfg.doges; i++) {
-        r = interior[p++]; if (!r) break;
-        st.doges.push({ x: r.x, y: r.y, chaseT: 0 });
+      // traps: a mix of spike traps (hurt you) and alarm traps (rouse the dogs)
+      for (i = 0; i < cfg.traps && p < interior.length; i++) {
+        var tr = interior[p++]; tr.trap = true; tr.trapKind = (i % 2 === 0) ? 'spike' : 'alarm';
       }
-      // traps fill remaining interior
-      for (i = 0; i < cfg.traps && p < interior.length; i++) { interior[p++].trap = true; }
+
+      // 2 guard dogs in EVERY row (they patrol the whole manor)
+      for (y = 0; y < rows; y++) {
+        var cands = st.grid.filter(function (rm) { return rm.y === y && !rm.shutter && !rm.vault; });
+        shuffle(cands);
+        for (var dc = 0; dc < cfg.dogsPerRow && dc < cands.length; dc++) {
+          st.doges.push({ x: cands[dc].x, y: cands[dc].y, chaseT: 0 });
+        }
+      }
 
       // cat is placed once the player taps an entry door
       flash('Pick a door to break in!');
@@ -223,17 +319,27 @@
       S.cat = { x: x, y: y };
       r.seen = true; reveal(x, y);
       S.phase = 'play';
+      S.tr = { kind: 'drop', t: 0, dur: 0.45 };     // cat leaps down off the balcony
       flash(S.looted ? 'Get this loot out!' : 'Sneak in… find the real vault.');
     }
 
-    function reveal(x, y) {
-      var d = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]];
-      for (var i = 0; i < d.length; i++) {
-        var nx = x + d[i][0], ny = y + d[i][1];
-        if (inGrid(nx, ny)) room(nx, ny).seen = true;
-      }
-    }
+    // Only the room you actually stand in is lit — you must go there to see it.
+    function reveal(x, y) { if (inGrid(x, y)) room(x, y).seen = true; }
     function flash(m) { S.msg = m; S.msgT = 2.4; }
+
+    // ---- juice: screen shake / flash / floating text / burst ----
+    function fxDamage(amount) {
+      S.shakeT = 0.35; S.shakeMag = 7;
+      S.flash = { r: 233, g: 69, b: 96, a: 0.5 };
+      if (S.cat) S.pops.push({ cx: S.cat.x, cy: S.cat.y, txt: '-' + amount, color: '#ff6b7e', age: 0, life: 0.9, big: false });
+    }
+    function fxCaught(x, y) {
+      S.shakeT = 0.55; S.shakeMag = 13;
+      S.flash = { r: 255, g: 60, b: 80, a: 0.6 };
+      S.pops.push({ cx: x, cy: y, txt: 'CAUGHT!', color: '#ffd0d6', age: 0, life: 1.1, big: true });
+      S.bursts.push({ cx: x, cy: y, age: 0, life: 0.6 });
+    }
+
     function dogeAt(x, y) {
       for (var i = 0; i < S.doges.length; i++) if (S.doges[i].x === x && S.doges[i].y === y) return S.doges[i];
       return null;
@@ -247,20 +353,23 @@
       var c = S.cat;
       if (!adj(c.x, c.y, x, y)) return;          // adjacent rooms only
       var r = room(x, y);
-      if (dogeAt(x, y)) { flash('A guard dog is in there!'); return; }
+      var dx = x - c.x, dy = y - c.y;
+      // you can't see into the next room — blundering into a guard dog = captured
+      if (dogeAt(x, y)) { c.x = x; c.y = y; r.seen = true; reveal(x, y); capture(); return; }
 
-      if (r.vault && !r.vault.opened) { openVault(r); return; }
-
-      // move
+      // move (vaults are now entered, not auto-opened — you choose to crack them)
       c.x = x; c.y = y; r.seen = true; reveal(x, y);
 
-      if (r.note) { r.note = false; collectNote(); }
       if (r.trap && !r.sprung) { r.sprung = true; springTrap(x, y); if (!S.running) return; }
 
       // win check: escape after looting
       if (S.looted && r.shutter) { endRound(true); return; }
 
+      if (r.vault && !r.vault.opened) flash('🔐 A vault! Tap it to crack it open.');
+
       dogesTurn();
+      // animate the walk into the new room (skip if the move ended the run)
+      if (S.running && S.phase === 'play' && S.cat) S.tr = { kind: 'slide', dx: dx, dy: dy, t: 0, dur: 0.24 };
     }
 
     function openVault(r) {
@@ -270,31 +379,41 @@
         flash('💎 The real vault! Now get out!');
         // the whole pack is roused and hunts you to the exit
         for (var i = 0; i < S.doges.length; i++) S.doges[i].chaseT = 999;
+        if (S.running) dogesTurn();
       } else {
+        // a hidden guard dog captures this cat (this clears S.cat & returns
+        // to the entry phase, so the dogs must NOT take a turn afterwards)
         flash('🚨 Decoy! A hidden guard dog nabs your cat!');
-        capture();                                // hidden guard dog captures a cat
+        capture();
       }
-      if (S.running) dogesTurn();
     }
 
-    function collectNote() {
-      S.notes++;
-      // each ledger exposes one still-unknown decoy
-      var hidden = S.vaults.filter(function (v) { return !v.vault.real && !v.vault.flagged && !v.vault.opened; });
-      if (hidden.length) pick(hidden).vault.flagged = true;
-      var left = S.vaults.filter(function (v) { return !v.vault.flagged && !v.vault.opened; });
-      flash(left.length === 1 && !left[0].vault.opened ? '📜 Ledger! The real vault is marked ✨' : '📜 Ledger found — a decoy is exposed');
-    }
-
-    function springTrap(x, y) {
-      S.hp = Math.max(0, S.hp - S.cfg.trapDmg);
-      // the noise rouses every nearby dog into a chase
+    function rouse(x, y, radius) {
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i];
-        if (cheb(d.x, d.y, x, y) <= S.cfg.wakeR) d.chaseT = S.cfg.chase;
+        if (cheb(d.x, d.y, x, y) <= radius) d.chaseT = S.cfg.chase;
       }
-      if (S.hp <= 0) { flash('💥 A trap finishes off your crew!'); endRound(false, 'hurt'); return; }
-      flash('💥 Trap! −' + S.cfg.trapDmg + ' health — and the noise draws the dogs!');
+    }
+    function springTrap(x, y) {
+      var kind = room(x, y).trapKind;
+      if (kind === 'alarm') {
+        // ALARM trap: no damage, but the whole nearby pack is alerted
+        rouse(x, y, S.cfg.wakeR + 1);
+        S.shakeT = 0.25; S.shakeMag = 5; S.flash = { r: 255, g: 200, b: 60, a: 0.4 };
+        flash('🔔 ALARM! The guard dogs are on alert!');
+        return;
+      }
+      // SPIKE trap: drains health (reduced if your cat is Tough)
+      var dmg = Math.round(S.cfg.trapDmg * (S.tough ? 0.6 : 1));
+      S.hp = Math.max(0, S.hp - dmg);
+      fxDamage(dmg);
+      rouse(x, y, 1);                         // a little noise
+      if (S.hp <= 0) {
+        S.running = false; S.pendingDeath = true;   // bar drains to empty, then end (frame loop)
+        flash('💥 A spike trap finishes off your crew!');
+        return;
+      }
+      flash('💥 Spike trap! −' + dmg + ' health!');
     }
 
     // empty, in-grid tiles a dog may step onto (no other dog, not a vault/door it would camp)
@@ -306,6 +425,9 @@
 
     // ---- dogs roam every turn; roused ones chase the cat ----
     function dogesTurn() {
+      if (!S.cat) return;     // no active cat (e.g. just captured) — nothing to chase
+      // "Speedy" cats are nimble — the dogs only get to act every other move
+      if (S.speedy) { S.dogTick = (S.dogTick || 0) + 1; if (S.dogTick % 2 === 1) return; }
       var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i], bx = d.x, by = d.y, k;
@@ -324,7 +446,7 @@
             var rx = d.x + dirs[k][0], ry = d.y + dirs[k][1];
             if ((rx === S.cat.x && ry === S.cat.y) || dogFree(rx, ry)) opts.push([rx, ry]);
           }
-          if (opts.length && Math.random() < 0.8) { var o = pick(opts); bx = o[0]; by = o[1]; }
+          if (opts.length) { var o = pick(opts); bx = o[0]; by = o[1]; }   // always on the move
         }
         d.x = bx; d.y = by;
         if (S.running && d.x === S.cat.x && d.y === S.cat.y) { capture(); return; }
@@ -332,6 +454,7 @@
     }
 
     function capture() {
+      if (S.cat) fxCaught(S.cat.x, S.cat.y);
       S.captures++;
       if (S.captures >= CREW) { endRound(false, 'caught'); return; }
       // that cat is caged; send in the next one — pick a fresh door
@@ -344,17 +467,28 @@
       if (S.ended) return;
       S.ended = true; S.running = false; S.win = won; S.reason = reason || '';
       if (won && S.level > best.load()) best.save(S.level);
+      if (won) awardGem();              // a heist win = 1 gacha gem
       showOver();
     }
 
     // ---------- rendering ----------
     function layout() {
-      var pad = 24, gap = 0;   // gap 0 => rooms are contiguous; walls/doorways are drawn
-      var cell = Math.min((W - pad * 2 - (S.cols - 1) * gap) / S.cols,
-                          (H - pad * 2 - (S.rows - 1) * gap) / S.rows);
-      var gw = S.cols * cell + (S.cols - 1) * gap;
-      var gh = S.rows * cell + (S.rows - 1) * gap;
-      S.geo = { ox: (W - gw) / 2, oy: (H - gh) / 2, cell: cell, gap: gap };
+      if (S.phase === 'entry' || !S.cat) {
+        // full-manor view so you can see every door to pick from
+        var pad = 24;
+        var cell = Math.min((W - pad * 2) / S.cols, (H - pad * 2) / S.rows);
+        var gw = S.cols * cell, gh = S.rows * cell;
+        S.geo = { ox: (W - gw) / 2, oy: (H - gh) / 2, cell: cell, gap: 0, zoom: false };
+      } else {
+        // play: a single room fills the whole view (see helpers / drawRoom)
+        S.geo = { zoom: true, room: true };
+      }
+    }
+
+    // interior rect of the single-room view (wall band all around)
+    function roomGeom() {
+      var M = Math.round(W * 0.13);
+      return { M: M, ix: M, iy: M, iw: W - 2 * M, ih: H - 2 * M };
     }
     function cellRect(x, y) {
       var g = S.geo;
@@ -472,51 +606,60 @@
       ctx.restore();
     }
 
-    function drawVault(cx, cy, s, state, t) {
-      ctx.save(); ctx.translate(cx, cy); var k = s / 100; ctx.scale(k, k); ctx.lineJoin = 'round';
-      if (state === 'hint' || state === 'openreal') {
-        var gg = ctx.createRadialGradient(0, 0, 0, 0, 0, 58);
-        gg.addColorStop(0, 'rgba(255,214,90,0.45)'); gg.addColorStop(1, 'rgba(255,214,90,0)');
-        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(0, 0, 58, 0, 7); ctx.fill();
-      }
-      ctx.fillStyle = '#7e8796'; ctx.strokeStyle = '#3c424d'; ctx.lineWidth = 4;
-      rrect(-34, -34, 68, 68, 8); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#6b7382'; rrect(-26, -26, 52, 52, 6); ctx.fill();
-      ctx.fillStyle = '#cfd6e0';
-      [[-28, -28], [28, -28], [-28, 28], [28, 28]].forEach(function (p) { ctx.beginPath(); ctx.arc(p[0], p[1], 3, 0, 7); ctx.fill(); });
-      if (state === 'openreal' || state === 'opendecoy') {
-        ctx.fillStyle = '#23262e'; rrect(-22, -22, 44, 44, 5); ctx.fill();
-        if (state === 'openreal') {
-          gem(-8, 6, 10, '#6be0c0'); gem(9, 9, 9, '#ff8fb0'); gem(2, -6, 8, '#ffd96b');
-          sparkle(-24, -24, 7, t);
-        } else {
-          ctx.strokeStyle = '#ff5a6e'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-          ctx.beginPath(); ctx.moveTo(-12, -12); ctx.lineTo(12, 12); ctx.moveTo(12, -12); ctx.lineTo(-12, 12); ctx.stroke();
-        }
-        ctx.fillStyle = '#8e97a6'; ctx.strokeStyle = '#3c424d'; ctx.lineWidth = 3;
-        rrect(26, -22, 12, 44, 4); ctx.fill(); ctx.stroke();
-      } else {
-        ctx.strokeStyle = '#cfd6e0'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, -2, 13, 0, 7); ctx.stroke();
-        ctx.fillStyle = '#cfd6e0'; ctx.beginPath(); ctx.arc(0, -2, 4, 0, 7); ctx.fill();
-        ctx.strokeStyle = '#cfd6e0'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(16, 9); ctx.stroke();
-        if (state === 'flagged') {
-          ctx.save(); ctx.rotate(-0.2); ctx.strokeStyle = '#ff4d61'; ctx.lineWidth = 4; rrect(-30, 8, 60, 20, 5); ctx.stroke();
-          ctx.fillStyle = '#ff4d61'; ctx.font = 'bold 15px Nunito, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText('FAKE', 0, 19); ctx.restore();
-        }
-        if (state === 'hint') sparkle(26, -28, 8, t);
-      }
+    // original cat-face crest stamped where the two doors meet (not a real-world logo)
+    function catCrest(r) {
+      ctx.save();
+      ctx.fillStyle = '#2b2b30'; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#8a6c1e'; ctx.lineWidth = Math.max(1.5, r * 0.12); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
+      ctx.fillStyle = '#f4efe2';
+      ctx.beginPath(); ctx.arc(0, r * 0.08, r * 0.58, 0, 7); ctx.fill();             // head
+      ctx.beginPath(); ctx.moveTo(-r * 0.52, -r * 0.38); ctx.lineTo(-r * 0.16, -r * 0.04); ctx.lineTo(-r * 0.64, -r * 0.02); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(r * 0.52, -r * 0.38); ctx.lineTo(r * 0.16, -r * 0.04); ctx.lineTo(r * 0.64, -r * 0.02); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#2b2b30';
+      ctx.beginPath(); ctx.arc(-r * 0.22, r * 0.02, r * 0.09, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(r * 0.22, r * 0.02, r * 0.09, 0, 7); ctx.fill();
+      ctx.fillStyle = '#e08a98'; ctx.beginPath(); ctx.moveTo(0, r * 0.14); ctx.lineTo(-r * 0.08, r * 0.22); ctx.lineTo(r * 0.08, r * 0.22); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#2b2b30'; ctx.lineWidth = Math.max(1, r * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.12, r * 0.18); ctx.lineTo(-r * 0.55, r * 0.12); ctx.moveTo(-r * 0.12, r * 0.26); ctx.lineTo(-r * 0.55, r * 0.28);
+      ctx.moveTo(r * 0.12, r * 0.18); ctx.lineTo(r * 0.55, r * 0.12); ctx.moveTo(r * 0.12, r * 0.26); ctx.lineTo(r * 0.55, r * 0.28);
+      ctx.stroke();
       ctx.restore();
     }
 
-    function drawLedger(cx, cy, s) {
-      ctx.save(); ctx.translate(cx, cy); ctx.rotate(-0.08); var k = s / 100; ctx.scale(k, k);
-      ctx.fillStyle = '#f3e4c0'; ctx.strokeStyle = '#b79a5e'; ctx.lineWidth = 3; rrect(-26, -32, 52, 64, 5); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#e7d3a4'; rrect(-26, -32, 52, 11, 5); ctx.fill();
-      ctx.strokeStyle = 'rgba(120,90,40,0.5)'; ctx.lineWidth = 2.5;
-      for (var ly = -14; ly <= 20; ly += 9) { ctx.beginPath(); ctx.moveTo(-18, ly); ctx.lineTo(18, ly); ctx.stroke(); }
-      ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(0, 30, 7, 0, 7); ctx.fill();
+    function drawVault(cx, cy, s, state, t) {
+      ctx.save(); ctx.translate(cx, cy); var k = s / 100; ctx.scale(k, k); ctx.lineJoin = 'round';
+      var isOpen = (state === 'openreal' || state === 'opendecoy');
+      if (state === 'openreal') {
+        var gg = ctx.createRadialGradient(0, 0, 0, 0, 0, 64);
+        gg.addColorStop(0, 'rgba(255,214,90,0.5)'); gg.addColorStop(1, 'rgba(255,214,90,0)');
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(0, 0, 64, 0, 7); ctx.fill();
+      }
+      // stone frame + dark doorway behind the doors
+      ctx.fillStyle = '#5a4a22'; ctx.strokeStyle = '#3a2f14'; ctx.lineWidth = 4;
+      rrect(-40, -42, 80, 84, 9); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#1b1910'; rrect(-31, -33, 62, 66, 5); ctx.fill();
+
+      if (isOpen) {
+        if (state === 'openreal') { gem(-9, 9, 11, '#6be0c0'); gem(10, 12, 9, '#ff8fb0'); gem(2, -5, 9, '#ffd96b'); sparkle(-20, -22, 7, t); }
+        else {
+          ctx.strokeStyle = '#ff5a6e'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(-12, -10); ctx.lineTo(12, 14); ctx.moveTo(12, -10); ctx.lineTo(-12, 14); ctx.stroke();
+        }
+        // both yellow doors swung open to the sides
+        ctx.fillStyle = '#e2b13a'; ctx.strokeStyle = '#8a6c1e'; ctx.lineWidth = 3;
+        rrect(-48, -33, 13, 66, 4); ctx.fill(); ctx.stroke();
+        rrect(35, -33, 13, 66, 4); ctx.fill(); ctx.stroke();
+      } else {
+        // two closed yellow doors meeting in the middle
+        ctx.strokeStyle = '#8a6c1e'; ctx.lineWidth = 3;
+        ctx.fillStyle = '#f0c343'; rrect(-31, -33, 30, 66, 5); ctx.fill(); ctx.stroke();   // left leaf
+        ctx.fillStyle = '#f0c343'; rrect(1, -33, 30, 66, 5); ctx.fill(); ctx.stroke();      // right leaf
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 2;
+        rrect(-27, -28, 22, 56, 4); ctx.stroke(); rrect(5, -28, 22, 56, 4); ctx.stroke();
+        // cat-face crest over the seam
+        catCrest(15);
+      }
       ctx.restore();
     }
 
@@ -562,6 +705,311 @@
       ctx.restore();
     }
 
+    // small overview map (top-right) — shows explored layout, never reveals which vault is real
+    function drawMinimap() {
+      var mc = Math.max(12, Math.min(20, (W * 0.34) / S.cols));   // mini cell size
+      var mw = S.cols * mc, mh = S.rows * mc, pad = 6;
+      var bx = W - mw - pad - 10, by = 10;
+      ctx.save();
+      ctx.fillStyle = 'rgba(10,8,20,0.74)'; rrect(bx - pad, by - pad, mw + pad * 2, mh + pad * 2, 8); ctx.fill();
+      ctx.strokeStyle = 'rgba(226,169,59,0.55)'; ctx.lineWidth = 1.5; rrect(bx - pad, by - pad, mw + pad * 2, mh + pad * 2, 8); ctx.stroke();
+      var x, y;
+      for (y = 0; y < S.rows; y++) for (x = 0; x < S.cols; x++) {
+        var r = room(x, y), px = bx + x * mc, py = by + y * mc;
+        ctx.fillStyle = r.seen ? '#6b5238' : '#241a30';
+        ctx.fillRect(px + 1, py + 1, mc - 2, mc - 2);
+        if (r.seen) {
+          if (r.shutter) { ctx.fillStyle = '#e2a93b'; ctx.fillRect(px + 1, py + 1, mc - 2, mc - 2); }
+          if (r.vault) {  // generic vault dot — identical for fake & real until opened
+            ctx.fillStyle = r.vault.opened ? (r.vault.real ? '#6be0c0' : '#9a4a52') : '#c2c8d2';
+            ctx.beginPath(); ctx.arc(px + mc / 2, py + mc / 2, mc * 0.24, 0, 7); ctx.fill();
+          } else if (r.trap && r.sprung) {
+            ctx.fillStyle = '#ff7a88'; ctx.fillRect(px + mc * 0.35, py + mc * 0.35, mc * 0.3, mc * 0.3);
+          }
+        }
+      }
+      // dogs you can currently see
+      for (var i = 0; i < S.doges.length; i++) {
+        var d = S.doges[i]; if (!room(d.x, d.y).seen) continue;
+        ctx.fillStyle = d.chaseT > 0 ? '#ff4d61' : '#e08a3a';
+        ctx.beginPath(); ctx.arc(bx + d.x * mc + mc / 2, by + d.y * mc + mc / 2, mc * 0.28, 0, 7); ctx.fill();
+      }
+      // the cat — and a box around the room you're currently in
+      if (S.cat) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+        ctx.strokeRect(bx + S.cat.x * mc + 1, by + S.cat.y * mc + 1, mc - 2, mc - 2);
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#2b3a63'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(bx + S.cat.x * mc + mc / 2, by + S.cat.y * mc + mc / 2, mc * 0.3, 0, 7); ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ---- floating damage / caught effects, positioned per view mode ----
+    function drawEffects(isRoom, t) {
+      var U, ctr;
+      if (isRoom) { var gm = roomGeom(); U = Math.min(gm.iw, gm.ih); ctr = function () { return { x: W / 2, y: gm.iy + gm.ih * 0.5 }; }; }
+      else { U = S.geo.cell || 60; ctr = function (cx, cy) { var rc = cellRect(cx, cy); return { x: rc.x + U / 2, y: rc.y + U / 2 }; }; }
+      var i, k;
+      for (i = 0; i < S.bursts.length; i++) {
+        var b = S.bursts[i], bp = b.age / b.life, p = ctr(b.cx, b.cy), R = U * 0.18 + bp * U * 0.5;
+        ctx.globalAlpha = clamp(1 - bp, 0, 1); ctx.fillStyle = '#ffd0d6';
+        for (k = 0; k < 8; k++) { var a = k / 8 * Math.PI * 2; ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * R, p.y + Math.sin(a) * R, U * 0.05, 0, 7); ctx.fill(); }
+        ctx.globalAlpha = 1;
+      }
+      for (i = 0; i < S.pops.length; i++) {
+        var pop = S.pops[i], q = ctr(pop.cx, pop.cy);
+        ctx.globalAlpha = clamp(1 - pop.age / pop.life, 0, 1);
+        ctx.fillStyle = pop.color; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = Math.max(2, U * 0.012); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = 'bold ' + (U * (pop.big ? 0.24 : 0.15)) + 'px Nunito, sans-serif';
+        var yy = q.y - pop.age * 46 - (isRoom ? U * 0.28 : 0);
+        ctx.strokeText(pop.txt, q.x, yy); ctx.fillText(pop.txt, q.x, yy);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // ===== single-room (fully zoomed) view + decorations =====
+    function rseed(x, y) { var n = (x * 374761393 + y * 668265263) ^ 0x9e3779b9; n = (n ^ (n >>> 13)) >>> 0; return n; }
+    function rng(seed) { var s = (seed % 233280 + 233280) % 233280 || 1; return function () { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+
+    function drawRug(cx, cy, w, h, cols) {
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.fillStyle = cols[0]; rrect(-w / 2, -h / 2, w, h, 14); ctx.fill();
+      ctx.strokeStyle = cols[1]; ctx.lineWidth = 7; rrect(-w / 2 + 9, -h / 2 + 9, w - 18, h - 18, 10); ctx.stroke();
+      ctx.fillStyle = cols[1]; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.2, h * 0.2, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = cols[0]; ctx.beginPath(); ctx.ellipse(0, 0, w * 0.12, h * 0.12, 0, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    function drawFloorFill(ix, iy, iw, ih, type, R) {
+      if (type === 1) {            // checkerboard tiles
+        var n = 5, tw = iw / n, th = ih / Math.max(3, Math.round(ih / tw));
+        for (var ry = 0; ry * th < ih + th; ry++) for (var rx = 0; rx < n; rx++) {
+          ctx.fillStyle = ((rx + ry) % 2) ? '#8a7656' : '#6f5d42';
+          ctx.fillRect(ix + rx * tw, iy + ry * th, tw + 1, th + 1);
+        }
+      } else if (type === 2) {     // patterned carpet
+        ctx.fillStyle = '#5b3450'; ctx.fillRect(ix, iy, iw, ih);
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        for (var cy2 = iy + 16; cy2 < iy + ih; cy2 += 30) for (var cx2 = ix + 16; cx2 < ix + iw; cx2 += 30) { ctx.beginPath(); ctx.arc(cx2, cy2, 3, 0, 7); ctx.fill(); }
+      } else {                     // wooden boards
+        ctx.fillStyle = '#7a5436'; ctx.fillRect(ix, iy, iw, ih);
+        ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 2;
+        for (var py = iy + 26; py < iy + ih; py += 26) { ctx.beginPath(); ctx.moveTo(ix, py); ctx.lineTo(ix + iw, py); ctx.stroke(); }
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+        for (var px = ix + 60; px < ix + iw; px += 60) { ctx.beginPath(); ctx.moveTo(px, iy); ctx.lineTo(px, iy + ih); ctx.stroke(); }
+      }
+    }
+    function drawPainting(cx, cy, w, h, R) {
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.fillStyle = '#caa15a'; rrect(-w / 2 - 5, -h / 2 - 5, w + 10, h + 10, 4); ctx.fill();
+      ctx.fillStyle = '#8a6c34'; rrect(-w / 2 - 2, -h / 2 - 2, w + 4, h + 4, 3); ctx.fill();
+      var sky = ['#37618a', '#6a4a7a', '#2e6a5a'][Math.floor(R() * 3)];
+      ctx.fillStyle = sky; rrect(-w / 2, -h / 2, w, h, 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(w * 0.22, -h * 0.18, h * 0.13, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-w / 2, h * 0.12, w, h * 0.38);
+      ctx.restore();
+    }
+    function drawPlant(cx, cy, s) {
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.fillStyle = '#b9572f'; ctx.beginPath(); ctx.moveTo(-s * 0.32, s * 0.5); ctx.lineTo(s * 0.32, s * 0.5); ctx.lineTo(s * 0.24, s * 0.12); ctx.lineTo(-s * 0.24, s * 0.12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#3f8a4a';
+      for (var i = 0; i < 5; i++) { var a = -Math.PI / 2 + (i - 2) * 0.5; ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.ellipse(0, -s * 0.4, s * 0.12, s * 0.42, 0, 0, 7); ctx.fill(); ctx.restore(); }
+      ctx.fillStyle = '#327a3e'; ctx.beginPath(); ctx.ellipse(0, -s * 0.2, s * 0.2, s * 0.26, 0, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    function drawTable(cx, cy, s) {
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.fillStyle = '#6b4527'; ctx.fillRect(-s * 0.06, -s * 0.1, s * 0.12, s * 0.5);  // leg
+      ctx.fillStyle = '#7d5430'; ctx.beginPath(); ctx.ellipse(0, -s * 0.1, s * 0.4, s * 0.14, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#5a3c22'; ctx.lineWidth = 2; ctx.stroke();
+      // little vase on top
+      ctx.fillStyle = '#4f8fae'; ctx.beginPath(); ctx.moveTo(-s * 0.1, -s * 0.16); ctx.quadraticCurveTo(-s * 0.16, -s * 0.42, 0, -s * 0.46); ctx.quadraticCurveTo(s * 0.16, -s * 0.42, s * 0.1, -s * 0.16); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    function drawSconce(cx, cy, s, t) {
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.fillStyle = '#caa15a'; ctx.fillRect(-s * 0.08, 0, s * 0.16, s * 0.5);
+      ctx.fillStyle = '#f3e4c0'; ctx.fillRect(-s * 0.12, -s * 0.1, s * 0.24, s * 0.16);
+      var fl = 0.8 + 0.2 * Math.sin((t || 0) * 9);
+      ctx.fillStyle = 'rgba(255,180,60,' + (0.5 * fl) + ')'; ctx.beginPath(); ctx.arc(0, -s * 0.18, s * 0.22 * fl, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.ellipse(0, -s * 0.22, s * 0.06, s * 0.12 * fl, 0, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    function drawWindow(side, gm) {
+      var w, h, cx, cy;
+      if (side === 'up' || side === 'down') { w = gm.iw * 0.32; h = gm.M * 0.5; cx = W / 2; cy = side === 'up' ? gm.M * 0.5 : H - gm.M * 0.5; }
+      else { h = gm.ih * 0.3; w = gm.M * 0.5; cy = gm.iy + gm.ih / 2; cx = side === 'left' ? gm.M * 0.5 : W - gm.M * 0.5; }
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.fillStyle = '#0e1430'; rrect(-w / 2, -h / 2, w, h, 4); ctx.fill();
+      ctx.fillStyle = 'rgba(255,240,200,0.10)'; ctx.beginPath(); ctx.arc(w * 0.2, -h * 0.15, Math.min(w, h) * 0.18, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#caa15a'; ctx.lineWidth = 4; rrect(-w / 2, -h / 2, w, h, 4); ctx.stroke();
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -h / 2); ctx.lineTo(0, h / 2); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke();
+      ctx.restore();
+    }
+    function drawDoorway(side, gm, t, glow) {
+      var x, y, w, h, dl = (side === 'up' || side === 'down') ? gm.iw * 0.34 : gm.ih * 0.3;
+      if (side === 'up') { w = dl; h = gm.iy + 8; x = W / 2 - dl / 2; y = 0; }
+      else if (side === 'down') { w = dl; y = gm.iy + gm.ih - 8; h = H - y; x = W / 2 - dl / 2; }
+      else if (side === 'left') { h = dl; w = gm.ix + 8; x = 0; y = gm.iy + gm.ih / 2 - dl / 2; }
+      else { h = dl; x = gm.ix + gm.iw - 8; w = W - x; y = gm.iy + gm.ih / 2 - dl / 2; }
+      ctx.fillStyle = '#19122a'; rrect(x, y, w, h, 5); ctx.fill();
+      ctx.strokeStyle = '#caa15a'; ctx.lineWidth = 4; rrect(x, y, w, h, 5); ctx.stroke();
+      // pulsing chevron pointing outward
+      var a = 0.5 + 0.45 * Math.sin((t || 0) * 5);
+      ctx.fillStyle = 'rgba(150,235,170,' + a + ')'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold ' + (gm.M * 0.5) + 'px Nunito, sans-serif';
+      var ar = side === 'up' ? '▴' : side === 'down' ? '▾' : side === 'left' ? '◂' : '▸';
+      ctx.fillText(ar, x + w / 2, y + h / 2);
+    }
+    function drawExitDoor(side, gm, t) {
+      var x, y, w, h, dl = (side === 'up' || side === 'down') ? gm.iw * 0.34 : gm.ih * 0.3;
+      if (side === 'up') { w = dl; h = gm.iy + 8; x = W / 2 - dl / 2; y = 0; }
+      else if (side === 'down') { w = dl; y = gm.iy + gm.ih - 8; h = H - y; x = W / 2 - dl / 2; }
+      else if (side === 'left') { h = dl; w = gm.ix + 8; x = 0; y = gm.iy + gm.ih / 2 - dl / 2; }
+      else { h = dl; x = gm.ix + gm.iw - 8; w = W - x; y = gm.iy + gm.ih / 2 - dl / 2; }
+      if (S.looted) { var gl = 0.4 + 0.4 * Math.sin((t || 0) * 5); ctx.fillStyle = 'rgba(120,230,150,' + gl + ')'; rrect(x - 4, y - 4, w + 8, h + 8, 7); ctx.fill(); }
+      ctx.fillStyle = '#6b4226'; rrect(x, y, w, h, 5); ctx.fill();
+      ctx.strokeStyle = '#e2a93b'; ctx.lineWidth = 5; rrect(x, y, w, h, 5); ctx.stroke();
+      ctx.fillStyle = '#ffe08a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold ' + (gm.M * 0.32) + 'px Nunito, sans-serif';
+      ctx.fillText(S.looted ? 'EXIT' : '🚪', x + w / 2, y + h / 2);
+    }
+    function drawDecor(gm, R, cur) {
+      var ix = gm.ix, iy = gm.iy, iw = gm.iw, ih = gm.ih, M = gm.M;
+      if (R() < 0.75) drawPainting(ix + iw * 0.2, M * 0.5, iw * 0.2, M * 0.55, R);
+      if (R() < 0.5) drawPainting(ix + iw * 0.8, M * 0.5, iw * 0.2, M * 0.55, R);
+      if (R() < 0.7) drawPlant(ix + iw * 0.12, iy + ih * 0.8, Math.min(iw, ih) * 0.22);
+      if (R() < 0.6) drawTable(ix + iw * 0.88, iy + ih * 0.8, Math.min(iw, ih) * 0.24);
+      if (R() < 0.5) drawSconce(M * 0.5, iy + ih * 0.28, M * 0.7, S.anim);
+      if (R() < 0.5) drawSconce(W - M * 0.5, iy + ih * 0.28, M * 0.7, S.anim);
+    }
+    function drawBalcony(side, gm, t) {
+      var x, y, w, h, dl = (side === 'up' || side === 'down') ? gm.iw * 0.4 : gm.ih * 0.42;
+      if (side === 'up') { w = dl; h = gm.iy + 8; x = W / 2 - dl / 2; y = 0; }
+      else if (side === 'down') { w = dl; y = gm.iy + gm.ih - 8; h = H - y; x = W / 2 - dl / 2; }
+      else if (side === 'left') { h = dl; w = gm.ix + 8; x = 0; y = gm.iy + gm.ih / 2 - dl / 2; }
+      else { h = dl; x = gm.ix + gm.iw - 8; w = W - x; y = gm.iy + gm.ih / 2 - dl / 2; }
+      // open-air night sky beyond the balcony
+      var sky = ctx.createLinearGradient(x, y, x, y + h); sky.addColorStop(0, '#1a2350'); sky.addColorStop(1, '#0c1230');
+      ctx.fillStyle = sky; rrect(x, y, w, h, 5); ctx.fill();
+      ctx.fillStyle = 'rgba(255,245,210,0.5)'; ctx.beginPath(); ctx.arc(x + w * 0.7, y + h * 0.32, Math.min(w, h) * 0.13, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(x + w * 0.3, y + h * 0.5, 2, 2); ctx.fillRect(x + w * 0.5, y + h * 0.22, 2, 2); ctx.fillRect(x + w * 0.82, y + h * 0.7, 2, 2);
+      // gold railing with balusters along the inner edge
+      ctx.strokeStyle = '#e2a93b'; ctx.lineCap = 'round';
+      if (side === 'left' || side === 'right') {
+        var rx = side === 'left' ? x + w - 5 : x + 5;
+        ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(rx, y + 5); ctx.lineTo(rx, y + h - 5); ctx.stroke();
+        ctx.lineWidth = 3; for (var byy = y + 9; byy < y + h - 5; byy += 11) { ctx.beginPath(); ctx.moveTo(rx, byy); ctx.lineTo(rx + (side === 'left' ? -9 : 9), byy); ctx.stroke(); }
+      } else {
+        var ry = side === 'up' ? y + h - 5 : y + 5;
+        ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x + 5, ry); ctx.lineTo(x + w - 5, ry); ctx.stroke();
+        ctx.lineWidth = 3; for (var bxx = x + 9; bxx < x + w - 5; bxx += 11) { ctx.beginPath(); ctx.moveTo(bxx, ry); ctx.lineTo(bxx, ry + (side === 'up' ? -9 : 9)); ctx.stroke(); }
+      }
+      ctx.strokeStyle = '#8a6c1e'; ctx.lineWidth = 4; rrect(x, y, w, h, 5); ctx.stroke();
+      if (S.looted) {
+        var gl = 0.5 + 0.4 * Math.sin((t || 0) * 5); ctx.fillStyle = 'rgba(120,230,150,' + gl + ')';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold ' + (gm.M * 0.32) + 'px Nunito, sans-serif';
+        ctx.fillText(side === 'up' ? '▴' : side === 'down' ? '▾' : side === 'left' ? '◂' : '▸', x + w / 2, y + h / 2);
+      }
+    }
+    function drawAlarm(cx, cy, s, t) {
+      ctx.save(); ctx.translate(cx, cy); var k = s / 100; ctx.scale(k, k); ctx.lineJoin = 'round';
+      ctx.rotate(Math.sin((t || 0) * 26) * 0.12);
+      ctx.fillStyle = '#e2b13a'; ctx.strokeStyle = '#7a5a16'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-22, 18); ctx.quadraticCurveTo(-22, -18, 0, -22); ctx.quadraticCurveTo(22, -18, 22, 18); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#c8991f'; rrect(-26, 16, 52, 8, 3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#7a5a16'; ctx.beginPath(); ctx.arc(0, 24, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -26, 4, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,210,90,0.85)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(-30, -4, 9, 0.6, 2.0); ctx.stroke();
+      ctx.beginPath(); ctx.arc(30, -4, 9, Math.PI - 2.0, Math.PI - 0.6); ctx.stroke();
+      ctx.restore();
+    }
+    function drawRoom(t) {
+      var cat = S.cat, cur = room(cat.x, cat.y);
+      var R = rng(rseed(cat.x, cat.y) + 11);
+      var gm = roomGeom(), ix = gm.ix, iy = gm.iy, iw = gm.iw, ih = gm.ih, M = gm.M;
+
+      // slide the whole room in when walking to the next one
+      ctx.save();
+      if (S.tr && S.tr.kind === 'slide') {
+        var sp = clamp(S.tr.t / S.tr.dur, 0, 1), se = 1 - (1 - sp) * (1 - sp);
+        ctx.translate((1 - se) * W * S.tr.dx, (1 - se) * H * S.tr.dy);
+      }
+      var wallCols = ['#3a2c4a', '#43324f', '#3c3340', '#34304e', '#4a3340'];
+      var rugCols = [['#7a2e3a', '#caa15a'], ['#2e5a52', '#9fe0cf'], ['#5a4a2a', '#e0c070'], ['#3a3a6a', '#8a8ad8']];
+      var floorType = Math.floor(R() * 3);
+      var wallCol = wallCols[Math.floor(R() * wallCols.length)];
+
+      // wallpaper across the wall band
+      ctx.fillStyle = wallCol; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(255,255,255,0.045)';
+      for (var wy = 16; wy < H; wy += 32) for (var wx = ((wy / 32) % 2 ? 32 : 16); wx < W; wx += 32) { ctx.beginPath(); ctx.arc(wx, wy, 2.4, 0, 7); ctx.fill(); }
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(0, M * 0.62); ctx.lineTo(W, M * 0.62); ctx.stroke();
+
+      // floor + vignette
+      ctx.save(); rrect(ix, iy, iw, ih, 12); ctx.clip();
+      drawFloorFill(ix, iy, iw, ih, floorType, R);
+      var vg = ctx.createRadialGradient(W / 2, iy + ih * 0.5, iw * 0.2, W / 2, iy + ih * 0.5, iw * 0.85);
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.3)');
+      ctx.fillStyle = vg; ctx.fillRect(ix, iy, iw, ih);
+      ctx.restore();
+
+      drawRug(W / 2, iy + ih * 0.58, iw * 0.74, ih * 0.5, rugCols[Math.floor(R() * rugCols.length)]);
+
+      // molding frame
+      ctx.lineWidth = 8; ctx.strokeStyle = '#caa15a'; rrect(ix, iy, iw, ih, 12); ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; rrect(ix - 1, iy - 1, iw + 2, ih + 2, 13); ctx.stroke();
+
+      // sides: doorway (neighbour) / exit door (shutter wall) / window (plain wall)
+      var sides = [['up', 0, -1], ['down', 0, 1], ['left', -1, 0], ['right', 1, 0]];
+      for (var si = 0; si < sides.length; si++) {
+        var sd = sides[si], nx = cat.x + sd[1], ny = cat.y + sd[2];
+        if (inGrid(nx, ny)) drawDoorway(sd[0], gm, t, true);
+        else if (cur.shutter) drawBalcony(sd[0], gm, t);     // exits are balconies
+        else drawWindow(sd[0], gm);
+      }
+
+      drawDecor(gm, R, cur);
+
+      // "Vault Sense" ability — arrow toward the nearest unopened vault
+      if (S.guide) {
+        var uv = S.vaults.filter(function (v) { return !v.vault.opened; }), best = null, bd = 1e9;
+        uv.forEach(function (v) { var d = Math.abs(v.x - cat.x) + Math.abs(v.y - cat.y); if (d < bd) { bd = d; best = v; } });
+        if (best) {
+          var ddx = best.x - cat.x, ddy = best.y - cat.y, ar = (ddx === 0 && ddy === 0) ? 'HERE'
+            : Math.abs(ddx) >= Math.abs(ddy) ? (ddx > 0 ? '▶' : '◀') : (ddy > 0 ? '▼' : '▲');
+          ctx.globalAlpha = 0.65 + 0.35 * Math.sin(t * 5); ctx.fillStyle = '#9be0ff';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold ' + (Math.min(iw, ih) * 0.11) + 'px Nunito, sans-serif';
+          ctx.fillText('💎 ' + ar, W / 2, iy + ih * 0.15); ctx.globalAlpha = 1;
+        }
+      }
+
+      // cat drop-in animation when leaping off a balcony
+      var dropDY = 0;
+      if (S.tr && S.tr.kind === 'drop') { var dp = clamp(S.tr.t / S.tr.dur, 0, 1), de = 1 - (1 - dp) * (1 - dp); dropDY = -(1 - de) * ih * 0.85; }
+
+      if (cur.vault) {
+        var vsz = Math.min(iw, ih) * 0.5, vy = iy + ih * 0.42;
+        if (!cur.vault.opened) {
+          var pa = 0.4 + 0.4 * Math.sin(t * 5);
+          ctx.strokeStyle = 'rgba(255,210,120,' + pa + ')'; ctx.lineWidth = 4;
+          rrect(W / 2 - vsz * 0.5, vy - vsz * 0.55, vsz, vsz * 1.12, 12); ctx.stroke();
+          var st = 'closed';
+        } else { var st = cur.vault.real ? 'openreal' : 'opendecoy'; }
+        drawVault(W / 2, vy, vsz, st, t);
+        drawBurglarCat(W / 2, iy + ih * 0.76 + dropDY, Math.min(iw, ih) * 0.32, S.looted, t);
+      } else {
+        if (cur.trap) {
+          if (cur.trapKind === 'alarm') drawAlarm(W / 2, iy + ih * 0.5, Math.min(iw, ih) * 0.3, t);
+          else drawTrap(W / 2, iy + ih * 0.52, Math.min(iw, ih) * 0.32, cur.sprung);
+        }
+        drawBurglarCat(W / 2, iy + ih * 0.52 + dropDY, Math.min(iw, ih) * 0.42, S.looted, t);
+      }
+      ctx.restore();   // end slide transform
+    }
+
     function render() {
       ctx.clearRect(0, 0, W, H);
       var bg = ctx.createLinearGradient(0, 0, 0, H);
@@ -571,8 +1019,14 @@
       var g = S.geo, cell = g.cell, ox = g.ox, oy = g.oy, gw = S.cols * cell, gh = S.rows * cell;
       var t = S.anim || 0, x, y;
 
-      var unknown = S.vaults.filter(function (v) { return !v.vault.flagged && !v.vault.opened; });
-      var only = unknown.length === 1 ? unknown[0] : null;
+      // screen shake — jitter the whole view while shakeT is active
+      ctx.save();
+      if (S.shakeT > 0) {
+        var m = S.shakeMag * (S.shakeT / 0.4);
+        ctx.translate((Math.random() * 2 - 1) * m, (Math.random() * 2 - 1) * m);
+      }
+
+      if (g.room && S.cat) { drawRoom(t); } else {
 
       // ---- wooden manor floor ----
       ctx.save(); rrect(ox, oy, gw, gh, 10); ctx.clip();
@@ -628,11 +1082,10 @@
         var cr0 = room(x, y); if (!cr0.seen) continue;
         var rc2 = cellRect(x, y), ccx = rc2.x + cell / 2, ccy = rc2.y + cell / 2;
         if (cr0.vault) {
-          var st = cr0.vault.opened ? (cr0.vault.real ? 'openreal' : 'opendecoy')
-                 : (cr0.vault.flagged ? 'flagged' : (only === cr0 ? 'hint' : 'closed'));
+          // every unopened vault looks identical — no fake/real tell
+          var st = cr0.vault.opened ? (cr0.vault.real ? 'openreal' : 'opendecoy') : 'closed';
           drawVault(ccx, ccy, cell * 0.82, st, t);
-        } else if (cr0.note) drawLedger(ccx, ccy, cell * 0.68);
-        else if (cr0.trap) drawTrap(ccx, ccy, cell * 0.7, cr0.sprung);
+        } else if (cr0.trap) drawTrap(ccx, ccy, cell * 0.7, cr0.sprung);
       }
 
       // ---- movable-room highlight ----
@@ -646,17 +1099,18 @@
           rrect(er.x + cell * 0.12, er.y + cell * 0.12, cell * 0.76, cell * 0.76, 9); ctx.stroke();
         }
       } else if (S.running && S.cat) {
-        // movable-room highlight
+        // movable-room highlight — drawn for ALL neighbours so it never reveals
+        // whether a dog is lurking next door
         var a = 0.45 + 0.3 * Math.sin(t * 5);
         for (y = 0; y < S.rows; y++) for (x = 0; x < S.cols; x++) {
-          if (!adj(S.cat.x, S.cat.y, x, y) || dogeAt(x, y)) continue;
+          if (!adj(S.cat.x, S.cat.y, x, y)) continue;
           var hr = cellRect(x, y);
           ctx.strokeStyle = 'rgba(120,230,150,' + a + ')'; ctx.lineWidth = 3;
           rrect(hr.x + cell * 0.16, hr.y + cell * 0.16, cell * 0.68, cell * 0.68, 8); ctx.stroke();
         }
       }
 
-      // ---- dogs ----
+      // ---- dogs (only in rooms you've explored) ----
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i]; if (!room(d.x, d.y).seen) continue;
         var dr = cellRect(d.x, d.y);
@@ -666,8 +1120,23 @@
       // ---- the burglar cat (absent during entry choice) ----
       if (S.cat) {
         var catR = cellRect(S.cat.x, S.cat.y);
-        drawCat(catR.x + cell / 2, catR.y + cell / 2, cell * 0.86, S.looted, t);
+        drawBurglarCat(catR.x + cell / 2, catR.y + cell / 2, cell * 0.86, S.looted, t);
       }
+
+      }  // end map-mode world
+
+      drawEffects(!!(g.room && S.cat), t);
+
+      ctx.restore();   // end screen-shake transform
+
+      // ---- damage / caught flash overlay ----
+      if (S.flash && S.flash.a > 0) {
+        ctx.fillStyle = 'rgba(' + S.flash.r + ',' + S.flash.g + ',' + S.flash.b + ',' + S.flash.a + ')';
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // ---- minimap overview (only while zoomed in) ----
+      if (g.zoom) drawMinimap();
 
       // ---- toast ----
       if (S.msgT > 0) {
@@ -688,7 +1157,6 @@
     var hpFill = document.getElementById('hp-fill');
     var hpNum = document.getElementById('hp-num');
     var mLevel = document.getElementById('m-level');
-    var mNotes = document.getElementById('m-notes');
     var mLoot = document.getElementById('m-loot');
 
     function syncHUD() {
@@ -699,15 +1167,21 @@
       var s = '';
       for (var i = 0; i < CREW; i++) s += '<span' + (i < S.captures ? ' class="lost"' : '') + '>🐱</span>';
       strikesEl.innerHTML = s;
-      var hpPct = Math.round(S.hp / MAX_HP * 100);
-      hpFill.style.width = hpPct + '%';
-      hpFill.style.background = hpPct > 50 ? 'linear-gradient(90deg,#5fd07a,#3bbf63)'
-                              : hpPct > 25 ? 'linear-gradient(90deg,#e2b13a,#d8922a)'
-                                           : 'linear-gradient(90deg,#e94560,#c5283d)';
-      hpNum.textContent = Math.ceil(S.hp);
       mLevel.textContent = S.level;
-      mNotes.textContent = S.notes + '/' + S.cfg.notes;
       mLoot.textContent = S.loot;
+    }
+
+    // health bar is animated every frame so trap damage "ticks" down gradually
+    function updateHpBar(dt) {
+      if (S.dispHp == null) S.dispHp = S.hp;
+      if (S.dispHp > S.hp) S.dispHp = Math.max(S.hp, S.dispHp - 42 * dt);   // slow drain
+      else if (S.dispHp < S.hp) S.dispHp = S.hp;
+      var pct = clamp(S.dispHp / (S.maxHp || MAX_HP) * 100, 0, 100);
+      hpFill.style.width = pct + '%';
+      hpFill.style.background = pct > 50 ? 'linear-gradient(90deg,#5fd07a,#3bbf63)'
+                             : pct > 25 ? 'linear-gradient(90deg,#e2b13a,#d8922a)'
+                                        : 'linear-gradient(90deg,#e94560,#c5283d)';
+      hpNum.textContent = Math.ceil(S.dispHp);
     }
 
     // ---------- overlays ----------
@@ -716,6 +1190,7 @@
     var startBtn = document.getElementById('start-btn');
     var againBtn = document.getElementById('again-btn');
     document.getElementById('over-best').textContent = best.load();
+    document.getElementById('menu-best').textContent = best.load();
 
     function startLevel(level) {
       newGame(level);
@@ -734,7 +1209,9 @@
         : loseSub;
       document.getElementById('over-score').textContent = S.level;
       document.getElementById('over-best').textContent = best.load();
+      document.getElementById('over-reward').textContent = S.win ? '🎉 +1 💎 earned — spend it on a cat!' : '';
       againBtn.textContent = S.win ? 'Next Heist ›' : 'Retry Heist';
+      refreshGemDisplays();
       overEl.hidden = false;
     }
 
@@ -742,36 +1219,312 @@
     againBtn.addEventListener('click', function () { startLevel(S.win ? S.level + 1 : S.level); });
 
     // ---------- input ----------
+    // move one room in a direction (handles vault/dog/trap via tapRoom, plus
+    // escaping out through a shutter wall once you've looted)
+    function move(dx, dy) {
+      if (!S || !S.running || !S.cat || S.tr) return;
+      var nx = S.cat.x + dx, ny = S.cat.y + dy;
+      if (inGrid(nx, ny)) tapRoom(nx, ny);
+      else {                                  // walking into an outer wall
+        var cur = room(S.cat.x, S.cat.y);
+        if (cur.shutter) { if (S.looted) endRound(true); else flash('Find the loot before you leave!'); }
+      }
+      syncHUD();
+    }
+
     function onTap(e) {
       if (!S || !S.running) return;
       e.preventDefault();
+      if (S.tr) return;                       // mid-animation — ignore taps
       var p = EL.canvasPos(canvas, e, W, H), g = S.geo;
-      var x = Math.floor((p.x - g.ox) / (g.cell + g.gap));
-      var y = Math.floor((p.y - g.oy) / (g.cell + g.gap));
-      // ignore taps in the gaps between cells
-      var rc = cellRect(x, y);
-      if (p.x < rc.x || p.x > rc.x + rc.s || p.y < rc.y || p.y > rc.y + rc.s) return;
-      tapRoom(x, y);
-      syncHUD();
+      if (S.phase === 'entry') {
+        // full-map view: tap a door cell to break in
+        var x = Math.floor((p.x - g.ox) / g.cell), y = Math.floor((p.y - g.oy) / g.cell);
+        if (!inGrid(x, y)) return;
+        tapRoom(x, y); syncHUD(); return;
+      }
+      // single-room view: tap inside = open the vault here; tap a wall = move/escape
+      var gm = roomGeom();
+      var inside = p.x >= gm.ix && p.x <= gm.ix + gm.iw && p.y >= gm.iy && p.y <= gm.iy + gm.ih;
+      if (inside) {
+        var cur = room(S.cat.x, S.cat.y);
+        if (cur.vault && !cur.vault.opened) { openVault(cur); syncHUD(); }
+        return;
+      }
+      if (p.x < gm.ix) move(-1, 0);
+      else if (p.x > gm.ix + gm.iw) move(1, 0);
+      else if (p.y < gm.iy) move(0, -1);
+      else move(0, 1);
     }
     canvas.addEventListener('click', onTap);
     canvas.addEventListener('touchstart', onTap, { passive: false });
+
+    // arrow keys / WASD move the cat
+    window.addEventListener('keydown', function (e) {
+      if (!S || !S.running || S.phase !== 'play' || !S.cat || S.tr) return;
+      var k = e.key, dx = 0, dy = 0;
+      if (k === ' ' || k === 'Spacebar' || k === 'Enter') {     // open the vault you're standing in
+        var here = room(S.cat.x, S.cat.y);
+        if (here.vault && !here.vault.opened) { e.preventDefault(); openVault(here); syncHUD(); }
+        return;
+      }
+      if (k === 'ArrowUp' || k === 'w' || k === 'W') dy = -1;
+      else if (k === 'ArrowDown' || k === 's' || k === 'S') dy = 1;
+      else if (k === 'ArrowLeft' || k === 'a' || k === 'A') dx = -1;
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D') dx = 1;
+      else return;
+      e.preventDefault();
+      move(dx, dy);
+    });
 
     // ---------- loop ----------
     var last = 0;
     function frame(ts) {
       if (!last) last = ts;
       var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
-      if (S) { S.anim = (S.anim || 0) + dt; if (S.msgT > 0) S.msgT -= dt; layout(); render(); }
+      if (S) {
+        S.anim = (S.anim || 0) + dt;
+        if (S.msgT > 0) S.msgT -= dt;
+        if (S.shakeT > 0) S.shakeT -= dt;
+        if (S.flash) { S.flash.a -= dt * 2.2; if (S.flash.a <= 0) S.flash = null; }
+        var j;
+        for (j = S.pops.length - 1; j >= 0; j--) { S.pops[j].age += dt; if (S.pops[j].age >= S.pops[j].life) S.pops.splice(j, 1); }
+        for (j = S.bursts.length - 1; j >= 0; j--) { S.bursts[j].age += dt; if (S.bursts[j].age >= S.bursts[j].life) S.bursts.splice(j, 1); }
+        if (S.tr) { S.tr.t += dt; if (S.tr.t >= S.tr.dur) S.tr = null; }   // room-move / jump animation
+        updateHpBar(dt);
+        // once the bar finishes draining to empty, the crew is out
+        if (S.pendingDeath && S.dispHp <= 0.5) { S.pendingDeath = false; endRound(false, 'hurt'); }
+        layout(); render();
+      }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
+
+    // ============================================================
+    //  Cat Gacha — 300 collectible cats, pulled with gems
+    // ============================================================
+    var GACHA_N = 300;
+    var FUR = {
+      black: '#2b2b30', white: '#f4f1ea', grey: '#8c8c96', ginger: '#d9863f', cream: '#ecdcb8',
+      brown: '#6b4a30', bluegrey: '#7d8a99', chocolate: '#4a3526', fawn: '#caa97e', charcoal: '#3f3f47',
+      silver: '#b9bcc4', caramel: '#b07a3e'
+    };
+    var FUR_KEYS = Object.keys(FUR);
+    var EYES = ['#7bbf5a', '#e2b13a', '#5aa6e0', '#c4783a', '#9a7b3a'];
+    var ORANGE = '#e08a3a', WHITEP = '#f4f1ea', BLACKP = '#2b2b30';
+    var FIRST = ['Biscuit', 'Pepper', 'Mochi', 'Pickle', 'Waffle', 'Noodle', 'Pumpkin', 'Marble', 'Clover', 'Simba',
+                 'Hazel', 'Olive', 'Ziggy', 'Tofu', 'Maple', 'Pretzel', 'Cinnamon', 'Pebble', 'Domino', 'Saffron'];
+    var LAST = ['Whiskers', 'Paws', 'Boots', 'Mittens', 'Socks', 'Toes', 'Tail', 'Purr', 'Pounce', 'Nibbles',
+                'Snuggles', 'Button', 'Bean', 'Muffin', 'Patches', 'Twitch', 'Fluff', 'Bandit', 'Biscuits', 'Crumb'];
+    var RARITY = [null,
+      { name: 'Common', col: '#9aa0ad', w: 1000 },
+      { name: 'Uncommon', col: '#5fd07a', w: 450 },
+      { name: 'Rare', col: '#5aa6e0', w: 160 },
+      { name: 'Epic', col: '#b07ae0', w: 45 },
+      { name: 'Legendary', col: '#e2b13a', w: 10 },
+      { name: 'Secret', col: '#ff5a6e', w: 1 }
+    ];
+    // your real cats — the rarest "secret" pulls
+    var SPECIALS = [
+      { name: 'Smidge', rarity: 6, base: FUR.black, pattern: 'tortie', patches: [{ c: ORANGE, n: 5 }], eye: '#c9a23a' },
+      { name: 'Calico Mona Lisa', rarity: 6, base: FUR.black, pattern: 'calico', patches: [{ c: WHITEP, n: 3 }, { c: ORANGE, n: 3 }], eye: '#7bbf5a' },
+      { name: 'Kuku', rarity: 6, base: FUR.black, pattern: 'tuxedo', splitFace: 'L-white', belly: WHITEP, eye: '#e2b13a' },
+      { name: 'Sweet Pea', rarity: 6, base: FUR.white, pattern: 'calico', patches: [{ c: BLACKP, n: 2 }, { c: ORANGE, n: 4 }], eye: '#7bbf5a' },
+      { name: 'Mimi', rarity: 6, base: FUR.black, pattern: 'calico', belly: WHITEP, patches: [{ c: ORANGE, n: 3 }], eye: '#e2b13a' }
+    ];
+    var PATTERNS = ['solid', 'tuxedo', 'tabby', 'calico', 'tortie', 'point', 'bicolor', 'spotted'];
+
+    function buildCat(i) {
+      if (i < SPECIALS.length) { var c = {}; for (var key in SPECIALS[i]) c[key] = SPECIALS[i][key]; c.seed = i + 1; return c; }
+      var R = rng(i * 40503 + 17);
+      var coat = {
+        seed: i + 1, base: FUR[FUR_KEYS[Math.floor(R() * FUR_KEYS.length)]],
+        pattern: PATTERNS[Math.floor(R() * PATTERNS.length)], eye: EYES[Math.floor(R() * EYES.length)],
+        name: FIRST[i % FIRST.length] + ' ' + LAST[Math.floor(i / FIRST.length) % LAST.length]
+      };
+      var rr = R(); coat.rarity = rr < 0.5 ? 1 : rr < 0.78 ? 2 : rr < 0.92 ? 3 : rr < 0.985 ? 4 : 5;
+      var p = coat.pattern;
+      if (p === 'tuxedo' || p === 'bicolor') coat.belly = WHITEP;
+      else if (p === 'calico') { if (R() < 0.5) coat.belly = WHITEP; coat.patches = [{ c: WHITEP, n: 2 + ((R() * 3) | 0) }, { c: ORANGE, n: 2 + ((R() * 3) | 0) }]; }
+      else if (p === 'tortie') coat.patches = [{ c: ORANGE, n: 3 + ((R() * 4) | 0) }, { c: '#1f1f24', n: 2 }];
+      else if (p === 'tabby') { coat.stripes = true; if (R() < 0.5) coat.belly = FUR.cream; }
+      else if (p === 'spotted') coat.patches = [{ c: 'rgba(0,0,0,0.32)', n: 6 }];
+      else if (p === 'point') { coat.point = true; coat.pointColor = R() < 0.5 ? FUR.chocolate : FUR.charcoal; coat.base = R() < 0.5 ? FUR.cream : FUR.fawn; }
+      return coat;
+    }
+    var CATS = [], CUM = [], TOT = 0;
+    (function () { for (var i = 0; i < GACHA_N; i++) { CATS.push(buildCat(i)); TOT += RARITY[CATS[i].rarity].w; CUM.push(TOT); } })();
+    function rollCat() { var r = Math.random() * TOT, lo = 0, hi = CUM.length - 1; while (lo < hi) { var m = (lo + hi) >> 1; if (CUM[m] < r) lo = m + 1; else hi = m; } return lo; }
+
+    function gGems() { try { return parseInt(localStorage.getItem('burgle-cats.gems') || '0', 10) || 0; } catch (e) { return 0; } }
+    function gSetGems(v) { try { localStorage.setItem('burgle-cats.gems', String(v)); } catch (e) {} }
+    function gOwned() { try { var a = JSON.parse(localStorage.getItem('burgle-cats.owned')); if (a && a.length === GACHA_N) return a; } catch (e) {} return new Array(GACHA_N).fill(0); }
+    function gSetOwned(a) { try { localStorage.setItem('burgle-cats.owned', JSON.stringify(a)); } catch (e) {} }
+    function awardGem() { gSetGems(gGems() + 1); }
+    function gEquipped() { try { var v = parseInt(localStorage.getItem('burgle-cats.equip'), 10); return isNaN(v) ? -1 : v; } catch (e) { return -1; } }
+    function gSetEquipped(i) { try { localStorage.setItem('burgle-cats.equip', String(i)); } catch (e) {} }
+    // stats & abilities scale with rarity — better cats are stronger
+    function equipInfo() {
+      var i = gEquipped();
+      if (i < 0 || gOwned()[i] <= 0) return { coat: DEFAULT_COAT, name: 'Alley Cat', rarity: 0, bonusHp: 0, tough: false, speedy: false, guide: false, abilities: [] };
+      var c = CATS[i], r = c.rarity, inf = { coat: c, name: c.name, rarity: r, bonusHp: r * 8, tough: r >= 2, speedy: r >= 3, guide: r >= 4, abilities: [] };
+      if (inf.guide) inf.abilities.push('Vault Sense');
+      if (inf.speedy) inf.abilities.push('Speedy');
+      if (inf.tough) inf.abilities.push('Tough');
+      return inf;
+    }
+
+    // ---- cat portrait drawing (any 2D context) ----
+    function catSil(g) {
+      g.beginPath();
+      g.moveTo(-26, -34); g.lineTo(-10, -14); g.lineTo(-34, -14); g.closePath();
+      g.moveTo(26, -34); g.lineTo(10, -14); g.lineTo(34, -14); g.closePath();
+      g.ellipse(0, -16, 28, 25, 0, 0, 7);
+      g.ellipse(0, 24, 32, 30, 0, 0, 7);
+    }
+    function applyCoat(g, coat) {
+      var R = rng((coat.seed || 1) * 131 + 7);
+      if (coat.splitFace) {
+        var lw = coat.splitFace === 'L-white';
+        g.fillStyle = lw ? WHITEP : BLACKP; g.fillRect(-40, -44, 40, 100);
+        g.fillStyle = lw ? BLACKP : WHITEP; g.fillRect(0, -44, 40, 100);
+      }
+      if (coat.point) {
+        g.fillStyle = coat.pointColor || FUR.chocolate;
+        g.beginPath(); g.ellipse(0, -14, 16, 15, 0, 0, 7); g.fill();
+        g.beginPath(); g.moveTo(-26, -34); g.lineTo(-10, -14); g.lineTo(-34, -14); g.closePath(); g.fill();
+        g.beginPath(); g.moveTo(26, -34); g.lineTo(10, -14); g.lineTo(34, -14); g.closePath(); g.fill();
+        g.beginPath(); g.ellipse(0, 48, 28, 14, 0, 0, 7); g.fill();
+      }
+      if (coat.belly) {
+        g.fillStyle = coat.belly;
+        g.beginPath(); g.ellipse(0, 30, 20, 24, 0, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(0, -8, 15, 12, 0, 0, 7); g.fill();
+      }
+      if (coat.stripes) {
+        g.strokeStyle = 'rgba(0,0,0,0.30)'; g.lineWidth = 4;
+        for (var sy = 8; sy < 46; sy += 9) { g.beginPath(); g.moveTo(-30, sy); g.quadraticCurveTo(0, sy - 4, 30, sy); g.stroke(); }
+        g.beginPath(); g.moveTo(-6, -34); g.lineTo(-3, -22); g.moveTo(0, -36); g.lineTo(0, -22); g.moveTo(6, -34); g.lineTo(3, -22); g.stroke();
+      }
+      if (coat.patches) {
+        for (var pi = 0; pi < coat.patches.length; pi++) {
+          var pc = coat.patches[pi]; g.fillStyle = pc.c;
+          for (var n = 0; n < pc.n; n++) { var rx = (R() * 2 - 1) * 30, ry = (R() * 1.6 - 0.4) * 40, rr = 7 + R() * 9; g.beginPath(); g.ellipse(rx, ry, rr, rr * 0.85, 0, 0, 7); g.fill(); }
+        }
+      }
+    }
+    function drawCatPortrait(g, cx, cy, s, coat, opts) {
+      var k = s / 120; g.save(); g.translate(cx, cy); g.scale(k, k); g.lineJoin = 'round';
+      g.strokeStyle = coat.base; g.lineCap = 'round'; g.lineWidth = 13;
+      g.beginPath(); g.moveTo(30, 34); g.quadraticCurveTo(54, 26, 50, 2); g.stroke();
+      g.fillStyle = coat.base; catSil(g); g.fill();
+      g.save(); catSil(g); g.clip(); applyCoat(g, coat); g.restore();
+      g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.4)'; catSil(g); g.stroke();
+      g.fillStyle = '#e7a0a8';
+      g.beginPath(); g.moveTo(-23, -30); g.lineTo(-15, -18); g.lineTo(-28, -18); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(23, -30); g.lineTo(15, -18); g.lineTo(28, -18); g.closePath(); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(-11, -16, 7, 9, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(11, -16, 7, 9, 0, 0, 7); g.fill();
+      g.fillStyle = coat.eye || '#7bbf5a'; g.beginPath(); g.ellipse(-11, -15, 4.5, 7, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(11, -15, 4.5, 7, 0, 0, 7); g.fill();
+      g.fillStyle = '#15131a'; g.beginPath(); g.ellipse(-11, -14, 2, 5, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(11, -14, 2, 5, 0, 0, 7); g.fill();
+      g.fillStyle = '#e08a98'; g.beginPath(); g.moveTo(0, -6); g.lineTo(-4, -2); g.lineTo(4, -2); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(40,30,40,0.55)'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(0, -2); g.lineTo(0, 2); g.moveTo(0, 2); g.quadraticCurveTo(-5, 5, -8, 2); g.moveTo(0, 2); g.quadraticCurveTo(5, 5, 8, 2); g.stroke();
+      g.beginPath(); g.moveTo(-6, -1); g.lineTo(-26, -4); g.moveTo(-6, 2); g.lineTo(-26, 3); g.moveTo(6, -1); g.lineTo(26, -4); g.moveTo(6, 2); g.lineTo(26, 3); g.stroke();
+      if (opts && opts.burglar) {                       // bandit mask over the eyes
+        g.fillStyle = '#1d1d24'; g.beginPath(); g.ellipse(0, -16, 25, 10, 0, 0, 7); g.fill();
+        g.fillStyle = '#fff'; g.beginPath(); g.ellipse(-11, -16, 6, 7, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(11, -16, 6, 7, 0, 0, 7); g.fill();
+        g.fillStyle = '#15131a'; g.beginPath(); g.ellipse(-11, -15, 2.6, 4, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(11, -15, 2.6, 4, 0, 0, 7); g.fill();
+      }
+      if (opts && opts.looted) {                         // loot sack
+        g.fillStyle = '#6b4a2c'; g.strokeStyle = '#3a2e2a'; g.lineWidth = 3;
+        g.beginPath(); g.ellipse(-36, 8, 12, 14, 0, 0, 7); g.fill(); g.stroke();
+        g.fillStyle = '#ffd96b'; g.font = 'bold 16px Nunito, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('$', -36, 9);
+      }
+      g.restore();
+    }
+    // default coat used before you equip a cat
+    var DEFAULT_COAT = { base: '#f4f1ea', pattern: 'solid', eye: '#7bbf5a', seed: 1, rarity: 0 };
+    function equippedCoat() {
+      var i = gEquipped();
+      return (i >= 0 && gOwned()[i] > 0) ? CATS[i] : DEFAULT_COAT;
+    }
+    function drawBurglarCat(cx, cy, s, looted, t) {
+      drawCatPortrait(ctx, cx, cy + Math.sin((t || 0) * 3) * s * 0.015, s, equippedCoat(), { burglar: true, looted: looted });
+    }
+
+    // ---- gacha / collection UI ----
+    function starStr(r) { var n = Math.min(r, 5), s = ''; for (var i = 0; i < n; i++) s += '★'; return s; }
+    function refreshGemDisplays() {
+      var g = gGems();
+      ['menu-gems', 'gacha-gems', 'over-gems'].forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = g; });
+      var pb = document.getElementById('pull-btn'); if (pb) pb.disabled = g < 1;
+    }
+    function showReveal(idx, isNew) {
+      var coat = CATS[idx], rar = RARITY[coat.rarity];
+      var cv = document.getElementById('gacha-canvas'), c2 = cv.getContext('2d');
+      c2.clearRect(0, 0, cv.width, cv.height);
+      var gg = c2.createRadialGradient(120, 122, 8, 120, 122, 120);
+      gg.addColorStop(0, rar.col + '99'); gg.addColorStop(1, 'rgba(0,0,0,0)');
+      c2.fillStyle = gg; c2.fillRect(0, 0, 240, 240);
+      drawCatPortrait(c2, 120, 130, 158, coat);
+      var nm = document.getElementById('reveal-name');
+      nm.textContent = coat.name + (isNew ? '  ✨NEW' : ''); nm.style.color = rar.col;
+      var st = document.getElementById('reveal-stars');
+      st.textContent = (coat.rarity === 6 ? 'SECRET · ' : '') + starStr(coat.rarity) + ' ' + rar.name; st.style.color = rar.col;
+      var rv = document.getElementById('gacha-reveal'); rv.classList.remove('pop'); void rv.offsetWidth; rv.classList.add('pop');
+    }
+    function doPull() {
+      var g = gGems(); if (g < 1) return;
+      gSetGems(g - 1);
+      var idx = rollCat(), owned = gOwned(), isNew = owned[idx] === 0;
+      owned[idx]++; gSetOwned(owned);
+      refreshGemDisplays(); showReveal(idx, isNew);
+    }
+    function openGacha() { refreshGemDisplays(); document.getElementById('gacha').hidden = false; }
+    function updateEquipLine() {
+      var inf = equipInfo();
+      var ab = inf.abilities.length ? inf.abilities.join(' · ') : 'no special ability';
+      document.getElementById('coll-equip').innerHTML = 'Equipped: <b>' + inf.name + '</b> &nbsp;·&nbsp; +' + inf.bonusHp + ' HP &nbsp;·&nbsp; ' + ab;
+    }
+    function openCollection() {
+      var owned = gOwned(), equipped = gEquipped(), grid = document.getElementById('coll-grid'), count = 0;
+      grid.innerHTML = '';
+      for (var i = 0; i < GACHA_N; i++) {
+        var cell = document.createElement('div'); cell.className = 'cell';
+        if (owned[i] > 0) {
+          count++; var coat = CATS[i], rar = RARITY[coat.rarity];
+          cell.style.borderColor = rar.col;
+          var cv = document.createElement('canvas'); cv.width = 70; cv.height = 70;
+          drawCatPortrait(cv.getContext('2d'), 35, 39, 78, coat); cell.appendChild(cv);
+          var nm = document.createElement('div'); nm.className = 'cn'; nm.textContent = coat.name; cell.appendChild(nm);
+          if (owned[i] > 1) { var d = document.createElement('div'); d.className = 'dup'; d.textContent = '×' + owned[i]; cell.appendChild(d); }
+          if (coat.rarity >= 5) cell.classList.add('shiny');
+          if (i === equipped) cell.classList.add('equipped');
+          (function (idx) {
+            cell.addEventListener('click', function () { gSetEquipped(idx); updateEquipLine(); openCollection(); });
+          })(i);
+        } else { cell.classList.add('locked'); cell.innerHTML = '<div class="qm">?</div>'; }
+        grid.appendChild(cell);
+      }
+      document.getElementById('coll-count').textContent = count;
+      updateEquipLine();
+      document.getElementById('collection').hidden = false;
+    }
+    document.getElementById('open-gacha').addEventListener('click', openGacha);
+    document.getElementById('over-gacha').addEventListener('click', openGacha);
+    document.getElementById('open-collection').addEventListener('click', openCollection);
+    document.getElementById('gacha-close').addEventListener('click', function () { document.getElementById('gacha').hidden = true; });
+    document.getElementById('coll-close').addEventListener('click', function () { document.getElementById('collection').hidden = true; document.getElementById('coll-grid').innerHTML = ''; });
+    document.getElementById('pull-btn').addEventListener('click', doPull);
+    refreshGemDisplays();
 
     // ---------- test hook (mirrors the project's __t convention) ----------
     window.__bc = {
       state: function () { return S; },
       tap: function (x, y) { tapRoom(x, y); syncHUD(); },
-      start: startLevel
+      open: function () { var r = room(S.cat.x, S.cat.y); if (r.vault && !r.vault.opened) { openVault(r); syncHUD(); } },
+      start: startLevel,
+      gacha: { gems: gGems, setGems: gSetGems, pull: doPull, owned: gOwned, cats: CATS, roll: rollCat, specials: SPECIALS.length }
     };
   })();
   </script>

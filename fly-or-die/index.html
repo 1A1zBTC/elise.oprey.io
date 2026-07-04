@@ -30,7 +30,6 @@
     }
     canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     .hint { margin-top: 8px; color: #a0a8c0; font-size: 0.8rem; text-align: center; max-width: 900px; line-height: 1.5; flex: 0 0 auto; }
-    .hint .o2 { color: #6ee7ff; } .hint .h2o { color: #4ea8ff; }
 
     .panel { width: 100%; max-width: 420px; background: #16213e; border: 2px solid #0f3460; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.5); }
     .panel h2 { font-family: 'Pacifico', cursive; color: #fff; font-size: 1.8rem; font-weight: 400; margin-bottom: 6px; }
@@ -59,14 +58,14 @@
       <div class="panel">
         <h2>Fly or Die</h2>
         <div class="sub">You're a tiny flying critter. <b>Eat</b> food and smaller creatures to grow &amp; <b>evolve</b> — but bigger creatures will eat <b>you</b>!</div>
-        <div class="evo">🪰<span class="arrow"> › </span>🐝<span class="arrow"> › </span>🦋<span class="arrow"> › </span>🐦<span class="arrow"> › </span>🦜<span class="arrow"> › </span>🦅<span class="arrow"> › </span>🦉<span class="arrow"> › </span>🐉</div>
+        <div class="evo">🪰<span class="arrow"> › </span>🦟<span class="arrow"> › </span>🐝<span class="arrow"> › </span>🦋<span class="arrow"> › </span>🐞<span class="arrow"> › </span>🐦<span class="arrow"> › </span>🦇<span class="arrow"> › </span>🦜<span class="arrow"> › </span>🦅<span class="arrow"> › </span>🦉<span class="arrow"> › </span>🦢<span class="arrow"> › </span>🐲<span class="arrow"> › </span>🐉<span class="arrow"> › </span>👾<span class="arrow"> › </span>💀</div>
         <div class="legend">
           <div class="row"><span style="font-size:1.2rem">🟢</span><span><b>Smaller</b>Safe to eat</span></div>
           <div class="row"><span style="font-size:1.2rem">🔴</span><span><b>Bigger</b>Will eat you!</span></div>
           <div class="row"><span style="font-size:1.2rem">🦂</span><span><b>Ground beasts</b>Bite if you fly low</span></div>
           <div class="row"><span style="font-size:1.2rem">🍓</span><span><b>Biome food</b>On ground &amp; trees</span></div>
         </div>
-        <div class="sub" style="margin-top:10px"><b>WASD</b> to fly: <b>W</b> flaps up, <b>gravity</b> pulls you down, <b>A/D</b> steer, <b>S</b> dives. Each area has its own food &mdash; and its own ground predators!</div>
+        <div class="sub" style="margin-top:10px">Tap the <b>arrow keys</b> (or WASD) to move &mdash; <b>one hop per press, no holding</b>. Tap <b>↑</b> to flap up against gravity. Click to dash toward the cursor. Each area has its own food &mdash; and its own ground predators!</div>
         <button class="start-btn" id="start-btn">Start Game</button>
       </div>
     </div>
@@ -83,8 +82,8 @@
   </div>
 
   <p class="hint">
-    <b>WASD</b> to fly (W flaps, gravity pulls down) &nbsp;·&nbsp; eat <b>ground &amp; tree</b> food to evolve &nbsp;·&nbsp;
-    dodge <span style="color:#ff5a6e">bigger</span> fliers &amp; <span style="color:#ff5a6e">ground beasts</span> 🦂🐺 &nbsp;·&nbsp; <span class="o2">O₂</span> in space ↑ &nbsp;·&nbsp; <span class="h2o">water</span> in seas ↓
+    Tap <b>arrow keys</b> (or WASD) to move &mdash; one hop per press, <b>no holding</b> &nbsp;·&nbsp; <b>click</b> to dash toward the cursor &nbsp;·&nbsp;
+    eat <b>food</b> &amp; <span style="color:#5fe06a">smaller</span> creatures to evolve &nbsp;·&nbsp; dodge <span style="color:#ff5a6e">bigger</span> fliers &amp; <span style="color:#ff5a6e">ground beasts</span> 🦂🐺
   </p>
 
   <script src="../shared/game.js"></script>
@@ -117,30 +116,42 @@
     // ---- evolution ladder (all flying animals) ----
     // each level needs noticeably more XP than the last (steeper curve)
     const STAGES = [
-      { e: '🪰', r: 16, next: 5,   speed: 4.7 },
-      { e: '🐝', r: 22, next: 14,  speed: 4.5 },
-      { e: '🦋', r: 29, next: 30,  speed: 4.3 },
-      { e: '🐦', r: 37, next: 55,  speed: 4.1 },
-      { e: '🦜', r: 46, next: 95,  speed: 3.9 },
-      { e: '🦅', r: 56, next: 155, speed: 3.8 },
-      { e: '🦉', r: 68, next: 240, speed: 3.6 },
-      { e: '🐉', r: 84, next: 999, speed: 3.7 }
+      { e: '🪰', r: 15, next: 5,   speed: 3.2 },
+      { e: '🦟', r: 18, next: 12,  speed: 3.2 },
+      { e: '🐝', r: 21, next: 22,  speed: 3.1 },
+      { e: '🦋', r: 25, next: 38,  speed: 3.0 },
+      { e: '🐞', r: 29, next: 58,  speed: 3.0 },
+      { e: '🐦', r: 34, next: 85,  speed: 2.9 },
+      { e: '🦇', r: 39, next: 120, speed: 2.9 },
+      { e: '🦜', r: 45, next: 165, speed: 2.8 },
+      { e: '🦅', r: 51, next: 225, speed: 2.7 },
+      { e: '🦉', r: 58, next: 300, speed: 2.6 },
+      { e: '🦢', r: 66, next: 400, speed: 2.5 },
+      { e: '🐲', r: 75, next: 540, speed: 2.5 },
+      { e: '🐉', r: 85, next: 800, speed: 2.6 },
+      // special apex forms with powers
+      { e: '👾', r: 93, next: 1100, speed: 2.7, perk: 'goop' },    // alien goop: rapid regen + immune to poison
+      { e: '💀', r: 102, next: 999, speed: 2.6, perk: 'poison' }   // grim reaper: poison aura damages nearby creatures
     ];
     const MAXTIER = STAGES.length - 1;
+    const POISON_R = 1.9;    // poison aura reach, in multiples of the reaper's radius
+    const POISON_DPS = 26;   // poison damage per second to the player from a reaper's aura
 
     // ---- world & zones ----
     // a really WIDE world split into distinct biomes, with a space band on top,
     // scattered seas (not a full-width floor), and solid obstacles to fly around.
-    const WORLD = { w: 8400, h: 2200 };
-    const SPACE_Y = 320;          // y < this → space (oxygen drains)
+    const WORLD = { w: 13200, h: 2200 };
+    const SPACE_Y = 320;          // y < this → the starry high-sky band (scenery only now)
     const GROUND_Y = WORLD.h - 150;  // visual ground strip starts here
-    const NPC_MAX = 26;
-    const FOOD_MAX = 110;
+    const NPC_MAX = 44;           // more creatures roaming the wider world (they move slowly)
+    const FOOD_MAX = 170;
     const BIOME_W = WORLD.w / 6;
 
-    // gravity flight: you fall unless you flap (W). A/D move, S dives.
-    const GRAV = 0.30, THRUST = 0.78, DIVE = 0.55, HACCEL = 0.72;
-    const HDRAG = 0.86, VDRAG = 0.985, MAXVX = 6.2, MAXVUP = 9.5, MAXVDOWN = 12;
+    // tap-to-move: each arrow/WASD press (or click) adds ONE impulse in that direction —
+    // no holding. Gravity gently drifts you down between taps; momentum bleeds off via drag.
+    const GRAV = 0.13;
+    const HDRAG = 0.92, VDRAG = 0.92, MAXVX = 7.0, MAXVUP = 9.4, MAXVDOWN = 10.4;
+    const TAP_H = 4.3, TAP_UP = 5.6, TAP_DN = 4.1;   // impulse per tap (sideways / flap up / dive)
 
     // each biome: its look + obstacle kit + FOOD that only grows here + GROUND predators
     const BIOMES = [
@@ -169,12 +180,10 @@
     let foods = [], npcs = [], parts = [];
     let camX = 0, camY = 0;
     let score = 0, best = 0, maxTier = 0;
-    let evolveMsg = 0, zoneMsg = '', zoneMsgT = 0;
+    let evolveMsg = 0;
     let stars = [];
 
     // input
-    const keys = {};
-    let tx = 0, ty = 0, haveTarget = false, pointerActive = false;
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
@@ -240,7 +249,7 @@
       player = {
         x: BIOME_W * 0.5, y: (SPACE_Y + GROUND_Y) / 2, vx: 0, vy: 0,
         tier: 0, r: STAGES[0].r, drawR: STAGES[0].r, xp: 0,
-        hp: 100, o2: 100, water: 100, iframe: 0, grace: 3, flap: 0
+        hp: 100, iframe: 0, grace: 3, flap: 0
       };
       player.grounded = false;
       // nudge the spawn out of any obstacle it landed on
@@ -248,9 +257,8 @@
       foods = []; for (let i = 0; i < FOOD_MAX; i++) foods.push(spawnFood());
       npcs = []; for (let i = 0; i < NPC_MAX; i++) npcs.push(spawnNpc({}, player));
       grounders = []; for (let b = 0; b < BIOMES.length; b++) { const n = rndInt(2, 3); for (let i = 0; i < n; i++) grounders.push(spawnGrounder({}, b)); }
-      parts = []; score = 0; maxTier = 0; evolveMsg = 0; zoneMsgT = 0;
+      parts = []; score = 0; maxTier = 0; evolveMsg = 0;
       best = loadBest();
-      haveTarget = false;
       resize();
       setupEl.hidden = true; overEl.hidden = true;
       state = 'playing';
@@ -268,36 +276,41 @@
     }
     function showSetup() { state = 'setup'; overEl.hidden = true; setupEl.hidden = false; }
     function stageName(t) {
-      return ['fly', 'bee', 'butterfly', 'bird', 'parrot', 'eagle', 'owl', 'dragon'][t];
+      return ['fly', 'mosquito', 'bee', 'butterfly', 'ladybug', 'bird', 'bat', 'parrot',
+        'eagle', 'owl', 'swan', 'wyvern', 'dragon', 'alien goop', 'grim reaper'][t];
     }
 
-    // ---------- input ----------
-    function setTargetFromEvent(e) {
-      const rect = canvas.getBoundingClientRect();
-      // map the click position (in CSS px) straight to world units across the view
-      const sx = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / rect.width * VIEW_W;
-      const sy = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / rect.height * VIEW_H;
-      tx = camX + sx; ty = camY + sy; haveTarget = true;
+    // ---------- input (tap-to-move) ----------
+    // One impulse per press/click — no holding. Arrow keys (or WASD) move you in that
+    // direction; clicking dashes you toward the cursor.
+    function nudge(dx, dy) {
+      if (state !== 'playing' || !player) return;
+      player.vx += dx; player.vy += dy;
+      player.flap += 0.7;                     // a wing-beat for each tap
     }
     canvas.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       if (state === 'setup') { begin(); return; }
       if (state === 'over') { showSetup(); return; }
-      pointerActive = true; setTargetFromEvent(e);
+      const rect = canvas.getBoundingClientRect();
+      const sx = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / rect.width * VIEW_W;
+      const sy = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / rect.height * VIEW_H;
+      const a = Math.atan2((camY + sy) - player.y, (camX + sx) - player.x);
+      nudge(Math.cos(a) * TAP_H * 1.3, Math.sin(a) * TAP_H * 1.3);
     });
-    canvas.addEventListener('pointermove', function (e) {
-      if (state !== 'playing') return;
-      // desktop: follow hover; touch: only while pressed
-      if (pointerActive || e.pointerType === 'mouse') setTargetFromEvent(e);
-    });
-    window.addEventListener('pointerup', function () { pointerActive = false; });
     window.addEventListener('keydown', function (e) {
       if (state === 'setup' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); begin(); return; }
       if (state === 'over' && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); showSetup(); return; }
-      keys[e.code] = true;
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].indexOf(e.code) >= 0) e.preventDefault();
+      if (e.repeat) return;                   // ignore key auto-repeat → no holding, one move per press
+      let dx = 0, dy = 0;
+      if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') dy = -TAP_UP;
+      else if (e.code === 'ArrowDown' || e.code === 'KeyS') dy = TAP_DN;
+      else if (e.code === 'ArrowLeft' || e.code === 'KeyA') dx = -TAP_H;
+      else if (e.code === 'ArrowRight' || e.code === 'KeyD') dx = TAP_H;
+      else return;
+      e.preventDefault();
+      nudge(dx, dy);
     });
-    window.addEventListener('keyup', function (e) { keys[e.code] = false; });
 
     document.getElementById('start-btn').addEventListener('click', begin);
     document.getElementById('again-btn').addEventListener('click', showSetup);
@@ -307,7 +320,6 @@
       for (const w of WATERS) { const dx = (x - w.x) / w.rx, dy = (y - w.y) / w.ry; if (dx * dx + dy * dy <= 1) return true; }
       return false;
     }
-    function zoneOf(x, y) { return y < SPACE_Y ? 'space' : (inWater(x, y) ? 'water' : 'sky'); }
 
     function update(dt) {
       for (let i = parts.length - 1; i >= 0; i--) {
@@ -315,26 +327,12 @@
         if (p.t > 0.7) parts.splice(i, 1);
       }
       if (evolveMsg > 0) evolveMsg -= dt;
-      if (zoneMsgT > 0) zoneMsgT -= dt;
       if (state !== 'playing') return;
 
-      // ---- gravity flight (WASD): W flaps up, A/D move, S dives ----
-      let left = keys['KeyA'] || keys['ArrowLeft'];
-      let right = keys['KeyD'] || keys['ArrowRight'];
-      let up = keys['KeyW'] || keys['ArrowUp'] || keys['Space'];
-      let down = keys['KeyS'] || keys['ArrowDown'];
-      // touch: hold to flap up and steer toward your finger's x
-      if (pointerActive && haveTarget) {
-        up = true;
-        if (tx < player.x - 24) left = true; else if (tx > player.x + 24) right = true;
-      }
-      if (left) player.vx -= HACCEL;
-      if (right) player.vx += HACCEL;
-      player.vx *= HDRAG;
-      player.vy += GRAV;                       // gravity always pulls down
-      if (up) player.vy -= THRUST;             // flap to rise
-      if (down) player.vy += DIVE;             // dive faster
-      player.vy *= VDRAG;
+      // ---- flight: velocity comes from discrete taps/clicks (see nudge()); here we
+      // just apply gentle gravity + momentum drag and integrate. ----
+      player.vy += GRAV;                       // gentle downward drift between taps
+      player.vx *= HDRAG; player.vy *= VDRAG;  // momentum bleeds off so a tap is a discrete dash
       player.vx = clamp(player.vx, -MAXVX, MAXVX);
       player.vy = clamp(player.vy, -MAXVUP, MAXVDOWN);
       player.x = clamp(player.x + player.vx, player.r, WORLD.w - player.r);
@@ -344,30 +342,18 @@
       const floor = GROUND_Y - player.r;
       if (player.y >= floor) { player.y = floor; if (player.vy > 0) player.vy = 0; player.grounded = true; }
       collideObstacles(player);
-      player.flap += (Math.abs(player.vx) * 0.05 + (up ? 0.5 : 0.12));
+      player.flap += (Math.abs(player.vx) + Math.abs(player.vy)) * 0.04 + 0.05;
       player.drawR += (player.r - player.drawR) * 0.12;
       if (player.iframe > 0) player.iframe -= dt;
       if (player.grace > 0) player.grace -= dt;
 
-      // ---- zones: oxygen + water ----
-      const z = zoneOf(player.x, player.y);
-      if (z === 'space') { player.o2 -= 11 * dt; if (zoneMsg !== 'space') { zoneMsg = 'space'; zoneMsgT = 2; } }
-      else { player.o2 += 16 * dt; if (z !== 'space' && zoneMsg === 'space') zoneMsg = ''; }
-      if (z === 'water') { player.water += 42 * dt; if (zoneMsg !== 'water') { zoneMsg = 'water'; zoneMsgT = 2; } }
-      else { player.water -= 3.6 * dt; if (zoneMsg === 'water') zoneMsg = ''; }
-      player.o2 = clamp(player.o2, 0, 100);
-      player.water = clamp(player.water, 0, 100);
-
-      // empty bars hurt; otherwise slowly heal
-      let starving = false;
-      if (player.o2 <= 0) { player.hp -= 16 * dt; starving = true; }
-      if (player.water <= 0) { player.hp -= 14 * dt; starving = true; }
-      if (!starving && player.iframe <= 0) player.hp += 3 * dt;
-      player.hp = clamp(player.hp, 0, 100);
-      if (player.hp <= 0) {
-        gameOver(player.o2 <= 0 ? 'You suffocated in space!' : (player.water <= 0 ? 'You dried out!' : 'A bigger creature got you!'));
-        return;
-      }
+      // ---- health: heal when not recently bitten; alien goop regenerates fast ----
+      const perk = STAGES[player.tier].perk;
+      const regen = (perk === 'goop') ? 11 : 3;
+      if (player.iframe <= 0) player.hp = clamp(player.hp + regen * dt, 0, 100);
+      // grim reaper: a poison aura that withers nearby creatures (handled in the NPC /
+      // grounder loops below). It also makes enemy reapers able to poison YOU.
+      if (player.hp <= 0) { gameOver('A bigger creature got you!'); return; }
 
       // ---- food ----
       for (const f of foods) {
@@ -384,7 +370,7 @@
         const npcBig = n.r > player.r * 1.08;
         const npcSmall = player.r > n.r * 1.08;
         const dd = Math.hypot(n.x - player.x, n.y - player.y);
-        const ns = STAGES[n.tier].speed * 0.6;
+        const ns = STAGES[n.tier].speed * 0.5;   // slower, more dodgeable enemies
         // behaviour
         if (dd < 320 && npcBig) {           // hunter: chase the player
           const a = Math.atan2(player.y - n.y, player.x - n.x);
@@ -401,6 +387,22 @@
         n.y = clamp(n.y + n.vy, n.r, WORLD.h - n.r);
         collideObstacles(n);
         n.flap += Math.hypot(n.vx, n.vy) * 0.05 + 0.04;
+
+        // ---- poison auras (grim reaper perk) ----
+        const nPerk = STAGES[n.tier].perk;
+        if (perk === 'poison' && dd < player.r * POISON_R) {     // you're a reaper: wither, then reap nearby creatures
+          n.poisonT = (n.poisonT || 0) + dt;
+          if (Math.random() < 0.2) burst(n.x, n.y, '#9b59ff', 1);
+          if (n.poisonT > 0.8) {
+            gainXp((n.tier + 1) * 2); score += (n.tier + 1) * 2;
+            burst(n.x, n.y, '#b06bff', 10); spawnNpc(n, player); n.poisonT = 0; continue;
+          }
+        } else if (n.poisonT) { n.poisonT = Math.max(0, n.poisonT - dt * 0.6); }
+        if (nPerk === 'poison' && perk !== 'goop' && dd < n.r * POISON_R && player.grace <= 0) {  // enemy reaper poisons you (goop is immune)
+          player.hp -= POISON_DPS * dt;
+          if (Math.random() < 0.2) burst(player.x, player.y, '#9b59ff', 1);
+          if (player.hp <= 0) { gameOver('A grim reaper’s poison got you!'); return; }
+        }
 
         // collisions
         const touch = (player.r + n.r) * 0.78;
@@ -425,7 +427,7 @@
         if (g.bite > 0) g.bite -= dt;
         const gd = player.x - g.x, adx = Math.abs(gd);
         if (lowEnough && adx < 360) {            // notice you and charge along the ground
-          g.vx += ((gd > 0 ? 1 : -1) * 2.6 - g.vx) * 0.08;
+          g.vx += ((gd > 0 ? 1 : -1) * 1.8 - g.vx) * 0.06;
         } else {                                 // patrol
           g.wt -= dt; if (g.wt <= 0) { g.vx = (Math.random() < 0.5 ? -1 : 1) * rnd(0.6, 1.4); g.wt = rnd(1.5, 3.5); }
         }
@@ -504,7 +506,7 @@
         return rnd(30, 46);
       };
       for (let b = 0; b < BIOMES.length; b++) {
-        const kit = BIOMES[b].obs, n = rndInt(7, 10);
+        const kit = BIOMES[b].obs, n = rndInt(3, 5);   // fewer scattered objects — clearer skies to fly
         for (let i = 0; i < n; i++) {
           const e = kit[rndInt(0, kit.length - 1)];
           const r = sizeFor(e);
@@ -516,8 +518,8 @@
           OBSTACLES.push({ x: x, y: y, r: r, e: e });
         }
       }
-      // asteroids drifting in space
-      for (let i = 0; i < 14; i++) OBSTACLES.push({ x: rnd(80, WORLD.w - 80), y: rnd(40, SPACE_Y - 30), r: rnd(26, 40), e: '☄️' });
+      // a few asteroids drifting in the high sky
+      for (let i = 0; i < 8; i++) OBSTACLES.push({ x: rnd(80, WORLD.w - 80), y: rnd(40, SPACE_Y - 30), r: rnd(26, 40), e: '☄️' });
     }
 
     // ---------- drawing ----------
@@ -655,10 +657,8 @@
     function drawHUD() {
       const S = uiS;
       const bw = Math.min(214 * S, VW * 0.34);   // shrink to fit narrow (mobile) screens
-      // bars top-left
+      // health bar top-left
       bar(14 * S, 14 * S, bw, 20 * S, player.hp / 100, '#ff5a6e', '❤ ' + Math.ceil(player.hp));
-      bar(14 * S, 40 * S, bw, 20 * S, player.o2 / 100, '#6ee7ff', '🫧 O₂');
-      bar(14 * S, 66 * S, bw, 20 * S, player.water / 100, '#4ea8ff', '💧 H₂O');
 
       // evolve progress + creature (top-right)
       const st = STAGES[player.tier];
@@ -680,14 +680,6 @@
       ctx.fillStyle = '#ffe8b0'; ctx.font = '800 ' + (14 * S) + "px 'Nunito',sans-serif";
       ctx.fillText('LEVEL ' + (player.tier + 1) + ' · ' + stageName(player.tier).toUpperCase(), VW / 2, 60 * S);
 
-      // zone alerts
-      if (zoneMsgT > 0 && zoneMsg) {
-        ctx.globalAlpha = Math.min(1, zoneMsgT);
-        ctx.font = '800 ' + (24 * S) + "px 'Nunito',sans-serif"; ctx.textAlign = 'center';
-        if (zoneMsg === 'space') { ctx.fillStyle = '#6ee7ff'; ctx.fillText('🚀 SPACE — oxygen draining!', VW / 2, VH - 30 * S); }
-        else { ctx.fillStyle = '#4ea8ff'; ctx.fillText('🌊 WATER — refilling!', VW / 2, VH - 30 * S); }
-        ctx.globalAlpha = 1;
-      }
       // evolve banner
       if (evolveMsg > 0) {
         ctx.globalAlpha = Math.min(1, evolveMsg * 1.4);
@@ -695,15 +687,30 @@
         ctx.fillText('EVOLVED! ' + STAGES[player.tier].e, VW / 2, VH / 2 - 70 * S);
         ctx.globalAlpha = 1;
       }
-      // low-bar vignette warning
-      if ((player.o2 < 25 || player.water < 25) && state === 'playing') {
+      // low-health vignette warning
+      if (player.hp < 30 && state === 'playing') {
         ctx.save();
-        const a = 0.25 + 0.15 * Math.sin(_t * 0.01);
-        ctx.strokeStyle = player.o2 < 25 ? 'rgba(110,231,255,' + a + ')' : 'rgba(78,168,255,' + a + ')';
+        const a = 0.25 + 0.18 * Math.sin(_t * 0.01);
+        ctx.strokeStyle = 'rgba(233,69,96,' + a + ')';
         ctx.lineWidth = 14 * S; ctx.strokeRect(7 * S, 7 * S, VW - 14 * S, VH - 14 * S);
         ctx.restore();
       }
     }
+
+    // a soft pulsing aura ring for perk creatures (poison = purple, goop = green)
+    function drawAura(x, y, rWorld, rgb) {
+      const R = rWorld * ZOOM * POISON_R, pulse = 0.5 + 0.5 * Math.sin(_t * 0.006);
+      const g = ctx.createRadialGradient(x, y, rWorld * ZOOM * 0.6, x, y, R);
+      g.addColorStop(0, 'rgba(' + rgb + ',0)');
+      g.addColorStop(0.75, 'rgba(' + rgb + ',' + (0.10 + 0.06 * pulse).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(' + rgb + ',0)');
+      ctx.save();
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.28); ctx.fill();
+      ctx.lineWidth = 2 * ZOOM; ctx.strokeStyle = 'rgba(' + rgb + ',' + (0.35 + 0.25 * pulse).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(x, y, R, 0, 6.28); ctx.stroke();
+      ctx.restore();
+    }
+    function perkRgb(p) { return p === 'poison' ? '155,89,255' : (p === 'goop' ? '90,224,120' : null); }
 
     function draw() {
       drawBackground();
@@ -738,6 +745,8 @@
           const x = worldToScreenX(n.x), y = worldToScreenY(n.y);
           const nr = n.r * ZOOM;
           if (x < -nr * 2 || x > VW + nr * 2 || y < -nr * 2 || y > VH + nr * 2) continue;
+          const nrgb = perkRgb(STAGES[n.tier].perk);
+          if (nrgb) drawAura(x, y, n.r, nrgb);
           const ring = n.r > player.r * 1.08 ? '#ff5a6e' : (player.r > n.r * 1.08 ? '#5fe06a' : '#9aa6c0');
           drawCreature(n.e, x, y, n.r, n.flap, ring);
         }
@@ -747,6 +756,8 @@
         const gg = ctx.createRadialGradient(px, py, pr * 0.2, px, py, pr * 1.7);
         gg.addColorStop(0, 'rgba(255,255,255,0.45)'); gg.addColorStop(0.6, 'rgba(255,240,180,0.18)'); gg.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, pr * 1.7, 0, 6.28); ctx.fill();
+        const pRgb = perkRgb(STAGES[player.tier].perk);   // poison/goop aura under the player
+        if (pRgb) drawAura(px, py, player.drawR, pRgb);
         // spawn-shield ring
         if (player.grace > 0) {
           ctx.lineWidth = 3 * ZOOM; ctx.strokeStyle = 'rgba(110,231,255,' + (0.4 + 0.4 * Math.sin(_t * 0.012)) + ')';
