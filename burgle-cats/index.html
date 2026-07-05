@@ -115,7 +115,8 @@
     .coll-grid .cell.locked .qm { color: rgba(255,255,255,0.18); font-size: 1.5rem; font-weight: 900; }
     .coll-grid .cell.shiny { box-shadow: inset 0 0 12px rgba(226,169,59,0.45); }
     .coll-grid .cell.equipped { outline: 3px solid #5fd07a; outline-offset: -1px; }
-    .coll-grid .cell.equipped::after { content: '✓'; position: absolute; bottom: 1px; left: 4px; font-size: 0.6rem; font-weight: 900; color: #5fd07a; }
+    .coll-grid .cell .slotno { position: absolute; bottom: 2px; left: 4px; width: 15px; height: 15px; border-radius: 50%;
+      background: #5fd07a; color: #10241a; font-size: 0.58rem; font-weight: 900; display: flex; align-items: center; justify-content: center; }
     .equip-line { font-size: 0.74rem; color: var(--muted); margin: 4px 0 2px; line-height: 1.4; }
     .equip-line b { color: var(--gold); }
   </style>
@@ -136,7 +137,7 @@
       <div class="panel">
         <div class="logo">🐱</div>
         <h2>Burgle Cats</h2>
-        <div class="sub">Break into the manor, crack the <b>real vault</b> among the decoys, and slip back out a door — with a crew of <b>4 cats</b> and your wits.</div>
+        <div class="sub">Break into the manor, crack the <b>real vault</b> among the decoys, and slip back out a door — with a team of <b>5 cats</b> from your collection.</div>
         <div class="brief">
           <div class="r"><span class="e">🚪</span><span><b>Pick an entry door</b> on any wall to send a cat in</span></div>
           <div class="r"><span class="e">🐾</span><span>Tap a doorway (or use <b>arrow keys</b>) to creep through</span></div>
@@ -188,7 +189,7 @@
         <button class="x" id="coll-close">✕</button>
         <h2>Cat Collection</h2>
         <div class="sub"><b id="coll-count">0</b> / 300 cats adopted</div>
-        <div class="equip-line" id="coll-equip">Tap a cat to equip it — rarer cats have better stats &amp; abilities.</div>
+        <div class="equip-line" id="coll-equip">Tap cats to build your heist team of 5 — rarer cats have better abilities.</div>
         <div class="coll-grid" id="coll-grid"></div>
       </div>
     </div>
@@ -224,7 +225,7 @@
 
     var best = EL.best('burgle-cats.best');
 
-    var CREW = 4;            // cats you bring on the heist (captures you can survive)
+    var CREW = 5;            // heist team size (captures you can survive)
     var MAX_HP = 100;        // shared crew health, drained by traps
 
     // ---- per-level configuration (tuned slightly forgiving, like the real game) ----
@@ -233,7 +234,7 @@
       return {
         cols: cols,
         rows: rows,
-        dogsPerRow: 2,                                        // 2 dogs in every row
+        dogsPerRow: 1,                                        // ONE dog guards each row
         traps: clamp(4 + level, 4, 20),
         trapDmg: clamp(15 + level * 2, 15, 30),               // gentler health loss
         wakeR: level >= 5 ? 2 : 1,                            // trap noise radius (Chebyshev)
@@ -253,14 +254,14 @@
     // ---- build a manor ----
     function newGame(level) {
       var cfg = config(level), cols = cfg.cols, rows = cfg.rows;
-      var eq = equipInfo();                       // equipped cat's stats & abilities
-      var maxHp = MAX_HP + eq.bonusHp;
+      var team = teamInfo();                      // your 5 heist slots (+ alley-cat filler)
+      var maxHp = MAX_HP + team.reduce(function (s, m) { return s + m.hp; }, 0);
       var st = {
         level: level, cfg: cfg, cols: cols, rows: rows,
         grid: [], doges: [], cat: null, entry: null,
         phase: 'entry',                 // 'entry' = pick a door; 'play' = sneak
         captures: 0, maxHp: maxHp, hp: maxHp, dispHp: maxHp, pendingDeath: false, looted: false, loot: 0,
-        tough: eq.tough, speedy: eq.speedy, guide: eq.guide, dogTick: 0,
+        team: team, toughMult: 1, speedy: false, guideR: 0, dogTick: 0,
         tr: null,                       // room-move / jump-down animation
         shakeT: 0, shakeMag: 0, flash: null, pops: [], bursts: [],
         running: true, ended: false, win: false,
@@ -297,7 +298,8 @@
         var tr = interior[p++]; tr.trap = true; tr.trapKind = (i % 2 === 0) ? 'spike' : 'alarm';
       }
 
-      // 2 guard dogs in EVERY row (they patrol the whole manor)
+      // ONE guard dog in EVERY row — each is chained to its row and only
+      // patrols across it (never up or down)
       for (y = 0; y < rows; y++) {
         var cands = st.grid.filter(function (rm) { return rm.y === y && !rm.shutter && !rm.vault; });
         shuffle(cands);
@@ -307,8 +309,16 @@
       }
 
       // cat is placed once the player taps an entry door
+      applyActiveCat(st);
       flash('Pick a door to break in!');
       return st;
+    }
+
+    // The cat currently on the job is team[captures] — ITS abilities are live.
+    function activeCat(st) { return (st || S).team[(st || S).captures] || catInfo(-1); }
+    function applyActiveCat(st) {
+      var a = activeCat(st);
+      st.toughMult = a.toughMult; st.speedy = a.speedy; st.guideR = a.guideR;
     }
 
     // ---- player picks an entry/exit door to send a cat through ----
@@ -320,7 +330,10 @@
       r.seen = true; reveal(x, y);
       S.phase = 'play';
       S.tr = { kind: 'drop', t: 0, dur: 0.45 };     // cat leaps down off the balcony
-      flash(S.looted ? 'Get this loot out!' : 'Sneak in… find the real vault.');
+      var a = activeCat();
+      flash(S.looted ? 'Get this loot out!'
+          : a.idx >= 0 ? a.name + ' slips in… find the real vault.'
+          : 'Sneak in… find the real vault.');
     }
 
     // Only the room you actually stand in is lit — you must go there to see it.
@@ -403,8 +416,8 @@
         flash('🔔 ALARM! The guard dogs are on alert!');
         return;
       }
-      // SPIKE trap: drains health (reduced if your cat is Tough)
-      var dmg = Math.round(S.cfg.trapDmg * (S.tough ? 0.6 : 1));
+      // SPIKE trap: drains health (reduced by the active cat's Tough rating)
+      var dmg = Math.round(S.cfg.trapDmg * S.toughMult);
       S.hp = Math.max(0, S.hp - dmg);
       fxDamage(dmg);
       rouse(x, y, 1);                         // a little noise
@@ -424,14 +437,16 @@
     }
 
     // ---- dogs roam every turn; roused ones chase the cat ----
+    // Every dog is chained to its own row: it slides left/right only, NEVER up
+    // or down. A roused dog can therefore only run the cat down along its row.
     function dogesTurn() {
       if (!S.cat) return;     // no active cat (e.g. just captured) — nothing to chase
       // "Speedy" cats are nimble — the dogs only get to act every other move
       if (S.speedy) { S.dogTick = (S.dogTick || 0) + 1; if (S.dogTick % 2 === 1) return; }
-      var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      var dirs = [[1, 0], [-1, 0]];                          // across the row only
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i], bx = d.x, by = d.y, k;
-        if (d.chaseT > 0) {                                  // hunt the cat
+        if (d.chaseT > 0) {                                  // hunt the cat along the row
           var bestD = 1e9;
           for (k = 0; k < dirs.length; k++) {
             var nx = d.x + dirs[k][0], ny = d.y + dirs[k][1];
@@ -440,7 +455,7 @@
             if (dist < bestD) { bestD = dist; bx = nx; by = ny; }
           }
           d.chaseT--;
-        } else {                                             // wander at random
+        } else {                                             // pace the row at random
           var opts = [];
           for (k = 0; k < dirs.length; k++) {
             var rx = d.x + dirs[k][0], ry = d.y + dirs[k][1];
@@ -457,10 +472,12 @@
       if (S.cat) fxCaught(S.cat.x, S.cat.y);
       S.captures++;
       if (S.captures >= CREW) { endRound(false, 'caught'); return; }
-      // that cat is caged; send in the next one — pick a fresh door
+      // that cat is caged; the next team slot takes over — ITS abilities apply now
       S.cat = null; S.entry = null; S.phase = 'entry';
+      applyActiveCat(S);
       for (var i = 0; i < S.doges.length; i++) S.doges[i].chaseT = 0;
-      flash('🐾 Cat captured! ' + (CREW - S.captures) + ' left — pick a door for the next.');
+      var nxt = activeCat();
+      flash('🐾 Cat captured! ' + (CREW - S.captures) + ' left — send in ' + nxt.name + '.');
     }
 
     function endRound(won, reason) {
@@ -973,10 +990,13 @@
 
       drawDecor(gm, R, cur);
 
-      // "Vault Sense" ability — arrow toward the nearest unopened vault
-      if (S.guide) {
+      // "Vault Sense" family — arrow toward the NEAREST unopened vault (never
+      // says which one is real). Secrets sense manor-wide; Legendary/Epic cats
+      // only pick up the scent within their (shorter) guide range.
+      if (S.guideR) {
         var uv = S.vaults.filter(function (v) { return !v.vault.opened; }), best = null, bd = 1e9;
         uv.forEach(function (v) { var d = Math.abs(v.x - cat.x) + Math.abs(v.y - cat.y); if (d < bd) { bd = d; best = v; } });
+        if (best && bd > S.guideR) best = null;
         if (best) {
           var ddx = best.x - cat.x, ddy = best.y - cat.y, ar = (ddx === 0 && ddy === 0) ? 'HERE'
             : Math.abs(ddx) >= Math.abs(ddy) ? (ddx > 0 ? '▶' : '◀') : (ddy > 0 ? '▼' : '▲');
@@ -1361,17 +1381,55 @@
     function gOwned() { try { var a = JSON.parse(localStorage.getItem('burgle-cats.owned')); if (a && a.length === GACHA_N) return a; } catch (e) {} return new Array(GACHA_N).fill(0); }
     function gSetOwned(a) { try { localStorage.setItem('burgle-cats.owned', JSON.stringify(a)); } catch (e) {} }
     function awardGem() { gSetGems(gGems() + 1); }
-    function gEquipped() { try { var v = parseInt(localStorage.getItem('burgle-cats.equip'), 10); return isNaN(v) ? -1 : v; } catch (e) { return -1; } }
-    function gSetEquipped(i) { try { localStorage.setItem('burgle-cats.equip', String(i)); } catch (e) {} }
-    // stats & abilities scale with rarity — better cats are stronger
-    function equipInfo() {
-      var i = gEquipped();
-      if (i < 0 || gOwned()[i] <= 0) return { coat: DEFAULT_COAT, name: 'Alley Cat', rarity: 0, bonusHp: 0, tough: false, speedy: false, guide: false, abilities: [] };
-      var c = CATS[i], r = c.rarity, inf = { coat: c, name: c.name, rarity: r, bonusHp: r * 8, tough: r >= 2, speedy: r >= 3, guide: r >= 4, abilities: [] };
-      if (inf.guide) inf.abilities.push('Vault Sense');
+    // ---- heist team: up to 5 cats from your collection ----------------------
+    // Legacy 'burgle-cats.equip' (single cat) seeds the team on first run.
+    var TEAM_MAX = 5;
+    function gTeam() {
+      var t = null;
+      try { t = JSON.parse(localStorage.getItem('burgle-cats.team')); } catch (e) {}
+      if (!t || !t.length) {
+        try { var lg = parseInt(localStorage.getItem('burgle-cats.equip'), 10); if (!isNaN(lg) && lg >= 0) t = [lg]; } catch (e) {}
+      }
+      if (!t) return [];
+      var owned = gOwned(), seen = {}, out = [];
+      for (var i = 0; i < t.length && out.length < TEAM_MAX; i++)
+        if (typeof t[i] === 'number' && t[i] >= 0 && t[i] < GACHA_N && owned[t[i]] > 0 && !seen[t[i]]) { seen[t[i]] = 1; out.push(t[i]); }
+      return out;
+    }
+    function gSetTeam(t) { try { localStorage.setItem('burgle-cats.team', JSON.stringify(t)); } catch (e) {} }
+    // Per-cat stats & abilities — a strict ladder, each step a bit worse than
+    // the one above. Only the SECRET cats (Smidge, Calico Mona Lisa, Kuku,
+    // Sweet Pea, Mimi) get full Vault Sense: it points toward the NEAREST
+    // unopened vault, so it never gives away which vault is the real one.
+    //   6 Secret     Vault Sense (whole manor) · Speedy · Tough 50% · +20 HP
+    //   5 Legendary  Vault Whiff (≤3 rooms)    · Speedy · Tough 60% · +16 HP
+    //   4 Epic       Vault Peek  (≤2 rooms)    · Speedy · Tough 70% · +12 HP
+    //   3 Rare       Speedy · Tough 80% · +8 HP
+    //   2 Uncommon   Tough 85% · +6 HP
+    //   1 Common     +4 HP
+    function catInfo(idx) {
+      if (idx == null || idx < 0 || gOwned()[idx] <= 0)
+        return { idx: -1, coat: DEFAULT_COAT, name: 'Alley Cat', rarity: 0, hp: 0, toughMult: 1, speedy: false, guideR: 0, abilities: [] };
+      var c = CATS[idx], r = c.rarity;
+      var inf = { idx: idx, coat: c, name: c.name, rarity: r,
+        hp: [0, 4, 6, 8, 12, 16, 20][r],
+        toughMult: [1, 1, 0.85, 0.8, 0.7, 0.6, 0.5][r],
+        speedy: r >= 3,
+        guideR: r >= 6 ? 99 : r === 5 ? 3 : r === 4 ? 2 : 0,
+        abilities: [] };
+      if (r >= 6) inf.abilities.push('Vault Sense');
+      else if (r === 5) inf.abilities.push('Vault Whiff');
+      else if (r === 4) inf.abilities.push('Vault Peek');
       if (inf.speedy) inf.abilities.push('Speedy');
-      if (inf.tough) inf.abilities.push('Tough');
+      if (inf.toughMult < 1) inf.abilities.push('Tough ' + Math.round((1 - inf.toughMult) * 100) + '%');
+      inf.abilities.push('+' + inf.hp + ' HP');
       return inf;
+    }
+    // The 5 heist slots: your picked team, padded out with plain alley cats.
+    function teamInfo() {
+      var t = gTeam(), out = [];
+      for (var i = 0; i < TEAM_MAX; i++) out.push(catInfo(i < t.length ? t[i] : -1));
+      return out;
     }
 
     // ---- cat portrait drawing (any 2D context) ----
@@ -1442,14 +1500,11 @@
       }
       g.restore();
     }
-    // default coat used before you equip a cat
+    // default coat for unfilled team slots (plain alley cat)
     var DEFAULT_COAT = { base: '#f4f1ea', pattern: 'solid', eye: '#7bbf5a', seed: 1, rarity: 0 };
-    function equippedCoat() {
-      var i = gEquipped();
-      return (i >= 0 && gOwned()[i] > 0) ? CATS[i] : DEFAULT_COAT;
-    }
     function drawBurglarCat(cx, cy, s, looted, t) {
-      drawCatPortrait(ctx, cx, cy + Math.sin((t || 0) * 3) * s * 0.015, s, equippedCoat(), { burglar: true, looted: looted });
+      var coat = (S && S.team) ? activeCat().coat : DEFAULT_COAT;
+      drawCatPortrait(ctx, cx, cy + Math.sin((t || 0) * 3) * s * 0.015, s, coat, { burglar: true, looted: looted });
     }
 
     // ---- gacha / collection UI ----
@@ -1481,13 +1536,26 @@
       refreshGemDisplays(); showReveal(idx, isNew);
     }
     function openGacha() { refreshGemDisplays(); document.getElementById('gacha').hidden = false; }
-    function updateEquipLine() {
-      var inf = equipInfo();
-      var ab = inf.abilities.length ? inf.abilities.join(' · ') : 'no special ability';
-      document.getElementById('coll-equip').innerHTML = 'Equipped: <b>' + inf.name + '</b> &nbsp;·&nbsp; +' + inf.bonusHp + ' HP &nbsp;·&nbsp; ' + ab;
+    function updateTeamLine() {
+      var t = gTeam();
+      if (!t.length) {
+        document.getElementById('coll-equip').innerHTML = 'Tap cats to build your <b>heist team of ' + TEAM_MAX + '</b> — empty slots go in as plain Alley Cats.';
+        return;
+      }
+      var parts = t.map(function (idx) {
+        var inf = catInfo(idx);
+        return '<b>' + inf.name + '</b> <span style="opacity:0.75">(' + inf.abilities.join(' · ') + ')</span>';
+      });
+      document.getElementById('coll-equip').innerHTML = 'Team ' + t.length + '/' + TEAM_MAX + ': ' + parts.join(' &nbsp;•&nbsp; ');
+    }
+    function toggleTeam(idx) {
+      var t = gTeam(), at = t.indexOf(idx);
+      if (at >= 0) t.splice(at, 1);
+      else { if (t.length >= TEAM_MAX) return false; t.push(idx); }
+      gSetTeam(t); return true;
     }
     function openCollection() {
-      var owned = gOwned(), equipped = gEquipped(), grid = document.getElementById('coll-grid'), count = 0;
+      var owned = gOwned(), team = gTeam(), grid = document.getElementById('coll-grid'), count = 0;
       grid.innerHTML = '';
       for (var i = 0; i < GACHA_N; i++) {
         var cell = document.createElement('div'); cell.className = 'cell';
@@ -1499,15 +1567,22 @@
           var nm = document.createElement('div'); nm.className = 'cn'; nm.textContent = coat.name; cell.appendChild(nm);
           if (owned[i] > 1) { var d = document.createElement('div'); d.className = 'dup'; d.textContent = '×' + owned[i]; cell.appendChild(d); }
           if (coat.rarity >= 5) cell.classList.add('shiny');
-          if (i === equipped) cell.classList.add('equipped');
+          var slot = team.indexOf(i);
+          if (slot >= 0) {
+            cell.classList.add('equipped');
+            var sb = document.createElement('div'); sb.className = 'slotno'; sb.textContent = slot + 1; cell.appendChild(sb);
+          }
           (function (idx) {
-            cell.addEventListener('click', function () { gSetEquipped(idx); updateEquipLine(); openCollection(); });
+            cell.addEventListener('click', function () {
+              if (!toggleTeam(idx)) { updateTeamLine(); return; }   // team full — no-op
+              openCollection();
+            });
           })(i);
         } else { cell.classList.add('locked'); cell.innerHTML = '<div class="qm">?</div>'; }
         grid.appendChild(cell);
       }
       document.getElementById('coll-count').textContent = count;
-      updateEquipLine();
+      updateTeamLine();
       document.getElementById('collection').hidden = false;
     }
     document.getElementById('open-gacha').addEventListener('click', openGacha);
@@ -1524,7 +1599,8 @@
       tap: function (x, y) { tapRoom(x, y); syncHUD(); },
       open: function () { var r = room(S.cat.x, S.cat.y); if (r.vault && !r.vault.opened) { openVault(r); syncHUD(); } },
       start: startLevel,
-      gacha: { gems: gGems, setGems: gSetGems, pull: doPull, owned: gOwned, cats: CATS, roll: rollCat, specials: SPECIALS.length }
+      gacha: { gems: gGems, setGems: gSetGems, pull: doPull, owned: gOwned, setOwned: gSetOwned, cats: CATS, roll: rollCat, specials: SPECIALS.length },
+      team: { get: gTeam, set: gSetTeam, info: teamInfo, catInfo: catInfo, active: function () { return activeCat(); } }
     };
   })();
   </script>
