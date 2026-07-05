@@ -142,6 +142,11 @@
     }
     .shop-tab.active { color: #fff; background: #0f3460; border-color: #2f6fd0; }
     .shop-items { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
+    /* Park tab: two labeled columns (Dog Park | Cats) inside the strip. */
+    .shop-group { flex: 0 0 auto; }
+    .shop-group + .shop-group { border-left: 2px solid #0f3460; padding-left: 12px; margin-left: 2px; }
+    .shop-group-label { color: #9fb3d9; font-weight: 900; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .shop-group-items { display: flex; gap: 10px; }
     .shop-item {
       flex: 0 0 auto;
       width: 96px;

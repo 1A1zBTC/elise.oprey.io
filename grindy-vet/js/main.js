@@ -1202,6 +1202,9 @@
       { id: 'seesaw',  name: 'Seesaw',        cost: 80,  w: 2, h: 1, icon: '🛝', cat: 'park', parkItem: true, quality: 4, draw: drawSeesaw },
       { id: 'tunnel',  name: 'Tunnel',        cost: 90,  w: 2, h: 1, icon: '🛢️', cat: 'park', parkItem: true, quality: 4, draw: drawTunnel },
       { id: 'pool',    name: 'Paddling Pool', cost: 120, w: 2, h: 2, icon: '🏊', cat: 'park', parkItem: true, quality: 6, draw: drawPool },
+      // Cat Room: the cat-side counterpart of Dog Park — same blank-room brush
+      // (kind 'blank'), surfaced in the Park tab's Cats column for discoverability.
+      { id: 'catroom', name: 'Cat Room', cost: 10, icon: '🐱', cat: 'park', kind: 'blank', perSquare: true, catItem: true },
       { id: 'litterbox', name: 'Litter Box',      cost: 40,  w: 1, h: 1, icon: '🚽', cat: 'park', catItem: true, quality: 2, draw: drawLitterBox },
       { id: 'catbox',    name: 'Cardboard Box',   cost: 45,  w: 1, h: 1, icon: '📦', cat: 'park', catItem: true, quality: 2, draw: drawCardboardBox },
       { id: 'scratcher', name: 'Scratching Post', cost: 60,  w: 1, h: 1, icon: '🪵', cat: 'park', catItem: true, quality: 3, draw: drawScratchPost },
@@ -4396,29 +4399,47 @@
       return staffIconCache[id];
     }
     function shopIcon(item) { return (item.cat === 'staff' && staffIconURL(item.id)) || item.icon; }
+    function shopCard(item) {
+      var cost = itemCost(item);
+      var afford = money >= cost;
+      var card = document.createElement('div');
+      card.className = 'shop-item' + (afford ? '' : ' disabled') +
+                       (placing && placing.item.id === item.id ? ' selected' : '');
+      if (item.cat === 'staff') card.setAttribute('data-staff', item.id);  // hover → highlight this staff type
+      card.innerHTML = '<div class="ic">' + shopIcon(item) + '</div>' +
+                       '<div class="nm">' + item.name + '</div>' +
+                       '<div class="pr">$' + cost + (item.perSquare ? '/sq' : '') + '</div>';
+      card.addEventListener('click', function () {
+        if (money < itemCost(item)) return;
+        placing = (placing && placing.item.id === item.id) ? null : { item: item, rot: 0 };
+        corridorDrag = null;
+        document.body.classList.toggle('placing', !!placing);
+        renderStatic();                      // toggle walls off (placing) / on (deselected)
+        renderShop();
+      });
+      return card;
+    }
     function renderShop() {
       if (activeTab === 'skills') { renderSkillCards(); return; }
       shopItemsEl.innerHTML = '';
-      FURNITURE.filter(function (item) { return (item.cat || 'reception') === activeTab; }).forEach(function (item) {
-        var cost = itemCost(item);
-        var afford = money >= cost;
-        var card = document.createElement('div');
-        card.className = 'shop-item' + (afford ? '' : ' disabled') +
-                         (placing && placing.item.id === item.id ? ' selected' : '');
-        if (item.cat === 'staff') card.setAttribute('data-staff', item.id);  // hover → highlight this staff type
-        card.innerHTML = '<div class="ic">' + shopIcon(item) + '</div>' +
-                         '<div class="nm">' + item.name + '</div>' +
-                         '<div class="pr">$' + cost + (item.perSquare ? '/sq' : '') + '</div>';
-        card.addEventListener('click', function () {
-          if (money < itemCost(item)) return;
-          placing = (placing && placing.item.id === item.id) ? null : { item: item, rot: 0 };
-          corridorDrag = null;
-          document.body.classList.toggle('placing', !!placing);
-          renderStatic();                      // toggle walls off (placing) / on (deselected)
-          renderShop();
+      var items = FURNITURE.filter(function (item) { return (item.cat || 'reception') === activeTab; });
+      if (activeTab === 'park') {
+        // Park tab splits into two labeled columns: dog-park items left, cat items right.
+        [{ label: 'Dog Park', items: items.filter(function (i) { return !i.catItem; }) },
+         { label: 'Cats',     items: items.filter(function (i) { return i.catItem; }) }
+        ].forEach(function (g) {
+          var group = document.createElement('div');
+          group.className = 'shop-group';
+          group.innerHTML = '<div class="shop-group-label">' + g.label + '</div>';
+          var row = document.createElement('div');
+          row.className = 'shop-group-items';
+          g.items.forEach(function (item) { row.appendChild(shopCard(item)); });
+          group.appendChild(row);
+          shopItemsEl.appendChild(group);
         });
-        shopItemsEl.appendChild(card);
-      });
+        return;
+      }
+      items.forEach(function (item) { shopItemsEl.appendChild(shopCard(item)); });
     }
 
     // Shop tabs switch the visible category. Switching cancels any in-progress
