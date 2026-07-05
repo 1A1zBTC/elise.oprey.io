@@ -220,3 +220,34 @@ cleaner (route matrix all-false), never cleaned.
 ### Not committed
 Other instance is mid-feature on the same file (smoke test running); left for Dan or the
 next commit sweep.
+
+## 2026-07-04 — Multi-desk reception (visitors + receptionists per desk)
+
+### Bug
+Extra reception desks were decorative: deskAnchor() always returned the FIRST placed
+desk, so all visitors queued at desk 1 and nearestStation() only offered desk 1's two
+stations when placing a receptionist.
+
+### Fix (grindy-vet/js/main.js)
+- Line indices are now global: line L belongs to desk L>>1, side L&1. New helpers
+  deskList/deskAnchor(i)/deskForLine/numLines.
+- ensureQueues() (called each update frame + on spawn): resizes queue[] to 2 lines per
+  desk; on desk removal, orphaned queuers rejoin the shortest surviving line and
+  orphaned receptionists step to the first free station.
+- spawnVisitor joins the shortest line across ALL desks (random among ties).
+- Lone-receptionist alternation generalized per desk (deskStaff/staffLine replace
+  loneStaffLine); serveVisitor hands the turn to the SAME desk's other line.
+- nearestStation() scans every desk's stations (fixes hiring/relocating onto desk 2+).
+- stationTile/slotPos/drawDeskCircles/scene draw use the line's own desk; receptionist
+  sprite takes a per-desk rot so it faces its own desk's front.
+
+### Verification (headless __t, browse daemon)
+- Two desks: visitors split across lines [0,1] and [2,3]; lone receptionist hired on
+  line 2 drained BOTH desk-2 lines (alternation) and earned check-in fees; relocation
+  desk B -> desk A -> desk B all landed on correct station tiles.
+- Single-desk regression: both stations hirable, service + queue behavior unchanged.
+- Screenshot: two desks with 3 receptionists serving simultaneously.
+
+### Not committed
+Another instance was concurrently editing main.js (waited for quiet before each edit);
+left uncommitted for Dan / next commit sweep.

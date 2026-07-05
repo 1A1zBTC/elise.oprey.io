@@ -105,8 +105,10 @@
     var visitors = [];
     var visitorSeq = 0;
     var examTicketSeq = 0;                  // monotonic check-in number → exam order
-    // Visitors queue in two lines in front of the reception desk (one per desk
-    // tile). queue[0] / queue[1] are ordered arrays of visitors; index 0 = front.
+    // Visitors queue in two lines in front of EACH reception desk (one per desk
+    // tile). queue[L] is an ordered array of visitors (index 0 = front); line L
+    // belongs to desk L>>1, side L&1. ensureQueues() keeps the list sized to the
+    // desks on the floor.
     var queue = [[], []];
 
     // Vet skills (top bar). Both start at 1.0 and upgrade +0.5 at a time; the
@@ -3119,7 +3121,7 @@
       ctx.restore();
       ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
       ghostCtx.clearRect(0, 0, view.w, view.h);
-      drawReceptionist(ghostCtx, st.x, st.y);
+      drawReceptionist(ghostCtx, st.x, st.y, undefined, deskForLine(st.line).rot || 0);
       if (!st.ok) {
         ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop';
         ghostCtx.fillStyle = 'rgba(222,58,44,0.62)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore();
@@ -4686,7 +4688,7 @@
     // The action-circle tile behind the desk for a queue line (where the vet must
     // stand to process that line), and whether the vet is standing on it.
     function stationTile(line) {
-      var d = deskAnchor(), f = FRONT[d.rot || 0], t = deskLineTiles(d)[line];
+      var d = deskForLine(line), f = FRONT[d.rot || 0], t = deskLineTiles(d)[line & 1];
       return { x: t.x - f.x, y: t.y - f.y };
     }
     function vetAtStation(line) {
@@ -4694,26 +4696,32 @@
       var s = stationTile(line);
       return Math.round(vet.x) === s.x && Math.round(vet.y) === s.y;
     }
-    // A hired receptionist mans a line's station. With two receptionists each
-    // covers their own line; a lone receptionist alternates (their `curLine`
-    // toggles after each client — see updateReceptionist / serveVisitor), so they
-    // serve both queues instead of leaving one starved.
-    function loneStaffLine() {
-      var s = staff[0];
-      return s.curLine != null ? s.curLine : (s.line || 0);
+    // A hired receptionist mans a line's station. With both of a desk's stations
+    // manned each receptionist covers their own line; a desk's LONE receptionist
+    // alternates between its two lines (their `curLine` toggles after each
+    // client — see updateReceptionist / serveVisitor), so they serve both queues
+    // instead of leaving one starved.
+    function deskStaff(di) {
+      return staff.filter(function (s) { return ((s.line || 0) >> 1) === di; });
+    }
+    function staffLine(s) {
+      var line = s.line || 0;
+      var lone = deskStaff(line >> 1).length === 1;
+      return (lone && s.curLine != null && (s.curLine >> 1) === (line >> 1)) ? s.curLine : line;
     }
     function staffAtStation(line) {
-      if (staff.length === 1) return loneStaffLine() === line;
-      return staff.some(function (s) { return s.line === line; });
+      return staff.some(function (s) { return staffLine(s) === line; });
     }
-    // A lone receptionist switches to the other queue when their current one runs
-    // out (so they never sit idle while clients wait on the other side).
+    // A desk's lone receptionist switches to its other queue when their current
+    // one runs out (so they never sit idle while clients wait on the other side).
     function updateReceptionist() {
-      if (staff.length !== 1) return;
-      var s = staff[0];
-      if (s.curLine == null) s.curLine = (s.line || 0);
-      var other = 1 - s.curLine;
-      if (queue[s.curLine].length === 0 && queue[other].length > 0) s.curLine = other;
+      staff.forEach(function (s) {
+        var di = (s.line || 0) >> 1;
+        if (deskStaff(di).length !== 1) return;
+        if (s.curLine == null || (s.curLine >> 1) !== di) s.curLine = (s.line || 0);
+        var other = di * 2 + (1 - (s.curLine & 1));
+        if ((queue[s.curLine] || []).length === 0 && (queue[other] || []).length > 0) s.curLine = other;
+      });
     }
 
     // Is the vet standing in an exam room's processing circle?
@@ -5259,11 +5267,12 @@
         } else c.stuckT = 0;
       } else { c.moving = false; }
     }
-    // The desk station nearest the cursor (for placing a receptionist), with validity.
+    // The desk station nearest the cursor (over EVERY desk, for placing a
+    // receptionist), with validity.
     function nearestStation() {
       if (!hasDesk()) return null;
       var best = null, bd = 1e9;
-      for (var L = 0; L < 2; L++) {
+      for (var L = 0; L < numLines(); L++) {
         var s = stationTile(L), d = Math.abs(pointer.gx - s.x) + Math.abs(pointer.gy - s.y);
         if (d < bd) { bd = d; best = { line: L, x: s.x, y: s.y }; }
       }
@@ -5272,9 +5281,10 @@
     }
 
     // A receptionist figure (headset + name badge) standing at a desk station.
-    function drawReceptionist(c, gx, gy, gender) {
+    // `rot` is the desk's rotation (which way to face); defaults to the first desk.
+    function drawReceptionist(c, gx, gy, gender, rot) {
       var s = iso(gx, gy);
-      var f = FRONT[deskAnchor().rot || 0];
+      var f = FRONT[(rot != null ? rot : deskAnchor().rot) || 0];
       var dir = chooseDir(f.x, f.y);              // face the customers
       var front = (dir === 'SE' || dir === 'SW');
       var mirror = (dir === 'SW' || dir === 'NW') ? -1 : 1;
@@ -5518,7 +5528,7 @@
       // receptionists (only when a desk exists — matches draw())
       if (hasDesk()) staff.forEach(function (st) {
         cb(makeStaffHandle('receptionist', st,
-          function () { var L = (staff.length === 1) ? loneStaffLine() : st.line; return stationTile(L); },
+          function () { return stationTile(staffLine(st)); },
           function () { var s = nearestStation(); return !!(s && s.ok); },
           function () { var s = nearestStation(); if (s && s.ok) { st.line = s.line; st.curLine = s.line; } },
           function () { var i = staff.indexOf(st); if (i >= 0) staff.splice(i, 1); }));
@@ -5681,10 +5691,11 @@
     function serveVisitor(v) {
       money += 10; renderMoney();
       floaters.push({ v: v, t: 0 });
-      var qi = queue[v.line].indexOf(v); if (qi >= 0) queue[v.line].splice(qi, 1);
-      // a lone receptionist hands the next turn to the other queue (alternation)
-      if (staff.length === 1 && !vetAtStation(v.line) && loneStaffLine() === v.line && queue[1 - v.line].length > 0) {
-        staff[0].curLine = 1 - v.line;
+      var qi = queue[v.line] ? queue[v.line].indexOf(v) : -1; if (qi >= 0) queue[v.line].splice(qi, 1);
+      // a desk's lone receptionist hands the next turn to its other queue (alternation)
+      var di = (v.line || 0) >> 1, ds = deskStaff(di), otherL = di * 2 + (1 - (v.line & 1));
+      if (ds.length === 1 && !vetAtStation(v.line) && staffLine(ds[0]) === v.line && (queue[otherL] || []).length > 0) {
+        ds[0].curLine = otherL;
       }
       v.served = true;                       // checked in (rating needs v.happy too — set only when the whole journey completes)
       v.ticket = examTicketSeq++;            // check-in order → examined first-come-first-served
@@ -6137,14 +6148,14 @@
         var t = slotPos(v);
         var reached = stepToward(v, t.x, t.y, dt);
         if (reached) {
-          var f = FRONT[(deskAnchor().rot || 0)];
+          var f = FRONT[(deskForLine(v.line).rot || 0)];
           v.x = t.x; v.y = t.y; v.moving = false; v.dir = chooseDir(-f.x, -f.y); // face the desk
         }
         v.patience -= dt * drainMult(v);                  // tick down while in line
         if (v.patience <= 0) { v.patience = 0; leaveOutbound(v); return; }
         // the front-of-line client is processed while the vet stands on the desk's
         // action circle for that line, OR a hired receptionist mans it; bar fills.
-        v.processing = (reached && queue[v.line][0] === v && (vetAtStation(v.line) || staffAtStation(v.line)));
+        v.processing = (reached && (queue[v.line] || [])[0] === v && (vetAtStation(v.line) || staffAtStation(v.line)));
         if (v.processing) {
           // the player works at full speed; a hired receptionist is 50% as effective
           v.procT = (v.procT || 0) + dt * (vetAtStation(v.line) ? 1 : 0.5);
@@ -6467,8 +6478,9 @@
 
       // visitors: spawn on a timer, then step each one along its path
       spawnTimer -= dt;
+      ensureQueues();                        // sync the line list to the desks on the floor
       if (spawnTimer <= 0) { spawnVisitor(); spawnTimer += frq; }
-      updateReceptionist();                  // lone receptionist picks which queue to man
+      updateReceptionist();                  // each desk's lone receptionist picks which queue to man
       for (var i = visitors.length - 1; i >= 0; i--) {
         var wv = visitors[i], wpx = wv.x, wpy = wv.y;
         updateVisitor(wv, dt);
@@ -6525,14 +6537,14 @@
       return Math.hypot(x - DOOR_MID, y - (ROOM - 0.5)) < 2.0;
     }
 
-    // Processing-station rings drawn on the floor behind the desk — one per line
-    // that has someone waiting, on that line's side.
+    // Processing-station rings drawn on the floor behind each desk — one per
+    // line that has someone waiting, on that line's side.
     function drawDeskCircles() {
       if (!hasDesk()) return;
-      var d = deskAnchor(), f = FRONT[d.rot || 0], tiles = deskLineTiles(d);
-      for (var L = 0; L < 2; L++) {
+      for (var L = 0; L < queue.length; L++) {
         if (!queue[L].some(function (v) { return v.phase === 'queuing'; })) continue;
-        var s = iso(tiles[L].x - f.x, tiles[L].y - f.y);   // one tile behind the desk
+        var p = stationTile(L);
+        var s = iso(p.x, p.y);                             // one tile behind the desk
         var on = vetAtStation(L);          // vet standing on this station's circle
         ctx.save();
         ctx.beginPath();
@@ -6778,10 +6790,10 @@
       });
       if (hasDesk()) staff.forEach(function (st) {       // receptionists at their stations
         if (carrying && carrying.is(st)) return;         // the carried one rides the lift sprite instead
-        var L = (staff.length === 1) ? loneStaffLine() : st.line;   // lone one stands at the queue it's serving
-        var p = stationTile(L);
+        var L = staffLine(st);                           // a desk's lone one stands at the queue it's serving
+        var p = stationTile(L), rot = deskForLine(L).rot || 0;
         scene.push({ d: p.x + p.y, who: 'receptionist', ref: st, hx: p.x, hy: p.y, fn: function () {
-          staffSprite('rec' + st.gender + (deskAnchor().rot || 0), p.x, p.y, function (c, gx, gy) { drawReceptionist(c, gx, gy, st.gender); });
+          staffSprite('rec' + st.gender + rot, p.x, p.y, function (c, gx, gy) { drawReceptionist(c, gx, gy, st.gender, rot); });
         } });
       });
       restrooms.forEach(function (rm) {                  // toilet fixture inside the walled room
