@@ -91,6 +91,45 @@
     .rev .st { color:#ffd24a; font-weight:900; font-size:0.85rem; } .rev .tx { color:#cfd6ea; font-size:0.78rem; } .rev .by { color:#7c869a; font-size:0.68rem; }
     .ratebar { display:flex; gap:10px; align-items:center; background:#101a30; border:2px solid #28324a; border-radius:14px; padding:10px 12px; margin-bottom:8px; }
     .ratebar .big { font-size:1.5rem; font-weight:900; color:#ffd24a; } .ratebar .lab { font-size:0.72rem; color:#9fb0cf; font-weight:800; }
+
+    /* cash register checkout (manual change-making) */
+    .cash-panel { max-width:400px; text-align:left; }
+    .cash-panel h2 { font-size:1.5rem; text-align:center; }
+    .cash-line { display:flex; justify-content:space-between; background:#101a30; border:2px solid #28324a; border-radius:12px; padding:9px 12px; margin-bottom:7px; font-weight:800; font-size:0.92rem; }
+    .cash-line .lab { color:#9fb0cf; } .cash-line .val { color:#fff; } .cash-line .val.big { color:#7df0a8; font-size:1.05rem; }
+    .cash-change { text-align:center; margin:10px 0 8px; font-weight:900; font-size:1.35rem; color:#ffd24a; min-height:1.6em; }
+    .cash-bills { display:flex; gap:8px; justify-content:center; margin-bottom:10px; }
+    .bill { flex:1; max-width:84px; border:none; border-radius:10px; padding:12px 0; font-family:inherit; font-weight:900; font-size:1rem; cursor:pointer; color:#0b2416; box-shadow:0 4px 0 rgba(0,0,0,0.35); }
+    .bill:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,0.35); }
+    .bill.b20{ background:#8fd8a0; } .bill.b10{ background:#e8c87a; } .bill.b5{ background:#c9a8e8; } .bill.b1{ background:#bfcbdc; }
+    .cash-acts { display:flex; gap:8px; }
+    .cash-acts button { flex:1; font-family:inherit; font-weight:800; font-size:0.95rem; padding:12px 0; border-radius:12px; border:2px solid; cursor:pointer; background:rgba(10,14,28,0.6); color:#fff; }
+    #cashClear { border-color:#e94560; color:#ffc2cd; } #cashGive { border-color:#2faf5a; color:#9af0bd; }
+    .cash-msg { text-align:center; min-height:1.3em; font-weight:800; font-size:0.85rem; color:#ff9aa8; margin-top:8px; }
+    @keyframes cashshake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 75%{transform:translateX(7px)} }
+    .cash-panel.shake { animation:cashshake 0.3s; }
+
+    /* booster pack opening — a fan of rendered cards */
+    .pack-panel { max-width:560px; }
+    .pack-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:12px 0; }
+    .pack-grid .cardc { width:100%; border-radius:7px; box-shadow:0 4px 10px rgba(0,0,0,0.5); cursor:pointer;
+      opacity:0; transform:translateY(14px) scale(0.85); animation:cardin 0.3s ease-out forwards; }
+    @keyframes cardin { to { opacity:1; transform:none; } }
+    .pack-total { display:flex; justify-content:space-between; font-weight:900; font-size:1rem; padding:8px 12px; background:#143d2a; border:2px solid #2faf5a; border-radius:12px; color:#7df0a8; }
+
+    /* collection / tcg / deck extras in the phone */
+    .cbadge { display:inline-block; font-size:0.6rem; font-weight:900; border-radius:6px; padding:1px 5px; margin-left:4px; vertical-align:middle; }
+    .cbadge.foil { background:linear-gradient(90deg,#7fd0ff,#c9a8ff,#8fe8b0); color:#0b1020; }
+    .cbadge.art { background:#caa14a; color:#241a06; }
+    .cbadge.deck { background:#1f57a8; color:#dceaff; }
+    .seg { display:flex; gap:5px; margin-bottom:9px; }
+    .seg button { flex:1; background:#16203a; border:2px solid #28324a; color:#9fb0cf; font-family:inherit; font-weight:800; font-size:0.76rem; padding:7px 4px; border-radius:10px; cursor:pointer; }
+    .seg button.active { background:#8a3b6a; border-color:#c85a9a; color:#fff; }
+    .row .buy.mini { padding:7px 9px; font-size:0.74rem; }
+
+    /* display-case card picker */
+    .case-panel { max-width:430px; }
+    .case-list { display:flex; flex-direction:column; gap:7px; max-height:54vh; overflow-y:auto; margin:10px 0; }
   </style>
 </head>
 <body>
@@ -107,6 +146,7 @@
     <span class="grow"></span>
     <span class="stat" id="rival">🏬 Rival 4.0</span>
     <span class="stat" id="queue">🧍 0</span>
+    <button class="stat" id="saveBtn2" style="cursor:pointer;font-family:inherit">💾 Save</button>
   </div>
 
   <div class="stage" id="stage">
@@ -134,7 +174,7 @@
     </div>
   </div>
 
-  <p class="hint kbd"><b>WASD/Arrows</b> walk &amp; turn · <b>Space/E</b> action · <b>Q</b> open box/packs · <b>P</b> phone · placing: <b>R</b> rotate, <b>Esc</b> cancel</p>
+  <p class="hint kbd"><b>WASD/Arrows</b> walk &amp; turn · <b>Space/E</b> action · <b>Q</b> open box/packs · <b>F</b> move · <b>G</b> shelf products · <b>P</b> phone · placing: <b>R</b> rotate, <b>Esc</b> cancel</p>
   <p class="hint touchonly">▲▼ walk · ↺↻ turn · drag to look · <b>Action</b> pick up / stock / open / checkout · <b>Phone</b> to buy</p>
 
   <div class="overlay" id="startOv">
@@ -144,6 +184,7 @@
         <b>Warhammer</b>, <b>Magic</b> sealed boxes (open them for packs!), <b>Monster High</b>, plus <b>NECA</b> &amp; <b>Tamashii&nbsp;Nations</b> figures.
         Add <b>play tables</b>, expand into new <b>rooms</b>, beat your <b>rival</b>, and earn 5‑star <b>reviews</b>!</div>
       <button class="start-btn" id="startBtn">Open the store</button>
+      <button class="start-btn" id="continueBtn" style="background:#2f6fd0;box-shadow:0 6px 0 #1f4f9a" hidden>Continue saved store</button>
     </div>
   </div>
 
@@ -155,6 +196,7 @@
       </div>
       <div class="ph-tabs">
         <button class="ph-tab active" data-tab="stock">📦 Stock</button>
+        <button class="ph-tab" data-tab="cards">🎴 Cards</button>
         <button class="ph-tab" data-tab="furn">🪑 Furniture</button>
         <button class="ph-tab" data-tab="staff">🧑‍💼 Staff</button>
         <button class="ph-tab" data-tab="rooms">🚪 Rooms</button>
@@ -162,6 +204,67 @@
         <button class="ph-tab" data-tab="rev">⭐ Reviews</button>
       </div>
       <div class="ph-list" id="phList"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="cashOv" hidden>
+    <div class="panel cash-panel" id="cashPanel">
+      <h2>💵 Checkout</h2>
+      <div class="cash-line"><span class="lab" id="cashItem">Item</span><span class="val" id="cashPrice">$0</span></div>
+      <div class="cash-line"><span class="lab">Customer hands you</span><span class="val big" id="cashTender">$0</span></div>
+      <div class="cash-change" id="cashChange">Change: $0</div>
+      <div class="cash-bills">
+        <button class="bill b20" data-v="20">$20</button>
+        <button class="bill b10" data-v="10">$10</button>
+        <button class="bill b5" data-v="5">$5</button>
+        <button class="bill b1" data-v="1">$1</button>
+      </div>
+      <div class="cash-acts">
+        <button id="cashClear">Clear</button>
+        <button id="cashGive">Hand it over</button>
+      </div>
+      <div class="cash-msg" id="cashMsg"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="packOv" hidden>
+    <div class="panel pack-panel">
+      <h2 id="packTitle">🎴 Booster Pack</h2>
+      <div class="sub" style="margin-bottom:4px"><b>Marvel Super Heroes</b> · 10 cards</div>
+      <div class="pack-grid" id="packGrid"></div>
+      <div class="pack-total"><span>Added to collection</span><span id="packTotal">$0</span></div>
+      <button class="start-btn" id="packClose" style="margin-top:12px">Sweet! (Q)</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="shelfOv" hidden>
+    <div class="panel case-panel">
+      <h2>🗂️ Shelf Products</h2>
+      <div class="sub">Tick what's allowed on this shelf. Nothing ticked = anything goes.</div>
+      <div class="case-list" id="shelfList"></div>
+      <button class="start-btn" id="shelfOvClose" style="margin-top:4px;background:#3a4252;box-shadow:0 6px 0 #262c38">Done</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="saveOv" hidden>
+    <div class="panel case-panel">
+      <h2>💾 Save Slots</h2>
+      <div class="sub">Name a slot to save your store. It also autosaves when you leave.</div>
+      <div style="display:flex;gap:8px;margin:6px 0">
+        <input id="slotName" type="text" maxlength="24" placeholder="Name this save…" style="flex:1;min-width:0;font-family:inherit;font-weight:700;font-size:0.95rem;color:#fff;background:#0f1830;border:2px solid #28324a;border-radius:12px;padding:9px 12px">
+        <button class="buy" id="slotSaveBtn" style="flex:0 0 auto">Save</button>
+      </div>
+      <div class="case-list" id="slotList"></div>
+      <button class="start-btn" id="saveOvClose" style="margin-top:4px;background:#3a4252;box-shadow:0 6px 0 #262c38">Close</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="caseOv" hidden>
+    <div class="panel case-panel">
+      <h2>🗄️ Display Case</h2>
+      <div class="sub">Pick a card from your collection to sell in this slot.</div>
+      <div class="case-list" id="caseList"></div>
+      <button class="start-btn" id="caseClose" style="margin-top:4px;background:#3a4252;box-shadow:0 6px 0 #262c38">Close</button>
     </div>
   </div>
 
@@ -197,9 +300,44 @@
     g.fillStyle='rgba('+((base[0]+s*spread)|0)+','+((base[1]+s*spread)|0)+','+((base[2]+s*spread)|0)+','+a+')'; g.fillRect((Math.random()*TW)|0,(Math.random()*TH)|0,1,1); } }
 
   var TEX={
-    wall: texData(function(g){ grad(g,'#e8e2d4','#cfc7b4'); g.fillStyle='rgba(0,0,0,0.05)'; for(var y=0;y<TH;y+=16)g.fillRect(0,y,TW,1); speck(g,60,[210,204,190],20,0.25); }),
-    floor: texData(function(g){ grad(g,'#caa57a','#a9885f'); for(var y=0;y<TH;y+=21)for(var x=0;x<TW;x+=21){ g.fillStyle='rgba(255,255,255,0.06)'; g.fillRect(x,y,20,20);} speck(g,200,[170,140,100],20,0.3); }),
-    ceil: texData(function(g){ grad(g,'#f2f1ee','#dcdbd6'); speck(g,80,[245,245,242],10,0.3); }),
+    // warm hobby-shop wall: crown moulding, two-tone paint over wainscot
+    // panelling, an accent stripe and a walnut baseboard.
+    wall: texData(function(g){
+      grad(g,'#efe7d6','#e0d5bf');
+      g.fillStyle='#f7f2e6'; g.fillRect(0,0,TW,5);                                   // crown
+      g.fillStyle='rgba(0,0,0,0.10)'; g.fillRect(0,5,TW,1);
+      g.fillStyle='#e94560'; g.fillRect(0,22,TW,3);                                  // accent stripe
+      g.fillStyle='rgba(0,0,0,0.06)'; g.fillRect(0,25,TW,1);
+      var wg=g.createLinearGradient(0,34,0,TH); wg.addColorStop(0,'#cdbb9a'); wg.addColorStop(1,'#b7a27e');
+      g.fillStyle=wg; g.fillRect(0,34,TW,TH-34);                                     // wainscot
+      for(var px2=0;px2<TW;px2+=16){                                                 // panel seams + bevels
+        g.fillStyle='rgba(60,44,28,0.25)'; g.fillRect(px2,34,1,TH-40);
+        g.fillStyle='rgba(255,255,255,0.18)'; g.fillRect(px2+1,34,1,TH-40); }
+      g.fillStyle='rgba(255,255,255,0.20)'; g.fillRect(0,34,TW,1);
+      g.fillStyle='#5a4028'; g.fillRect(0,TH-6,TW,6);                                // baseboard
+      g.fillStyle='rgba(255,255,255,0.14)'; g.fillRect(0,TH-6,TW,1);
+      speck(g,50,[220,210,190],18,0.2); }),
+    // checkerboard vinyl with grout lines and wear speckle — classic game-shop floor
+    floor: texData(function(g){
+      var c0='#d9cdb4', c1='#b3a488';
+      for(var cy3=0;cy3<2;cy3++) for(var cx3=0;cx3<2;cx3++){
+        g.fillStyle=((cx3+cy3)&1)?c1:c0; g.fillRect(cx3*32,cy3*32,32,32);
+        var hl=g.createLinearGradient(cx3*32,cy3*32,cx3*32+32,cy3*32+32);
+        hl.addColorStop(0,'rgba(255,255,255,0.10)'); hl.addColorStop(1,'rgba(0,0,0,0.06)');
+        g.fillStyle=hl; g.fillRect(cx3*32,cy3*32,32,32); }
+      g.fillStyle='rgba(70,58,40,0.35)';                                             // grout
+      g.fillRect(0,0,TW,1); g.fillRect(0,32,TW,1); g.fillRect(0,0,1,TH); g.fillRect(32,0,1,TH);
+      speck(g,160,[150,135,105],25,0.25); }),
+    // suspended ceiling: panel grid with a soft recessed light in each tile
+    ceil: texData(function(g){
+      grad(g,'#eceae4','#dad8d0');
+      g.fillStyle='rgba(0,0,0,0.12)'; g.fillRect(0,0,TW,2); g.fillRect(0,0,2,TH);    // T-bar grid
+      var lg=g.createRadialGradient(TW/2,TH/2,2,TW/2,TH/2,20);
+      lg.addColorStop(0,'rgba(255,250,225,0.95)'); lg.addColorStop(0.6,'rgba(255,248,220,0.35)'); lg.addColorStop(1,'rgba(255,248,220,0)');
+      g.fillStyle=lg; g.fillRect(0,0,TW,TH);                                         // warm light panel
+      g.fillStyle='rgba(255,252,235,0.9)'; g.fillRect(TW/2-9,TH/2-9,18,18);
+      g.fillStyle='rgba(0,0,0,0.08)'; g.strokeStyle='rgba(0,0,0,0.15)'; g.lineWidth=1; g.strokeRect(TW/2-9.5,TH/2-9.5,19,19);
+      speck(g,40,[240,238,232],10,0.3); }),
     // nicer glass shop door: frame, glass with reflections, push-bar handle, OPEN sign, mat
     door: texData(function(g){
       g.fillStyle='#3a2c1c'; g.fillRect(0,0,TW,TH);                                  // frame
@@ -243,7 +381,21 @@
     mtg_box:{ name:'Magic Sealed Box', tag:'sealed', price:0, sealed:true, opensTo:'mtg_pack', openCount:12, draw:function(g,s){
       g.fillStyle='#16263e'; g.fillRect(s*0.22,s*0.28,s*0.56,s*0.5); g.fillStyle='#2f5f8c'; g.fillRect(s*0.22,s*0.28,s*0.56,s*0.12);
       g.fillStyle='#ffe08a'; g.beginPath(); g.arc(s*0.5,s*0.54,s*0.1,0,7); g.fill(); g.strokeStyle='#0c1626'; g.lineWidth=2; g.strokeRect(s*0.22,s*0.28,s*0.56,s*0.5);
-      g.fillStyle='#9fd0ff'; g.font='900 '+(s*0.16|0)+'px sans-serif'; g.textAlign='center'; g.fillText('MTG',s*0.5,s*0.74); } }
+      g.fillStyle='#9fd0ff'; g.font='900 '+(s*0.16|0)+'px sans-serif'; g.textAlign='center'; g.fillText('MTG',s*0.5,s*0.74); } },
+    mtg_cpack:{ name:'Collector Booster', tag:'pack', price:24, openable:true, draw:function(g,s){
+      g.fillStyle='#1c1026'; g.fillRect(s*0.3,s*0.2,s*0.4,s*0.6);
+      var fg=g.createLinearGradient(s*0.3,s*0.2,s*0.7,s*0.8);
+      fg.addColorStop(0,'#7fd0ff'); fg.addColorStop(0.5,'#c9a8ff'); fg.addColorStop(1,'#8fe8b0');
+      g.fillStyle=fg; g.fillRect(s*0.35,s*0.26,s*0.3,s*0.3);
+      g.fillStyle='#ffe08a'; g.beginPath(); g.arc(s*0.5,s*0.41,s*0.07,0,7); g.fill();
+      g.fillStyle='#e8d8ff'; g.fillRect(s*0.35,s*0.6,s*0.3,s*0.12); } },
+    mtg_cbox:{ name:'Collector Box', tag:'sealed', price:0, sealed:true, opensTo:'mtg_cpack', openCount:12, draw:function(g,s){
+      g.fillStyle='#170e20'; g.fillRect(s*0.22,s*0.28,s*0.56,s*0.5);
+      var fg=g.createLinearGradient(s*0.22,s*0.28,s*0.78,s*0.78);
+      fg.addColorStop(0,'#7fd0ff'); fg.addColorStop(0.5,'#c9a8ff'); fg.addColorStop(1,'#ffe08a');
+      g.fillStyle=fg; g.fillRect(s*0.22,s*0.28,s*0.56,s*0.12);
+      g.fillStyle='#ffe08a'; g.beginPath(); g.arc(s*0.5,s*0.54,s*0.1,0,7); g.fill(); g.strokeStyle='#0c0616'; g.lineWidth=2; g.strokeRect(s*0.22,s*0.28,s*0.56,s*0.5);
+      g.fillStyle='#e8d8ff'; g.font='900 '+(s*0.14|0)+'px sans-serif'; g.textAlign='center'; g.fillText('MSH ✦',s*0.5,s*0.74); } }
   };
   // ---- Monster-doll line: a big roster of original monster-themed dolls, each boxed ----
   function drawDoll(g,s,o){ var cx=s*0.5; g.lineCap='round';
@@ -346,6 +498,8 @@
   var BOXES=[
     { key:'mtg', product:'mtg_box', count:1, cost:40, sealed:true, cat:'Trading Cards', name:'Magic sealed box', desc:'Open for 12 packs · $40' },
     { key:'mtgpacks', product:'mtg_pack', count:8, cost:48, cat:'Trading Cards', name:'Magic booster packs', desc:'8 packs — sell, or open for pulls · $48' },
+    { key:'mtgcbox', product:'mtg_cbox', count:1, cost:200, sealed:true, cat:'Trading Cards', name:'Collector booster box', desc:'12 collector packs — foils &amp; special arts · $200' },
+    { key:'mtgcpacks', product:'mtg_cpack', count:4, cost:88, cat:'Trading Cards', name:'Collector boosters', desc:'4 packs — foil-heavy, special-art chase · $88' },
     { key:'neca', product:'neca', count:4, cost:60, cat:'Action Figures', name:'NECA figure case', desc:'4 figures · $60' },
     { key:'tama', product:'tamashii', count:4, cost:96, cat:'Action Figures', name:'Tamashii Nations case', desc:'4 figures · $96' },
     { key:'wh', product:'warhammer', count:6, cost:90, cat:'Miniatures', name:'Battle-minis case', desc:'6 minis · $90' }
@@ -371,14 +525,42 @@
     shelf_white:{ kind:'shelf', name:'White Shelf', desc:'4 slots · modern', cost:85, slotCap:4, color:'#dfe3ea', itemZ:0.46, topZ:0.5,
       boxes:[ {x0:-0.40,y0:0.06,x1:0.40,y1:0.20,z0:0,z1:0.46,col:'#dfe3ea'},
               {x0:-0.42,y0:0.04,x1:0.42,y1:0.22,z0:0.24,z1:0.28,col:'#b9bfc9'} ] },
-    shelf_glass:{ kind:'shelf', name:'Glass Case', desc:'4 slots · for figures', cost:120, slotCap:4, color:'#3a4658', itemZ:0.5, topZ:0.72,
+    shelf_glass:{ kind:'shelf', prem:1, name:'Glass Case', desc:'4 slots · for figures', cost:120, slotCap:4, color:'#3a4658', itemZ:0.5, topZ:0.72,
       boxes:[ {x0:-0.38,y0:0.04,x1:0.38,y1:0.22,z0:0,z1:0.16,col:'#2a3340'},
               {x0:-0.36,y0:0.06,x1:0.36,y1:0.20,z0:0.16,z1:0.66,col:'#7fa6c8'},
               {x0:-0.38,y0:0.04,x1:0.38,y1:0.22,z0:0.66,z1:0.72,col:'#2a3340'} ] },
     shelf_endcap:{ kind:'shelf', name:'Endcap Display', desc:'4 slots · big seller', cost:150, slotCap:5, color:'#c0533f', itemZ:0.56, topZ:0.62,
       boxes:[ {x0:-0.44,y0:0.02,x1:0.44,y1:0.22,z0:0,z1:0.56,col:'#c0533f'},
               {x0:-0.46,y0:0.0,x1:0.46,y1:0.24,z0:0.3,z1:0.34,col:'#8a3b2c'} ] },
-    playtable:{ kind:'playtable', name:'Play Table', desc:'Players draw a crowd', cost:140, color:'#2f7e4f', topZ:0.34, seats:3,
+    cardcase:{ kind:'shelf', cardOnly:true, prem:1, name:'Card Display Case', desc:'Sell single cards from your collection', cost:130, slotCap:1, color:'#8a3b6a', itemZ:0.5, topZ:0.66,
+      boxes:[ {x0:-0.38,y0:0.04,x1:0.38,y1:0.22,z0:0,z1:0.2,col:'#3a2030'},
+              {x0:-0.36,y0:0.06,x1:0.36,y1:0.20,z0:0.2,z1:0.6,col:'#c88fd8'},
+              {x0:-0.38,y0:0.04,x1:0.38,y1:0.22,z0:0.6,z1:0.66,col:'#3a2030'} ] },
+    premiumcase:{ kind:'shelf', cardOnly:true, premium:true, prem:3, name:'Premium Cabinet', desc:'LOCKED — customers must ask you to open it', cost:400, slotCap:1, color:'#caa14a', itemZ:0.56, topZ:0.86,
+      boxes:[ {x0:-0.40,y0:0.02,x1:0.40,y1:0.24,z0:0,z1:0.26,col:'#3a2c10'},        // walnut base
+              {x0:-0.36,y0:0.05,x1:0.36,y1:0.21,z0:0.26,z1:0.78,col:'#ffe9b0'},     // glass (warm-lit)
+              {x0:-0.40,y0:0.02,x1:0.40,y1:0.24,z0:0.78,z1:0.86,col:'#caa14a'},     // gold crown
+              {x0:-0.40,y0:0.02,x1:-0.36,y1:0.24,z0:0.26,z1:0.78,col:'#caa14a'},    // gold pillars
+              {x0:0.36,y0:0.02,x1:0.40,y1:0.24,z0:0.26,z1:0.78,col:'#caa14a'} ] },
+    storage:{ kind:'shelf', storage:true, name:'Storage Shelf', desc:'Back-stock — deliveries land here, customers can’t shop it', cost:90, slotCap:12, color:'#5a6474', itemZ:0.55, topZ:0.95,
+      boxes:[ {x0:-0.42,y0:0.02,x1:0.42,y1:0.24,z0:0,z1:0.95,col:'#5a6474'},
+              {x0:-0.44,y0:0.00,x1:0.44,y1:0.26,z0:0.30,z1:0.34,col:'#3f4756'},
+              {x0:-0.44,y0:0.00,x1:0.44,y1:0.26,z0:0.62,z1:0.66,col:'#3f4756'} ] },
+    staffchair:{ kind:'chair', name:'Staff Chair', desc:'Comfy staff work faster (+8% each, up to 4)', cost:45, color:'#b06a3c', topZ:0.5,
+      boxes:[ {x0:-0.18,y0:-0.18,x1:0.18,y1:0.18,z0:0.22,z1:0.28,col:'#b06a3c'},
+              {x0:-0.18,y0:0.12,x1:0.18,y1:0.18,z0:0.28,z1:0.56,col:'#8a4e2a'},
+              {x0:-0.14,y0:-0.14,x1:-0.08,y1:-0.08,z0:0,z1:0.22,col:'#6a3c20'},
+              {x0:0.08,y0:-0.14,x1:0.14,y1:-0.08,z0:0,z1:0.22,col:'#6a3c20'},
+              {x0:-0.14,y0:0.08,x1:-0.08,y1:0.14,z0:0,z1:0.22,col:'#6a3c20'},
+              {x0:0.08,y0:0.08,x1:0.14,y1:0.14,z0:0,z1:0.22,col:'#6a3c20'} ] },
+    bathroom:{ kind:'bathroom', name:'Bathroom', desc:'Customers need one — keep it mopped', cost:120, color:'#7fc4d8', topZ:0.9,
+      boxes:[ {x0:-0.44,y0:-0.30,x1:0.44,y1:0.30,z0:0,z1:0.9,col:'#bfe4ee'},
+              {x0:-0.44,y0:-0.32,x1:0.44,y1:-0.26,z0:0,z1:0.9,col:'#7fc4d8'},
+              {x0:-0.10,y0:-0.34,x1:0.10,y1:-0.30,z0:0.35,z1:0.55,col:'#2a3340'} ] },
+    wall:{ kind:'wall', name:'Wall Section', desc:'Divide your floor — $30 a square', cost:30, color:'#8a92a4', topZ:1.0,
+      boxes:[ {x0:-0.5,y0:-0.18,x1:0.5,y1:0.18,z0:0,z1:1.0,col:'#9aa2b4'},
+              {x0:-0.5,y0:-0.20,x1:0.5,y1:0.20,z0:0.96,z1:1.0,col:'#7a8294'} ] },
+    playtable:{ kind:'playtable', prem:1, name:'Play Table', desc:'Players draw a crowd', cost:140, color:'#2f7e4f', topZ:0.34, seats:3,
       boxes:[ {x0:-0.46,y0:-0.34,x1:0.46,y1:0.34,z0:0.28,z1:0.34,col:'#2f7e4f'},
               {x0:-0.42,y0:-0.30,x1:-0.34,y1:-0.22,z0:0,z1:0.28,col:'#5a4a3a'},
               {x0:0.34,y0:-0.30,x1:0.42,y1:-0.22,z0:0,z1:0.28,col:'#5a4a3a'},
@@ -390,11 +572,20 @@
   // ====================== map / rooms ======================
   var iW=7,iH=5, mapW=9,mapH=7, map=[], doorPt={x:4.5,y:5.5};
   var ROOMS={ back:false, side:false };
+  // A fixed 20×16 world of solid rock: the base 7×5 shop sits bottom-centre
+  // (door on the world's bottom edge) and every extra floor square is CARVED
+  // wherever you like — sideways, upward, one-tile hallways, whole wings.
+  var WORLD_W=20, WORLD_H=16, BASE_X0=6, BASE_Y0=10;   // base interior: x 6..12, y 10..14
+  var carved=[];                                       // ["x,y"] squares bought beyond the base room
+  function baseFloor(x,y){ return x>=BASE_X0&&x<BASE_X0+7&&y>=BASE_Y0&&y<BASE_Y0+5; }
   function rebuildMap(){
-    mapW=iW+2; mapH=iH+2; map=[];
-    for(var y=0;y<mapH;y++){ var row=[]; for(var x=0;x<mapW;x++){ row.push((x===0||y===0||x===mapW-1||y===mapH-1)?1:0); } map.push(row); }
-    var dx=(mapW/2)|0; map[mapH-1][dx]=2; doorPt={ x:dx+0.5, y:mapH-1.5 };
+    mapW=WORLD_W; mapH=WORLD_H; map=[];
+    for(var y=0;y<mapH;y++){ var row=[]; for(var x=0;x<mapW;x++){ row.push(baseFloor(x,y)?0:1); } map.push(row); }
+    carved.forEach(function(k){ var pp=k.split(','), x=+pp[0], yy=+pp[1];
+      if(x>0&&yy>0&&x<mapW-1&&yy<mapH-1) map[yy][x]=0; });
+    var dx=BASE_X0+3; map[mapH-1][dx]=2; doorPt={ x:dx+0.5, y:mapH-1.5 };
   }
+  function floorArea(){ return 35+carved.length; }
   function mapAt(x,y){ var ix=Math.floor(x), iy=Math.floor(y); if(ix<0||iy<0||ix>=mapW||iy>=mapH) return 1; return map[iy][ix]; }
   function wallTex(v){ return v===2?TEX.door:TEX.wall; }
 
@@ -410,17 +601,137 @@
   var ghostX=4.5, ghostY=3.5;   // bird's-eye placement cursor (world coords)
   var employees=[];   // {role, x,y, img, state, target, carry, serveT}
   var wageT=30;
-  var spawnT=0, toastT=0;
+  var spawnT=0, toastT=0, eventT=0, eventCd=0;
+  var messes=[];                 // [{x,y}] spills & litter on the floor
+  var extBack=0, extSide=0;      // squares bought toward the next row/column of floor
+  var STOCK_TARGETS={};          // product key -> desired total stock (stock checker re-orders to this)
+  var RIVAL_MARKUP=1.12;         // the rival sells at market +12% — a fair margin over cost
   var reviews=[], ratingSum=0, ratingCount=0, rival=4.0;
 
   function reset(){
-    iW=7; iH=5; ROOMS={back:false,side:false}; rebuildMap();
+    iW=7; iH=5; ROOMS={back:false,side:false}; carved.length=0; rebuildMap();
     money=500; sold=0; placed=[]; register=null; floorBoxes=[]; carrying=null; customers=[]; placing=null; employees=[]; wageT=30;
-    reviews=[]; ratingSum=0; ratingCount=0; rival=4.0; spawnT=8;
+    // A fresh store opens at a solid 3.0 stars (five seed "word of mouth"
+    // reviews) — traffic then follows the rating: y = 5x people per minute.
+    reviews=[{stars:3,text:'Grand opening — decent start, let’s see where it goes.'}];
+    ratingSum=15; ratingCount=5; rival=4.0; spawnT=4;
+    saleC=null; document.getElementById('cashOv').hidden=true; document.getElementById('packOv').hidden=true;
+    collection=[]; caseTarget=null; matchCd=0; document.getElementById('caseOv').hidden=true;
+    messes.length=0; STOCK_TARGETS={}; eventT=0; eventCd=0; extBack=0; extSide=0;
+    Object.keys(PRODUCTS).forEach(function(k){ if(PRODUCTS[k].card){ delete PRODUCTS[k]; delete ICONS[k]; } });
     px=(mapW/2); py=mapH-2.2; dir=-Math.PI/2; updateCamera(); refreshHUD();
   }
   function avgRating(){ return ratingCount? (ratingSum/ratingCount) : 0; }
 
+  // ====================== save / load (named slots + autosave) ======================
+  var SLOTS_KEY='yourstore.slots';
+  var RANKED_FOES=['DragonMaster77','PlaneswalkerZoe','TopdeckTim','MulliganMax','LotusLisa','ComboKid','BrewmasterBen','StackQueen'];
+  function buildSaveData(){
+    var basePrices={}; Object.keys(PRODUCTS).forEach(function(k){ if(!PRODUCTS[k].card) basePrices[k]=PRODUCTS[k].price; });
+    return { v:2, savedAt:Date.now(), money:money, sold:sold, carved:carved.slice(),
+      ratingSum:ratingSum, ratingCount:ratingCount, rival:rival, reviews:reviews.slice(0,20),
+      collection:collection.map(function(e){ return {n:e.n,r:e.r,foil:e.foil,art:e.art,v:e.v,qty:e.qty,inDeck:e.inDeck}; }),
+      employees:employees.map(function(e){ return {role:e.role}; }),
+      basePrices:basePrices, stockTargets:STOCK_TARGETS,
+      floorBoxes:floorBoxes.map(function(b){ return {x:b.x,y:b.y,product:b.product,count:b.count,sealed:b.sealed,opensTo:b.opensTo,openCount:b.openCount}; }),
+      placed:placed.map(function(f){ return { fkey:f.fkey, x:f.x, y:f.y, rot:f.rot||0, allow:f.allow||null,
+        slots: f.slots ? f.slots.map(function(sl){ var pr=sl.product&&PRODUCTS[sl.product];
+          return { stock:sl.stock, price:sl.price, prod:(pr&&!pr.card)?sl.product:null, cardData:(pr&&pr.card)?pr.cardData:null }; }) : null }; }) };
+  }
+  function readSlots(){ try{ return JSON.parse(localStorage.getItem(SLOTS_KEY)||'{}'); }catch(e){ return {}; } }
+  function writeSlot(name){ if(!name) return;
+    var slots=readSlots(); slots[name]=buildSaveData();
+    try{ localStorage.setItem(SLOTS_KEY, JSON.stringify(slots)); }catch(e){ toast('Save failed'); return; }
+    toast('💾 Saved “'+name+'”'); renderSlotList(); }
+  function hasSave(){ var sl=readSlots(); if(Object.keys(sl).length) return true;
+    try{ return !!localStorage.getItem('yourstore.save'); }catch(e){ return false; } }
+  function newestSlotName(){ var sl=readSlots(), best=null, bt=-1;
+    Object.keys(sl).forEach(function(k){ if((sl[k].savedAt||0)>bt){ bt=sl[k].savedAt||0; best=k; } });
+    return best; }
+  function applySaveData(d){
+    if(!d) return false;
+    reset();
+    if(d.v===2){ carved.length=0; (d.carved||[]).forEach(function(k){ carved.push(k); }); rebuildMap(); }
+    else if(d.v===1){                             // legacy rectangular save → carve the same floor into the new world
+      var oW=d.iW||7, oH=d.iH||5, ddx=BASE_X0-1, ddy=(BASE_Y0+4)-oH;
+      carved.length=0;
+      for(var yy=1;yy<=oH;yy++) for(var xx=1;xx<=oW;xx++){ var nx2=xx+ddx, ny2=yy+ddy; if(!baseFloor(nx2,ny2)) carved.push(nx2+','+ny2); }
+      rebuildMap();
+      (d.placed||[]).forEach(function(f){ f.x+=ddx; f.y+=ddy; });
+      (d.floorBoxes||[]).forEach(function(b){ b.x+=ddx; b.y+=ddy; });
+    } else return false;
+    money=d.money; sold=d.sold; ratingSum=d.ratingSum; ratingCount=d.ratingCount; rival=d.rival;
+    reviews=d.reviews||[];
+    collection=(d.collection||[]).map(function(e){ return {n:e.n,r:e.r,foil:e.foil,art:e.art,v:e.v,qty:e.qty,inDeck:e.inDeck||0}; });
+    Object.keys(d.basePrices||{}).forEach(function(k){ if(PRODUCTS[k]) PRODUCTS[k].price=d.basePrices[k]; });
+    STOCK_TARGETS={}; Object.keys(d.stockTargets||{}).forEach(function(k){ STOCK_TARGETS[k]=d.stockTargets[k]; });
+    (d.placed||[]).forEach(function(fs){
+      var f=placeAt(fs.fkey, fs.x-0.5, fs.y-0.5, fs.rot);
+      if(fs.allow) f.allow=fs.allow;
+      if(f.slots&&fs.slots) fs.slots.forEach(function(ss,i){
+        if(ss.cardData){ f.slots[i]={ product:registerCardProduct(ss.cardData), stock:ss.stock, price:ss.price }; if(PRODUCTS[f.slots[i].product]) PRODUCTS[f.slots[i].product].price=ss.price; }
+        else if(ss.prod){ f.slots[i]={ product:ss.prod, stock:ss.stock, price:ss.price }; } });
+    });
+    (d.floorBoxes||[]).forEach(function(b){ floorBoxes.push({x:b.x,y:b.y,product:b.product,count:b.count,sealed:b.sealed,opensTo:b.opensTo,openCount:b.openCount}); });
+    (d.employees||[]).forEach(function(e){ employees.push({ role:e.role, x:doorPt.x, y:doorPt.y, img:empSprite(e.role), target:null, carry:null, serveT:0 }); });
+    px=(mapW/2); py=mapH-2.2; dir=-Math.PI/2; updateCamera(); refreshHUD();
+    return true;
+  }
+  function loadSlot(name){ var sl=readSlots();
+    if(sl[name]) return applySaveData(sl[name]);
+    if(name==='__legacy'){ try{ return applySaveData(JSON.parse(localStorage.getItem('yourstore.save')||'null')); }catch(e){ return false; } }
+    return false; }
+  function loadGame(){ var n=newestSlotName(); if(n) return loadSlot(n); return loadSlot('__legacy'); }
+  // ---- the slots overlay ----
+  function saveOvOpen(){ return !document.getElementById('saveOv').hidden; }
+  // ---- dedicate a shelf to specific products (G on a shelf) ----
+  var shelfCfgTarget=null;
+  function shelfOvOpen(){ return !document.getElementById('shelfOv').hidden; }
+  function openShelfConfig(f){
+    shelfCfgTarget=f;
+    var list=document.getElementById('shelfList'); list.innerHTML='';
+    Object.keys(PRODUCTS).forEach(function(k){ var pr=PRODUCTS[k];
+      if(pr.card) return;                                       // singles live in cases, not shelf plans
+      var row=makeRow(ICONS[k], pr.name, pr.sealed?'Sealed box':'Sell price $'+pr.price, null, false, null);
+      var tb=document.createElement('button'); tb.className='buy';
+      var refresh=function(){ var on=f.allow&&f.allow[k]; tb.textContent=on?'✓ Allowed':'—'; tb.style.background=on?'#2faf5a':'#3a4252'; };
+      tb.onclick=function(){ if(!f.allow) f.allow={};
+        if(f.allow[k]) delete f.allow[k]; else f.allow[k]=true;
+        if(!Object.keys(f.allow).length) f.allow=null;           // empty plan = anything goes again
+        refresh(); };
+      refresh();
+      row.querySelector('.buyslot').appendChild(tb);
+      list.appendChild(row); });
+    document.getElementById('shelfOv').hidden=false;
+  }
+  document.getElementById('shelfOvClose').addEventListener('click',function(){ document.getElementById('shelfOv').hidden=true; shelfCfgTarget=null; });
+  function renderSlotList(){
+    var list=document.getElementById('slotList'); list.innerHTML='';
+    var sl=readSlots(), names=Object.keys(sl).sort(function(a,b){ return (sl[b].savedAt||0)-(sl[a].savedAt||0); });
+    if(!names.length){ var em=document.createElement('div'); em.className='sub'; em.textContent='No saves yet — name one above.'; list.appendChild(em); return; }
+    names.forEach(function(n){ var d=sl[n];
+      var row=document.createElement('div'); row.className='row';
+      var info=document.createElement('div'); info.className='info';
+      info.innerHTML='<div class="nm">'+n+'</div><div class="ds">$'+d.money+' · '+(d.ratingCount?(d.ratingSum/d.ratingCount).toFixed(1):'—')+'★ · '+new Date(d.savedAt||0).toLocaleTimeString()+'</div>';
+      row.appendChild(info);
+      var lb=document.createElement('button'); lb.className='buy'; lb.textContent='Load';
+      lb.onclick=function(){ if(applySaveData(d)){ document.getElementById('saveOv').hidden=true; document.getElementById('startOv').hidden=true; gstate='play'; toast('💾 Loaded “'+n+'”'); } };
+      row.appendChild(lb);
+      var db=document.createElement('button'); db.className='buy'; db.style.background='#e94560'; db.textContent='✕';
+      db.onclick=function(){ var s2=readSlots(); delete s2[n]; localStorage.setItem(SLOTS_KEY,JSON.stringify(s2)); renderSlotList(); };
+      row.appendChild(db);
+      list.appendChild(row); });
+  }
+  function openSaveOv(){ renderSlotList(); document.getElementById('slotName').value=curSlot||''; document.getElementById('saveOv').hidden=false; }
+  var curSlot=null;
+  document.getElementById('saveOvClose').addEventListener('click',function(){ document.getElementById('saveOv').hidden=true; });
+  document.getElementById('slotSaveBtn').addEventListener('click',function(){
+    var n=document.getElementById('slotName').value.trim()||'My Store';
+    curSlot=n; writeSlot(n); });
+  // autosave whenever you leave / hide the tab
+  function autoSaveNow(){ if(gstate==='play') writeSlot(curSlot||'⏱ Autosave'); }
+  window.addEventListener('pagehide',autoSaveNow);
+  document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden') autoSaveNow(); });
   // ====================== geometry helpers ======================
   function rotPt(x,y,r){ return r===0?[x,y]:r===1?[-y,x]:r===2?[-x,-y]:[y,-x]; }
   function rotB(b,r){ var a=rotPt(b.x0,b.y0,r), c=rotPt(b.x1,b.y1,r);
@@ -478,12 +789,32 @@
       if((!vis||x===sx1)&&runStart>=0){ var runEnd=vis?x:x-1; var srcX=((runStart-sx0)/spW)*img.width, srcW=((runEnd-runStart+1)/spW)*img.width;
         ctx.drawImage(img,srcX,0,srcW,img.height,runStart,topY,runEnd-runStart+1,spH); runStart=-1; } }
     ctx.globalAlpha=1; }
+  // soft elliptical contact shadow at an actor's feet — grounds every sprite
+  var SHADOW_SPR=(function(){ var c=mkCanvas(64,24), g=c.getContext('2d');
+    var rg=g.createRadialGradient(32,12,2,32,12,30);
+    rg.addColorStop(0,'rgba(8,10,18,0.42)'); rg.addColorStop(0.7,'rgba(8,10,18,0.18)'); rg.addColorStop(1,'rgba(8,10,18,0)');
+    g.fillStyle=rg; g.save(); g.translate(32,12); g.scale(1,0.375); g.beginPath(); g.arc(0,0,30,0,7); g.fill(); g.restore(); return c; })();
+  function drawShadow(wx,wy,scale){ var pr=projP(wx,wy,0); if(!pr) return;
+    var xr=RW/W; if(pr.tY<=0.05||pr.tY>=zbuf[clamp((pr.x/W*RW)|0,0,RW-1)]) return;
+    var lineH=H/pr.tY, w=lineH*0.5*(scale||1), h=w*0.34, by=H/2+lineH/2;
+    ctx.globalAlpha=0.85; ctx.drawImage(SHADOW_SPR,pr.x-w/2,by-h*0.55,w,h); ctx.globalAlpha=1; }
   function labelAt(wx,wy,z,text,color){ var pr=projP(wx,wy,z); if(!pr) return; if(pr.tY<0.12||pr.tY>=zbuf[clamp((pr.x/W*RW)|0,0,RW-1)]) return;
     ctx.font='800 '+Math.max(10,W/74)+'px Nunito,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
     var w=ctx.measureText(text).width+10, h=Math.max(15,W/46); ctx.fillStyle='rgba(10,14,28,0.82)';
     rr(ctx,pr.x-w/2,pr.y-h,w,h-3,6); ctx.fillStyle=color; ctx.fillText(text,pr.x,pr.y-6); }
   function rr(g,x,y,w,h,r){ g.beginPath(); if(g.roundRect)g.roundRect(x,y,w,h,r); else g.rect(x,y,w,h); g.fill(); }
 
+  // a soft vignette + faint warm wash, baked once per canvas size
+  var VIG=null, VIG_W=0, VIG_H=0;
+  function vignetteFor(w,h){ if(VIG&&VIG_W===w&&VIG_H===h) return VIG;
+    VIG_W=w; VIG_H=h; VIG=mkCanvas(w,h); var g=VIG.getContext('2d');
+    var rg=g.createRadialGradient(w/2,h*0.46,Math.min(w,h)*0.36,w/2,h*0.52,Math.max(w,h)*0.74);
+    rg.addColorStop(0,'rgba(0,0,0,0)'); rg.addColorStop(0.75,'rgba(6,8,18,0.10)'); rg.addColorStop(1,'rgba(6,8,18,0.34)');
+    g.fillStyle=rg; g.fillRect(0,0,w,h);
+    var wl=g.createLinearGradient(0,0,0,h);                       // whisper of warm shop light from above
+    wl.addColorStop(0,'rgba(255,214,150,0.05)'); wl.addColorStop(0.5,'rgba(255,214,150,0)');
+    g.fillStyle=wl; g.fillRect(0,0,w,h);
+    return VIG; }
   function render(){
     var ob=document.getElementById('openBtn'), canOpen = carrying && !placing && (carrying.sealed || (PRODUCTS[carrying.product] && PRODUCTS[carrying.product].openable));
     ob.hidden = !canOpen; if(canOpen) ob.textContent = carrying.sealed ? '📦 Open Box (Q)' : '🎴 Open Pack (Q)';
@@ -510,19 +841,23 @@
       for(y=y0;y<=y1;y++){ var tyy=(tPos|0)&TMASK, tii=((tyy*TW+texX)<<2);
         buf[y*RW+x]=(0xff000000|(((wd[tii+2]*wsh)|0)<<16)|(((wd[tii+1]*wsh)|0)<<8)|((wd[tii]*wsh)|0))>>>0; tPos+=tStep; } }
     sceneCtx.putImageData(sceneImg,0,0); ctx.drawImage(sceneCanvas,0,0,RW,RH,0,0,W,H);
+    ctx.drawImage(vignetteFor(W,H),0,0);
 
     var objs=[];
     placed.forEach(function(f){ objs.push({d:camDepth(f.x,f.y), kind:'furn', f:f}); });
     floorBoxes.forEach(function(b){ objs.push({d:camDepth(b.x,b.y), kind:'fbox', b:b}); });
     customers.forEach(function(c){ objs.push({d:camDepth(c.x,c.y), kind:'cust', c:c}); });
+    messes.forEach(function(m){ objs.push({d:camDepth(m.x,m.y), kind:'mess', m:m}); });
     employees.forEach(function(e){ objs.push({d:camDepth(e.x,e.y), kind:'emp', e:e}); });
     objs.sort(function(a,b){ return b.d-a.d; });
     objs.forEach(function(o){
       if(o.kind==='furn'){ var f=o.f; drawBoxes(ctx,f.x,f.y,FURNITURE[f.fkey].boxes,f.rot,1); decorateFurn(f); }
-      else if(o.kind==='fbox'){ billboard(o.b.x,o.b.y,0,0.46,0.46,boxSprite(o.b.product,o.b.sealed),1); labelAt(o.b.x,o.b.y,0.56,PRODUCTS[o.b.product].name+(o.b.sealed?'':' ×'+o.b.count),'#ffe08a'); }
-      else if(o.kind==='cust'){ var c=o.c; billboard(c.x,c.y,0,0.62,0.42,c.img,1); if(c.item) billboard(c.x,c.y,0.64,0.18,0.18,ICONS[c.item],1);
-        if(c.state==='playing') billboard(c.x,c.y,0.7,0.14,0.14,ICONS['mtg_pack'],0.9); }
-      else if(o.kind==='emp'){ var e=o.e; billboard(e.x,e.y,0,0.62,0.42,e.img,1); if(e.carry) billboard(e.x,e.y,0.52,0.2,0.2,boxSprite(e.carry.product,e.carry.sealed),1);
+      else if(o.kind==='fbox'){ drawShadow(o.b.x,o.b.y,0.8); billboard(o.b.x,o.b.y,0,0.46,0.46,boxSprite(o.b.product,o.b.sealed),1); labelAt(o.b.x,o.b.y,0.56,PRODUCTS[o.b.product].name+(o.b.sealed?'':' ×'+o.b.count),'#ffe08a'); }
+      else if(o.kind==='cust'){ var c=o.c; drawShadow(c.x,c.y,0.7); billboard(c.x,c.y,0,0.62,0.42,c.img,1); if(c.item) billboard(c.x,c.y,0.64,0.18,0.18,ICONS[c.item],1);
+        if(c.state==='playing') billboard(c.x,c.y,0.7,0.14,0.14,ICONS['mtg_pack'],0.9);
+        if(c.emote) billboard(c.x,c.y,0.96,c.emote.w||0.22,c.emote.h||0.22,c.emote.img,1); }
+      else if(o.kind==='mess'){ billboard(o.m.x,o.m.y,0.03,0.3,0.1,messSprite(),1); }
+      else if(o.kind==='emp'){ var e=o.e; drawShadow(e.x,e.y,0.7); billboard(e.x,e.y,0,0.62,0.42,e.img,1); if(e.carry) billboard(e.x,e.y,0.52,0.2,0.2,boxSprite(e.carry.product,e.carry.sealed),1);
         labelAt(e.x,e.y,0.66, e.role==='cashier'?'👔 Cashier':'📦 Restocker','#9fd0ff'); }
     });
 
@@ -544,6 +879,7 @@
       ctx.fillStyle = v===1?'#2a3346' : (v===2?'#2f5f8c':'#caa57a');
       ctx.fillRect(SX(x),SY(y),sc+0.5,sc+0.5); }
     // alignment grid
+    for(y=0;y<mapH;y++) for(x=0;x<mapW;x++){ if(map[y][x]===1){ ctx.fillStyle='rgba(10,14,26,0.72)'; ctx.fillRect(SX(x),SY(y),sc,sc); } }
     ctx.strokeStyle='rgba(255,255,255,0.16)'; ctx.lineWidth=1; ctx.beginPath();
     for(x=0;x<=mapW;x++){ ctx.moveTo(SX(x),SY(0)); ctx.lineTo(SX(x),SY(mapH)); }
     for(y=0;y<=mapH;y++){ ctx.moveTo(SX(0),SY(y)); ctx.lineTo(SX(mapW),SY(y)); }
@@ -560,13 +896,19 @@
     ctx.fillStyle='#7df0a8'; ctx.beginPath(); ctx.arc(SX(px),SY(py),sc*0.18,0,7); ctx.fill();
     ctx.strokeStyle='#7df0a8'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(SX(px),SY(py)); ctx.lineTo(SX(px+dirX*0.6),SY(py+dirY*0.6)); ctx.stroke();
     // ghost (snapped)
-    var sx=snap(ghostX), sy=snap(ghostY), fp=footprint(placing.fkey,sx,sy,placing.rot), ok=ghostValid();
+    var sx=snap(ghostX), sy=snap(ghostY), ok=ghostValid();
+    if(placing.carve){ var cgx=Math.floor(sx), cgy=Math.floor(sy);
+      ctx.fillStyle=ok?'rgba(125,240,168,0.4)':'rgba(233,69,96,0.4)'; ctx.fillRect(SX(cgx),SY(cgy),sc,sc);
+      ctx.strokeStyle=ok?'#7df0a8':'#e94560'; ctx.lineWidth=2.5; ctx.setLineDash([6,5]); ctx.strokeRect(SX(cgx),SY(cgy),sc,sc); ctx.setLineDash([]);
+      ctx.fillStyle='#ffe08a'; ctx.font='900 '+Math.max(14,W/52)+'px Nunito,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillText('Build Mode · Buy floor $50/square — carve rooms & hallways anywhere', W/2, 10);
+    } else {
+    var fp=footprint(placing.fkey,sx,sy,placing.rot);
     drawTopBoxes(SX,SY,sc,sx,sy,FURNITURE[placing.fkey].boxes,placing.rot, ok?'#7df0a8':'#e94560');
     ctx.strokeStyle=ok?'#7df0a8':'#e94560'; ctx.lineWidth=2.5; ctx.setLineDash([6,5]);
     ctx.strokeRect(SX(fp.fx0),SY(fp.fy0),(fp.fx1-fp.fx0)*sc,(fp.fy1-fp.fy0)*sc); ctx.setLineDash([]);
-    // title
     ctx.fillStyle='#ffe08a'; ctx.font='900 '+Math.max(14,W/52)+'px Nunito,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillText('Build Mode · '+FURNITURE[placing.fkey].name+' — line it up on the grid', W/2, 10);
+    ctx.fillText('Build Mode · '+FURNITURE[placing.fkey].name+' — line it up on the grid', W/2, 10); }
   }
   function drawTopBoxes(SX,SY,sc,fx,fy,boxesRaw,rot,tint){
     boxesRaw.forEach(function(bb){ var b=rotB(bb,rot); ctx.fillStyle=tint; ctx.globalAlpha=0.5;
@@ -593,21 +935,47 @@
   function ghostXY(){ return { x:ghostX, y:ghostY }; }
   function snap(v){ return Math.floor(v)+0.5; }
   function startPlacing(fkey){ placing={fkey:fkey,rot:0}; ghostX=clamp(px+dirX*1.2,1.5,mapW-1.5); ghostY=clamp(py+dirY*1.2,1.5,mapH-1.5); placeBar(true); }
-  function cancelPlacing(){ placing=null; placeBar(false); toast('Cancelled'); }
+  function cancelPlacing(){
+    if(placing&&placing.moving){ var mf=placing.moving; placed.push(mf); if(mf.kind==='register') register=mf; }
+    placing=null; placeBar(false); toast('Cancelled'); }
   function rotateGhost(){ if(placing) placing.rot=(placing.rot+1)&3; }
   function placeBar(on){ document.getElementById('placeBar').hidden=!on; }
   function ghostValid(){ var gp=ghostXY(), sx=snap(gp.x), sy=snap(gp.y);
+    if(placing.carve){ var gx2=Math.floor(sx), gy2=Math.floor(sy);          // buying floor: a wall square touching your floor
+      if(gx2<1||gy2<1||gx2>=mapW-1||gy2>=mapH-1) return false;
+      if(mapAt(sx,sy)!==1) return false;
+      return mapAt(gx2+1.5,gy2+0.5)===0||mapAt(gx2-0.5,gy2+0.5)===0||mapAt(gx2+0.5,gy2+1.5)===0||mapAt(gx2+0.5,gy2-0.5)===0; }
     if(mapAt(sx,sy)!==0) return false;
     var fp=footprint(placing.fkey,sx,sy,placing.rot);
     for(var i=0;i<placed.length;i++){ if(rectsHit(fp,placed[i].fp)) return false; }
     if(px>fp.fx0-0.2&&px<fp.fx1+0.2&&py>fp.fy0-0.2&&py<fp.fy1+0.2) return false;
     return true; }
   function placeNow(){ if(!ghostValid()){ toast('Can’t place there'); return; }
-    var gp=ghostXY(), sx=snap(gp.x), sy=snap(gp.y), meta=FURNITURE[placing.fkey];
+    var gp=ghostXY(), sx=snap(gp.x), sy=snap(gp.y);
+    if(placing.carve){                       // carve the square, stay in carve mode to keep building
+      if(money<50){ toast('Need $50'); placing=null; placeBar(false); return; }
+      money-=50; carved.push(Math.floor(sx)+','+Math.floor(sy)); rebuildMap(); refreshHUD();
+      toast('⛏️ Floor laid — $50 ('+floorArea()+' squares total). Keep going or Esc');
+      return; }
+    var meta=FURNITURE[placing.fkey];
+    if(placing.moving){                     // repositioning an existing piece: keep its stock & slots
+      var mf=placing.moving; mf.x=sx; mf.y=sy; mf.rot=placing.rot; mf.fp=footprint(mf.fkey,sx,sy,placing.rot);
+      if(meta.kind==='register') register=mf;
+      placed.push(mf); toast(meta.name+' moved'); placing=null; placeBar(false); return; }
     var f={ kind:meta.kind, fkey:placing.fkey, x:sx, y:sy, rot:placing.rot, fp:footprint(placing.fkey,sx,sy,placing.rot) };
     if(meta.kind==='shelf'){ f.slots=[0,1,2,3].map(function(){ return {product:null,stock:0,price:0}; }); }
     if(meta.kind==='register'){ register=f; }
     placed.push(f); toast(meta.name+' placed'); placing=null; placeBar(false); }
+  // F on a piece of furniture: lift it (stock and all) and re-place it anywhere.
+  function moveTargetFurn(){ if(placing||gstate!=='play') return;
+    var t=findTarget(); if(!t||!t.f) { toast('Look at a shelf, table or the register'); return; }
+    var f=t.f;
+    if(customers.some(function(c){ return c.shelf===f||c.table===f; })){ toast('Customers are using that right now'); return; }
+    placed.splice(placed.indexOf(f),1);
+    if(register===f) register=null;
+    placing={ fkey:f.fkey, rot:f.rot||0, moving:f };
+    ghostX=f.x; ghostY=f.y; placeBar(true);
+    toast('Moving '+FURNITURE[f.fkey].name+' — arrows to move, R rotate, ✓ place'); }
   function placeAt(fkey,tx,ty,rot){ // test/helper: direct place (no validity check)
     var meta=FURNITURE[fkey], x=tx+0.5, y=ty+0.5;
     var f={ kind:meta.kind, fkey:fkey, x:x, y:y, rot:rot||0, fp:footprint(fkey,x,y,rot||0) };
@@ -622,9 +990,14 @@
     // floor boxes get priority — they arrive by the door, where a register might sit
     floorBoxes.forEach(function(b){ consider(b.x,b.y,{type:'pickup',box:b}, 0.55); });
     placed.forEach(function(f){ if(f.kind==='shelf') consider(f.x,f.y,{type:'shelf',f:f});
-      else if(f.kind==='register') consider(f.x,f.y,{type:'register',f:f}); });
+      else if(f.kind==='register') consider(f.x,f.y,{type:'register',f:f});
+      else if(f.kind==='playtable') consider(f.x,f.y,{type:'playtable',f:f});
+      else if(f.kind==='bathroom'||f.kind==='wall'||f.kind==='chair') consider(f.x,f.y,{type:'furn',f:f}); });
     return best; }
-  function emptySlot(f,prod){ for(var i=0;i<4;i++){ if(f.slots[i].product===prod && f.slots[i].stock<FURNITURE[f.fkey].slotCap) return i; }
+  function emptySlot(f,prod){
+    if(FURNITURE[f.fkey].cardOnly && !(PRODUCTS[prod]&&PRODUCTS[prod].card)) return -1;   // card cases hold singles only
+    if(f.allow && !f.allow[prod]) return -1;                                              // dedicated shelf: only its chosen products
+    for(var i=0;i<4;i++){ if(f.slots[i].product===prod && f.slots[i].stock<FURNITURE[f.fkey].slotCap) return i; }
     for(var j=0;j<4;j++){ if(!f.slots[j].product) return j; } return -1; }
   function shelfHasStock(f){ for(var i=0;i<4;i++) if(f.slots[i].product&&f.slots[i].stock>0) return true; return false; }
 
@@ -636,16 +1009,19 @@
     var txt='';
     if(t.type==='pickup'){ txt= carrying?'Hands full — stock or open first':'<b>Action</b>: pick up '+PRODUCTS[t.box.product].name; }
     else if(t.type==='shelf'){ var f=t.f;
-      if(carrying){ var slot=emptySlot(f,carrying.product); txt= slot>=0?'<b>Action</b>: stock '+PRODUCTS[carrying.product].name:'Shelf full'; }
-      else txt= shelfHasStock(f)?'Shelf · '+shelfSummary(f):'Empty shelf — bring a box'; }
+      if(FURNITURE[f.fkey].cardOnly){ txt= shelfHasStock(f)?'Case · '+shelfSummary(f)+' · <b>Action</b>: add a card':'<b>Action</b>: display a card from your collection'; }
+      else if(carrying){ var slot=emptySlot(f,carrying.product); txt= slot>=0?'<b>Action</b>: stock '+PRODUCTS[carrying.product].name:'Shelf full'; }
+      else txt= (shelfHasStock(f)?'Shelf · '+shelfSummary(f):'Empty shelf — bring a box')+' · <b>F</b> move · <b>G</b> products'; }
+    else if(t.type==='playtable'){ txt= deckSize()>=6?'<b>Action</b>: play a match (deck $'+deckValue().toFixed(0)+')':'Play table — build a 6+ card deck (📱 Cards)'; }
+    else if(t.type==='furn'){ txt=FURNITURE[t.f.fkey].name+' · <b>F</b> move'; }
     else if(t.type==='register'){ var q=customers.filter(function(c){ return c.state==='queue'; }).length;
-      txt= q>0?'<b>Action</b>: check out ($'+nextSalePrice()+')':'Register — no one waiting'; }
+      txt= q>0?'<b>Action</b>: check out ($'+nextSalePrice()+')':'Register — no one waiting · <b>F</b> move'; }
     p.hidden=false; p.innerHTML=txt; }
   function shelfSummary(f){ var s=[]; for(var i=0;i<4;i++){ if(f.slots[i].product) s.push(PRODUCTS[f.slots[i].product].name.split(' ')[0]+' '+f.slots[i].stock); } return s.join(' · '); }
   function nextSalePrice(){ var c=queueFront(); return c?c.price:0; }
   function queueFront(){ var f=null, fd=1e9; customers.forEach(function(c){ if(c.state==='queue'&&c.qd<fd){ fd=c.qd; f=c; } }); return f; }
 
-  function doAction(){ if(gstate!=='play') return;
+  function doAction(){ if(gstate!=='play'||cashOpen()||packOpen()||caseOpenOv()) return;
     if(placing){ placeNow(); return; }
     if(carrying&&carrying.sealed){ // open it
       carrying={ product:carrying.opensTo, count:carrying.openCount, sealed:false }; toast('Opened! '+carrying.count+' '+PRODUCTS[carrying.product].name+'s'); return; }
@@ -654,23 +1030,316 @@
       var b=t.box; carrying={ product:b.product, count:b.count, sealed:b.sealed, opensTo:b.opensTo, openCount:b.openCount };
       floorBoxes.splice(floorBoxes.indexOf(b),1); toast('Carrying '+PRODUCTS[b.product].name); }
     else if(t.type==='shelf'){ var f=t.f;
+      if(FURNITURE[f.fkey].cardOnly){ openCasePicker(f); return; }   // display case: slot singles, not boxes
       if(!carrying){ toast(shelfHasStock(f)?shelfSummary(f):'Bring a box to stock it'); return; }
       var slot=emptySlot(f,carrying.product); if(slot<0){ toast('Shelf is full'); return; }
       var sl=f.slots[slot]; if(!sl.product){ sl.product=carrying.product; sl.price=PRODUCTS[carrying.product].price; }
       var move=Math.min(FURNITURE[f.fkey].slotCap-sl.stock, carrying.count); sl.stock+=move; carrying.count-=move;
       toast('Stocked '+move+' '+PRODUCTS[sl.product].name); if(carrying.count<=0) carrying=null; }
     else if(t.type==='register'){ var c=queueFront(); if(!c){ toast('No one waiting'); return; }
-      money+=c.price; sold++; addReview(c); c.state='leave'; c.target=doorPt; toast('+$'+c.price+'  '+PRODUCTS[c.item].name); refreshHUD(); }
+      startCheckout(c); }
+    else if(t.type==='playtable'){ playMatch(t.f); }
   }
-  // ---- open a booster pack you're carrying: gamble for a pull ----
-  var PULLS=[ {p:0.64,v:2,n:'a common'}, {p:0.24,v:5,n:'an uncommon'}, {p:0.09,v:15,n:'a RARE!'}, {p:0.03,v:50,n:'a MYTHIC! 🤩'} ];
+
+  // ---- deck & friendly matches at the play table ---------------------------
+  var matchCd=0;
+  function playMatch(tbl){
+    if(deckSize()<6){ toast('Build a deck first — 6+ cards (📱 Cards tab)'); return; }
+    if(matchCd>0){ toast('Catch your breath — next match in '+Math.ceil(matchCd)+'s'); return; }
+    var pl=playersAt(tbl);
+    if(!pl){ toast('No one at the table to play against'); return; }
+    matchCd=8;
+    // deck strength: card value + a nod to curve size; opponents punch at ~$25
+    // friendly matches: no money changes hands at the tables — just bragging
+    // rights and a whisker of goodwill when the owner puts on a show.
+    var str=deckValue()+deckSize()*0.5;
+    var winP=clamp(0.25+str/140,0.2,0.85);
+    if(Math.random()<winP){
+      ratingSum+=0.25;
+      customers.forEach(function(c){ if(c.table===tbl) emote(c,'🤯'); });
+      toast('🏆 You won the match — the table loved the show!');
+    } else {
+      customers.forEach(function(c){ if(c.table===tbl) emote(c,'🏆'); });
+      toast('😅 Lost the match — they’ll brag about that for weeks');
+    }
+    refreshHUD();
+  }
+
+  // ---- display case: sell single cards from the collection -----------------
+  var caseTarget=null, cardProdSeq=0;
+  function caseOpenOv(){ return !document.getElementById('caseOv').hidden; }
+  function closeCase(){ document.getElementById('caseOv').hidden=true; caseTarget=null; }
+  function caseFreeSlot(f){ for(var i=0;i<4;i++) if(!f.slots[i].product) return i; return -1; }
+  function registerCardProduct(e){    // one pseudo-product per slotted card
+    var key='card_'+(cardProdSeq++), face=cardFace(e,120);
+    PRODUCTS[key]={ name:e.n+(e.foil?' (Foil)':'')+(e.art?' ✦':''), tag:'card', price:Math.max(1,Math.round(e.v)),
+      card:true, cardData:{n:e.n,r:e.r,foil:!!e.foil,art:!!e.art,v:e.v},
+      draw:function(g,s){ var f2=cardFace(e,Math.round(s*0.62)); g.drawImage(f2,(s-f2.width)/2,(s-f2.height)/2); } };
+    ICONS[key]=prodIcon(key,40);
+    return key; }
+  function openCasePicker(f){
+    caseTarget=f;
+    var list=document.getElementById('caseList'); list.innerHTML='';
+    // cards already on display: tweak their asking price right here
+    for(var si2=0;si2<4;si2++)(function(slot){
+      if(!slot||!slot.product||!PRODUCTS[slot.product]) return;
+      var pr=PRODUCTS[slot.product];
+      var row=makeRow(ICONS[slot.product], pr.name, 'On display — set your price:', null, false, null);
+      var ctl=document.createElement('div'); ctl.className='price-ctl';
+      var minus=document.createElement('button'); minus.textContent='–';
+      var pv=document.createElement('span'); pv.className='pv'; pv.textContent='$'+slot.price;
+      var plus=document.createElement('button'); plus.textContent='+';
+      minus.onclick=function(){ pr.price=Math.max(1,pr.price-1); slot.price=pr.price; pv.textContent='$'+slot.price; };
+      plus.onclick=function(){ pr.price=pr.price+1; slot.price=pr.price; pv.textContent='$'+slot.price; };
+      ctl.appendChild(minus); ctl.appendChild(pv); ctl.appendChild(plus);
+      row.querySelector('.buyslot').appendChild(ctl);
+      list.appendChild(row);
+    })(f.slots[si2]);
+    if(caseFreeSlot(f)<0){ document.getElementById('caseOv').hidden=false; return; }   // full → just the price editors
+    collection.slice().sort(function(a,b){ return b.v-a.v; }).forEach(function(e){
+      var free=e.qty-e.inDeck; if(free<=0) return;
+      var row=makeRow(cardIconSq(e,40), e.n+(e.foil?' <span class="cbadge foil">FOIL</span>':'')+(e.art?' <span class="cbadge art">✦ ART</span>':''),
+        rarityName(e.r)+' · market $'+e.v.toFixed(2)+' · ×'+free, 'Sell $'+Math.max(1,Math.round(e.v)), true, function(){
+          var si=caseFreeSlot(caseTarget); if(si<0){ closeCase(); return; }
+          var key=registerCardProduct(e);
+          caseTarget.slots[si]={ product:key, stock:1, price:PRODUCTS[key].price };
+          takeFromCollection(e);
+          toast('In the case: '+PRODUCTS[key].name+' — $'+PRODUCTS[key].price);
+          if(caseFreeSlot(caseTarget)<0 || !collection.length) closeCase(); else openCasePicker(caseTarget);
+        });
+      list.appendChild(row); });
+    if(!list.children.length){ toast(collection.length?'All your cards are in your deck — free some up first':'No cards in your collection yet — open some packs!'); caseTarget=null; return; }
+    document.getElementById('caseOv').hidden=false;
+  }
+  function rarityName(r){ return r==='mythic'?'Mythic':r==='rare'?'Rare':r==='uncommon'?'Uncommon':'Common'; }
+  function cardIconSq(e,s){ var c=mkCanvas(s,s), g=c.getContext('2d');
+    var f=cardFace(e,Math.round(s*0.66)); g.drawImage(f,(s-f.width)/2,(s-f.height)/2); return c; }
+  document.getElementById('caseClose').addEventListener('click',closeCase);
+  // ---- cash checkout: customers pay in cash, exact or a little over ----
+  // Overpayers make you count out their change by hand at the register.
+  var saleC=null, saleGiven=0;
+  function makeTender(p){ if(Math.random()<0.4) return p;
+    var ups=[Math.ceil(p/5)*5, Math.ceil(p/10)*10, Math.ceil(p/20)*20].filter(function(t){ return t>p; });
+    ups.push(p+1);                       // the odd customer pays a buck over
+    return pick(ups); }
+  function completeSale(c){ money+=c.price; sold++; addReview(c);
+    c.state='leave'; c.target=doorPt; refreshHUD(); }
+  function cashOpen(){ return !document.getElementById('cashOv').hidden; }
+  function startCheckout(c){
+    c.tender=makeTender(c.price);
+    if(c.tender===c.price){              // exact cash — no change to make
+      emote(c,'🙂'); completeSale(c); toast('💵 Exact change  +$'+c.price+'  '+PRODUCTS[c.item].name); return; }
+    saleC=c; saleGiven=0; c.state='paying'; c.flubs=0;
+    document.getElementById('cashItem').textContent=PRODUCTS[c.item].name+' — total';
+    document.getElementById('cashPrice').textContent='$'+c.price;
+    document.getElementById('cashTender').textContent='$'+c.tender;
+    document.getElementById('cashMsg').textContent='';
+    updateCashUI();
+    document.getElementById('cashOv').hidden=false;
+  }
+  function updateCashUI(){ document.getElementById('cashChange').textContent='Change: $'+saleGiven; }
+  function cashGive(){ if(!saleC) return;
+    var owed=saleC.tender-saleC.price;
+    if(saleGiven===owed){
+      document.getElementById('cashOv').hidden=true;
+      emote(saleC, saleC.flubs?'🙂':'😊');
+      completeSale(saleC);
+      toast('💵 +$'+saleC.price+' — change given'+(saleC.flubs?' (eventually…)':' 👍'));
+      saleC=null;
+    } else {
+      saleC.flubs++;
+      var panel=document.getElementById('cashPanel');
+      panel.classList.remove('shake'); void panel.offsetWidth; panel.classList.add('shake');
+      document.getElementById('cashMsg').textContent =
+        saleGiven<owed ? '“Hey, that’s not enough change!”' : '“That’s too much — count it again.”';
+      emote(saleC,'😠');
+      saleGiven=0; updateCashUI();
+    }
+  }
+  document.querySelectorAll('#cashOv .bill').forEach(function(b){
+    b.addEventListener('click',function(){ if(!saleC) return; saleGiven+=parseInt(b.dataset.v,10); updateCashUI(); }); });
+  document.getElementById('cashClear').addEventListener('click',function(){ saleGiven=0; updateCashUI(); document.getElementById('cashMsg').textContent=''; });
+  document.getElementById('cashGive').addEventListener('click',cashGive);
+  document.getElementById('packClose').addEventListener('click',closePack);
+  // ---- open a booster pack you're carrying: 10 cards from the newest set ----
+  // Real Magic: The Gathering — Marvel Super Heroes (MSH, June 2026) cards with
+  // live market prices pulled from Scryfall at build time (regular, non-foil).
+  var MSH_CARDS={
+    common:[
+      {n:"Hawkeye's Bow",v:0.25}, {n:'Restorative Technique',v:0.24}, {n:'Machinesmith Automaton',v:0.22},
+      {n:'Go Nuts!',v:0.21}, {n:'Call Damage Control',v:0.20}, {n:'We Say Thee Nay!',v:0.17},
+      {n:'HULK SMASH!',v:0.16}, {n:'HYDRA Assault Robot',v:0.16}, {n:'Super Strength',v:0.15},
+      {n:'Take Up the Shield',v:0.15}, {n:"Ant-Man's Army",v:0.14}, {n:'Giant Growth',v:0.14},
+      {n:'Guerrilla Gorilla',v:0.14}, {n:'Undercover Skrull',v:0.14}, {n:'Pym Technologies',v:0.14},
+      {n:'Surveillance Room',v:0.14}, {n:'Vision of Love',v:0.14}, {n:'Powerful Broker',v:0.14}
+    ],
+    uncommon:[
+      {n:'Hex Magic',v:1.15}, {n:'Shuri, Wakandan Inventor',v:0.39}, {n:'Captain America, Living Legend',v:0.30},
+      {n:'Claim the Kingdom',v:0.27}, {n:'Super Intelligence',v:0.27}, {n:'Mister Fantastic, Reed Richards',v:0.26},
+      {n:'Attuma, Atlantean Warlord',v:0.23}, {n:'Mister Hyde, Monster Within',v:0.23}, {n:'Hulk, Gamma Goliath',v:0.22},
+      {n:'Night Nurse, Healer of Heroes',v:0.22}, {n:'Pym Particles',v:0.22}, {n:'Baxter Building',v:0.21},
+      {n:'Doc Samson, Super Psychiatrist',v:0.21}, {n:'Kid Loki',v:0.21}, {n:'Loki Laufeyson',v:0.21},
+      {n:'Kang, Temporal Tyrant',v:0.20}
+    ],
+    rare:[
+      {n:'The Unbeatable Squirrel Girl',v:8.55}, {n:'Loki, God of Mischief',v:6.22}, {n:'Dark Fortress',v:3.69},
+      {n:'Hidden Lair',v:3.43}, {n:'Gathering Place',v:2.94}, {n:'Gleaming Bastion',v:2.87},
+      {n:'Training Compound',v:2.41}, {n:'Mole Man, Moloid Master',v:1.39}, {n:'World War Hulk',v:1.32},
+      {n:"Captain America's Shield",v:1.00}, {n:'Arc Reactor',v:0.90}, {n:'Super-Soldier Serum',v:0.76},
+      {n:'The Scarlet Witch',v:0.75}, {n:'The Serpent Society',v:0.70}, {n:'The Vision',v:0.64}
+    ],
+    mythic:[
+      {n:'The Mind Stone',v:68.45}, {n:'Mjölnir, Hammer of Thor',v:23.28}, {n:'Ultron, Artificial Malevolence',v:14.23},
+      {n:'The Ten Rings',v:14.15}, {n:'Jennifer Walters // The Sensational She-Hulk',v:13.20},
+      {n:"King T'Challa // Black Panther, Hope Enduring",v:12.10}, {n:'Cosmic Cube',v:10.20},
+      {n:'Shang-Chi, Master of Kung Fu',v:9.71}, {n:'Bruce Banner // The Incredible Hulk',v:8.86},
+      {n:'Thor, God of Thunder',v:8.35}, {n:'Tony Stark // The Invincible Iron Man',v:6.72},
+      {n:'Iron Man Armor',v:4.81}, {n:'Namor the Sub-Mariner',v:4.77}, {n:'M.O.D.O.K.',v:4.70},
+      {n:'Doctor Doom',v:3.71}, {n:'Captain America, Super-Soldier',v:3.08}, {n:'Black Widow, Super Spy',v:2.81},
+      {n:'Thanos, the Mad Titan',v:2.70}, {n:'The Coming of Galactus',v:1.47}
+    ]
+  };
+  // ---- card instances: base card + variant (foil / special art) ------------
+  // Foil and borderless "special art" premiums approximate real collector-market
+  // multipliers over the regular printing.
+  var RAR_COL={ common:'#9aa4b4', uncommon:'#c8d4e0', rare:'#ffd24a', mythic:'#ff8a3c' };
+  function cardInst(r,foil,art){ var c=pick(MSH_CARDS[r]);
+    var v=c.v*(foil?2.5:1)*(art?5:1);
+    return { n:c.n, r:r, foil:!!foil, art:!!art, v:Math.round(v*100)/100 }; }
+  function instLabel(cd){ return cd.n+(cd.art?' · Special Art':'')+(cd.foil?' · Foil':''); }
+  function instKey(cd){ return cd.n+'|'+(cd.foil?'F':'')+'|'+(cd.art?'A':''); }
+
+  // ---- card faces: the REAL card images (bundled in cards/, downloaded from
+  // Scryfall at build time so the game stays offline/file:// friendly), with a
+  // foil shimmer / special-art badge layered on top. Falls back to the
+  // procedural comic-burst face while an image is still loading.
+  var CARD_IMGS={};
+  function cardSlug(n){ return n.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+  (function(){ Object.keys(MSH_CARDS).forEach(function(r){ MSH_CARDS[r].forEach(function(cd){
+    var s=cardSlug(cd.n); if(CARD_IMGS[s]) return;
+    var im=new Image(); im.src='cards/'+s+'.jpg'; CARD_IMGS[s]=im; }); }); })();
+  var CARD_FACE_CACHE={};
+  function hash32(s){ var h=2166136261; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return (h>>>0); }
+  function cardFace(cd,w){ var key=instKey(cd)+'|'+w; if(CARD_FACE_CACHE[key]) return CARD_FACE_CACHE[key];
+    var h=Math.round(w*1.4), img=CARD_IMGS[cardSlug(cd.n)];
+    if(img && img.complete && img.naturalWidth){       // the actual card, corner-rounded
+      var rc=mkCanvas(w,h), rg=rc.getContext('2d');
+      rg.save(); rg.beginPath();
+      if(rg.roundRect) rg.roundRect(0,0,w,h,w*0.06); else rg.rect(0,0,w,h);
+      rg.clip(); rg.drawImage(img,0,0,w,h);
+      if(cd.foil){ var rf=rg.createLinearGradient(0,0,w,h);   // foil shimmer over the print
+        rf.addColorStop(0,'rgba(120,200,255,0.28)'); rf.addColorStop(0.35,'rgba(210,140,255,0.24)');
+        rf.addColorStop(0.7,'rgba(120,255,180,0.24)'); rf.addColorStop(1,'rgba(255,230,120,0.28)');
+        rg.fillStyle=rf; rg.fillRect(0,0,w,h);
+        rg.fillStyle='rgba(255,255,255,0.85)'; var rhs=hash32(cd.n);
+        for(var ri=0;ri<7;ri++){ var rsx=((rhs>>ri)%97)/97*w, rsy=((rhs>>(ri+3))%89)/89*h;
+          rg.fillRect(rsx-0.5,rsy-3,1,6); rg.fillRect(rsx-3,rsy-0.5,6,1); } }
+      if(cd.art){ rg.fillStyle='rgba(8,8,16,0.8)';           // special-art corner badge
+        rg.beginPath(); rg.arc(w*0.12,h*0.075,w*0.1,0,7); rg.fill();
+        rg.fillStyle='#ffd24a'; rg.font='900 '+(w*0.12|0)+'px Nunito,sans-serif';
+        rg.textAlign='center'; rg.textBaseline='middle'; rg.fillText('★',w*0.12,h*0.078); }
+      rg.restore();
+      CARD_FACE_CACHE[key]=rc; return rc;
+    }
+    var c=mkCanvas(w,h), g=c.getContext('2d');
+    var hs=hash32(cd.n), hue=hs%360, hue2=(hue+140+(hs>>4)%80)%360;
+    var bd=cd.art?0:Math.max(2,w*0.05);                       // special art = full-bleed borderless
+    g.fillStyle=cd.art?'#0c0c14':'#1a1206'; rr(g,0,0,w,h,w*0.07);
+    // art box: comic burst — rays, halo and a bolt, seeded by the card name
+    var ax=bd, ay=bd, aw=w-2*bd, ah=cd.art?h-bd*2:h*0.52;
+    g.save(); g.beginPath(); g.rect(ax,ay,aw,ah); g.clip();
+    g.fillStyle='hsl('+hue+',55%,30%)'; g.fillRect(ax,ay,aw,ah);
+    var cx0=ax+aw*(0.3+((hs>>8)%40)/100), cy0=ay+ah*(0.3+((hs>>12)%40)/100);
+    g.fillStyle='hsl('+hue2+',70%,45%)';
+    for(var i=0;i<12;i++){ var a0=i*Math.PI/6+(hs%100)/50, a1=a0+Math.PI/14;
+      g.beginPath(); g.moveTo(cx0,cy0); g.lineTo(cx0+Math.cos(a0)*w,cy0+Math.sin(a0)*w); g.lineTo(cx0+Math.cos(a1)*w,cy0+Math.sin(a1)*w); g.closePath(); g.fill(); }
+    g.fillStyle='hsl('+hue+',80%,72%)'; g.beginPath(); g.arc(cx0,cy0,w*0.16,0,7); g.fill();
+    g.fillStyle='hsl('+hue2+',85%,60%)'; g.beginPath();      // zig-zag bolt
+    g.moveTo(cx0-w*0.06,cy0-h*0.16); g.lineTo(cx0+w*0.03,cy0-h*0.02); g.lineTo(cx0-w*0.02,cy0-h*0.02);
+    g.lineTo(cx0+w*0.06,cy0+h*0.14); g.lineTo(cx0+w*0.01,cy0+h*0.0); g.lineTo(cx0+w*0.05,cy0+h*0.0); g.closePath(); g.fill();
+    if(cd.foil){ var fg=g.createLinearGradient(ax,ay,ax+aw,ay+ah);   // foil shimmer
+      fg.addColorStop(0,'rgba(120,200,255,0.34)'); fg.addColorStop(0.35,'rgba(210,140,255,0.30)');
+      fg.addColorStop(0.7,'rgba(120,255,180,0.30)'); fg.addColorStop(1,'rgba(255,230,120,0.34)');
+      g.fillStyle=fg; g.fillRect(ax,ay,aw,ah);
+      g.fillStyle='rgba(255,255,255,0.85)';
+      for(i=0;i<8;i++){ var sx2=ax+((hs>>i)%97)/97*aw, sy2=ay+((hs>>(i+3))%89)/89*ah;
+        g.fillRect(sx2-0.5,sy2-3,1,6); g.fillRect(sx2-3,sy2-0.5,6,1); } }
+    g.restore();
+    // name plate + rarity gem
+    var ny=cd.art?h-w*0.30:ay+ah;
+    g.fillStyle=cd.art?'rgba(8,8,16,0.78)':'#e8e0cc'; rr(g,bd||2,ny,w-(bd||2)*2,cd.art?w*0.30-2:h-ny-(bd||2),w*0.04);
+    g.fillStyle=cd.art?'#ffe8b0':'#1a1408'; g.font='900 '+Math.max(6,w*0.085)+'px Nunito,sans-serif'; g.textAlign='left'; g.textBaseline='top';
+    var nm=cd.n.length>26?cd.n.slice(0,25)+'…':cd.n, half=Math.ceil(nm.length/2);
+    if(nm.length>14 && nm.indexOf(' ')>0){ var sp=nm.lastIndexOf(' ',half)>0?nm.lastIndexOf(' ',half):nm.indexOf(' ');
+      g.fillText(nm.slice(0,sp),(bd||2)+w*0.05,ny+w*0.045); g.fillText(nm.slice(sp+1),(bd||2)+w*0.05,ny+w*0.045+w*0.105); }
+    else g.fillText(nm,(bd||2)+w*0.05,ny+w*0.06);
+    g.fillStyle=RAR_COL[cd.r]; g.beginPath(); g.arc(w-(bd||2)-w*0.075,ny+w*0.095,w*0.05,0,7); g.fill();
+    g.strokeStyle='rgba(0,0,0,0.4)'; g.lineWidth=1; g.stroke();
+    if(cd.art){ g.fillStyle='#caa14a'; g.font='900 '+Math.max(5,w*0.07)+'px Nunito,sans-serif'; g.fillText('★',(bd||2)+w*0.05,ny-w*0.12); }
+    if(!img) CARD_FACE_CACHE[key]=c;   // image still loading → don't cache; next call upgrades to the real print
+    return c; }
+
+  // ---- your collection: cards live here until decked, cased, or sold -------
+  var collection=[];   // {n,r,foil,art,v,qty,inDeck}
+  function collFind(cd){ for(var i=0;i<collection.length;i++) if(instKey(collection[i])===instKey(cd)) return collection[i]; return null; }
+  function addToCollection(cd){ var e=collFind(cd); if(e){ e.qty++; return e; }
+    e={ n:cd.n, r:cd.r, foil:cd.foil, art:cd.art, v:cd.v, qty:1, inDeck:0 }; collection.push(e); return e; }
+  function takeFromCollection(e){ e.qty--; if(e.inDeck>e.qty) e.inDeck=e.qty;
+    if(e.qty<=0) collection.splice(collection.indexOf(e),1); }
+  function collValue(){ return collection.reduce(function(s,e){ return s+e.v*e.qty; },0); }
+  function deckSize(){ return collection.reduce(function(s,e){ return s+e.inDeck; },0); }
+  function deckValue(){ return collection.reduce(function(s,e){ return s+e.v*e.inDeck; },0); }
+
+  function packOpen(){ return !document.getElementById('packOv').hidden; }
+  function closePack(){ document.getElementById('packOv').hidden=true; }
+  function showPack(cards,title){
+    document.getElementById('packTitle').textContent=title;
+    var grid=document.getElementById('packGrid'); grid.innerHTML='';
+    cards.forEach(function(cd,i){ var face=cardFace(cd,120);
+      var el=document.createElement('canvas'); el.width=face.width; el.height=face.height; el.className='cardc';
+      el.style.animationDelay=(i*0.09)+'s'; el.title=instLabel(cd)+' — $'+cd.v.toFixed(2);
+      el.getContext('2d').drawImage(face,0,0); grid.appendChild(el); });
+    var total=cards.reduce(function(s,cd){ return s+cd.v; },0);
+    document.getElementById('packTotal').textContent='$'+total.toFixed(2);
+    document.getElementById('packOv').hidden=false;
+  }
+  // REAL pull odds. Play Booster (matches the printed slot sheet): 7 commons,
+  // 3 uncommons, 1 rare/mythic (mythic 1-in-7.4), 1 non-foil wildcard
+  // (C 41.7% / U 33.3% / R 20.8% / M 4.2%), and 1 guaranteed traditional-foil
+  // wildcard (C 58.8% / U 29.4% / R 10% / M 1.7%) — 13 cards.
+  // Collector Booster: 4 foil C, 3 foil U, 1 foil special-art C/U, 1 non-foil
+  // R/M, 1 foil R/M, and the special-art R/M chase (mythic 1-in-3, foil 30%).
+  function wildcardRarity(foil){ var r=Math.random();
+    if(foil) return r<0.588?'common':r<0.882?'uncommon':r<0.982?'rare':'mythic';
+    return r<0.417?'common':r<0.75?'uncommon':r<0.958?'rare':'mythic'; }
+  function rollPack(collector){ var cards=[], i;
+    if(collector){
+      for(i=0;i<4;i++) cards.push(cardInst('common', true));
+      for(i=0;i<3;i++) cards.push(cardInst('uncommon', true));
+      cards.push(cardInst(Math.random()<0.5?'common':'uncommon', true, true));          // foil special-art C/U
+      cards.push(cardInst(Math.random()<0.135?'mythic':'rare'));
+      cards.push(cardInst(Math.random()<0.135?'mythic':'rare', true));                  // guaranteed foil R/M
+      cards.push(cardInst(Math.random()<0.333?'mythic':'rare', Math.random()<0.3, true)); // special-art chase
+    } else {
+      for(i=0;i<7;i++) cards.push(cardInst('common'));
+      for(i=0;i<3;i++) cards.push(cardInst('uncommon'));
+      cards.push(cardInst(Math.random()<0.135?'mythic':'rare'));
+      var wr=wildcardRarity(false); cards.push(cardInst(wr));
+      var fr=wildcardRarity(true);  cards.push(cardInst(fr, true));                     // guaranteed foil slot
+    }
+    return cards; }
   function openCarriedPack(){ if(gstate!=='play'||placing) return;
     if(!carrying||!(PRODUCTS[carrying.product]&&PRODUCTS[carrying.product].openable)){ toast('Nothing to open'); return; }
-    var r=Math.random(), acc=0, pull=PULLS[0]; for(var i=0;i<PULLS.length;i++){ acc+=PULLS[i].p; if(r<acc){ pull=PULLS[i]; break; } }
-    money+=pull.v; carrying.count--; if(carrying.count<=0) carrying=null;
-    toast('🎴 Opened — '+pull.n+'  +$'+pull.v); refreshHUD(); }
+    var collector=carrying.product==='mtg_cpack';
+    var cards=rollPack(collector);
+    cards.forEach(addToCollection);
+    carrying.count--; if(carrying.count<=0) carrying=null;
+    var best=cards.reduce(function(a,b){ return b.v>a.v?b:a; });
+    showPack(cards, collector?'✨ Collector Booster':'🎴 Booster Pack');
+    toast('🎴 Best pull: '+instLabel(best)+' ($'+best.v.toFixed(2)+') — added to collection'); refreshHUD(); }
   // Q opens whatever's in hand: a sealed box → packs, then each pack → a pull
-  function unifiedOpen(){ if(gstate!=='play'||placing) return;
+  function unifiedOpen(){ if(gstate!=='play'||placing||cashOpen()||caseOpenOv()) return;
+    if(packOpen()){ closePack(); return; }
     if(!carrying){ toast('Nothing to open'); return; }
     if(carrying.sealed){ carrying={ product:carrying.opensTo, count:carrying.openCount, sealed:false };
       toast('📦 Opened the box — '+carrying.count+' '+PRODUCTS[carrying.product].name+'s! Press Q to open packs'); refreshHUD(); return; }
@@ -683,11 +1352,15 @@
   var BAD=['Way overpriced. Not coming back.','Waited forever — terrible service.','Felt like a total rip-off.','Slow and pricey. One star.','Long lines, picked-over shelves. Avoid.'];
   // Harsh critics: 5 stars must be earned — any wait or markup costs you.
   function addReview(c){ var stars=4, base=PRODUCTS[c.item].price;
-    if(c.price>base*1.5) stars-=2; else if(c.price>base*1.15) stars-=1;     // price gouging hurts
+    if(c.price>base*1.3) stars-=2; else if(c.price>base*1.05) stars-=1;     // price gouging hurts, fast
+    if(c.price<base*0.9) stars+=1;                                          // a real deal gets remembered
     if(c.patience>8) stars-=1; if(c.patience>16) stars-=1; if(c.patience>24) stars-=1;  // any wait is noticed
     if(employees.some(function(e){ return e.role==='cashier'; })) stars+=1; // a staffed till speeds things up
+    if(c.flubs) stars-=Math.min(2,c.flubs);                                 // botched their change at the till
     if(playTables()>0 && stars>=3) stars+=1;                                // good vibe only if already decent
     if(Math.random()<0.22) stars-=1;                                        // picky shoppers
+    if(stars<5 && Math.random()<premBonus()) stars+=1;                      // premium fittings leave an impression
+    if(messes.length>4 && Math.random()<0.5) stars-=1;                      // nobody rates a grubby shop kindly
     stars=clamp(Math.round(stars),1,5);
     var txt= stars>=5?pick(GREAT) : stars>=4?pick(GOOD) : stars>=3?pick(MEH) : pick(BAD);
     reviews.unshift({ stars:stars, text:txt }); if(reviews.length>20) reviews.pop();
@@ -695,15 +1368,36 @@
     rival = clamp(rival + (avgRating()>rival?-0.015:0.03), 3.6, 4.9);       // rival keeps up, slips slowly
   }
   function playTables(){ var n=0; placed.forEach(function(f){ if(f.kind==='playtable') n++; }); return n; }
+  function bathrooms(){ var n=0; placed.forEach(function(f){ if(f.kind==='bathroom') n++; }); return n; }
+  // comfy chairs: each one (up to 4) makes staff — and you — work a bit faster
+  function chairBoost(){ var n=0; placed.forEach(function(f){ if(f.kind==='chair') n++; }); return 1+0.08*Math.min(4,n); }
+  function nearestMess(e){ var best=null,bd=1e9; messes.forEach(function(m){ var d=Math.hypot(m.x-e.x,m.y-e.y); if(d<bd){bd=d;best=m;} }); return best; }
+  function dropMess(x,y){ if(messes.length<14) messes.push({x:x+rnd(-0.3,0.3),y:y+rnd(-0.3,0.3)}); }
+  // total stock of a product across shelves, floor boxes and sealed boxes that open into it
+  function stockCount(k){ var n=0;
+    placed.forEach(function(f){ if(f.slots) f.slots.forEach(function(sl){ if(sl.product===k) n+=sl.stock; }); });
+    floorBoxes.forEach(function(b){ if(b.product===k) n+=b.count; if(b.sealed&&b.opensTo===k) n+=(b.openCount||0); });
+    return n; }
+  // your average markup across every stocked shelf slot (1.0 = selling at market)
+  function avgMarkup(){ var mks=[];
+    placed.forEach(function(f){ if(f.slots) f.slots.forEach(function(sl){ if(sl.product&&sl.stock>0&&PRODUCTS[sl.product]) mks.push(sl.price/PRODUCTS[sl.product].price); }); });
+    return mks.length? mks.reduce(function(a,b){return a+b;},0)/mks.length : 1; }
+  // Sum of the premium scores of everything on the floor: fancy fittings make
+  // shoppers a bit more generous in reviews and pull a few extra people in.
+  function premScore(){ var n=0; placed.forEach(function(f){ n+=(FURNITURE[f.fkey].prem||0); }); return n; }
+  function premBonus(){ return clamp(premScore()*0.06,0,0.45); }
 
   // ====================== customers ======================
-  function stockedShelves(){ return placed.filter(function(f){ return f.kind==='shelf'&&shelfHasStock(f); }); }
-  function freePlayTable(){ var ts=placed.filter(function(f){ return f.kind==='playtable'; }); for(var i=0;i<ts.length;i++){ if(playersAt(ts[i])<FURNITURE.playtable.seats) return ts[i]; } return null; }
+  function stockedShelves(){ return placed.filter(function(f){ return f.kind==='shelf'&&!FURNITURE[f.fkey].storage&&shelfHasStock(f); }); }
+  function freePlayTable(){ var ts=placed.filter(function(f){ return f.kind==='playtable'&&playersAt(f)<FURNITURE.playtable.seats; });
+    if(!ts.length) return null;
+    var waiting=ts.filter(function(t){ return playersAt(t)===1; });   // pair up: join someone waiting for an opponent
+    return waiting.length?waiting[0]:ts[0]; }
   function playersAt(t){ return customers.filter(function(c){ return c.table===t&&(c.state==='toPlay'||c.state==='playing'); }).length; }
   function frontOf(f,dist){ var cx=mapW/2, cy=mapH/2-0.4; var dx=cx-f.x, dy=cy-f.y, d=Math.hypot(dx,dy)||1; return { x:f.x+dx/d*dist, y:f.y+dy/d*dist }; }
   function spawnCustomer(){
     if(!register) return; var ss=stockedShelves(), pt=freePlayTable();
-    var wantsPlay = pt && Math.random()<0.4;
+    var wantsPlay = pt && Math.random()<(eventT>0?0.85:0.4);
     if(!ss.length && !wantsPlay) return;
     var c={ x:doorPt.x+rnd(-0.3,0.3), y:doorPt.y, img:personSprite(pick(SKINS),pick(SHIRTS)), item:null, price:0, patience:0, qd:0, t:0, table:null, playT:0 };
     if(wantsPlay){ c.state='toPlay'; c.table=pt; c.target=frontOf(pt,0.8); }
@@ -712,6 +1406,72 @@
   }
   function moveToward(c,sp){ var dx=c.target.x-c.x, dy=c.target.y-c.y, d=Math.hypot(dx,dy); if(d<0.08) return true; var s=Math.min(sp,d); c.x+=dx/d*s; c.y+=dy/d*s; return false; }
   function pickSlot(f){ var idx=[]; for(var i=0;i<4;i++) if(f.slots[i].product&&f.slots[i].stock>0) idx.push(i); return idx.length?pick(idx):-1; }
+  // Done browsing → eye the price tag: fair → happy grab; marked up → visible
+  // grumbling with a refusal chance that scales with the markup.
+  function decideBuy(c){ var sl=pickSlot(c.shelf);
+    if(sl<0){ c.state='leave'; c.target=doorPt; return; }
+    // the Premium Cabinet is LOCKED — they can't grab it themselves; they wave
+    // you over and wait for you to walk up and hand it across.
+    if(FURNITURE[c.shelf.fkey] && FURNITURE[c.shelf.fkey].premium){
+      c.state='askPremium'; c.askT=0; c.slotIdx=sl;
+      emote(c,'🙋'); remark(c,'Can you grab this for me?');
+      return; }
+    var slot=c.shelf.slots[sl], prc=slot.price, b=PRODUCTS[slot.product].price, mk=prc/b;
+    // Shoppers are SHARP on price: anything past +5% gets side-eye and the
+    // walk-away odds climb fast (near-certain refusal by +60%); bargains under
+    // 95% always sell and get people talking.
+    if(mk>1.05 && Math.random()<clamp((mk-1.05)/0.55,0,0.98)){
+      emote(c, mk>1.4?'😡':'😤'); remark(c, mk>1.4?'What a rip-off!':'Too pricey for me');
+      if(mk>1.4){ reviews.unshift({stars:1,text:pick(BAD)}); ratingSum+=1; ratingCount++; }
+      c.state='leave'; c.target=doorPt; toast('Too pricey — a customer walked 😤'); }
+    else { emote(c, mk>1.05?'🤨': mk<0.95?'🤩':'🙂');
+      if(mk<0.95 && Math.random()<0.4){ reviews.unshift({stars:5,text:'Bargain prices — tell your friends!'}); ratingSum+=5; ratingCount++; }
+      slot.stock--; c.item=slot.product; c.price=prc; c.state='toReg'; c.target=regPt();
+      if(slot.stock<=0 && PRODUCTS[slot.product] && PRODUCTS[slot.product].card) slot.product=null; } }
+
+  // ---- emotes: a floating reaction bubble above a customer's head ----
+  var EMO_CACHE={};
+  var MESS_SPR=null;
+  function messSprite(){ if(MESS_SPR) return MESS_SPR;
+    var c=mkCanvas(40,26), g=c.getContext('2d');
+    g.fillStyle='rgba(94,74,42,0.85)';
+    g.beginPath(); g.ellipse(20,15,13,7,0,0,7); g.fill();
+    g.beginPath(); g.ellipse(9,10,5,3,0,0,7); g.fill();
+    g.beginPath(); g.ellipse(31,9,4,2.6,0,0,7); g.fill();
+    g.fillStyle='rgba(140,110,60,0.55)'; g.beginPath(); g.ellipse(20,13,7,3.6,0,0,7); g.fill();
+    MESS_SPR=c; return c; }
+  function emoteSprite(t){ if(EMO_CACHE[t]) return EMO_CACHE[t];
+    var c=mkCanvas(48,48), g=c.getContext('2d');
+    g.fillStyle='rgba(245,248,255,0.92)'; g.beginPath(); g.arc(24,22,19,0,7); g.fill();
+    g.beginPath(); g.moveTo(18,38); g.lineTo(24,47); g.lineTo(29,38); g.closePath(); g.fill();
+    g.font='24px serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(t,24,23);
+    EMO_CACHE[t]=c; return c; }
+  function emote(c,t,dur){ c.emote={ img:emoteSprite(t), t:dur||2.4 }; }
+  // ---- remarks: a wider speech bubble with a short line about your store ----
+  var REM_CACHE={};
+  function remarkSprite(t){ if(REM_CACHE[t]) return REM_CACHE[t];
+    var c=mkCanvas(150,44), g=c.getContext('2d');
+    g.fillStyle='rgba(245,248,255,0.94)'; rr(g,2,2,146,30,10);
+    g.beginPath(); g.moveTo(66,31); g.lineTo(74,43); g.lineTo(82,31); g.closePath(); g.fill();
+    g.fillStyle='#232a38'; g.font='800 13px Nunito,sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText(t,75,17.5);
+    REM_CACHE[t]=c; return c; }
+  function remark(c,t){ c.emote={ img:remarkSprite(t), t:3.2, w:0.72, h:0.21 }; }
+  // What browsers mutter depends on how the store is doing — happy remarks when
+  // the rating is healthy, digs when it slips (they show up as review pressure).
+  var REM_GOOD=['Cool store!','Love this place ✨','Great selection!','Ooh, sealed boxes!','Fair prices 👍','So tidy in here','I could stay all day','Nice vibe 🎶'];
+  var REM_BAD=['Kinda empty in here…','Bit pricey, hmm','Meh selection','That line though 😕','Could be tidier','Seen better shops'];
+  function storeRemark(c){
+    // the pricing on the shelf they're LOOKING AT drives the chatter first
+    if(c.shelf&&c.shelf.slots){ var mks=[], i, sl;
+      for(i=0;i<4;i++){ sl=c.shelf.slots[i]; if(sl&&sl.product&&sl.stock>0&&PRODUCTS[sl.product]) mks.push(sl.price/PRODUCTS[sl.product].price); }
+      if(mks.length){ var avg=mks.reduce(function(a,b){return a+b;},0)/mks.length;
+        if(avg>1.25){ remark(c, pick(['These prices though 😬','Cheaper at the rival…','Who pays this much?!'])); return; }
+        if(avg>1.05){ remark(c, pick(['Hmm, bit steep','Prices creeping up…'])); return; }
+        if(avg<0.95){ remark(c, pick(['Great deals here!','Bargain bin, love it!','Prices are 🔥'])); return; } } }
+    var goodOdds=clamp((avgRating()-1.5)/3, 0.15, 0.9);
+    remark(c, Math.random()<goodOdds ? pick(REM_GOOD) : pick(REM_BAD));
+  }
 
   function update(){
     if(placing){ // bird's-eye build mode: arrows move the ghost on the grid; shop is paused
@@ -720,30 +1480,88 @@
     }
     var mv=0,tn=0; if(keys.up)mv+=1; if(keys.down)mv-=1; if(keys.left)tn-=1; if(keys.right)tn+=1;
     if(tn) dir+=tn*2.3*DT;
-    if(mv){ var nx=px+dirX*mv*2.6*DT, ny=py+dirY*mv*2.6*DT; if(mapAt(nx,py)===0&&!solidAt(nx,py)) px=nx; if(mapAt(px,ny)===0&&!solidAt(px,ny)) py=ny; }
+    if(mv){ var pspd=2.6*(1+0.03*Math.min(4,(chairBoost()-1)/0.08)); var nx=px+dirX*mv*pspd*DT, ny=py+dirY*mv*pspd*DT; if(mapAt(nx,py)===0&&!solidAt(nx,py)) px=nx; if(mapAt(px,ny)===0&&!solidAt(px,ny)) py=ny; }
     updateCamera();
     updateEmployees();
     wageT-=DT; if(wageT<=0){ wageT=30; var wage=10*employees.length; if(wage>0){ if(money>=wage){ money-=wage; } else { var q=employees.pop(); if(q) toast('Couldn’t make payroll — '+q.role+' quit'); } } }
+    if(matchCd>0) matchCd-=DT;
 
-    spawnT-=DT; if(spawnT<=0){ var base=rnd(5,9); spawnT= base * clamp(rival/Math.max(0.8,avgRating()||4),0.5,1.8);
-      if(customers.length<8) spawnCustomer(); }
+    // Arrivals follow your review score: y = 5x people per minute, where x is
+    // your star rating out of 5. (3.0★ → 15/min, 5.0★ → 25/min, 1.0★ → 5/min.)
+    if(eventT>0){ eventT-=DT; if(eventT<=0){ toast('🏁 Event over — the crowd loved it!');
+        reviews.unshift({stars:5,text:'Friday Night Magic here is amazing. Hosting more?'}); ratingSum+=5; ratingCount++;
+        reviews.unshift({stars:5,text:'Great event — well run, great prizes!'}); ratingSum+=5; ratingCount++; } }
+    if(eventCd>0) eventCd-=DT;
+    spawnT-=DT; if(spawnT<=0){ var perMin=5*Math.max(0.4,avgRating());
+      perMin*=(1+premBonus()*0.5);                    // premium fittings pull a few extra heads
+      perMin*=clamp(RIVAL_MARKUP/Math.max(0.5,avgMarkup()),0.55,1.15);   // price war: dearer than the rival → thinner crowds
+      if(messes.length>4) perMin*=0.75;               // a grubby floor turns people away at the door
+      if(eventT>0) perMin*=2.5;                       // event night: the crowd pours in
+      spawnT=(60/perMin)*rnd(0.85,1.15);
+      if(customers.length<(eventT>0?18:12)) spawnCustomer(); }
 
     var qList=customers.filter(function(c){ return c.state==='queue'; }).sort(function(a,b){ return a.qd-b.qd; });
     for(var i=customers.length-1;i>=0;i--){ var c=customers[i]; c.t+=DT;
-      if(c.state==='toShelf'){ if(moveToward(c,2.0*DT)){ var sl=pickSlot(c.shelf);
-          if(sl>=0){ var prc=c.shelf.slots[sl].price, b=PRODUCTS[c.shelf.slots[sl].product].price;
-            if(prc>b*1.8 && Math.random()<0.6){ c.state='leave'; c.target=doorPt; reviews.unshift({stars:1,text:pick(BAD)}); ratingSum+=1; ratingCount++; toast('Too pricey — a customer balked 😤'); }
-            else { c.shelf.slots[sl].stock--; c.item=c.shelf.slots[sl].product; c.price=prc; c.state='toReg'; c.target=regPt(); } }
+      if(c.emote){ c.emote.t-=DT; if(c.emote.t<=0) c.emote=null; }
+      if(c.state==='toShelf'){ if(moveToward(c,0.7*DT)){
+          // arrived → linger and BROWSE first (remarks + window shopping)
+          c.state='browse'; c.browseT=rnd(9,18); c.remarkT=rnd(0.6,1.8); c.hops=c.hops||0; } }
+      else if(c.state==='browse'){ c.browseT-=DT; c.remarkT-=DT;
+        if(c.remarkT<=0 && !c.emote){ storeRemark(c); c.remarkT=rnd(3.5,7); }
+        if(messes.length>4 && Math.random()<DT*0.06){ remark(c,pick(['Kinda gross in here…','Someone mop this up?','Ew, sticky floor'])); }
+        if(!c.wentBath && Math.random()<DT*0.02){ var ba=placed.filter(function(f){ return f.kind==='bathroom'; })[0];
+          if(ba){ c.wentBath=true; c.state='toBath'; c.bath=ba; c.target=frontOf(ba,0.7); }
+          else if(Math.random()<0.5){ c.wentBath=true; emote(c,'🚻'); remark(c,'No restroom?! I have to go…');
+            reviews.unshift({stars:2,text:'Needed a restroom — there isn’t one.'}); ratingSum+=2; ratingCount++;
+            c.state='leave'; c.target=doorPt; } }
+        if(c.browseT<=0){
+          var ss2=stockedShelves();
+          if(c.hops<5 && ss2.length>1 && Math.random()<0.75){   // proper window-shopping laps of the store
+            c.hops++; c.shelf=pick(ss2.filter(function(s){ return s!==c.shelf; }))||c.shelf;
+            c.state='toShelf'; c.target=frontOf(c.shelf,0.85);
+          } else decideBuy(c);
+        } }
+      else if(c.state==='toBath'){ if(moveToward(c,0.7*DT)){ c.state='inBath'; c.bathT=3; emote(c,'🚻'); } }
+      else if(c.state==='inBath'){ c.bathT-=DT;
+        if(c.bathT<=0){ if(Math.random()<0.35) dropMess(c.bath.x,c.bath.y);   // bathrooms get grubby with use
+          var ss3=stockedShelves();
+          if(ss3.length){ c.state='toShelf'; c.shelf=pick(ss3); c.target=frontOf(c.shelf,0.85); }
           else { c.state='leave'; c.target=doorPt; } } }
-      else if(c.state==='toReg'){ c.target=regPt(); if(moveToward(c,2.0*DT)) c.state='queue'; }
+      else if(c.state==='askPremium'){ c.askT+=DT;
+        if(c.askT>2 && !c.emote && Math.random()<DT*0.5) emote(c,'🙋');
+        // YOU (not an employee) must walk up to the cabinet to unlock it
+        if(Math.hypot(px-c.shelf.x,py-c.shelf.y)<1.35){
+          var pslot=c.shelf.slots[c.slotIdx];
+          if(pslot&&pslot.product&&pslot.stock>0){
+            pslot.stock--; c.item=pslot.product; c.price=pslot.price;
+            if(pslot.stock<=0 && PRODUCTS[pslot.product] && PRODUCTS[pslot.product].card) pslot.product=null;
+            emote(c,'🤩'); c.premServed=true; c.state='toReg'; c.target=regPt();
+            toast('🔓 You hand over the premium card'); }
+          else { c.state='leave'; c.target=doorPt; } }
+        else if(c.askT>22){ c.state='leave'; c.target=doorPt;
+          reviews.unshift({stars:2,text:'Nobody opened the premium cabinet for me.'}); ratingSum+=2; ratingCount++;
+          emote(c,'😤'); toast('A customer gave up on the cabinet 😤'); } }
+      else if(c.state==='toReg'){ c.target=regPt(); if(moveToward(c,0.7*DT)) c.state='queue'; }
       else if(c.state==='queue'){ c.patience+=DT; var idx=qList.indexOf(c); c.qd=idx; var rp=regPt();
-        c.target={ x:rp.x, y:rp.y+idx*0.5 }; moveToward(c,1.6*DT);
+        var payers=customers.some(function(o){ return o.state==='paying'; })?1:0;  // payer holds the till spot
+        c.target={ x:rp.x, y:rp.y+(idx+payers)*0.5 }; moveToward(c,0.7*DT);
         if(c.patience>28){ c.state='leave'; c.target=doorPt; c.item=null; toast('A customer gave up 😠'); reviews.unshift({stars:1,text:'Waited forever, left empty-handed.'}); ratingSum+=1; ratingCount++; } }
-      else if(c.state==='toPlay'){ if(moveToward(c,2.0*DT)){ c.state='playing'; c.playT=rnd(6,12); } }
-      else if(c.state==='playing'){ c.playT-=DT; if(c.playT<=0){ var ss=stockedShelves();
+      else if(c.state==='paying'){ /* at the till, waiting for their change */ }
+      else if(c.state==='toPlay'){ if(moveToward(c,0.7*DT)){ c.state='playing'; c.playT=rnd(6,12); } }
+      else if(c.state==='playing'){
+        var foes=playersAt(c.table);
+        if(foes>=2){ c.playT-=DT; c.waitP=0;
+          // an actual DUEL between customers — battle emotes fly
+          if(!c.emote && Math.random()<DT*0.35) emote(c,pick(['⚔️','🎲','🔥','🤯','🃏'])); }
+        else { c.waitP=(c.waitP||0)+DT;       // shuffling their deck, hoping someone sits down
+          if(!c.emote && Math.random()<DT*0.15) emote(c,pick(['🃏','👀','💤']));
+          if(c.waitP>12){ c.waitP=0; c.playT=0; } }
+        if(c.playT<=0){ var ss=stockedShelves(); var hadDuel=foes>=2;
+          if(hadDuel){ ratingSum+=0.12; emote(c,'🤝'); }   // a good game nudges the vibe up a touch — tables don't earn cash
           if(ss.length&&Math.random()<0.7){ c.state='toShelf'; c.shelf=pick(ss); c.target=frontOf(c.shelf,0.85); c.table=null; }
-          else { c.state='leave'; c.target=doorPt; c.table=null; reviews.unshift({stars:5,text:'Had a blast at the play tables!'}); ratingSum+=5; ratingCount++; } } }
-      else if(c.state==='leave'){ if(moveToward(c,2.4*DT)) customers.splice(i,1); }
+          else { c.state='leave'; c.target=doorPt; c.table=null; } } }
+      else if(c.state==='leave'){ if(Math.random()<DT*0.02) dropMess(c.x,c.y);
+        if(moveToward(c,0.95*DT)) customers.splice(i,1); }
     }
     refreshHUD();
     if(toastT>0){ toastT-=DT; if(toastT<=0) document.getElementById('toast').hidden=true; }
@@ -751,17 +1569,37 @@
   function regPt(){ if(!register) return doorPt; return frontOf(register,0.85); }
 
   // ====================== employees ======================
-  function empSprite(role){ var c=personSprite('#e8c49a', role==='cashier'?'#27408b':'#c75b2a'); var g=c.getContext('2d');
+  function empSprite(role){ var col=role==='cashier'?'#27408b':role==='janitor'?'#2f7e4f':role==='checker'?'#6a4a8c':'#c75b2a';
+    var c=personSprite('#e8c49a', col); var g=c.getContext('2d');
     g.fillStyle='#fff'; g.fillRect(19,29,10,3);                                   // name-tag
     if(role==='cashier'){ g.fillStyle='#27408b'; g.fillRect(16,5,16,4); }         // cap
+    else if(role==='janitor'){ g.fillStyle='#caa14a'; g.fillRect(34,18,3,24); g.fillStyle='#e8e0cc'; g.fillRect(31,40,9,4); } // mop
+    else if(role==='checker'){ g.fillStyle='#f7f3e8'; g.fillRect(31,26,8,11); g.fillStyle='#3a4252'; g.fillRect(32,28,6,1.5); g.fillRect(32,31,6,1.5); } // clipboard
     else { g.fillStyle='#ffd24a'; g.fillRect(13,30,22,3); g.fillRect(13,40,22,3); } // hi-vis stripes
     return c; }
   function empIcon(role){ var c=mkCanvas(40,40), g=c.getContext('2d'); g.drawImage(empSprite(role),3,-6,34,50); return c; }
-  function hireEmployee(role){ var cost=role==='cashier'?220:200; if(money<cost){ toast('Need $'+cost); return false; }
+  function hireEmployee(role){ var cost=role==='cashier'?220:role==='janitor'?180:role==='checker'?250:200; if(money<cost){ toast('Need $'+cost); return false; }
     money-=cost; employees.push({ role:role, x:doorPt.x, y:doorPt.y, img:empSprite(role), target:null, carry:null, serveT:0 });
     refreshHUD(); toast('Hired a '+role+'!'); return true; }
   function nearestBox(e){ var best=null,bd=1e9; floorBoxes.forEach(function(b){ var d=Math.hypot(b.x-e.x,b.y-e.y); if(d<bd){ bd=d; best=b; } }); return best; }
-  function shelfNeeding(prod){ for(var i=0;i<placed.length;i++){ if(placed[i].kind==='shelf'&&emptySlot(placed[i],prod)>=0) return placed[i]; } return null; }
+  function shelfNeeding(prod){ for(var i=0;i<placed.length;i++){ if(placed[i].kind==='shelf'&&!FURNITURE[placed[i].fkey].storage&&emptySlot(placed[i],prod)>=0) return placed[i]; } return null; }
+  // storage shelves: deliveries flow in here; restockers draw from them
+  function storageShelves(){ return placed.filter(function(f){ return f.kind==='shelf'&&FURNITURE[f.fkey].storage; }); }
+  function storeIntoStorage(prod,count){
+    var left=count;
+    storageShelves().some(function(st){ var si=emptySlot(st,prod);
+      while(si>=0&&left>0){ var sl=st.slots[si]; if(!sl.product){ sl.product=prod; sl.price=PRODUCTS[prod].price; }
+        var mv=Math.min(FURNITURE[st.fkey].slotCap-sl.stock,left); sl.stock+=mv; left-=mv;
+        if(left<=0) break; si=emptySlot(st,prod); }
+      return left<=0; });
+    return count-left; }
+  function storageWithdraw(prod,count){
+    var got=0;
+    storageShelves().forEach(function(st){ st.slots.forEach(function(sl){
+      if(got>=count||sl.product!==prod||sl.stock<=0) return;
+      var mv=Math.min(sl.stock,count-got); sl.stock-=mv; got+=mv;
+      if(sl.stock<=0) sl.product=null; }); });
+    return got; }
   function updateEmployees(){
     employees.forEach(function(e){
       if(e.role==='cashier'){
@@ -769,20 +1607,45 @@
         e.target=frontOf(register,0.5); moveToward(e,2.0*DT);
         var c=queueFront();
         if(c && c.state==='queue' && c.qd===0){ e.serveT=(e.serveT||0)+DT;
-          if(e.serveT>=1.1){ e.serveT=0; money+=c.price; sold++; addReview(c); c.state='leave'; c.target=doorPt; refreshHUD(); toast('💵 +$'+c.price); } }
+          if(e.serveT>=2.2/chairBoost()){ e.serveT=0; money+=c.price; sold++; addReview(c); c.state='leave'; c.target=doorPt; refreshHUD(); toast('💵 +$'+c.price); } }
         else e.serveT=0;
+      } else if(e.role==='janitor'){ // mop up the messiest spot first
+        var ms=nearestMess(e);
+        if(ms){ e.target={x:ms.x,y:ms.y};
+          if(moveToward(e,1.9*DT)){ e.cleanT=(e.cleanT||0)+DT;
+            if(e.cleanT>=1.4/chairBoost()){ e.cleanT=0; messes.splice(messes.indexOf(ms),1); } } }
+        else { e.cleanT=0; e.target=frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.7); moveToward(e,1.3*DT); }
+      } else if(e.role==='checker'){ // stock checker: walks the floor, re-orders to your targets
+        e.orderT=(e.orderT||0)-DT;
+        e.target=e.walkTo||frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.9);
+        if(moveToward(e,1.2*DT)||!e.walkTo){ var ss=stockedShelves(); e.walkTo=ss.length?frontOf(pick(ss),0.9):null; }
+        if(e.orderT<=0){ e.orderT=4;
+          Object.keys(STOCK_TARGETS).forEach(function(k){ var want=STOCK_TARGETS[k]; if(!want) return;
+            var have=stockCount(k); if(have>=want) return;
+            var bx=null; for(var bi=0;bi<BOXES.length;bi++){ var B=BOXES[bi];
+              if(B.product===k || (B.sealed && PRODUCTS[B.product] && PRODUCTS[B.product].opensTo===k)){ bx=B; break; } }
+            if(bx&&money>=bx.cost){ money-=bx.cost; deliverBox(bx); refreshHUD(); toast('🧾 Stock checker ordered '+bx.name); } }); }
       } else { // restocker: haul boxes to shelves
         if(e.carry && e.carry.sealed){ e.carry={ product:e.carry.opensTo, count:e.carry.openCount, sealed:false }; }
-        if(!e.carry){ var box=nearestBox(e);
-          if(box){ e.target={x:box.x,y:box.y}; if(moveToward(e,2.2*DT)){ e.carry={ product:box.product, count:box.count, sealed:box.sealed, opensTo:box.opensTo, openCount:box.openCount }; floorBoxes.splice(floorBoxes.indexOf(box),1); } }
-          else { e.target=frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.5); moveToward(e,1.4*DT); } }
+        if(!e.carry){ e.stuckT=0; var box=nearestBox(e);
+          if(box){ e.target={x:box.x,y:box.y}; if(moveToward(e,2.2*chairBoost()*DT)){ e.carry={ product:box.product, count:box.count, sealed:box.sealed, opensTo:box.opensTo, openCount:box.openCount }; floorBoxes.splice(floorBoxes.indexOf(box),1); } }
+          else { // nothing at the door: fetch back-stock from a storage shelf for a shelf that wants it
+            var pull=null, pst=null;
+            storageShelves().some(function(st){ return st.slots.some(function(sl){
+              if(sl.product&&sl.stock>0&&shelfNeeding(sl.product)){ pull=sl.product; pst=st; return true; } return false; }); });
+            if(pull){ e.target=frontOf(pst,0.8);
+              if(moveToward(e,2.2*chairBoost()*DT)){ var take=storageWithdraw(pull,6); if(take>0) e.carry={ product:pull, count:take, sealed:false }; } }
+            else { e.target=frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.5); moveToward(e,1.4*DT); } } }
         else { var sh=shelfNeeding(e.carry.product);
-          if(sh){ e.target=frontOf(sh,0.85);
+          if(sh){ e.stuckT=0; e.target=frontOf(sh,0.85);
             if(moveToward(e,2.2*DT)){ var slot=emptySlot(sh,e.carry.product);
               if(slot>=0){ var sl=sh.slots[slot]; if(!sl.product){ sl.product=e.carry.product; sl.price=PRODUCTS[e.carry.product].price; }
                 var mv=Math.min(FURNITURE[sh.fkey].slotCap-sl.stock, e.carry.count); sl.stock+=mv; e.carry.count-=mv; if(e.carry.count<=0) e.carry=null; }
-              else e.carry=null; } }
-          else { e.target=frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.5); moveToward(e,1.4*DT); } }
+              else { floorBoxes.push({x:e.x,y:e.y,product:e.carry.product,count:e.carry.count}); e.carry=null; } } }   // slot got taken → set the box down, don't vaporize it
+          else { // nowhere to put it RIGHT NOW: set the box down after a beat instead of freezing with it forever
+            e.stuckT=(e.stuckT||0)+DT;
+            e.target=frontOf(register||{x:mapW/2,y:mapH/2-0.5},-0.5); moveToward(e,1.4*DT);
+            if(e.stuckT>4){ e.stuckT=0; floorBoxes.push({x:e.x+rnd(-0.3,0.3),y:e.y+rnd(-0.3,0.3),product:e.carry.product,count:e.carry.count}); e.carry=null; } } }
       }
     });
   }
@@ -797,9 +1660,9 @@
   function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; toastT=2.2; }
 
   // ====================== phone ======================
-  var phoneTab='stock';
+  var phoneTab='stock', cardSeg='coll';
   function phoneOpen(){ return !document.getElementById('phoneOv').hidden; }
-  function openPhone(){ if(gstate!=='play'||placing) return; document.getElementById('phoneOv').hidden=false; buildPhone(); }
+  function openPhone(){ if(gstate!=='play'||placing||cashOpen()||packOpen()||caseOpenOv()) return; document.getElementById('phoneOv').hidden=false; buildPhone(); }
   function closePhone(){ document.getElementById('phoneOv').hidden=true; }
   function buildPhone(){ refreshHUD();
     document.querySelectorAll('.ph-tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===phoneTab); });
@@ -809,26 +1672,102 @@
         var items=BOXES.filter(function(b){ return (b.cat||'Other')===cat; }); if(!items.length) return;
         var h=document.createElement('div'); h.style.cssText='color:#9fd0ff;font-weight:900;font-size:0.78rem;padding:8px 4px 2px;letter-spacing:0.4px';
         h.textContent=cat+'  ('+items.length+')'; list.appendChild(h);
-        items.forEach(function(bx){ list.appendChild(makeRow(ICONS[bx.product], bx.name, bx.desc, 'Buy $'+bx.cost, money>=bx.cost, function(){
-          if(money<bx.cost) return; money-=bx.cost; deliverBox(bx); refreshHUD(); buildPhone(); toast(bx.name+' ordered — at the door'); })); });
+        items.forEach(function(bx){ var row=makeRow(ICONS[bx.product], bx.name, bx.desc, 'Buy $'+bx.cost, money>=bx.cost, function(){
+          if(money<bx.cost) return; money-=bx.cost; deliverBox(bx); refreshHUD(); buildPhone(); toast(bx.name+' ordered — at the door'); });
+          {   // stock-checker target: set it any time (a hired checker acts on it)
+            var tk=bx.product, ctl=document.createElement('div'); ctl.className='price-ctl';
+            var minus=document.createElement('button'); minus.textContent='–';
+            var pv=document.createElement('span'); pv.className='pv'; pv.textContent='🧾'+(STOCK_TARGETS[tk]||0);
+            var plus=document.createElement('button'); plus.textContent='+';
+            minus.onclick=function(ev){ ev.stopPropagation(); STOCK_TARGETS[tk]=Math.max(0,(STOCK_TARGETS[tk]||0)-4); pv.textContent='🧾'+STOCK_TARGETS[tk]; };
+            plus.onclick=function(ev){ ev.stopPropagation(); STOCK_TARGETS[tk]=(STOCK_TARGETS[tk]||0)+4; pv.textContent='🧾'+STOCK_TARGETS[tk]; };
+            ctl.appendChild(minus); ctl.appendChild(pv); ctl.appendChild(plus);
+            row.querySelector('.buyslot').appendChild(ctl); }
+          list.appendChild(row); });
       });
+    } else if(phoneTab==='cards'){
+      var seg=document.createElement('div'); seg.className='seg';
+      [['coll','🗃️ Collection'],['tcg','🛒 TCG Player'],['deck','🃏 Deck ('+deckSize()+')']].forEach(function(s){
+        var b=document.createElement('button'); b.textContent=s[1]; b.className=cardSeg===s[0]?'active':'';
+        b.onclick=function(){ cardSeg=s[0]; buildPhone(); }; seg.appendChild(b); });
+      list.appendChild(seg);
+      if(cardSeg==='coll'){
+        var hd=document.createElement('div'); hd.className='rev';
+        hd.innerHTML='<div class="st">'+collection.reduce(function(s,e){return s+e.qty;},0)+' cards · $'+collValue().toFixed(2)+'</div><div class="tx">Open packs to pull cards. Sell them in a <b>Card Display Case</b>, or deck up and duel at the play table.</div>';
+        list.appendChild(hd);
+        if(!collection.length){ var em=document.createElement('div'); em.className='rev'; em.innerHTML='<div class="tx">Nothing yet — crack some boosters!</div>'; list.appendChild(em); }
+        collection.slice().sort(function(a,b){ return b.v-a.v; }).forEach(function(e){
+          var canAdd=e.inDeck<e.qty && deckSize()<10;
+          var row=makeRow(cardIconSq(e,40),
+            e.n+(e.foil?' <span class="cbadge foil">FOIL</span>':'')+(e.art?' <span class="cbadge art">✦ ART</span>':'')+(e.inDeck?' <span class="cbadge deck">DECK ×'+e.inDeck+'</span>':''),
+            rarityName(e.r)+' · $'+e.v.toFixed(2)+' · own ×'+e.qty, canAdd?'Deck +':'—', canAdd, function(){ if(e.inDeck<e.qty&&deckSize()<10){ e.inDeck++; buildPhone(); } });
+          list.appendChild(row); });
+      } else if(cardSeg==='tcg'){
+        var th=document.createElement('div'); th.className='rev';
+        th.innerHTML='<div class="st">TCG Player — MSH singles</div><div class="tx">Every card at live market price. Regular printings; foils pull from packs.</div>';
+        list.appendChild(th);
+        ['mythic','rare','uncommon','common'].forEach(function(r){
+          var h=document.createElement('div'); h.style.cssText='color:#9fd0ff;font-weight:900;font-size:0.78rem;padding:8px 4px 2px;letter-spacing:0.4px';
+          h.textContent=rarityName(r)+'s'; list.appendChild(h);
+          MSH_CARDS[r].forEach(function(cd){
+            var cost=Math.max(1,Math.ceil(cd.v)), inst={n:cd.n,r:r,foil:false,art:false,v:cd.v};
+            list.appendChild(makeRow(cardIconSq(inst,40), cd.n, rarityName(r)+' · market $'+cd.v.toFixed(2),
+              'Buy $'+cost, money>=cost, function(){ if(money<cost) return; money-=cost; addToCollection(inst); refreshHUD(); buildPhone(); toast('🎴 '+cd.n+' added to your collection'); })); });
+        });
+      } else { // deck
+        var rd=document.createElement('div'); rd.className='rev';
+        var canDuel=deckSize()>=6&&matchCd<=0;
+        rd.innerHTML='<div class="st">🎮 Ranked Duel</div><div class="tx">Queue your deck against a random challenger online. Deck value sets your odds — win cash prizes!</div>';
+        var db=document.createElement('button'); db.className='buy'; db.style.marginTop='6px';
+        db.textContent=deckSize()<6?'Need a 6+ card deck':(matchCd>0?'Cooldown '+Math.ceil(matchCd)+'s':'Find opponent');
+        db.disabled=!canDuel;
+        db.onclick=function(){ if(deckSize()<6||matchCd>0) return; matchCd=15;
+          var foe=pick(RANKED_FOES), str=deckValue()+deckSize()*0.5, winP=clamp(0.30+str/130,0.2,0.9);
+          if(Math.random()<winP){ var prize=rint(15,45); money+=prize;
+            toast('🏆 Beat '+foe+' online! +$'+prize); }
+          else toast('😩 '+foe+' took the match — tune that deck');
+          refreshHUD(); buildPhone(); };
+        rd.appendChild(db); list.appendChild(rd);
+        var dh=document.createElement('div'); dh.className='rev';
+        dh.innerHTML='<div class="st">Deck — '+deckSize()+'/10 · $'+deckValue().toFixed(2)+'</div><div class="tx">6+ cards lets you duel customers at a play table. Stronger (pricier) decks win more.</div>';
+        list.appendChild(dh);
+        var any=false;
+        collection.forEach(function(e){ if(!e.inDeck) return; any=true;
+          var row=makeRow(cardIconSq(e,40), e.n+(e.foil?' <span class="cbadge foil">FOIL</span>':'')+(e.art?' <span class="cbadge art">✦ ART</span>':''),
+            rarityName(e.r)+' · $'+e.v.toFixed(2)+' · in deck ×'+e.inDeck, 'Remove', true, function(){ e.inDeck--; buildPhone(); });
+          list.appendChild(row); });
+        if(!any){ var de=document.createElement('div'); de.className='rev'; de.innerHTML='<div class="tx">Empty — add cards from your Collection.</div>'; list.appendChild(de); }
+      }
     } else if(phoneTab==='furn'){
-      ['register'].concat(SHELF_KEYS).concat(['playtable']).forEach(function(k){ var f=FURNITURE[k];
+      ['register'].concat(SHELF_KEYS).concat(['storage','cardcase','premiumcase','playtable','staffchair','bathroom','wall']).forEach(function(k){ var f=FURNITURE[k];
         var owned = (k==='register' && register);
         list.appendChild(makeRow(furnIcon(k), f.name+(k==='register'?' ★':''), f.desc+' · $'+f.cost, owned?'Placed':'Buy $'+f.cost, !owned&&money>=f.cost, function(){
           if(owned||money<f.cost) return; money-=f.cost; refreshHUD(); closePhone(); startPlacing(k); toast('Move it with arrows · ↻ rotate · ✓ place'); }, owned)); });
     } else if(phoneTab==='staff'){
+      var ev=document.createElement('div'); ev.className='rev';
+      var evOk=playTables()>0&&eventT<=0&&eventCd<=0&&money>=50;
+      ev.innerHTML='<div class="st">🎪 Host Friday Night Magic — $50</div><div class="tx">A 60-second tournament night: the crowd pours in to duel and browse — and a well-run event earns glowing reviews.</div>';
+      var eb=document.createElement('button'); eb.className='buy'; eb.style.marginTop='6px';
+      eb.textContent=eventT>0?'Event running! '+Math.ceil(eventT)+'s':(eventCd>0?'Next event in '+Math.ceil(eventCd)+'s':(playTables()?'Host event $50':'Need a play table'));
+      eb.disabled=!evOk;
+      eb.onclick=function(){ if(!evOk) return; money-=50; eventT=60; eventCd=150;
+        toast('🎪 Friday Night Magic is ON — here comes the crowd!'); refreshHUD(); closePhone(); };
+      ev.appendChild(eb); list.appendChild(ev);
       var hdr=document.createElement('div'); hdr.className='rev'; hdr.innerHTML='<div class="tx">Staff work while you do other things — but cost <b>$10 each</b> every payday.</div>'; list.appendChild(hdr);
       var cN=employees.filter(function(e){ return e.role==='cashier'; }).length, rN=employees.filter(function(e){ return e.role==='restocker'; }).length;
       list.appendChild(makeRow(empIcon('cashier'),'Cashier'+(cN?' ×'+cN:''),'Runs the register automatically · $220','Hire $220', money>=220, function(){ if(hireEmployee('cashier')) buildPhone(); }));
       list.appendChild(makeRow(empIcon('restocker'),'Restocker'+(rN?' ×'+rN:''),'Carries boxes &amp; fills shelves · $200','Hire $200', money>=200, function(){ if(hireEmployee('restocker')) buildPhone(); }));
+      var jN=employees.filter(function(e){ return e.role==='janitor'; }).length, kN=employees.filter(function(e){ return e.role==='checker'; }).length;
+      list.appendChild(makeRow(empIcon('janitor'),'Janitor'+(jN?' ×'+jN:''),'Mops up messes before they cost you stars · $180','Hire $180', money>=180, function(){ if(hireEmployee('janitor')) buildPhone(); }));
+      list.appendChild(makeRow(empIcon('checker'),'Stock Checker'+(kN?' ×'+kN:''),'Auto-orders boxes to your targets (set them in 📦 Stock) · $250','Hire $250', money>=250, function(){ if(hireEmployee('checker')) buildPhone(); }));
       if(employees.length){ var fo=document.createElement('div'); fo.className='rev'; fo.innerHTML='<div class="st">On the clock: '+employees.length+'</div><div class="tx">'+cN+' cashier(s) · '+rN+' restocker(s)</div>'; list.appendChild(fo); }
     } else if(phoneTab==='rooms'){
-      var ex=[ {key:'back', name:'Back Room (+depth)', cost:250, on:ROOMS.back, act:function(){ iH+=4; ROOMS.back=true; }},
-               {key:'side', name:'Side Room (+width)', cost:300, on:ROOMS.side, act:function(){ iW+=4; ROOMS.side=true; }} ];
-      var info=document.createElement('div'); info.className='rev'; info.innerHTML='<div class="tx">Your shop is <b>'+iW+'×'+iH+'</b> tiles. Buy rooms for space to add more shelves &amp; tables.</div>'; list.appendChild(info);
-      ex.forEach(function(e){ list.appendChild(makeRow(roomIcon(), e.name, e.on?'Already added':'More floor space · $'+e.cost, e.on?'Owned':'Buy $'+e.cost, !e.on&&money>=e.cost, function(){
-        if(e.on||money<e.cost) return; money-=e.cost; e.act(); rebuildMap(); refreshHUD(); buildPhone(); toast('Store expanded!'); }, e.on)); });
+      var info=document.createElement('div'); info.className='rev';
+      info.innerHTML='<div class="tx">Your floor is <b>'+floorArea()+' squares</b>. Buy floor at <b>$50 a square</b> and lay it ANYWHERE that touches your shop — grow sideways, carve hallways, dig out whole wings. Wall Sections ($30, 🪑 Furniture) divide it back up.</div>';
+      list.appendChild(info);
+      list.appendChild(makeRow(roomIcon(), 'Buy floor squares', 'Enter build mode and click the squares you want · $50 each', 'Build', money>=50, function(){
+        closePhone(); placing={carve:true,rot:0}; ghostX=clamp(px+dirX*1.2,1.5,mapW-1.5); ghostY=clamp(py+dirY*1.2,1.5,mapH-1.5); placeBar(true);
+        toast('⛏️ Pick wall squares next to your floor — ✓ to buy each, Esc to stop'); }));
     } else if(phoneTab==='price'){
       Object.keys(PRODUCTS).forEach(function(k){ var p=PRODUCTS[k]; if(p.sealed) return;
         var row=makeRow(ICONS[k], p.name, 'Sell price each:', null, false, null);
@@ -844,6 +1783,9 @@
       rb.innerHTML='<div><div class="big">'+(ratingCount?ar.toFixed(1):'—')+' ★</div><div class="lab">'+ratingCount+' reviews</div></div>'+
         '<div style="flex:1"></div><div style="text-align:right"><div class="lab">Rival store</div><div class="big" style="color:#9fb0cf;font-size:1.1rem">'+rival.toFixed(1)+' ★</div></div>';
       list.appendChild(rb);
+      var tr=document.createElement('div'); tr.className='rev';   // the y = 5x traffic rule, spelled out
+      tr.innerHTML='<div class="st">🚶 '+Math.round(5*ar)+' customers/min</div><div class="tx">Foot traffic follows your stars: <b>5 × rating</b> people arrive every minute. Better reviews, busier store.</div>';
+      list.appendChild(tr);
       if(!reviews.length){ var e=document.createElement('div'); e.className='rev'; e.innerHTML='<div class="tx">No reviews yet — sell some stock to get rated!</div>'; list.appendChild(e); }
       reviews.slice(0,12).forEach(function(r){ var d=document.createElement('div'); d.className='rev';
         d.innerHTML='<div class="st">'+'★'.repeat(r.stars)+'<span style="color:#3a4252">'+'★'.repeat(5-r.stars)+'</span></div><div class="tx">'+r.text+'</div>'; list.appendChild(d); });
@@ -862,18 +1804,35 @@
     else { g.fillStyle=f.color; g.fillRect(8,6,24,28); g.fillStyle=jitC(f.color,0.7); g.fillRect(8,6,24,5); g.strokeStyle=jitC(f.color,0.5); g.strokeRect(8,6,24,28);
       g.fillStyle='#caa14a'; g.fillRect(11,14,18,3); g.fillRect(11,22,18,3); } return c; }
   function roomIcon(){ var c=mkCanvas(40,40), g=c.getContext('2d'); g.strokeStyle='#9fb0cf'; g.lineWidth=3; g.strokeRect(6,6,28,28); g.strokeStyle='#7df0a8'; g.beginPath(); g.moveTo(20,34); g.lineTo(20,20); g.lineTo(34,20); g.stroke(); return c; }
-  function deliverBox(bx){ floorBoxes.push({ product:bx.product, count:bx.count, sealed:!!bx.sealed,
-    opensTo:PRODUCTS[bx.product].opensTo, openCount:PRODUCTS[bx.product].openCount, x:doorPt.x+rnd(-0.7,0.7), y:doorPt.y-0.6+rnd(-0.2,0.2) }); }
+  function deliverBox(bx){
+    if(!bx.sealed){ var put=storeIntoStorage(bx.product,bx.count);   // back-stock straight onto the storage shelf
+      if(put>0) toast('📦 '+put+' '+PRODUCTS[bx.product].name+' into storage');
+      if(put>=bx.count) return;
+      floorBoxes.push({ product:bx.product, count:bx.count-put, sealed:false,
+        opensTo:PRODUCTS[bx.product].opensTo, openCount:PRODUCTS[bx.product].openCount, x:doorPt.x+rnd(-0.7,0.7), y:doorPt.y-0.6+rnd(-0.2,0.2) });
+      return; }
+    floorBoxes.push({ product:bx.product, count:bx.count, sealed:!!bx.sealed,
+      opensTo:PRODUCTS[bx.product].opensTo, openCount:PRODUCTS[bx.product].openCount, x:doorPt.x+rnd(-0.7,0.7), y:doorPt.y-0.6+rnd(-0.2,0.2) }); }
 
   // ====================== input ======================
   var keys={up:false,down:false,left:false,right:false};
   var KMAP={ KeyW:'up',ArrowUp:'up', KeyS:'down',ArrowDown:'down', KeyA:'left',ArrowLeft:'left', KeyD:'right',ArrowRight:'right' };
-  window.addEventListener('keydown',function(e){ if(phoneOpen()){ if(e.code==='Escape'||e.code==='KeyP') closePhone(); return; }
+  window.addEventListener('keydown',function(e){
+    if(cashOpen()){ e.preventDefault(); return; }   // counting change — finish the sale first
+    if(packOpen()){ if(e.code==='KeyQ'||e.code==='KeyE'||e.code==='Space'||e.code==='Escape'||e.code==='KeyO'){ closePack(); e.preventDefault(); } return; }
+    if(caseOpenOv()){ if(e.code==='Escape'||e.code==='KeyE'||e.code==='Space'){ closeCase(); e.preventDefault(); } return; }
+    if(saveOvOpen()){ if(e.code==='Escape') document.getElementById('saveOv').hidden=true; return; }
+    if(shelfOvOpen()){ if(e.code==='Escape'||e.code==='KeyG') document.getElementById('shelfOv').hidden=true; return; }
+    if(phoneOpen()){ if(e.code==='Escape'||e.code==='KeyP') closePhone(); return; }
     if(KMAP[e.code]){ keys[KMAP[e.code]]=true; e.preventDefault(); return; }
     if(e.code==='Space'||e.code==='KeyE'){ doAction(); e.preventDefault(); }
     else if(e.code==='KeyP'){ openPhone(); }
     else if(e.code==='KeyQ'||e.code==='KeyO'){ unifiedOpen(); }
     else if(e.code==='KeyR'){ rotateGhost(); }
+    else if(e.code==='KeyF'){ moveTargetFurn(); }
+    else if(e.code==='KeyG'){ var tg=findTarget();
+      if(tg&&tg.type==='shelf'&&!FURNITURE[tg.f.fkey].cardOnly) openShelfConfig(tg.f);
+      else toast('Aim at a shelf and press G to set its products'); }
     else if(e.code==='Escape'){ if(placing) cancelPlacing(); } });
   window.addEventListener('keyup',function(e){ if(KMAP[e.code]) keys[KMAP[e.code]]=false; });
   if(matchMedia('(pointer:coarse)').matches||'ontouchstart' in window) document.body.classList.add('touch');
@@ -887,7 +1846,7 @@
   document.getElementById('pbPlace').addEventListener('click',function(){ placeNow(); });
   document.getElementById('pbCancel').addEventListener('click',cancelPlacing);
   var dragId=null,dragX=0;
-  cv.addEventListener('pointerdown',function(e){ if(phoneOpen()||gstate!=='play') return; dragId=e.pointerId; dragX=e.clientX; try{cv.setPointerCapture(e.pointerId);}catch(err){} });
+  cv.addEventListener('pointerdown',function(e){ if(phoneOpen()||cashOpen()||packOpen()||caseOpenOv()||gstate!=='play') return; dragId=e.pointerId; dragX=e.clientX; try{cv.setPointerCapture(e.pointerId);}catch(err){} });
   cv.addEventListener('pointermove',function(e){ if(e.pointerId!==dragId) return; var dx=e.clientX-dragX; dragX=e.clientX; dir+=dx*0.005; });
   function endDrag(e){ if(e.pointerId===dragId) dragId=null; }
   cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
@@ -897,10 +1856,16 @@
 
   // ====================== boot ======================
   document.getElementById('startBtn').addEventListener('click',function(){ document.getElementById('startOv').hidden=true; gstate='play'; reset(); });
+  document.getElementById('continueBtn').addEventListener('click',function(){
+    if(loadGame()){ document.getElementById('startOv').hidden=true; gstate='play'; toast('💾 Welcome back!'); }
+    else toast('Save didn’t load — starting fresh'); });
+  document.getElementById('continueBtn').hidden=!hasSave();
+  document.getElementById('saveBtn2').addEventListener('click',function(){ if(gstate==='play') openSaveOv(); });
   resize(); reset(); requestAnimationFrame(frame);
 
   window.__t={ get money(){ return money; }, set money(v){ money=v; }, get state(){ return gstate; }, set state(v){ gstate=v; },
-    get placed(){ return placed; }, get floorBoxes(){ return floorBoxes; }, get customers(){ return customers; }, get carrying(){ return carrying; },
+    get placed(){ return placed; }, get floorBoxes(){ return floorBoxes; }, get customers(){ return customers; },
+    get carrying(){ return carrying; }, set carrying(v){ carrying=v; },
     get reviews(){ return reviews; }, get rating(){ return avgRating(); }, get rival(){ return rival; }, get register(){ return register; },
     get iW(){ return iW; }, get iH(){ return iH; }, PRODUCTS:PRODUCTS, FURNITURE:FURNITURE, BOXES:BOXES,
     deliverBox:function(key){ var bx=BOXES.filter(function(b){ return b.key===key; })[0]; if(bx) deliverBox(bx); },
@@ -908,6 +1873,9 @@
     placeAt:placeAt, doAction:doAction, render:render, update:update, spawn:spawnCustomer, openPhone:openPhone, buildPhone:buildPhone,
     get employees(){ return employees; }, hire:hireEmployee, openPack:openCarriedPack, get placing(){ return placing; },
     startPlacing:startPlacing, rotateGhost:rotateGhost, placeNow:placeNow, ghostValid:ghostValid, set ghost(p){ ghostX=p.x; ghostY=p.y; },
+    get collection(){ return collection; }, addCard:function(cd){ return addToCollection(cd); }, rollPack:rollPack,
+    get deckSize(){ return deckSize(); }, get deckValue(){ return deckValue(); }, playMatch:playMatch, openCasePicker:openCasePicker,
+    cardInst:cardInst, MSH_CARDS:MSH_CARDS,
     set px(v){ px=v; }, set py(v){ py=v; }, set dir(v){ dir=v; updateCamera(); }, faceTo:function(x,y){ dir=Math.atan2(y-py,x-px); updateCamera(); } };
 })();
 </script>
