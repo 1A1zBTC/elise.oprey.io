@@ -728,8 +728,10 @@
   document.getElementById('slotSaveBtn').addEventListener('click',function(){
     var n=document.getElementById('slotName').value.trim()||'My Store';
     curSlot=n; writeSlot(n); });
-  // autosave whenever you leave / hide the tab
-  function autoSaveNow(){ if(gstate==='play') writeSlot(curSlot||'⏱ Autosave'); }
+  // Autosave whenever you leave / hide the tab — ALWAYS into its own slot so a
+  // named save stays a stable snapshot (never silently overwritten on quit).
+  // "Continue" picks the newest slot, so resuming still lands on the autosave.
+  function autoSaveNow(){ if(gstate==='play') writeSlot('⏱ Autosave'); }
   window.addEventListener('pagehide',autoSaveNow);
   document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden') autoSaveNow(); });
   // ====================== geometry helpers ======================
