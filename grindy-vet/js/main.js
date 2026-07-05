@@ -157,13 +157,13 @@
 
     // ---- Economy + build / placement -------------------------------------
     var money = 1000;                      // player's cash
-    var staffSurcharge = 0;                // +$50 to every staff hire per staff member already hired — each new hire costs more than the last
-    // The price to hire/build an item right now: staff carry an escalating surcharge
-    // (see staffSurcharge) on top of their base cost; everything else is just base cost.
-    function itemCost(item) { return item.cost + (item.cat === 'staff' ? staffSurcharge : 0); }
-    // Pay for a staff hire, then bump the surcharge so the NEXT hire (of any kind)
-    // costs $50 more than this one did.
-    function chargeStaffHire(item) { money -= itemCost(item); staffSurcharge += 50; renderMoney(); }
+    var staffSurcharge = {};               // per-TYPE: +$50 per hire of that type — only the type you bought gets pricier
+    // The price to hire/build an item right now: each staff TYPE carries its own
+    // escalating surcharge on top of base cost; everything else is just base cost.
+    function itemCost(item) { return item.cost + (item.cat === 'staff' ? (staffSurcharge[item.id] || 0) : 0); }
+    // Pay for a staff hire, then bump that type's surcharge so the NEXT hire of
+    // the SAME type costs $50 more than this one did (other types unaffected).
+    function chargeStaffHire(item) { money -= itemCost(item); staffSurcharge[item.id] = (staffSurcharge[item.id] || 0) + 50; renderMoney(); }
     var placed = [];                       // [{id, gx, gy}] furniture in the room
     var occupied = {};                     // "gx,gy" -> true (a placed footprint tile)
     var staff = [];                        // [{type:'receptionist', line, name, gender}] hired staff at desk circles
@@ -7206,7 +7206,7 @@
       for (var kpk in park) delete park[kpk];
       for (var k2 in occupied) delete occupied[k2];
       money = D.money;
-      staffSurcharge = 0;                   // fresh clinic → staff back to base prices
+      staffSurcharge = {};                  // fresh clinic → staff back to base prices
       for (var sk in skills) { skills[sk].val = 1.0; skills[sk].cost = 10; }   // reset EVERY skill (incl. cleaning) to base
       frq = D.frq; wait = D.wait; spawnTimer = 0; autoSaveTimer = 0;
       currentName = '';
@@ -7228,7 +7228,13 @@
       for (var k2 in occupied) delete occupied[k2];
 
       money = (typeof data.money === 'number') ? data.money : 1000;
-      staffSurcharge = (typeof data.staffSurcharge === 'number') ? data.staffSurcharge : 0;
+      // Per-type surcharge map. Pre-fix saves stored ONE global number — apply it
+      // to every staff type so an old save's hire prices don't suddenly drop.
+      if (data.staffSurcharge && typeof data.staffSurcharge === 'object') staffSurcharge = data.staffSurcharge;
+      else if (typeof data.staffSurcharge === 'number' && data.staffSurcharge > 0) {
+        staffSurcharge = {};
+        FURNITURE.forEach(function (f) { if (f.cat === 'staff') staffSurcharge[f.id] = data.staffSurcharge; });
+      } else staffSurcharge = {};
       if (data.skills) {                       // restore every saved skill we still have (skips unknown/removed ones)
         for (var sk in skills) if (data.skills[sk]) { skills[sk].val = data.skills[sk].val; skills[sk].cost = data.skills[sk].cost; }
       }
@@ -7523,7 +7529,7 @@
       setFrq: function (f) { frq = f; if (typeof renderRating === 'function') renderRating(); return { frq: frq, rating: Math.round((100 / frq) * 100) / 100 }; },
       countSpawns: function (secs) { var n0 = visitorSeq; var steps = Math.round((secs || 5) * 30); for (var i = 0; i < steps; i++) update(1 / 30); return { spawned: visitorSeq - n0, secs: secs || 5, frq: frq }; },
       staffCost: function (id) { var it = FURN_BY_ID[id]; return it ? itemCost(it) : null; },
-      buyStaff: function (id) { var it = FURN_BY_ID[id]; if (!it || it.cat !== 'staff') return null; var paid = itemCost(it); chargeStaffHire(it); return { paid: paid, money: money, surcharge: staffSurcharge }; },
+      buyStaff: function (id) { var it = FURN_BY_ID[id]; if (!it || it.cat !== 'staff') return null; var paid = itemCost(it); chargeStaffHire(it); return { paid: paid, money: money, surcharge: staffSurcharge[id] || 0 }; },
       emojis: function () { return visitors.map(function (v) { return { phase: v.phase, served: !!v.served, examined: !!v.examined, happy: !!v.happy, emoji: visitorEmoji(v) }; }); },
       hireReceptionist: function (line) { staff.push({ type: 'receptionist', line: line || 0, name: '', gender: randGender() }); return staff.length; },
       hireVet: function () { vets.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, room: null, working: false, speed: 2.4, dir: 'SE', walkPhase: 0, moving: false, path: null, wp: 0, name: '', gender: randGender() }); return vets.length; },
