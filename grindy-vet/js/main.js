@@ -90,7 +90,7 @@
     // built or free: a client whose service is missing/full waits, drains
     // patience, and leaves UNHAPPY, pressuring the player to build it out.
     // Must sum to 1; rollIntent walks it in insertion order.
-    var INTENT_WEIGHTS = { exam: 0.55, pharm: 0.13, park: 0.12, shop: 0.10, groom: 0.10 };
+    var INTENT_WEIGHTS = { exam: 0.50, pharm: 0.12, park: 0.12, shop: 0.10, groom: 0.08, adoption: 0.08 };
     // Follow-up chances chained after a completed service (same not-gated rule).
     var FOLLOWUP = { examXray: 0.20, examMeds: 0.30, examGroom: 0.08, xrayMeds: 0.40, surgMeds: 0.50, parkGroom: 0.30, parkMeds: 0.20 };
     function rollIntent() {
@@ -242,6 +242,7 @@
       if (groomings.some(function (gm) { return x >= gm.gx && x < gm.gx + GROOM_W && y >= gm.gy && y < gm.gy + GROOM_H; })) return true;
       if (hotels.some(function (h) { return x >= h.gx && x < h.gx + HOTEL_W && y >= h.gy && y < h.gy + HOTEL_H; })) return true;
       if (surgeries.some(function (sg) { return x >= sg.gx && x < sg.gx + SURG_W && y >= sg.gy && y < sg.gy + SURG_H; })) return true;
+      if (adoptions.some(function (ad) { return x >= ad.gx && x < ad.gx + ADOPT_W && y >= ad.gy && y < ad.gy + ADOPT_H; })) return true;
       if (restrooms.some(function (rm) { return footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot).some(function (t) { return t.x === x && t.y === y; }); })) return true;
       return false;
     }
@@ -837,6 +838,36 @@
     function placeSurgery(gx, gy, rot) { return placeRoom('surgery', gx, gy, rot); }
     function freeSurgeryRoom() { return freeRoom('surgery'); }
 
+    // ---- Adoption centre ---------------------------------------------------
+    // A 4-wide × 5-deep room where clients GIVE a pet away or ADOPT one. Four
+    // pens along the back wall hold the surrendered pets waiting for a home
+    // (rm.stock, capacity 4); the handover happens at the counter mid-room.
+    // A fresh adopter walks out with their new pet and — if a shop exists —
+    // heads straight there to buy its essentials.
+    var ADOPT_W = 4, ADOPT_H = 5;
+    var ADOPT_PENS = 4;                    // pen crates on the back wall = stock cap
+    var ADOPT_FEE = 60;                    // paid to the clinic per adoption
+    var SURRENDER_FEE = 10;                // handling fee per pet given away
+    var adoptions = [];                    // [{gx,gy,rot,door,occupant,stock:[petKind],dirty,cleanProg,grimeT}]
+    function adoptionTiles(gx, gy) {
+      var t = [];
+      for (var j = 0; j < ADOPT_H; j++) for (var i = 0; i < ADOPT_W; i++) t.push({ x: gx + i, y: gy + j });
+      return t;
+    }
+    function adoptionKeyTiles(gx, gy) {
+      var pens = [];
+      for (var i = 0; i < ADOPT_PENS; i++) pens.push({ x: gx + i, y: gy });   // pen crates, back row
+      return {
+        pens: pens,
+        counter: { x: gx + 1, y: gy + 2 },  // handover counter (solid)
+        clerk:   { x: gx + 1, y: gy + 1 },  // a Worker mans the counter from behind
+        visitor: { x: gx + 1, y: gy + 3 },  // client stands in front of the counter
+        circle:  { x: gx + 2, y: gy + 3 }   // scrub anchor for cleaners
+      };
+    }
+    function canPlaceAdoption(gx, gy) { return canPlaceRoom('adoption', gx, gy); }
+    function placeAdoption(gx, gy, rot) { return placeRoom('adoption', gx, gy, rot); }
+
     // ---- Room registry ---------------------------------------------------
     // One descriptor per walled-room type drives the (previously duplicated)
     // place / canPlace / free / door logic. Each declares: its `list` array, a
@@ -974,6 +1005,15 @@
           v.operated = true; releaseSurgery(v);
           if (Math.random() < FOLLOWUP.surgMeds) medsOrWait(v);
           else { v.happy = true; leaveOutbound(v); }
+        }
+      },
+      adoption: {
+        list: adoptions,
+        tiles: function (gx, gy) { return adoptionTiles(gx, gy); },
+        make: function (gx, gy, rot, door) {
+          var k = adoptionKeyTiles(gx, gy);
+          return { room: { gx: gx, gy: gy, rot: rot, door: door, occupant: null, stock: [], dirty: false, cleanProg: 0, grimeT: null },
+                   solid: k.pens.concat([k.counter]) };
         }
       }
     };
@@ -1126,7 +1166,141 @@
       c.beginPath(); c.ellipse(s.x - 5, s.y - 1, 7, 3.2, 0, 0, Math.PI * 2); c.stroke();
       c.beginPath(); c.ellipse(s.x + 7, s.y + 2, 5, 2.4, 0, 0, Math.PI * 2); c.stroke();
     }
+    function drawHydrant(c, gx, gy) {
+      furnShadow(c, gx - 0.24, gy - 0.24, gx + 0.24, gy + 0.24);
+      isoBox(c, gx - 0.16, gy - 0.16, gx + 0.16, gy + 0.16, 18, '#e8514a', '#c23b38', '#a83230'); // body
+      var s = iso(gx, gy);
+      c.fillStyle = '#f4c542'; c.beginPath(); c.ellipse(s.x, s.y - 19, 6.5, 3.2, 0, 0, Math.PI * 2); c.fill(); // cap ring
+      c.fillStyle = '#e8514a'; c.beginPath(); c.arc(s.x, s.y - 22, 3.4, 0, Math.PI * 2); c.fill();             // dome
+      c.fillStyle = '#c23b38';                                                  // side nozzles
+      c.beginPath(); c.arc(s.x - 8, s.y - 11, 2.6, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.arc(s.x + 8, s.y - 11, 2.6, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#f4a7a1'; c.beginPath(); c.arc(s.x - 3, s.y - 16, 1.6, 0, Math.PI * 2); c.fill(); // shine
+    }
+    function drawDigPit(c, gx, gy) {
+      furnShadow(c, gx - 0.36, gy - 0.36, gx + 0.36, gy + 0.36);
+      var s = iso(gx, gy);
+      c.fillStyle = '#a2854c'; c.beginPath(); c.ellipse(s.x, s.y + 1, 17, 8.5, 0, 0, Math.PI * 2); c.fill();  // earth ring
+      c.fillStyle = '#e6d7ae'; c.beginPath(); c.ellipse(s.x, s.y - 1, 14, 7, 0, 0, Math.PI * 2); c.fill();    // sand
+      c.fillStyle = '#d4c295'; c.beginPath(); c.ellipse(s.x + 3, s.y, 8, 4, 0, 0, Math.PI * 2); c.fill();     // dug hollow
+      c.fillStyle = '#f7f3e8';                                                  // half-buried bone
+      c.beginPath(); c.arc(s.x - 6, s.y - 3, 2.2, 0, Math.PI * 2); c.arc(s.x - 3, s.y - 4.5, 2.2, 0, Math.PI * 2); c.fill();
+      c.fillRect(s.x - 6, s.y - 5.5, 4, 3);
+      for (var i = 0; i < 4; i++) {                                             // kicked-out sand flecks
+        var h = hash(gx * 5 + i, gy * 7 - i);
+        c.fillStyle = '#d4c295'; c.beginPath(); c.arc(s.x + (h - 0.5) * 26, s.y + 4 + (hash(gx + i, gy + i) - 0.5) * 5, 1.3, 0, Math.PI * 2); c.fill();
+      }
+    }
+    function drawHoop(c, gx, gy) {
+      furnShadow(c, gx - 0.26, gy - 0.26, gx + 0.26, gy + 0.26);
+      isoBox(c, gx - 0.28, gy - 0.06, gx - 0.16, gy + 0.06, 6, '#8a8f98', '#6d727b', '#5e636b'); // feet
+      isoBox(c, gx + 0.16, gy - 0.06, gx + 0.28, gy + 0.06, 6, '#8a8f98', '#6d727b', '#5e636b');
+      var s = iso(gx, gy);
+      c.strokeStyle = '#f4c542'; c.lineWidth = 4;                               // the ring
+      c.beginPath(); c.ellipse(s.x, s.y - 22, 12, 14, 0, 0, Math.PI * 2); c.stroke();
+      c.strokeStyle = '#e8514a'; c.lineWidth = 4;                               // candy stripes
+      c.beginPath(); c.ellipse(s.x, s.y - 22, 12, 14, 0, -0.4, 0.5); c.stroke();
+      c.beginPath(); c.ellipse(s.x, s.y - 22, 12, 14, 0, Math.PI - 0.4, Math.PI + 0.5); c.stroke();
+    }
+    function drawRamp(c, gx, gy, rot) {
+      rot = rot || 0;
+      var ew = (rot & 1) ? 1 : 2, eh = (rot & 1) ? 2 : 1;
+      furnShadow(c, gx - 0.4, gy - 0.4, gx + (ew - 1) + 0.4, gy + (eh - 1) + 0.4);
+      var a = iso(gx, gy), b = iso(gx + (ew - 1), gy + (eh - 1));               // the two feet
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;                           // apex above the middle
+      c.fillStyle = '#c23b54';                                                  // up panel
+      c.beginPath(); c.moveTo(a.x - 9, a.y); c.lineTo(a.x + 9, a.y); c.lineTo(mx + 9, my - 26); c.lineTo(mx - 9, my - 26); c.closePath(); c.fill();
+      c.fillStyle = '#9a2f44';                                                  // down panel (shaded)
+      c.beginPath(); c.moveTo(mx - 9, my - 26); c.lineTo(mx + 9, my - 26); c.lineTo(b.x + 9, b.y); c.lineTo(b.x - 9, b.y); c.closePath(); c.fill();
+      c.strokeStyle = '#f4c542'; c.lineWidth = 2;                               // grip slats
+      for (var i = 1; i <= 3; i++) {
+        var t = i / 4;
+        c.beginPath(); c.moveTo(a.x - 9 + (mx - a.x) * t, a.y + (my - 26 - a.y) * t); c.lineTo(a.x + 9 + (mx - a.x) * t, a.y + (my - 26 - a.y) * t); c.stroke();
+      }
+    }
+    function drawDoghouse(c, gx, gy) {
+      furnShadow(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34);
+      isoBox(c, gx - 0.34, gy - 0.34, gx + 0.34, gy + 0.34, 20, '#d8c089', '#b89a5e', '#a2854c'); // timber walls
+      var s = iso(gx, gy);
+      c.fillStyle = '#c23b38';                                                  // pitched roof
+      c.beginPath(); c.moveTo(s.x - 20, s.y - 18); c.lineTo(s.x, s.y - 34); c.lineTo(s.x + 20, s.y - 18); c.closePath(); c.fill();
+      c.fillStyle = '#e8514a';                                                  // roof highlight
+      c.beginPath(); c.moveTo(s.x - 20, s.y - 18); c.lineTo(s.x, s.y - 34); c.lineTo(s.x, s.y - 30); c.lineTo(s.x - 16, s.y - 16); c.closePath(); c.fill();
+      c.fillStyle = '#3a2c1c'; c.beginPath(); c.ellipse(s.x, s.y - 7, 6, 7.5, 0, Math.PI, 0); c.fill(); // arched door
+      c.fillRect(s.x - 6, s.y - 7, 12, 5);
+    }
     // ---- Cat-park items (blank rooms become a cat playground) --------------
+    function drawYarnBasket(c, gx, gy) {
+      furnShadow(c, gx - 0.28, gy - 0.28, gx + 0.28, gy + 0.28);
+      isoBox(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3, 9, '#caa368', '#a8834f', '#93713f');   // wicker basket
+      var s = iso(gx, gy);
+      var balls = [['#e8514a', -5, -12], ['#5aa0e8', 4, -13], ['#4cc46a', 0, -9]];
+      for (var i = 0; i < balls.length; i++) {
+        c.fillStyle = balls[i][0]; c.beginPath(); c.arc(s.x + balls[i][1], s.y + balls[i][2], 4.4, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1;              // wound strands
+        c.beginPath(); c.arc(s.x + balls[i][1], s.y + balls[i][2], 2.8, 0.6, 2.6); c.stroke();
+      }
+      c.strokeStyle = '#e8514a'; c.lineWidth = 1.2;                             // trailing strand
+      c.beginPath(); c.moveTo(s.x - 8, s.y - 10); c.quadraticCurveTo(s.x - 16, s.y - 4, s.x - 12, s.y + 2); c.stroke();
+    }
+    function drawCatBed(c, gx, gy) {
+      furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
+      var s = iso(gx, gy);
+      c.fillStyle = '#c96f4a'; c.beginPath(); c.ellipse(s.x, s.y - 2, 15, 8, 0, 0, Math.PI * 2); c.fill();   // bolster ring
+      c.fillStyle = '#e8956e'; c.beginPath(); c.ellipse(s.x, s.y - 4, 14, 7, 0, 0, Math.PI * 2); c.fill();   // ring top
+      c.fillStyle = '#f7e4c8'; c.beginPath(); c.ellipse(s.x, s.y - 3, 9.5, 4.6, 0, 0, Math.PI * 2); c.fill(); // plush centre
+      c.strokeStyle = '#e8b98e'; c.lineWidth = 1;                               // quilting
+      c.beginPath(); c.ellipse(s.x, s.y - 3, 5.5, 2.6, 0, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = '#e8514a';                                                  // cosy heart tag
+      c.beginPath(); c.arc(s.x + 10, s.y - 9, 1.6, 0, Math.PI * 2); c.arc(s.x + 12.4, s.y - 9, 1.6, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.moveTo(s.x + 8.6, s.y - 8.4); c.lineTo(s.x + 11.2, s.y - 5.4); c.lineTo(s.x + 13.8, s.y - 8.4); c.closePath(); c.fill();
+    }
+    function drawFeatherWand(c, gx, gy) {
+      furnShadow(c, gx - 0.24, gy - 0.24, gx + 0.24, gy + 0.24);
+      isoBox(c, gx - 0.24, gy - 0.24, gx + 0.24, gy + 0.24, 5, '#8a8f98', '#6d727b', '#5e636b'); // weighted base
+      var s = iso(gx, gy);
+      c.strokeStyle = '#b89a5e'; c.lineWidth = 2.4;                             // springy pole
+      c.beginPath(); c.moveTo(s.x, s.y - 5); c.quadraticCurveTo(s.x + 2, s.y - 24, s.x + 10, s.y - 34); c.stroke();
+      c.strokeStyle = '#d94f6e'; c.lineWidth = 1.1;                             // string
+      c.beginPath(); c.moveTo(s.x + 10, s.y - 34); c.lineTo(s.x + 12, s.y - 24); c.stroke();
+      var f = [['#4cc46a', -2.4], ['#5aa0e8', 0], ['#f4c542', 2.4]];            // feather fan
+      for (var i = 0; i < f.length; i++) {
+        c.save(); c.translate(s.x + 12, s.y - 22); c.rotate(f[i][1] * 0.25);
+        c.fillStyle = f[i][0]; c.beginPath(); c.ellipse(0, 4, 2.2, 6, 0, 0, Math.PI * 2); c.fill(); c.restore();
+      }
+    }
+    function drawCatTunnel(c, gx, gy, rot) {
+      rot = rot || 0;
+      var ew = (rot & 1) ? 1 : 2, eh = (rot & 1) ? 2 : 1;
+      furnShadow(c, gx - 0.4, gy - 0.4, gx + (ew - 1) + 0.4, gy + (eh - 1) + 0.4);
+      var a = iso(gx, gy), b = iso(gx + (ew - 1), gy + (eh - 1));               // the two open ends
+      c.strokeStyle = '#9678d0'; c.lineWidth = 17; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(a.x, a.y - 9); c.lineTo(b.x, b.y - 9); c.stroke();   // crinkle-fabric tube
+      c.strokeStyle = '#b79ae4'; c.lineWidth = 10;
+      c.beginPath(); c.moveTo(a.x, a.y - 11); c.lineTo(b.x, b.y - 11); c.stroke(); // highlight ridge
+      c.lineCap = 'butt';
+      c.strokeStyle = '#7d5bbe'; c.lineWidth = 1.4;                             // crinkle seams
+      for (var i = 1; i <= 3; i++) {
+        var t = i / 4, cx2 = a.x + (b.x - a.x) * t, cy2 = a.y + (b.y - a.y) * t;
+        c.beginPath(); c.ellipse(cx2, cy2 - 9, 4.4, 8, 0, 0, Math.PI * 2); c.stroke();
+      }
+      c.fillStyle = '#2c2140'; c.beginPath(); c.ellipse(a.x, a.y - 9, 4.4, 7.8, 0, 0, Math.PI * 2); c.fill(); // dark mouth
+    }
+    function drawFishTank(c, gx, gy) {
+      furnShadow(c, gx - 0.32, gy - 0.32, gx + 0.32, gy + 0.32);
+      isoBox(c, gx - 0.32, gy - 0.32, gx + 0.32, gy + 0.32, 9, '#5e636b', '#4c5057', '#42464c'); // cabinet stand
+      var s = iso(gx, gy);
+      c.fillStyle = 'rgba(120,200,235,0.85)'; c.fillRect(s.x - 14, s.y - 32, 28, 22);            // water box
+      c.fillStyle = 'rgba(190,235,250,0.9)'; c.fillRect(s.x - 14, s.y - 32, 28, 4);              // surface
+      c.strokeStyle = '#3a3f46'; c.lineWidth = 2; c.strokeRect(s.x - 14, s.y - 32, 28, 22);      // frame
+      c.fillStyle = '#f4a12e';                                                  // goldfish
+      c.beginPath(); c.ellipse(s.x - 4, s.y - 20, 3.6, 2.2, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.moveTo(s.x - 7.4, s.y - 20); c.lineTo(s.x - 11, s.y - 23); c.lineTo(s.x - 11, s.y - 17); c.closePath(); c.fill();
+      c.fillStyle = '#e8514a'; c.beginPath(); c.ellipse(s.x + 6, s.y - 15, 3, 1.9, 0, 0, Math.PI * 2); c.fill(); // red fish
+      c.fillStyle = '#4cc46a';                                                  // waving plant
+      c.beginPath(); c.ellipse(s.x + 10, s.y - 13, 1.6, 4.5, 0.3, 0, Math.PI * 2); c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(s.x + 6, s.y - 31, 3, 20);               // glass shine
+    }
     function drawLitterBox(c, gx, gy) {
       furnShadow(c, gx - 0.3, gy - 0.3, gx + 0.3, gy + 0.3);
       isoBox(c, gx - 0.36, gy - 0.36, gx + 0.36, gy + 0.36, 8, '#7d5bbe', '#64489c', '#553d85'); // plastic tray
@@ -1193,6 +1367,7 @@
       { id: 'grooming', name: 'Grooming', cost: 450, w: 3, h: 6, icon: '🛁', cat: 'rooms', kind: 'grooming' },
       { id: 'hotel', name: 'Pet Hotel', cost: 1100, w: 6, h: 5, icon: '🏨', cat: 'rooms', kind: 'hotel' },
       { id: 'surgery', name: 'Surgery', cost: 1500, w: 4, h: 5, icon: '⚕️', cat: 'rooms', kind: 'surgery' },
+      { id: 'adoption', name: 'Adoption', cost: 700, w: 4, h: 5, icon: '🏡', cat: 'rooms', kind: 'adoption' },
       { id: 'pharmacist', name: 'Pharmacist', cost: 600, w: 1, h: 1, icon: '🧑‍🔬', cat: 'staff', kind: 'pharmstaff' },
       { id: 'cleaner', name: 'Cleaner', cost: 400, w: 1, h: 1, icon: '🧹', cat: 'staff', kind: 'cleaner' },
       { id: 'worker', name: 'Worker', cost: 350, w: 1, h: 1, icon: '🧼', cat: 'staff', kind: 'worker' },
@@ -1202,6 +1377,11 @@
       { id: 'seesaw',  name: 'Seesaw',        cost: 80,  w: 2, h: 1, icon: '🛝', cat: 'park', parkItem: true, quality: 4, draw: drawSeesaw },
       { id: 'tunnel',  name: 'Tunnel',        cost: 90,  w: 2, h: 1, icon: '🛢️', cat: 'park', parkItem: true, quality: 4, draw: drawTunnel },
       { id: 'pool',    name: 'Paddling Pool', cost: 120, w: 2, h: 2, icon: '🏊', cat: 'park', parkItem: true, quality: 6, draw: drawPool },
+      { id: 'hydrant',  name: 'Fire Hydrant',  cost: 50,  w: 1, h: 1, icon: '🧯', cat: 'park', parkItem: true, quality: 2, draw: drawHydrant },
+      { id: 'digpit',   name: 'Digging Pit',   cost: 65,  w: 1, h: 1, icon: '🦴', cat: 'park', parkItem: true, quality: 3, draw: drawDigPit },
+      { id: 'hoop',     name: 'Agility Hoop',  cost: 85,  w: 1, h: 1, icon: '⭕', cat: 'park', parkItem: true, quality: 4, draw: drawHoop },
+      { id: 'ramp',     name: 'Agility Ramp',  cost: 100, w: 2, h: 1, icon: '🔺', cat: 'park', parkItem: true, quality: 5, draw: drawRamp },
+      { id: 'doghouse', name: 'Doghouse',      cost: 130, w: 1, h: 1, icon: '🏠', cat: 'park', parkItem: true, quality: 6, draw: drawDoghouse },
       // Cat Room: the cat-side counterpart of Dog Park — same blank-room brush
       // (kind 'blank'), surfaced in the Park tab's Cats column for discoverability.
       { id: 'catroom', name: 'Cat Room', cost: 10, icon: '🐱', cat: 'park', kind: 'blank', perSquare: true, catItem: true },
@@ -1209,7 +1389,12 @@
       { id: 'catbox',    name: 'Cardboard Box',   cost: 45,  w: 1, h: 1, icon: '📦', cat: 'park', catItem: true, quality: 2, draw: drawCardboardBox },
       { id: 'scratcher', name: 'Scratching Post', cost: 60,  w: 1, h: 1, icon: '🪵', cat: 'park', catItem: true, quality: 3, draw: drawScratchPost },
       { id: 'catnip',    name: 'Catnip Planter',  cost: 80,  w: 1, h: 1, icon: '🪴', cat: 'park', catItem: true, quality: 4, draw: drawCatnip },
-      { id: 'cattree',   name: 'Cat Tree',        cost: 120, w: 1, h: 1, icon: '🐈', cat: 'park', catItem: true, quality: 6, draw: drawCatTree }
+      { id: 'cattree',   name: 'Cat Tree',        cost: 120, w: 1, h: 1, icon: '🐈', cat: 'park', catItem: true, quality: 6, draw: drawCatTree },
+      { id: 'yarnbasket', name: 'Yarn Basket',    cost: 50,  w: 1, h: 1, icon: '🧶', cat: 'park', catItem: true, quality: 2, draw: drawYarnBasket },
+      { id: 'catbed',     name: 'Heated Cat Bed', cost: 65,  w: 1, h: 1, icon: '🛏️', cat: 'park', catItem: true, quality: 3, draw: drawCatBed },
+      { id: 'featherwand', name: 'Feather Wand',  cost: 85,  w: 1, h: 1, icon: '🪶', cat: 'park', catItem: true, quality: 4, draw: drawFeatherWand },
+      { id: 'cattunnel',  name: 'Crinkle Tunnel', cost: 100, w: 2, h: 1, icon: '🌀', cat: 'park', catItem: true, quality: 5, draw: drawCatTunnel },
+      { id: 'fishtank',   name: 'Fish Tank',      cost: 130, w: 1, h: 1, icon: '🐠', cat: 'park', catItem: true, quality: 6, draw: drawFishTank }
     ].sort(function (a, b) { return a.cost - b.cost; });
     var FURN_BY_ID = {};
     FURNITURE.forEach(function (f) { FURN_BY_ID[f.id] = f; });
@@ -1852,7 +2037,7 @@
           if (!mine(x, y + 1) && isRoomFloor(x, y + 1)) { if (isDoor(x, y + 1)) D(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, { style: 'brown', inx: 0, iny: -1 }); else W(false, x - 0.5, y + 0.5, x + 0.5, y + 0.5, FRONT_WALL_H, ps[0], ps[1], ps[2], ps[3]); }
         });
       }
-      ['exam', 'xray', 'restroom', 'pharmacy', 'shop', 'grooming', 'surgery'].forEach(function (type) {
+      ['exam', 'xray', 'restroom', 'pharmacy', 'shop', 'grooming', 'surgery', 'adoption'].forEach(function (type) {
         var d = ROOM_TYPES[type];
         d.list.forEach(function (rm) { roomWalls(rm, d.tiles(rm.gx, rm.gy, rm.rot || 0)); });
       });
@@ -2365,10 +2550,16 @@
       if (v.phase === 'leaving') return v.happy ? '🙂' : '😡';
       if (v.phase === 'toRestroom' || v.phase === 'inRestroom') return '🚻';
       if (v.wantsHotel || v.phase === 'toHotel' || v.phase === 'toHotelPickup') return '🏨';
+      if (v.intent === 'adoption' && !v.adopted && !v.surrendered) return v.adoptGive ? '🏡' : '❤️';
       if (v.phase === 'toShop' || v.phase === 'inShop') return '🛍️';
       if (v.phase === 'toDogPark' || v.phase === 'inDogPark') return '🐾';
       if (v.wantsGroom && !v.groomed) return '🛁'; // wants / getting a groom
       if (!v.served) return '💻';                 // arriving / in line → needs reception
+      // Intent-only services must be matched BEFORE the exam fallthrough, or a
+      // pharmacy/park/shop client shows 🩺 while walking somewhere else entirely.
+      if (v.needsMeds && !v.medicated && !v.examined) return '💊'; // pharmacy-intent client (no exam involved)
+      if (v.intent === 'park' && !v.parkDone) return '🐾';         // came for the park, waiting to head out
+      if (v.intent === 'shop' && !v.shopped) return '🛍️';          // came to browse the shop
       if (!v.examined) return '🩺';               // seen reception → needs an exam room
       if (v.needsXray && !v.xrayed) return '🩻';  // examined → needs an X-ray
       if (v.needsSurgery && !v.operated) return '⚕️'; // X-rayed → needs surgery
@@ -2492,7 +2683,7 @@
       // In the park the dog is off the leash and drawn separately at its own
       // position (see the off-leash scene pass), so don't also draw it beside the
       // owner. A boarded pet is at the hotel — the owner walks without it.
-      var dogLoose = isDog && ((v.phase === 'inDogPark' && !!v.dog) || !!v.petBoarded);
+      var dogLoose = isDog && ((v.phase === 'inDogPark' && !!v.dog) || !!v.petBoarded || !!v.petless);
       if (isDog && !dogLoose && front && !seated) cachedDog(v, cx - 17 * mirror, s.y + 3, mirror > 0);
 
       // Body: sprite-cached per (variant, facing, pose bucket) — see drawVisitorBody.
@@ -2514,10 +2705,10 @@
       if (seated) {
         // pet set down on the floor in front of the seated owner (at their feet)
         if (isDog && !dogLoose) cachedDog(v, cx + 9, s.y + 13, false);
-        else if (!isDog && !v.petBoarded) cachedCarrier(cx, s.y + 2, v.carrier, mirror);
+        else if (!isDog && !v.petBoarded && !v.petless) cachedCarrier(cx, s.y + 2, v.carrier, mirror);
       } else {
-        // cat carrier held in front of the body (empty-handed while the cat boards)
-        if (!isDog && !v.petBoarded) cachedCarrier(cx, baseY - 14, v.carrier, mirror);
+        // cat carrier held in front of the body (empty-handed while the cat boards / pet given away)
+        if (!isDog && !v.petBoarded && !v.petless) cachedCarrier(cx, baseY - 14, v.carrier, mirror);
         // dog drawn after the body when it should appear in front (walking up, back to us)
         if (isDog && !dogLoose && !front) cachedDog(v, cx - 16 * mirror, s.y + 4, mirror > 0);
       }
@@ -3842,6 +4033,47 @@
       }
     }
     // Ghost for the 5×5 shop: footprint tint + a preview of the display island.
+    // One adoption pen crate: a slatted wooden kennel; when a surrendered pet is
+    // waiting inside it peeks over the front rail (drawn by the scene pass).
+    function drawAdoptPen(c, gx, gy) {
+      var H = 16;
+      furnShadow(c, gx - 0.44, gy - 0.44, gx + 0.44, gy + 0.44);
+      isoBox(c, gx - 0.44, gy - 0.44, gx + 0.44, gy + 0.44, H, '#d8c089', '#b89a5e', '#a2854c');
+      var m = iso(gx, gy);
+      c.strokeStyle = '#8a6f3c'; c.lineWidth = 1.4;            // front slats
+      for (var i = -1; i <= 1; i++) { c.beginPath(); c.moveTo(m.x + i * 7, m.y - 2); c.lineTo(m.x + i * 7, m.y - H + 3); c.stroke(); }
+      c.fillStyle = '#6e5730'; c.fillRect(m.x - 12, m.y - H, 24, 2.4);   // top rail
+    }
+    // The adoption handover counter: a soft teal desk with a clipboard + heart.
+    function drawAdoptCounter(c, gx, gy) {
+      var H = 20;
+      furnShadow(c, gx - 0.46, gy - 0.46, gx + 0.46, gy + 0.46);
+      isoBox(c, gx - 0.46, gy - 0.46, gx + 0.46, gy + 0.46, H, '#bfe6df', '#8fc7bd', '#7bb3a9');
+      var m = iso(gx, gy), topY = m.y - H;
+      c.fillStyle = '#f7f3e8'; c.fillRect(m.x - 9, topY - 1, 10, 7);      // adoption papers
+      c.strokeStyle = '#9aa4ad'; c.lineWidth = 0.8;
+      c.beginPath(); c.moveTo(m.x - 7, topY + 1); c.lineTo(m.x - 1, topY + 1); c.stroke();
+      c.beginPath(); c.moveTo(m.x - 7, topY + 3); c.lineTo(m.x - 1, topY + 3); c.stroke();
+      c.fillStyle = '#e8514a';                                           // heart
+      c.beginPath(); c.arc(m.x + 5, topY + 1, 2, 0, Math.PI * 2); c.arc(m.x + 8, topY + 1, 2, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.moveTo(m.x + 3, topY + 2); c.lineTo(m.x + 6.5, topY + 6); c.lineTo(m.x + 10, topY + 2); c.closePath(); c.fill();
+    }
+    // Ghost for the 4×5 adoption centre: footprint tint + pen/counter previews.
+    function drawAdoptionGhost(rot) {
+      var ok = canPlaceAdoption(pointer.gx, pointer.gy);
+      ctx.save();
+      ctx.fillStyle = ok ? 'rgba(76,196,106,0.34)' : 'rgba(224,86,63,0.42)';
+      adoptionTiles(pointer.gx, pointer.gy).forEach(function (t) { var s = iso(t.x, t.y); diamondPath(ctx, s.x, s.y); ctx.fill(); });
+      ctx.restore();
+      ghostCtx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ghostCtx.clearRect(0, 0, view.w, view.h);
+      var gk = adoptionKeyTiles(pointer.gx, pointer.gy);
+      gk.pens.forEach(function (t) { drawAdoptPen(ghostCtx, t.x, t.y); });
+      drawAdoptCounter(ghostCtx, gk.counter.x, gk.counter.y);
+      if (!ok) { ghostCtx.save(); ghostCtx.globalCompositeOperation = 'source-atop'; ghostCtx.fillStyle = 'rgba(222,58,44,0.6)'; ghostCtx.fillRect(0, 0, view.w, view.h); ghostCtx.restore(); }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 0.72; ctx.drawImage(ghostC, 0, 0);
+      ctx.globalAlpha = 1; ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    }
     function drawShopGhost(rot) {
       var ok = canPlaceShop(pointer.gx, pointer.gy);
       ctx.save();
@@ -4041,6 +4273,7 @@
       if (item.kind === 'grooming') { drawGroomGhost(rot); return; }
       if (item.kind === 'hotel') { drawHotelGhost(); return; }
       if (item.kind === 'surgery') { drawSurgeryGhost(rot); return; }
+      if (item.kind === 'adoption') { drawAdoptionGhost(rot); return; }
       if (item.kind === 'pharmstaff') { drawPharmStaffGhost(); return; }
       if (item.kind === 'cleaner') { drawCleanerGhost(); return; }
       if (item.kind === 'worker') { drawWorkerGhost(); return; }
@@ -4127,6 +4360,7 @@
       for (i = groomings.length - 1; i >= 0; i--) if (inTiles(groomTiles(groomings[i].gx, groomings[i].gy))) return { kind: 'grooming', room: groomings[i], arr: groomings, idx: i };
       for (i = hotels.length - 1; i >= 0; i--) if (inTiles(hotelTiles(hotels[i].gx, hotels[i].gy))) return { kind: 'hotel', room: hotels[i], arr: hotels, idx: i };
       for (i = surgeries.length - 1; i >= 0; i--) if (inTiles(surgeryTiles(surgeries[i].gx, surgeries[i].gy))) return { kind: 'surgery', room: surgeries[i], arr: surgeries, idx: i };
+      for (i = adoptions.length - 1; i >= 0; i--) if (inTiles(adoptionTiles(adoptions[i].gx, adoptions[i].gy))) return { kind: 'adoption', room: adoptions[i], arr: adoptions, idx: i };
       for (i = restrooms.length - 1; i >= 0; i--) if (inTiles(footprintTiles(FURN_BY_ID.restroom, restrooms[i].gx, restrooms[i].gy, restrooms[i].rot || 0))) return { kind: 'restroom', room: restrooms[i], arr: restrooms, idx: i };
       return null;
     }
@@ -4149,6 +4383,7 @@
       else if (rh.kind === 'grooming') { clearFloor(groomTiles(r.gx, r.gy)); groomStations(r.gx, r.gy).forEach(function (s) { delete occupied[s.fixture.x + ',' + s.fixture.y]; }); }
       else if (rh.kind === 'hotel') { clearFloor(hotelTiles(r.gx, r.gy)); hotelBeds(r, 'dog').concat(hotelBeds(r, 'cat'), hotelDeskTiles(r.gx, r.gy), hotelPlantTiles(r.gx, r.gy)).forEach(function (t) { delete occupied[t.x + ',' + t.y]; }); }
       else if (rh.kind === 'surgery') { var sk = surgeryKeyTiles(r.gx, r.gy); clearFloor(surgeryTiles(r.gx, r.gy)); [sk.table, sk.monitor, sk.trolley].forEach(function (t) { delete occupied[t.x + ',' + t.y]; }); }
+      else if (rh.kind === 'adoption') { var ak = adoptionKeyTiles(r.gx, r.gy); clearFloor(adoptionTiles(r.gx, r.gy)); ak.pens.concat([ak.counter]).forEach(function (t) { delete occupied[t.x + ',' + t.y]; }); }
       else if (rh.kind === 'restroom') { clearFloor(footprintTiles(FURN_BY_ID.restroom, r.gx, r.gy, r.rot || 0)); delete occupied[r.toilet.x + ',' + r.toilet.y]; }
       rh.arr.splice(rh.idx, 1);
     }
@@ -4251,6 +4486,14 @@
         }
         return;
       }
+      if (item.kind === 'adoption') {       // 4x5 adoption centre (surrender / adopt pets)
+        if (pointer.on && canPlaceAdoption(pointer.gx, pointer.gy)) {
+          placeAdoption(pointer.gx, pointer.gy, rot);
+          if (!placing.moving) { money -= item.cost; renderMoney(); }
+          placing.origRoom = null; cancelPlacing();
+        }
+        return;
+      }
       if (item.kind === 'pharmstaff') {     // hire a Pharmacist onto a counter circle
         var pc = nearestPharmCircle();
         if (pointer.on && pc && pc.ok) {
@@ -4304,6 +4547,7 @@
         else if (rr.kind === 'grooming') placeGrooming(rr.gx, rr.gy, rr.rot);
         else if (rr.kind === 'hotel') placeHotel(rr.gx, rr.gy, rr.rot);
         else if (rr.kind === 'surgery') placeSurgery(rr.gx, rr.gy, rr.rot);
+        else if (rr.kind === 'adoption') placeAdoption(rr.gx, rr.gy, rr.rot);
       }
       placing = null;
       document.body.classList.remove('placing');
@@ -4538,8 +4782,16 @@
         { x: DOOR_MID, y: ROOM - 1.4 }     // step inside, then head to the queue slot
       ];
       v.wp = 0;
-      // EVERY visitor checks in at reception first — their journey (exam, park,
-      // shop, pharmacy, groom) is rolled at the desk (see serveVisitor/rollIntent).
+      // EVERY visitor checks in at reception first. Their journey is rolled here
+      // at spawn (one draw) so an adopting client can arrive PET-LESS; the
+      // pharm/groom flags stay inert until they're served (assigners gate on it).
+      v.intent = rollIntent();
+      if (v.intent === 'pharm') v.needsMeds = true;
+      if (v.intent === 'groom') v.wantsGroom = true;
+      if (v.intent === 'adoption') {
+        v.adoptGive = Math.random() < 0.5;   // half give a pet away, half come to adopt one
+        v.petless = !v.adoptGive;            // adopters walk in empty-handed
+      }
       queue[line].push(v);
       visitors.push(v);
     }
@@ -4556,7 +4808,14 @@
           // to use a dirty room, which cancels the positive effect (stays flat).
           // As a clinic gets great (low frq), each happy visit speeds arrivals
           // MORE, so an excellent clinic can ride the pace all the way to ~1/sec.
-          if (!v.usedDirtyRoom) { var boost = frq < 12 ? 1 + (12 - frq) / 12 : 1; frq = Math.max(1, frq - diff().up * boost); }
+          // BUT word of mouth only spreads while reception keeps up: if the queues
+          // are visibly backed up (>2 waiting per line), the pace holds instead of
+          // accelerating past what the desks can absorb — without this, a happy
+          // streak floods the queue, the flood dies in line, and the rating
+          // whipsaws between packed and dead.
+          var qload = 0; queue.forEach(function (q) { qload += q.length; });
+          var keepingUp = qload <= queue.length * 2;
+          if (!v.usedDirtyRoom && keepingUp) { var boost = frq < 12 ? 1 + (12 - frq) / 12 : 1; frq = Math.max(1, frq - diff().up * boost); }
         } else frq = Math.min(100, frq + diff().down);          // unhappy (gave up / accident / service never completed — even if the room was never built) → arrivals slow down. This is the SELF-REGULATOR: an over-promising clinic gets pushed back to a rate it can actually serve.
         renderRating();                                         // arrival rate changed → refresh rating
         floatRatingDelta(ratingValue() - rBefore);              // animate the +/- change out of the chip
@@ -4781,6 +5040,9 @@
       for (i = 0; i < surgeries.length; i++) { rm = surgeries[i];
         if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + SURG_W && ay >= rm.gy && ay < rm.gy + SURG_H,
                              bx >= rm.gx && bx < rm.gx + SURG_W && by >= rm.gy && by < rm.gy + SURG_H)) return true; }
+      for (i = 0; i < adoptions.length; i++) { rm = adoptions[i];
+        if (crosses(rm.door, ax >= rm.gx && ax < rm.gx + ADOPT_W && ay >= rm.gy && ay < rm.gy + ADOPT_H,
+                             bx >= rm.gx && bx < rm.gx + ADOPT_W && by >= rm.gy && by < rm.gy + ADOPT_H)) return true; }
       for (i = 0; i < restrooms.length; i++) { rm = restrooms[i];
         fp = footprintTiles(FURN_BY_ID.restroom, rm.gx, rm.gy, rm.rot);
         inA = fp.some(function (t) { return t.x === ax && t.y === ay; });
@@ -5039,6 +5301,38 @@
       for (var i = 0; i < waiting.length; i++)
         if (!tryShop(waiting[i])) break;     // no free/reachable aisle → retry next frame
     }
+    // ---- Adoption flow -----------------------------------------------------
+    // Route a waiting adoption client to a free centre's counter. A GIVER needs a
+    // free pen; an ADOPTER needs a pet in stock. No centre / full pens / empty
+    // pens → they keep waiting and patience bails them out unhappy (the usual
+    // build-it pressure). Route-before-claim like every other service.
+    function claimAdoption(v) {
+      for (var i = 0; i < adoptions.length; i++) {
+        var rm = adoptions[i];
+        if (rm.occupant || beingCleaned(rm)) continue;
+        if (v.adoptGive ? rm.stock.length >= ADOPT_PENS : rm.stock.length === 0) continue;
+        var k = adoptionKeyTiles(rm.gx, rm.gy);
+        var path = examRoute(v.x, v.y, k.visitor.x, k.visitor.y);
+        if (!examRouteReached) continue;
+        rm.occupant = v; v.adoptRoom = rm;
+        v.seated = false; v.chair = null; v.sideIdx = -1; v.patience = baseWait();
+        v.path = path; v.wp = 0; v.phase = 'toAdopt';
+        return true;
+      }
+      return false;
+    }
+    function releaseAdopt(v) {
+      if (v.adoptRoom) { if (v.adoptRoom.occupant === v) v.adoptRoom.occupant = null; v.adoptRoom = null; }
+    }
+    function assignAdoptions() {
+      var waiting = visitors.filter(function (v) {
+        return v.intent === 'adoption' && !v.adopted && !v.surrendered && !v.adoptRoom &&
+          (v.phase === 'served' || v.phase === 'idle' || v.phase === 'toChair' || v.phase === 'seated');
+      }).sort(function (a, b) { return (a.ticket || 0) - (b.ticket || 0); });
+      // No break-on-fail here: a giver blocked by full pens must not starve an
+      // adopter behind them (whose constraint — stock > 0 — is the opposite).
+      for (var i = 0; i < waiting.length; i++) claimAdoption(waiting[i]);
+    }
 
     // ---- Hotel boarding flow ----------------------------------------------
     // Owners flagged wantsHotel walk to the desk, hand the pet over and leave; the
@@ -5192,7 +5486,8 @@
       });
       pharmacies.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.gx, y: rm.gy + 2, goal: ROOM_CLEAN_TIME }); });   // column-0 lane, front row
       shops.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.gx + 2, y: rm.gy + 3, goal: ROOM_CLEAN_TIME }); });    // centre of the front aisle
-      restrooms.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.stand.x, y: rm.stand.y, goal: ROOM_CLEAN_TIME * 2 }); });
+      adoptions.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: adoptionKeyTiles(rm.gx, rm.gy).circle.x, y: adoptionKeyTiles(rm.gx, rm.gy).circle.y, goal: ROOM_CLEAN_TIME }); });
+      restrooms.forEach(function (rm) { if (rm.dirty) out.push({ rm: rm, x: rm.stand.x, y: rm.stand.y, goal: ROOM_CLEAN_TIME * 2, restroom: true }); });
       hotels.forEach(function (h) {          // each wing is its own scrub job (they dirty independently)
         if (h.wings.dog.dirty) { var sd = hotelWingScrub(h, 'dog'); out.push({ rm: h.wings.dog, x: sd.x, y: sd.y, goal: ROOM_CLEAN_TIME }); }
         if (h.wings.cat.dirty) { var sc = hotelWingScrub(h, 'cat'); out.push({ rm: h.wings.cat, x: sc.x, y: sc.y, goal: ROOM_CLEAN_TIME }); }
@@ -5219,7 +5514,7 @@
     // Non-operating rooms (pharmacy/shop) accumulate grime over time and turn dirty
     // once their grime timer runs out — regardless of how much they're used.
     function updateRoomGrime(dt) {
-      pharmacies.concat(shops).forEach(function (rm) {
+      pharmacies.concat(shops, adoptions).forEach(function (rm) {
         if (rm.dirty) return;
         if (rm.grimeT == null) rm.grimeT = ROOM_GRIME_TIME * (0.7 + Math.random() * 0.6);
         rm.grimeT -= dt;
@@ -5241,10 +5536,17 @@
     }
     // The clean jobs a cleaner can take: every puddle plus every dirty room's
     // circle. Each carries a back-ref so the cleaner knows when its job is done.
+    // Jobs carry a PRIORITY (lower = more urgent): pee accidents first (their
+    // 2x-impatience aura poisons everyone waiting nearby), then dirty restrooms
+    // (unblocks the whole bladder pipeline — a blocked restroom CAUSES the next
+    // accident), then park poo, then dirty rooms, and mundane litter last.
     function cleanTargets() {
       var jobs = [];
-      puddles.forEach(function (pd) { jobs.push({ x: pd.x, y: pd.y, pd: pd }); });
-      dirtyRooms().forEach(function (j) { jobs.push({ x: j.x, y: j.y, room: j.rm }); });
+      puddles.forEach(function (pd) {
+        var pri = pd.kind === 'litter' ? 4 : pd.kind === 'poo' ? 2 : 0;
+        jobs.push({ x: pd.x, y: pd.y, pd: pd, pri: pri });
+      });
+      dirtyRooms().forEach(function (j) { jobs.push({ x: j.x, y: j.y, room: j.rm, pri: j.restroom ? 1 : 3 }); });
       return jobs;
     }
     function targetGone(t) {
@@ -5258,6 +5560,9 @@
     // once they're standing on the spot). An unreachable job is skipped WITHOUT
     // claiming it, so one blocked mess can never freeze the whole cleaning staff.
     function updateCleaner(c, dt) {
+      if (!isRoomFloor(Math.round(c.x), Math.round(c.y))) {   // floor deleted under them → back to the clinic
+        c.x = ROOM / 2 - 0.5; c.y = ROOM - 1.5; c.target = null; c.path = null; c.moving = false;
+      }
       if (targetGone(c.target)) { c.target = null; c.path = null; }
       if (!c.target) {
         c.retryT = (c.retryT || 0) - dt;
@@ -5267,7 +5572,8 @@
         var claimed = [];
         cleaners.forEach(function (o) { if (o !== c && o.target) claimed.push(o.target.pd || o.target.room); });
         var jobs = cleanTargets().filter(function (j) { return claimed.indexOf(j.pd || j.room) < 0; })
-          .sort(function (a, b) {
+          .sort(function (a, b) {           // urgency first, then nearest
+            if (a.pri !== b.pri) return a.pri - b.pri;
             return (Math.abs(c.x - a.x) + Math.abs(c.y - a.y)) - (Math.abs(c.x - b.x) + Math.abs(c.y - b.y));
           });
         for (var i = 0; i < jobs.length; i++) {   // nearest job the cleaner can actually walk to
@@ -5456,17 +5762,28 @@
       c.restore();
     }
 
-    // The exam-room circle nearest the cursor (for placing a Vet), with validity.
+    // The vet-workable circle nearest the cursor (for placing a Vet), with
+    // validity. Vets man exam circles, X-ray circles AND the two surgeon
+    // circles flanking an operating table — so a Vet can be dropped straight
+    // into any of those rooms, however far from the clinic it was built.
     function nearestExamCircle() {
-      var rooms = examRooms.concat(xrayRooms);    // a Vet can man an exam OR an X-ray circle
-      if (!rooms.length) return null;
-      var best = null, bd = 1e9;
-      rooms.forEach(function (rm) {
+      var cands = [];
+      examRooms.concat(xrayRooms).forEach(function (rm) {
         var k = examKeyTiles(rm.gx, rm.gy, rm.rot);
-        var d = Math.abs(pointer.gx - k.circle.x) + Math.abs(pointer.gy - k.circle.y);
-        if (d < bd) { bd = d; best = { room: rm, x: k.circle.x, y: k.circle.y }; }
+        cands.push({ room: rm, x: k.circle.x, y: k.circle.y });
       });
-      if (best) best.ok = true;                   // a roaming Vet can be hired from any room circle
+      surgeries.forEach(function (rm) {
+        var k = surgeryKeyTiles(rm.gx, rm.gy);
+        cands.push({ room: rm, x: k.vetA.x, y: k.vetA.y });
+        cands.push({ room: rm, x: k.vetB.x, y: k.vetB.y });
+      });
+      if (!cands.length) return null;
+      var best = null, bd = 1e9;
+      cands.forEach(function (c) {
+        var d = Math.abs(pointer.gx - c.x) + Math.abs(pointer.gy - c.y);
+        if (d < bd) { bd = d; best = c; }
+      });
+      best.ok = true;                             // a roaming Vet can be hired from any room circle
       return best;
     }
 
@@ -5698,7 +6015,11 @@
     // A waiting client within 3 tiles of a puddle gets impatient twice as fast.
     function nearPee(v) {
       var vx = Math.round(v.x), vy = Math.round(v.y);
-      return puddles.some(function (p) { return Math.abs(p.x - vx) <= 3 && Math.abs(p.y - vy) <= 3; });
+      // Only genuinely gross messes (pee accidents, park poo) repulse waiters —
+      // NOT dropped litter, which shares the puddles array but is mundane. With
+      // litter falling constantly around the queue, counting it doubled everyone's
+      // patience drain and killed the line while rooms sat empty.
+      return puddles.some(function (p) { return p.kind !== 'litter' && Math.abs(p.x - vx) <= 3 && Math.abs(p.y - vy) <= 3; });
     }
     // Combined wait-drain multiplier: a TV halves it, nearby pee doubles it.
     // A patient assigned to (walking into or sitting in) a dirty operating room
@@ -5729,9 +6050,8 @@
       // independent RNG count), fixed weights from INTENT_WEIGHTS. pharm/groom
       // just set the existing flags; the central assigners take it from there.
       // park/shop get their own assigners (assignParks/assignShops).
-      v.intent = rollIntent();
-      if (v.intent === 'pharm') v.needsMeds = true;
-      if (v.intent === 'groom') v.wantsGroom = true;
+      // (the primary intent is rolled at SPAWN — adopters must arrive pet-less —
+      // and only becomes actionable now that the client is checked in)
       // 15% of exam-goers board their pet at the hotel instead (needs 3 workers
       // on post, a clean wing + free bed). Guards sit BEFORE the draw so
       // hotel-less games keep an identical RNG stream.
@@ -6067,6 +6387,56 @@
         }
         return;
       }
+      if (v.phase === 'toAdopt') {          // walking to the adoption counter
+        var adt = v.path[v.wp];
+        if (stepToward(v, adt.x, adt.y, dt, 0.08)) {
+          v.wp++;
+          if (v.wp >= v.path.length) {
+            var ak2 = adoptionKeyTiles(v.adoptRoom.gx, v.adoptRoom.gy);
+            v.x = ak2.visitor.x; v.y = ak2.visitor.y; v.moving = false;
+            v.dir = chooseDir(ak2.counter.x - v.x, ak2.counter.y - v.y);   // face the counter
+            v.phase = 'inAdopt'; v.adoptT = 3;   // paperwork takes a moment
+          }
+        }
+        v.patience -= dt * drainMult(v);     // blocked walk → give up rather than freeze
+        if (v.patience <= 0) { releaseAdopt(v); leaveOutbound(v); }
+        return;
+      }
+      if (v.phase === 'inAdopt') {          // at the counter: hand a pet over, or take one home
+        v.moving = false;
+        // The paperwork needs someone BEHIND the counter: the player (full rate)
+        // or a Worker on the 'adopt:i' post (half rate, like every worker task).
+        // Unmanned → the client's patience drains and they give up unhappy.
+        var aclk = adoptionKeyTiles(v.adoptRoom.gx, v.adoptRoom.gy).clerk;
+        v.processing = playerAtTile(aclk) || workerAtTile(aclk);
+        if (!v.processing) {
+          v.patience -= dt * drainMult(v);
+          if (v.patience <= 0) { releaseAdopt(v); leaveOutbound(v); }
+          return;
+        }
+        v.adoptT -= dt * (playerAtTile(aclk) ? 1 : 0.5);
+        if (v.adoptT <= 0) {
+          var arm = v.adoptRoom;
+          if (v.adoptGive) {                 // surrender: the pet moves into a pen
+            if (arm && arm.stock.length < ADOPT_PENS) arm.stock.push(v.pet);
+            v.petless = true; v.surrendered = true;
+            money += SURRENDER_FEE; renderMoney();
+            floaters.push({ v: v, t: 0, amt: SURRENDER_FEE });
+            v.happy = true; releaseAdopt(v); leaveOutbound(v);
+          } else {                           // adopt: take the longest-waiting pet home
+            if (arm && arm.stock.length) { v.pet = arm.stock.shift(); v.petless = false; }
+            v.adopted = true;
+            money += ADOPT_FEE; renderMoney();
+            floaters.push({ v: v, t: 0, amt: ADOPT_FEE });
+            v.happy = true; releaseAdopt(v);
+            // Straight to the shop for the new pet's essentials (bed, food, toys) —
+            // a guaranteed trip when a shop exists and its aisle is reachable.
+            if (!v.shopped && shops.length && tryShop(v)) return;
+            leaveOutbound(v);
+          }
+        }
+        return;
+      }
       if (v.phase === 'toDogPark') {        // walking out to their spot of grass
         var dpt = v.path[v.wp];
         if (stepToward(v, dpt.x, dpt.y, dt, 0.08)) {
@@ -6178,8 +6548,11 @@
         // action circle for that line, OR a hired receptionist mans it; bar fills.
         v.processing = (reached && (queue[v.line] || [])[0] === v && (vetAtStation(v.line) || staffAtStation(v.line)));
         if (v.processing) {
-          // the player works at full speed; a hired receptionist is 50% as effective
-          v.procT = (v.procT || 0) + dt * (vetAtStation(v.line) ? 1 : 0.5);
+          // Hired receptionists check in at FULL rate — reception is the single
+          // entry pipeline for every service, so a half-rate desk starves the
+          // whole clinic (patients died in the queue while rooms sat empty).
+          // The Processing skill still speeds check-in further for everyone.
+          v.procT = (v.procT || 0) + dt;
           if (v.procT >= procTime()) serveVisitor(v);
         }
         return;
@@ -6382,6 +6755,13 @@
       if (!o || (o.phase !== 'toSurgery' && o.phase !== 'inSurgery')) return null;
       return surgeryKeyTiles(rm.gx, rm.gy).worker;
     }
+    // Adoption post: the clerk tile behind the handover counter, live while a
+    // client is walking to or standing at it (same service tier as the hotel).
+    function adoptWorkerCircle(rm) {
+      var o = rm.occupant;
+      if (!o || (o.phase !== 'toAdopt' && o.phase !== 'inAdopt')) return null;
+      return adoptionKeyTiles(rm.gx, rm.gy).clerk;
+    }
     // Shop posts: the two back aisles beside the register + the old front-aisle spot.
     function shopWorkTiles(s) {
       return [{ x: s.gx + 1, y: s.gy + 1 }, { x: s.gx + 3, y: s.gy + 1 }, { x: s.gx + 2, y: s.gy + 3 }];
@@ -6399,6 +6779,10 @@
       for (i = 0; i < hotels.length; i++) {
         var wt = hotelWorkTiles(hotels[i]);
         for (j = 0; j < wt.length; j++) out.push({ key: 'hotel:' + i + ':' + j, pri: 1, tile: wt[j], room: hotels[i] });
+      }
+      for (i = 0; i < adoptions.length; i++) {           // adoption clerk, live while a client is at/heading to the counter
+        var ac = adoptWorkerCircle(adoptions[i]);
+        if (ac) out.push({ key: 'adopt:' + i, pri: 1, tile: ac, room: adoptions[i] });
       }
       for (i = 0; i < shops.length; i++) {
         var st = shopWorkTiles(shops[i]);
@@ -6521,6 +6905,7 @@
       assignGrooming();                      // hand free grooming rooms to clients wanting a groom
       assignParks();                         // send park-intent clients to the turf / cat room
       assignShops();                         // send shop-intent clients to a free aisle spot
+      assignAdoptions();                     // send adoption clients to a centre counter
       assignHotels();                        // route boarding clients to a hotel desk
       updateVets(dt);                        // roaming vets move between rooms that need them
       updateWorkers(dt);                     // one worker pool staffs grooming, the hotel and the shop (posts)
@@ -6646,6 +7031,7 @@
       });
       pharmacies.forEach(function (rm) { if (rm.dirty) pharmTiles(rm.gx, rm.gy).forEach(washDirtTile); });
       shops.forEach(function (rm) { if (rm.dirty) shopTiles(rm.gx, rm.gy).forEach(washDirtTile); });
+      adoptions.forEach(function (rm) { if (rm.dirty) adoptionTiles(rm.gx, rm.gy).forEach(washDirtTile); });
       hotels.forEach(function (h) {                     // grime wash stays confined to the dirty wing
         if (h.wings.dog.dirty) hotelWingTiles(h, 'dog').forEach(washDirtTile);
         if (h.wings.cat.dirty) hotelWingTiles(h, 'cat').forEach(washDirtTile);
@@ -6883,6 +7269,20 @@
           scene.push({ d: ct.x + ct.y, fn: function () {
             staffSprite('ca' + (sh.cashierGender || 'male'), ct.x, ct.y, function (c, gx, gy) { drawCashier(c, gx, gy, sh.cashierGender || 'male'); });
           } });
+      });
+      adoptions.forEach(function (ad) {                  // adoption pens (+ waiting pets) & counter
+        var ak = adoptionKeyTiles(ad.gx, ad.gy);
+        ak.pens.forEach(function (t, pi) {
+          var kind = ad.stock[pi] || null;               // pet waiting in this pen, if any
+          scene.push({ d: t.x + t.y, fn: function () {
+            drawAdoptPen(ctx, t.x, t.y);
+            if (kind) {                                  // peeking over the rail, gently bobbing
+              var ps = iso(t.x, t.y), bob = Math.sin(animT * 1.8 + pi) * 0.8;
+              (kind === 'cat' ? cachedCat : cachedDog)({ pet: kind }, ps.x, ps.y - 10 + bob, pi % 2 === 0, { leash: false });
+            }
+          } });
+        });
+        scene.push({ d: ak.counter.x + ak.counter.y, fn: function () { drawAdoptCounter(ctx, ak.counter.x, ak.counter.y); } });
       });
       hotels.forEach(function (h) {                      // hotel beds (+ sleeping guests), desk, plants, roaming pets
         ['dog', 'cat'].forEach(function (sp) {
@@ -7149,6 +7549,7 @@
           dogDirty: !!h.wings.dog.dirty, catDirty: !!h.wings.cat.dirty,
           pets: (h.pets || []).map(function (p) { return { kind: p.kind, bed: p.bed, stayT: Math.round(p.stayT * 10) / 10, fee: p.fee }; }) }; }),
         surgeries:  (surgeries || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0, uses: r.uses || 0, dirty: !!r.dirty }; }),
+        adoptions:  (adoptions || []).map(function (r) { return { gx: r.gx, gy: r.gy, rot: r.rot || 0, dirty: !!r.dirty, stock: (r.stock || []).slice() }; }),
         pharmacies: (pharmacies || []).map(function (r) {
           return { gx: r.gx, gy: r.gy, rot: r.rot || 0,
                    stations: (r.stations || []).map(function (s) { return { pharm: s.pharm ? { name: s.pharm.name || '', gender: s.pharm.gender || 'male' } : false }; }) };
@@ -7176,6 +7577,7 @@
       examRooms.forEach(function (r) { r.occupant = null; r.examT = 0; r.cleanProg = 0; });
       xrayRooms.forEach(function (r) { r.occupant = null; r.xrayT = 0; r.cleanProg = 0; });
       surgeries.forEach(function (r) { r.occupant = null; r.surgT = 0; r.cleanProg = 0; });
+      adoptions.forEach(function (r) { r.occupant = null; r.cleanProg = 0; });   // stock persists (it's saved)
       restrooms.forEach(function (r) { r.occupant = null; });
       pharmacies.forEach(function (p) { (p.stations || []).forEach(function (s) { s.patient = null; s.procT = 0; }); });
       groomings.forEach(function (r) { r.occupant = null; r.showerT = 0; r.dryT = 0; });
@@ -7261,6 +7663,7 @@
       if (typeof placeGrooming === 'function') (data.groomings || []).forEach(function (r) { placeGrooming(r.gx, r.gy, r.rot || 0); });
       if (typeof placeHotel === 'function')    (data.hotels || []).forEach(function (r) { placeHotel(r.gx, r.gy, r.rot || 0); });
       if (typeof placeSurgery === 'function')  (data.surgeries || []).forEach(function (r) { var rm = placeSurgery(r.gx, r.gy, r.rot || 0); if (rm) { rm.uses = r.uses || 0; rm.dirty = !!r.dirty; } });
+      if (typeof placeAdoption === 'function') (data.adoptions || []).forEach(function (r) { var rm = placeAdoption(r.gx, r.gy, r.rot || 0); if (rm) { rm.dirty = !!r.dirty; rm.stock = (r.stock || []).slice(0, ADOPT_PENS); } });
       _suspendStatic = false;
       // per-room persistent extras, by index (push order matches save order)
       (data.xrayRooms || []).forEach(function (r, i) { if (xrayRooms[i]) xrayRooms[i].vet = !!r.vet; });
@@ -7469,6 +7872,9 @@
       placePharm: function (gx, gy, rot) { if (!canPlacePharmacy(gx, gy)) return false; placePharmacy(gx, gy, rot || 0); return pharmacies[pharmacies.length - 1]; },
       canSurgery: function (gx, gy) { return canPlaceSurgery(gx, gy); },
       placeSurgery: function (gx, gy, rot) { if (!canPlaceSurgery(gx, gy)) return false; placeSurgery(gx, gy, rot || 0); return surgeryKeyTiles(gx, gy); },
+      placeAdopt: function (gx, gy, rot) { if (!canPlaceAdoption(gx, gy)) return false; placeAdoption(gx, gy, rot || 0); return adoptionKeyTiles(gx, gy); },
+      adoptList: function () { return adoptions.map(function (r) { return { gx: r.gx, gy: r.gy, occ: !!r.occupant, stock: r.stock.slice(), dirty: !!r.dirty }; }); },
+      stockAdopt: function (n, kinds) { var r = adoptions[n || 0]; if (!r) return false; r.stock = (kinds || ['dog-s', 'cat']).slice(0, ADOPT_PENS); return r.stock.slice(); },
       surgeries: function () { return surgeries.map(function (r) { return { gx: r.gx, gy: r.gy, occupied: !!r.occupant, surgT: Math.round((r.surgT||0)*10)/10, uses: r.uses||0, dirty: !!r.dirty, staffed: surgeryStaffed(r), door: r.door, cleanProg: Math.round((r.cleanProg||0)*10)/10 }; }); },
       surgSend: function (i) { var v = visitors[i || 0]; if (!v) return false; v.needsSurgery = true; return claimSurgery(v); },
       canShop: function (gx, gy) { return canPlaceShop(gx, gy); },
@@ -7525,6 +7931,7 @@
       happyStats: function () { return { happy: departStats.happy, unhappy: departStats.unhappy }; },
       setIntentWeights: function (o) { for (var k in o) INTENT_WEIGHTS[k] = o[k]; return INTENT_WEIGHTS; },
       rollIntents: function (n) { var c = {}; for (var i = 0; i < (n || 1000); i++) { var k = rollIntent(); c[k] = (c[k] || 0) + 1; } return c; },
+      vetCircleAt: function (gx, gy) { pointer.gx = gx; pointer.gy = gy; pointer.on = true; var ec = nearestExamCircle(); return ec ? { x: ec.x, y: ec.y, ok: ec.ok } : null; },
       vpos: function () { return visitors.map(function (v) { return { id: v.id, phase: v.phase, x: v.x, y: v.y, moving: !!v.moving, seated: !!v.seated }; }); },
       setFrq: function (f) { frq = f; if (typeof renderRating === 'function') renderRating(); return { frq: frq, rating: Math.round((100 / frq) * 100) / 100 }; },
       countSpawns: function (secs) { var n0 = visitorSeq; var steps = Math.round((secs || 5) * 30); for (var i = 0; i < steps; i++) update(1 / 30); return { spawned: visitorSeq - n0, secs: secs || 5, frq: frq }; },
@@ -7537,7 +7944,8 @@
       hireCleaner: function () { cleaners.push({ x: ROOM / 2 - 0.5, y: ROOM - 1.5, speed: 2.3, dir: 'SE', walkPhase: 0, moving: false, target: null, path: null, wp: 0, name: '', gender: randGender() }); return cleaners.length; },
       overlaps: function () { var occ = {}, n = 0; visitors.forEach(function (v) { if (v.moving) return; var k = Math.round(v.x) + ',' + Math.round(v.y); if (occ[k]) n++; occ[k] = 1; }); return n; },
       overlapInfo: function () { var occ = {}, hits = []; visitors.forEach(function (v) { if (v.moving) return; var k = Math.round(v.x) + ',' + Math.round(v.y); if (occ[k]) hits.push({ tile: k, a: occ[k], b: v.phase }); else occ[k] = v.phase; }); return hits; },
-      qat: function (x, y) { return visitors.filter(function (v) { return Math.round(v.x) === x && Math.round(v.y) === y; }).map(function (v) { return { ph: v.phase, line: v.line, idx: (v.line != null && queue[v.line]) ? queue[v.line].indexOf(v) : '-', slot: v.phase === 'queuing' ? slotPos(v) : null, mv: !!v.moving }; }); },
+      qat: function (x, y) { return visitors.filter(function (v) { return Math.round(v.x) === x && Math.round(v.y) === y; }).map(function (v) { return { ph: v.phase, line: v.line, idx: (v.line != null && queue[v.line]) ? queue[v.line].indexOf(v) : '-', slot: v.phase === 'queuing' ? slotPos(v) : null, mv: !!v.moving, procT: Math.round((v.procT || 0) * 100) / 100, proc: !!v.processing, pat: Math.round((v.patience || 0) * 10) / 10 }; }); },
+      queueDebug: function () { return queue.map(function (q, L) { return { line: L, n: q.length, manned: staffAtStation(L), front: q[0] ? { id: q[0].id, ph: q[0].phase, procT: Math.round((q[0].procT || 0) * 100) / 100, proc: !!q[0].processing, pat: Math.round((q[0].patience || 0) * 10) / 10, x: Math.round(q[0].x * 10) / 10, y: Math.round(q[0].y * 10) / 10, slot: q[0].phase === 'queuing' ? slotPos(q[0]) : null } : null }; }); },
       staffList: function () { var a = []; eachStaffHandle(function (h) { var t = h.tile(); a.push({ kind: h.kind, name: h.getName(), gender: h.getGender(), cost: h.cost, tile: { x: t.x, y: t.y } }); }); return a; },
       staffAt: function (gx, gy) { var h = staffAt(gx, gy); return h ? { kind: h.kind, name: h.getName(), gender: h.getGender() } : null; },
       _handle: function (kind, n) { var c = 0, out = null; eachStaffHandle(function (h) { if (h.kind === kind && c++ === (n || 0)) out = h; }); return out; },   // Nth handle of a kind

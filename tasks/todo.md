@@ -251,3 +251,26 @@ stations when placing a receptionist.
 ### Not committed
 Another instance was concurrently editing main.js (waited for quiet before each edit);
 left uncommitted for Dan / next commit sweep.
+
+## Pet Vet: fix — bubble shows one service, visitor goes to another (2026-07-05, session "janitors")
+
+### Root cause
+The intent rework (eec96d3) routes served visitors by `v.intent` ('exam'|'pharm'|'park'|'shop'|'groom'),
+but `visitorEmoji` still derived the bubble from legacy flags only. `!v.examined -> stethoscope` sat above
+the meds check, and park/shop had no waiting-state branch at all — so pharmacy-intent clients showed the
+stethoscope for their ENTIRE visit (walking to + standing at the counter), and park/shop-intent clients
+showed it while waiting to head out.
+
+### Fix
+Three intent-aware lines in visitorEmoji, inserted between the reception check and the exam fallthrough:
+meds-without-exam -> pill, intent 'park' && !parkDone -> paws, intent 'shop' && !shopped -> bags.
+
+### Verification (headless, 240 sim-seconds, all services built)
+Zero phase/emoji mismatches; toPharm/inPharm now sample as the pill emoji, waiting park clients as paws,
+shop as bags; exam-intent visitors still show the stethoscope (correct).
+Harness note: __t.placeDesk() REQUIRES coordinates (e.g. placeDesk(3,1,0)) — argless places a desk at
+undefined coords, queue slots become NaN and reception never serves (this was yesterday's "reception
+doesn't serve in tests" mystery, not a game bug).
+
+### Not committed
+Other instance has in-flight uncommitted work in the same file.

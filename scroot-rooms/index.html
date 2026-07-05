@@ -398,7 +398,7 @@
       slides = [];
       const sc = pickSpot(3); slides.push({ x: sc.x, y: sc.y });
 
-      // hunters: Captain Clark + (from level 2) the Bacteria
+      // hunters: Captain Clark + (from level 5) the Bacteria
       entities = [];
       function spawnHunter(type, speed) {
         for (let g = 0; g < 600; g++) {
@@ -411,24 +411,27 @@
       }
       // Captain Clark always stalks; each place then has its own signature
       // hunter so the levels feel distinct, plus the Bacteria infesting some.
-      const clarks = clamp(1 + Math.floor((lvl - 1) / 3), 1, 3);
+      // The pack grows ONE hunter per 5-level tier (not per level): the theme's
+      // signature hunter joins at 5, a 2nd Clark at 10, the extras at 15+.
+      const clarks = clamp(1 + Math.floor(lvl / 10), 1, 3);
       for (let i = 0; i < clarks; i++) spawnHunter('clark', 2.85 + lvl * 0.06);
       const T = themeName;
       if (T === 'party') {                                  // a mob of Partygoers
-        const n = clamp(3 + Math.floor(lvl / 2), 3, 6);
+        const n = clamp(3 + Math.floor(lvl / 5), 3, 6);
         for (let i = 0; i < n; i++) spawnHunter('partygoer', 2.5 + lvl * 0.04);
       } else if (T === 'forest') {                          // Hounds hunt the woods
-        for (let i = 0, n = lvl >= 3 ? 2 : 1; i < n; i++) spawnHunter('hound', 3.0 + lvl * 0.05);
+        for (let i = 0, n = lvl >= 5 ? 2 : 1; i < n; i++) spawnHunter('hound', 3.0 + lvl * 0.05);
       } else if (T === 'school' || T === 'office' || T === 'hospital' || T === 'grocery') {
-        if (lvl >= 2) spawnHunter('faceling', 1.8 + lvl * 0.03);   // blank-faced wanderers
-        if (lvl >= 3 && Math.random() < 0.5) spawnHunter('faceling', 1.8 + lvl * 0.03);
+        if (lvl >= 5) spawnHunter('faceling', 1.8 + lvl * 0.03);   // blank-faced wanderers
+        if (lvl >= 15 && Math.random() < 0.5) spawnHunter('faceling', 1.8 + lvl * 0.03);
       }
       // dark places: Smilers lurk in the shadows and lunge
-      if ((T === 'subway' || T === 'garage' || T === 'haunted' || T === 'sewer') && lvl >= 2) spawnHunter('smiler', 3.4 + lvl * 0.05);
-      // the Bacteria infests damp / organic levels
-      if (lvl >= 2 && (T === 'yellow' || T === 'sewer' || T === 'factory' || T === 'pool' || T === 'hospital')) spawnHunter('bacteria', 2.7 + lvl * 0.05);
+      if ((T === 'subway' || T === 'garage' || T === 'haunted' || T === 'sewer') && lvl >= 5) spawnHunter('smiler', 3.4 + lvl * 0.05);
+      // the Bacteria infests damp / organic levels (the hospital's signature
+      // hunter is the Faceling instead, so each theme adds ONE newcomer at 5)
+      if (lvl >= 5 && (T === 'yellow' || T === 'sewer' || T === 'factory' || T === 'pool')) spawnHunter('bacteria', 2.7 + lvl * 0.05);
       // deep levels get an extra roaming Hound
-      if (lvl >= 5 && T !== 'party' && T !== 'forest' && Math.random() < 0.4) spawnHunter('hound', 3.0 + lvl * 0.05);
+      if (lvl >= 15 && T !== 'party' && T !== 'forest' && Math.random() < 0.4) spawnHunter('hound', 3.0 + lvl * 0.05);
 
       // dead people in hazmat suits, slumped against the walls
       corpses = [];
@@ -495,6 +498,7 @@
       at: function (x, y) { return mapAt(x, y); },
       props: function () { return (props || []).length; },
       structs: function () { return (structProps || []).length; },
+      hunters: function () { return (entities || []).map(function (e) { return e.type; }); },
       pos: function () { return { px: px, py: py }; },
       showEntity: function (type, fr) {       // blit one entity walk-frame, scaled up, for art review
         var def = ENTITY_DEFS[type] || ENTITY_DEFS.clark, img = def.frames[fr || 0];
