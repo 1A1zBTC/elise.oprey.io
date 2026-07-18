@@ -116,10 +116,10 @@
   </div>
 
   <p class="hint">
-    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release at the <b>top</b> of the circle!) / <b>jump-block</b> / <b>steal</b>: Q / 4 &nbsp;·&nbsp; <b>Auto-defend</b> (hold): E / 3 &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
+    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release at the <b>top</b> of the circle!) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> 💨 &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
   </p>
   <p class="hint" style="margin-top:4px">
-    Inside the arc = <b>+2</b> &nbsp;·&nbsp; behind the arc = <b>+3</b> &nbsp;·&nbsp; green release right next to the hoop = <b>DUNK!</b> 💥 &nbsp;·&nbsp; sharpshooters get a <b style="color:#7ed37e">bigger green window</b> &nbsp;·&nbsp; tie at the buzzer = <b>sudden-death overtime</b>!
+    Inside the arc = <b>+2</b>, behind it = <b>+3</b>, green at the hoop = <b>DUNK!</b> 💥 &nbsp;·&nbsp; reaching in can draw a <b style="color:#ff9d9d">FOUL</b> (free throw!) &nbsp;·&nbsp; a crossover can break ankles 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b>
   </p>
 
   <script src="../shared/game.js"></script>
@@ -153,16 +153,19 @@
 
     // ---------- teams ----------
     const MOBS = {
-      pig:     { name: 'Pigs',     emoji: '🐷', tag: 'Balanced all-rounders',   accel: 0.60, maxSpd: 4.0, mass: 1.45, r: 22, shoot3: 1.00, steal: 1.00, color: '#f2a6c0', dark: '#d77fa0', face: '#ffc6dc' },
-      cow:     { name: 'Cows',     emoji: '🐮', tag: 'Big bodies, strong screens', accel: 0.52, maxSpd: 3.7, mass: 2.20, r: 25, shoot3: 0.95, steal: 0.95, color: '#f0ede6', dark: '#cfc9bd', face: '#e8a7b8' },
-      zombie:  { name: 'Zombies',  emoji: '🧟', tag: 'Tanky, super steals',     accel: 0.48, maxSpd: 3.5, mass: 2.40, r: 25, shoot3: 0.90, steal: 1.35, color: '#6a9a55', dark: '#4a7038', face: '#3a5a2c' },
-      creeper: { name: 'Creepers', emoji: '🟩', tag: 'Fast, deadly deep threes', accel: 0.66, maxSpd: 4.4, mass: 1.10, r: 21, shoot3: 1.25, steal: 0.90, color: '#5fc24f', dark: '#3f8f33', face: '#1d1d1d' },
+      pig:     { name: 'Pigs',     emoji: '🐷', tag: 'Balanced all-rounders',   accel: 0.36, maxSpd: 2.2, mass: 1.45, r: 15, shoot3: 1.00, steal: 1.00, color: '#f2a6c0', dark: '#d77fa0', face: '#ffc6dc' },
+      cow:     { name: 'Cows',     emoji: '🐮', tag: 'Big bodies, strong screens', accel: 0.31, maxSpd: 1.95, mass: 2.20, r: 17, shoot3: 0.95, steal: 0.95, color: '#f0ede6', dark: '#cfc9bd', face: '#e8a7b8' },
+      zombie:  { name: 'Zombies',  emoji: '🧟', tag: 'Tanky, super steals',     accel: 0.29, maxSpd: 1.85, mass: 2.40, r: 17, shoot3: 0.90, steal: 1.35, color: '#6a9a55', dark: '#4a7038', face: '#3a5a2c' },
+      creeper: { name: 'Creepers', emoji: '🟩', tag: 'Fast, deadly deep threes', accel: 0.40, maxSpd: 2.45, mass: 1.10, r: 14, shoot3: 1.25, steal: 0.90, color: '#5fc24f', dark: '#3f8f33', face: '#1d1d1d' },
     };
+    const SC = 0.7;                                // mob sprite scale — keeps the court big relative to players
     const MOB_KEYS = ['pig', 'cow', 'zombie', 'creeper'];
     const SIDE_COLOR = ['#6fa8ff', '#ff7d7d'];
 
     // ---------- state ----------
-    let state = 'select';        // 'select' | 'playing' | 'score' | 'half' | 'over'
+    let state = 'select';        // 'select' | 'tip' | 'playing' | 'score' | 'half' | 'over'
+    let tipT = 0, tipCount = 0;  // 1P tip-off: mash Space to win the jump ball
+    const TIP_FRAMES = 130, TIP_NEED = 8;
     let numPlayers = 1;
     let pickL = 'pig', pickR = 'creeper';
     let teams = [], ball = null, score = [0, 0];
@@ -190,7 +193,8 @@
       return { side: side, key: key, slot: slot,
         x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
         accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, shoot3: s.shoot3, steal: s.steal,
-        aiShootCD: 0, aiPassCD: 0, aiJumpCD: 0, stealCD: 0, flash: 0, legPhase: 0, mark: null, dunk: null };
+        aiShootCD: 0, aiPassCD: 0, aiJumpCD: 0, stealCD: 0, stunT: 0, crossT: 0, crossCD: 0,
+        flash: 0, legPhase: 0, mark: null, dunk: null };
     }
     function buildTeam(side, key) {
       return { side: side, key: key, onPitch: FORMATION.map(function (f, i) { return mkPlayer(side, key, i); }), active: 0 };
@@ -206,11 +210,31 @@
 
     // ---------- match flow ----------
     function placeInbound(side) {
-      ball = { x: VW / 2, y: CY, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 10, owner: null, freeCD: 0, lastSide: side, trail: [], passTo: null, settle: 0, shot: null };
+      ball = { x: VW / 2, y: CY, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 7, owner: null, freeCD: 0, lastSide: side, trail: [], passTo: null, settle: 0, shot: null };
       for (const t of teams) for (const p of t.onPitch) { const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stealCD = 0; }
       possCD = 0;
       setOwner(teams[side].onPitch[0]);   // point guard takes it in the backcourt
       possCD = 45;                        // a moment of space to play it in
+    }
+
+    // 1P jump ball: both point guards face off at centre court, ball goes up,
+    // and the human mashes Space to out-jump the CPU.
+    function placeTip() {
+      ball = { x: VW / 2, y: CY, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 7, owner: null, freeCD: 0, lastSide: 0, trail: [], passTo: null, settle: 0, shot: null };
+      for (const t of teams) for (const p of t.onPitch) { const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stunT = 0; }
+      teams[0].onPitch[0].x = VW / 2 - 34; teams[0].onPitch[0].y = CY; teams[0].onPitch[0].fx = 1;
+      teams[1].onPitch[0].x = VW / 2 + 34; teams[1].onPitch[0].y = CY; teams[1].onPitch[0].fx = -1;
+      tipT = 0; tipCount = 0; possCD = 0;
+      state = 'tip';
+    }
+    function settleTip() {
+      const win = tipCount >= TIP_NEED;
+      const w = win ? 0 : 1;
+      pops.push({ x: VW / 2, y: CY - 90, txt: win ? 'YOU WIN THE TIP!' : 'CPU WINS THE TIP!', color: SIDE_COLOR[w], t: 0, big: true });
+      const taker = teams[w].onPitch[0];
+      if (taker.z <= 0) taker.vz = 6;   // winning leap
+      setOwner(taker); possCD = 45;
+      state = 'playing';
     }
 
     function setControls() {
@@ -228,9 +252,10 @@
       clockMs = HALF_MS; half = 1; otMode = false;
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
       defendHeld[0] = defendHeld[1] = false;
-      placeInbound(0);
       setupEl.hidden = true; overEl.hidden = true;
-      state = 'playing'; setControls();
+      if (numPlayers === 1) { placeTip(); }        // 1P opens with the mash-Space jump ball
+      else { placeInbound(0); state = 'playing'; }
+      setControls();
     }
 
     function sideName(side) { return playerName(side, MOBS[teams[side].key].name) + (side === 1 && numPlayers === 1 ? ' (CPU)' : ''); }
@@ -322,8 +347,8 @@
         dx = tgt.x + tgt.vx * flight * 0.7 - o.x;
         dy = tgt.y + tgt.vy * flight * 0.7 - o.y;
       } else { dx = o.fx; dy = o.fy; }
-      const dl = Math.hypot(dx, dy) || 1, speed = clamp(dl * 0.06, 8, 14);
-      kickBall(o, dx / dl * speed, dy / dl * speed, 3, 9);
+      const dl = Math.hypot(dx, dy) || 1, speed = clamp(dl * 0.05, 6, 11);
+      kickBall(o, dx / dl * speed, dy / dl * speed, 5, 9);   // lofted so the pass visibly bounces over
       ball.passTo = tgt;
       if (tgt && isHumanTeam(side)) setActive(t, t.onPitch.indexOf(tgt));
       pops.push({ x: o.x, y: o.y - o.r - 18, txt: 'PASS', color: SIDE_COLOR[side], t: 0 });
@@ -363,7 +388,7 @@
         const a = rnd(0, 6.283), m = airball ? rnd(42, 70) : rnd(RIM_R * 1.1, RIM_R * 2.4);
         tx += Math.cos(a) * m; ty += Math.sin(a) * m;
       }
-      const z0 = 30 + o.z;
+      const z0 = 44 + o.z;   // released from the hands held overhead
       ball.owner = null; ball.lastSide = side; ball.passTo = null; possCD = 0;
       ball.x = sx; ball.y = sy; ball.z = z0;
       ball.vx = (tx - sx) / T; ball.vy = (ty - sy) / T;
@@ -379,19 +404,58 @@
       pops.push({ x: o.x, y: o.y - o.r - 24, txt: 'DUNK! 💥', color: '#ffe066', t: 0 });
     }
 
-    // F / 4 without the ball: jump to block a shot, or lunge to steal / grab a loose ball
+    // Stealing is an ATTEMPT with a risk: whiff, win the ball, or get whistled
+    // for a reach-in foul (stunned + a free throw for the offense).
+    function attemptSteal(p, o) {
+      if (p.stealCD > 0 || p.stunT > 0 || possCD > 0) return;
+      p.stealCD = 50;
+      const d = Math.hypot(p.x - o.x, p.y - o.y);
+      if (d > p.r + o.r + 22 * p.steal) { pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 }); return; }
+      const roll = Math.random();
+      if (roll < 0.38 * p.steal) {
+        setOwner(p); pops.push({ x: p.x, y: p.y - 34, txt: 'STEAL!', color: SIDE_COLOR[p.side], t: 0 });
+      } else if (roll < 0.38 * p.steal + 0.34) {
+        p.stunT = 70;
+        pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
+        if (!otMode) {   // no gimme points in sudden death
+          score[o.side] += 1;
+          pops.push({ x: o.x, y: o.y - 40, txt: 'FREE THROW +1', color: SIDE_COLOR[o.side], t: 0 });
+        }
+      } else {
+        pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 });
+      }
+    }
+
+    // Crossover dribble move (defend key while YOU have the ball): a burst of
+    // speed that can break a close defender's ankles.
+    function crossover(side) {
+      if (state !== 'playing') return;
+      const p = activePlayer(teams[side]);
+      if (ball.owner !== p || p.crossCD > 0 || p.dunk || p.stunT > 0) return;
+      p.crossCD = 90; p.crossT = 22;
+      const k = keys[side];
+      let ax = (k.r ? 1 : 0) - (k.l ? 1 : 0), ay = (k.d ? 1 : 0) - (k.u ? 1 : 0);
+      if (!ax && !ay) { ax = p.fx; ay = p.fy; }
+      const l = Math.hypot(ax, ay) || 1;
+      p.vx += (ax / l) * p.maxSpd * 2.6; p.vy += (ay / l) * p.maxSpd * 2.6;
+      let vic = null, vd = Infinity;
+      for (const q of teams[1 - side].onPitch) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < vd) { vd = d; vic = q; } }
+      if (vic && vd < 55 && vic.z <= 0) {
+        vic.stunT = 50;
+        pops.push({ x: vic.x, y: vic.y - 40, txt: 'ANKLES! 😵', color: '#ffe066', t: 0 });
+      }
+    }
+
+    // F / 4 without the ball: jump to block a shot, attempt a steal, or grab a loose ball
     function jumpAction(side) {
       if (state !== 'playing') return;
       const p = activePlayer(teams[side]);
-      if (ball.owner === p || p.dunk) return;
+      if (ball.owner === p || p.dunk || p.stunT > 0) return;
       if (p.z <= 0) p.vz = 7.5;
       const dx = ball.x - p.x, dy = ball.y - p.y, dl = Math.hypot(dx, dy) || 1;
       p.vx += (dx / dl) * p.maxSpd * 1.3; p.vy += (dy / dl) * p.maxSpd * 1.3;
-      if (ball.owner && ball.owner.side !== side && p.stealCD <= 0) {
-        const o = ball.owner;
-        if (possCD <= 0 && Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 16 * p.steal) {
-          setOwner(p); pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'STEAL!', color: SIDE_COLOR[side], t: 0 });
-        } else p.stealCD = 40;
+      if (ball.owner && ball.owner.side !== side) {
+        attemptSteal(p, ball.owner);
       } else if (!ball.owner && !ball.shot && ball.z < 20 && Math.hypot(p.x - ball.x, p.y - ball.y) < p.r + ball.r + 26) {
         setOwner(p);
       }
@@ -418,6 +482,7 @@
     window.addEventListener('keydown', function (e) {
       if (state === 'select') { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); beginGame(); } return; }
       if (state === 'over') { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); showSelect(); } return; }
+      if (state === 'tip') { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); tipCount++; } return; }
       const as = numPlayers === 2 ? 1 : 0;
       switch (e.code) {
         case 'KeyW': keys[0].u = true; e.preventDefault(); break;
@@ -425,7 +490,7 @@
         case 'KeyA': keys[0].l = true; e.preventDefault(); break;
         case 'KeyD': keys[0].r = true; e.preventDefault(); break;
         case 'KeyQ': if (!e.repeat) shootDown(0); e.preventDefault(); break;
-        case 'KeyE': defendHeld[0] = true; e.preventDefault(); break;
+        case 'KeyE': if (!e.repeat) defendDown(0); e.preventDefault(); break;
         case 'KeyR': passBall(0); e.preventDefault(); break;
         case 'KeyF': switchPlayer(0); e.preventDefault(); break;
         case 'ArrowUp': keys[as].u = true; e.preventDefault(); break;
@@ -434,7 +499,7 @@
         case 'ArrowRight': keys[as].r = true; e.preventDefault(); break;
         case 'Digit1': case 'Numpad1': if (numPlayers === 2) switchPlayer(1); e.preventDefault(); break;
         case 'Digit2': case 'Numpad2': if (numPlayers === 2) passBall(1); e.preventDefault(); break;
-        case 'Digit3': case 'Numpad3': if (numPlayers === 2) defendHeld[1] = true; e.preventDefault(); break;
+        case 'Digit3': case 'Numpad3': if (numPlayers === 2 && !e.repeat) defendDown(1); e.preventDefault(); break;
         case 'Digit4': case 'Numpad4': if (numPlayers === 2 && !e.repeat) shootDown(1); e.preventDefault(); break;
       }
     });
@@ -506,11 +571,16 @@
       btn.addEventListener('touchend', function (e) { e.preventDefault(); shootRelease(side); }, { passive: false });
     }
     wireShoot(ctlEls.shoot1, 0); wireShoot(ctlEls.shoot2, 1);
+    // defend key doubles as the crossover dribble move when you have the ball
+    function defendDown(side) {
+      if (ball && ball.owner === activePlayer(teams[side])) crossover(side);
+      else defendHeld[side] = true;
+    }
     function wireDefend(btn, side) {
-      btn.addEventListener('mousedown', function (e) { e.preventDefault(); defendHeld[side] = true; });
+      btn.addEventListener('mousedown', function (e) { e.preventDefault(); defendDown(side); });
       btn.addEventListener('mouseup', function () { defendHeld[side] = false; });
       btn.addEventListener('mouseleave', function () { defendHeld[side] = false; });
-      btn.addEventListener('touchstart', function (e) { e.preventDefault(); defendHeld[side] = true; }, { passive: false });
+      btn.addEventListener('touchstart', function (e) { e.preventDefault(); defendDown(side); }, { passive: false });
       btn.addEventListener('touchend', function (e) { e.preventDefault(); defendHeld[side] = false; }, { passive: false });
     }
     wireDefend(ctlEls.def1, 0); wireDefend(ctlEls.def2, 1);
@@ -620,24 +690,21 @@
         const markNearHoop = Math.hypot(mark.x - attackHoop(mark.side).x, mark.y - attackHoop(mark.side).y) < 230;
         // contest a charging or in-range shooter with a jump
         if (p.aiJumpCD <= 0 && d < 60 && (shootHeld[mark.side] || markNearHoop)) { if (p.z <= 0) p.vz = 7; p.aiJumpCD = 90; }
-        // occasional pickpocket
-        if (p.stealCD <= 0 && possCD <= 0 && d < p.r + mark.r + 14 * p.steal) {
-          if (Math.random() < 0.030 * p.steal) { setOwner(p); pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'STEAL!', color: SIDE_COLOR[side], t: 0 }); }
-          p.stealCD = 26;
-        }
+        // occasionally reach in for a steal ATTEMPT — the AI risks the foul too
+        if (d < p.r + mark.r + 18 && Math.random() < 0.012) attemptSteal(p, mark);
       }
     }
 
     function moveMob(m) {
       if (m.z > 0 || m.vz > 0) { m.vz -= GRAV_Z * dtf; m.z += m.vz * dtf; if (m.z <= 0) { m.z = 0; m.vz = 0; } }
       m.vx *= Math.pow(0.84, dtf); m.vy *= Math.pow(0.84, dtf);
-      const cap = m.maxSpd, sp = Math.hypot(m.vx, m.vy);
+      const cap = m.maxSpd * (m.crossT > 0 ? 2.4 : 1), sp = Math.hypot(m.vx, m.vy);
       if (sp > cap) { const k = cap / sp; m.vx *= k; m.vy *= k; }
       m.x += m.vx * dtf; m.y += m.vy * dtf;
       m.x = clamp(m.x, X0 + m.r * 0.6, X1 - m.r * 0.6);
       m.y = clamp(m.y, Y0 + m.r * 0.6, Y1 - m.r * 0.6);
       if (sp > 0.5) { m.fx = m.vx / sp; m.fy = m.vy / sp; }
-      m.legPhase += sp * 0.25 * dtf;
+      m.legPhase += sp * 0.4 * dtf;
     }
     function mobCollide(a, b) {
       const dx = b.x - a.x, dy = b.y - a.y; let d = Math.hypot(dx, dy); const min = a.r + b.r; if (d === 0) d = 0.01;
@@ -668,9 +735,7 @@
         ball.vx = o.vx; ball.vy = o.vy; ball.z = 0; ball.vz = 0; ball.spin += 0.12 * dtf;
         if (ball.trail.length) ball.trail.shift();
         if (possCD > 0) possCD -= dtf;
-        else {
-          for (const t of teams) { for (const p of t.onPitch) { if (p.side === o.side) continue; if (Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 2) { setOwner(p); pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'STEAL!', color: SIDE_COLOR[p.side], t: 0 }); return; } } }
-        }
+        // (no automatic contact steal — defenders must ATTEMPT a steal and risk the foul)
         return;
       }
       if (ball.freeCD > 0) ball.freeCD -= dtf;
@@ -741,7 +806,8 @@
         for (const t of teams) for (const p of t.onPitch) {
           if (ball.z > 26 + p.z) continue;
           const d = Math.hypot(p.x - ball.x, p.y - ball.y);
-          if (d < p.r + ball.r + 18 && d < bd) { bd = d; best = p; }
+          // tighter catch radius so you SEE the ball arrive rather than teleport
+          if (d < p.r + ball.r + (ball.passTo === p ? 10 : 7) && d < bd) { bd = d; best = p; }
         }
         if (best) setOwner(best);
       }
@@ -751,6 +817,15 @@
     function update() {
       animT += dtf;   // runs in every state so idle dribbles/bobs never freeze
       for (let i = pops.length - 1; i >= 0; i--) { pops[i].t += dtf; pops[i].y -= 0.5 * dtf; if (pops[i].t > (pops[i].big ? 80 : 45)) pops.splice(i, 1); }
+      if (state === 'tip') {
+        // jump ball: toss the ball up over the centre circle while Space taps count
+        tipT += dtf;
+        const t = Math.min(tipT / TIP_FRAMES, 1);
+        ball.z = 110 * 4 * t * (1 - t);
+        ball.spin += 0.2 * dtf;
+        if (tipT >= TIP_FRAMES) settleTip();
+        return;
+      }
       if (state !== 'playing' && state !== 'score' && state !== 'half') return;
 
       if (freeze > 0) {
@@ -800,6 +875,9 @@
         for (let i = 0; i < t.onPitch.length; i++) { const p = t.onPitch[i]; if (human && i === t.active) continue; if (ball.owner === p) continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < cd) { cd = d; chaser = i; } }
         for (let i = 0; i < t.onPitch.length; i++) {
           const p = t.onPitch[i];
+          if (p.crossT > 0) p.crossT -= dtf;
+          if (p.crossCD > 0) p.crossCD -= dtf;
+          if (p.stunT > 0) { p.stunT -= dtf; continue; }   // dazed: no driving, just coast
           if (p.dunk) continue;
           if (human && i === t.active) {
             // hold the defend key and your mob plays lock-down defense by itself
@@ -884,6 +962,9 @@
       // gentle idle bob so mobs never stand statue-still
       const bob = Math.sin(animT * 0.12 + p.slot * 2 + p.side * 3) * 1.4;
       const yb = p.y - p.z - (p.z > 0 ? 0 : 0);
+      // whole sprite drawn at SC scale around the feet — keeps the court big
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.scale(SC, SC); ctx.translate(-p.x, -p.y);
       // shadow stays on the floor
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       const shk = 1 / (1 + p.z * 0.02);
@@ -942,9 +1023,10 @@
         if (charging || p.dunk || armsUp) {
           bx2 = x; by2 = yb - 62 - bob;
         } else {
-          const dphase = animT * 0.24 + p.legPhase * 0.4;
+          // crossover: the ball whips hand-to-hand across the body
+          const dphase = p.crossT > 0 ? animT * 0.9 : animT * 0.24 + p.legPhase * 0.4;
           const bounce = Math.abs(Math.sin(dphase));
-          bx2 = x + p.fx * 14;
+          bx2 = p.crossT > 0 ? x + Math.sin(animT * 0.9) * 15 : x + p.fx * 14;
           const floorY = p.y + 4, handY = yb - 22 - bob;
           by2 = floorY + (handY - floorY) * bounce;
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -966,6 +1048,15 @@
           ctx.fillText('🛡️', x, my - 16); ctx.textAlign = 'left';
         }
       }
+      // dizzy stars while stunned (reach-in foul / broken ankles)
+      if (p.stunT > 0) {
+        ctx.fillStyle = '#ffe066';
+        for (const o2 of [0, 2.1, 4.2]) {
+          const a = animT * 0.25 + o2;
+          ctx.beginPath(); ctx.arc(x + Math.cos(a) * 15, yb - 52 - bob + Math.sin(a) * 5, 2.6, 0, 6.28); ctx.fill();
+        }
+      }
+      ctx.restore();
     }
 
     function drawBall() {
@@ -1006,7 +1097,7 @@
       ctx.save();
       ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.globalAlpha = 0.9;
       ctx.beginPath(); ctx.ellipse(m.x, m.y + 8, m.r * 1.4 * pulse, m.r * 0.58 * pulse, 0, 0, 6.28); ctx.stroke();
-      const cy = m.y - m.z - 74 + Math.sin(lastTs * 0.02) * 4;
+      const cy = m.y - m.z - 54 + Math.sin(lastTs * 0.02) * 4;
       ctx.globalAlpha = 1; ctx.fillStyle = col;
       ctx.beginPath(); ctx.moveTo(m.x, cy + 11); ctx.lineTo(m.x - 9, cy - 4); ctx.lineTo(m.x + 9, cy - 4); ctx.closePath(); ctx.fill();
       ctx.restore();
@@ -1016,7 +1107,7 @@
       const p = t.onPitch[t.active];
       const k = 1 - Math.pow(1 - Math.min(t.swFx.t, 1), 2);
       const dx = t.swFx.fx + (p.x - t.swFx.fx) * k;
-      const dy = t.swFx.fy + ((p.y - p.z - 62) - t.swFx.fy) * k;
+      const dy = t.swFx.fy + ((p.y - p.z - 48) - t.swFx.fy) * k;
       ctx.fillStyle = SIDE_COLOR[t.side];
       ctx.beginPath(); ctx.moveTo(dx, dy + 12); ctx.lineTo(dx - 8, dy); ctx.lineTo(dx + 8, dy); ctx.closePath(); ctx.fill();
     }
@@ -1030,7 +1121,7 @@
       const h = attackHoop(side);
       const three = Math.hypot(p.x - h.x, p.y - h.y) > THREE_R;
       const gw = greenWindow(p, three);
-      const cx = p.x, cy = p.y - p.z - 76, R = 17;
+      const cx = p.x, cy = p.y - p.z - 58, R = 17;
       // casing arc (bottom → past the top)
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 9;
@@ -1124,6 +1215,18 @@
       ctx.globalAlpha = 1; ctx.textAlign = 'left';
       if (state !== 'select') drawHUD();
       if (state === 'playing' || state === 'score') for (let s = 0; s < 2; s++) { if (joy[s].active && isHumanTeam(s)) drawJoystick(joy[s]); }
+      if (state === 'tip') {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff'; ctx.font = "800 26px 'Nunito', sans-serif";
+        ctx.fillText('JUMP BALL — MASH SPACE!', VW / 2, CY - 116);
+        const w = 220, x0 = VW / 2 - 110, y0 = CY - 102;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(x0, y0, w, 14, 7); ctx.fill();
+        ctx.fillStyle = tipCount >= TIP_NEED ? '#7ed37e' : '#ffd23f';
+        roundRect(x0, y0, w * Math.min(tipCount / TIP_NEED, 1), 14, 7); ctx.fill();
+        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 14px 'Nunito', sans-serif";
+        ctx.fillText(tipCount + (tipCount === 1 ? ' tap' : ' taps'), VW / 2, y0 + 32);
+        ctx.textAlign = 'left';
+      }
       if (state === 'half') { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif"; ctx.fillText('☕ Halftime — switch it up!', VW / 2, CY + 90); ctx.textAlign = 'left'; }
       else if ((state === 'playing' || state === 'score') && freeze > 0) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif"; ctx.fillText('Get ready…', VW / 2, CY + 90); ctx.textAlign = 'left'; }
     }
@@ -1155,7 +1258,7 @@
       state: function () {
         return { state: state, score: score.slice(), half: half, otMode: otMode, clockMs: Math.round(clockMs),
           owner: ball && ball.owner ? { side: ball.owner.side, slot: ball.owner.slot } : null,
-          active: [teams[0].active, teams[1].active] };
+          active: [teams[0].active, teams[1].active], tip: { t: Math.round(tipT), count: tipCount } };
       },
       ball: function () { return ball; },
       player: function (s, i) { return teams[s].onPitch[i]; },
