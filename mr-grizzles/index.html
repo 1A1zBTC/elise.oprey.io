@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mr Grizzles</title>
+  <link rel="stylesheet" href="../fonts/fonts.css">
+  <link rel="stylesheet" href="../shared/game.css">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="../icons/favicon.png">
+  <script src="../pwa.js" defer></script>
+  <style>
+    .group-label { color: #ffe8b0; font-weight: 800; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 8px; }
+    .choices { display: flex; gap: 8px; justify-content: center; }
+    .choice {
+      flex: 1;
+      font-family: 'Nunito', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      color: #cfd6ea;
+      background: #0f1830;
+      border: 2px solid #0f3460;
+      border-radius: 14px;
+      padding: 12px 4px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    }
+    .choice .big { display: block; font-size: 1.7rem; line-height: 1.3; }
+    .choice .small { display: block; font-size: 0.66rem; color: #8b93b0; font-weight: 700; margin-top: 2px; }
+    .choice:hover { border-color: #6f86c4; }
+    .choice:active { transform: scale(0.96); }
+    .choice.selected {
+      border-color: #e94560;
+      background: rgba(233, 69, 96, 0.12);
+      color: #fff;
+      box-shadow: 0 0 18px rgba(233, 69, 96, 0.25);
+    }
+    .choice.selected .small { color: #ffb3c2; }
+    .bestline { color: #ffe8b0; font-weight: 800; font-size: 0.85rem; margin-top: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Mr Grizzles</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <!-- Start / player select -->
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Mr Grizzles</h2>
+        <div class="sub">Run through the subway, leap the barriers, roll under the signs and grab every coin! 🧸</div>
+        <div class="group-label">Players</div>
+        <div class="choices" id="count-choices">
+          <button class="choice" data-players="1"><span class="big">1</span><span class="small">solo · WASD or ◄►</span></button>
+          <button class="choice" data-players="2"><span class="big">2</span><span class="small">P1 WASD · P2 ◄►</span></button>
+        </div>
+        <div class="bestline" id="setup-best">★ Best 0</div>
+        <button class="start-btn" id="start-btn">Start Running</button>
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div class="overlay" id="over" hidden>
+      <div class="panel">
+        <h2 id="over-title">Game Over</h2>
+        <div class="sub" id="over-sub">What a run!</div>
+        <div class="scoreline"><span class="lbl" id="over-l1">Score</span><span class="big" id="over-score">0</span></div>
+        <div class="scoreline"><span class="lbl" id="over-l2">Best</span><span class="big" id="over-best">0</span></div>
+        <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>P1: A/D</b> change lane, <b>W</b> jump, <b>S</b> roll &nbsp;·&nbsp; <b>P2: ◄ ►</b> change lane, <b>▲</b> jump, <b>▼</b> roll
+    &nbsp;·&nbsp; jump the barriers 🚧 roll under signs, and never argue with a train 🚆
+  </p>
+
+  <script src="../shared/game.js"></script>
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;    // 760
+    const H = canvas.height;   // 560
+
+    // ---------- projection constants ----------
+    const HORIZON_Y = 165;     // screen y of the vanishing point / skyline base
+    const BASE_Y = 505;        // screen y of the ground at z=0 (bears' feet)
+    const CAM = 6;             // camera depth: s(z) = CAM/(CAM+z), 1 at the player
+    const LANE_X0 = 205;       // lane-centre x offset at z=0
+    const Y_PX = 130;          // screen px per height unit at z=0
+    const Z_SPAWN = 70;        // entities enter the world here
+    const Z_KILL = -3;         // and are culled here, behind the camera
+    const Z_NEAR = -1.5;       // ground/track drawn out to here so it fills the frame
+
+    // ---------- gameplay constants ----------
+    const JUMP_FRAMES = 34, JUMP_H = 1.5;
+    const ROLL_FRAMES = 30;
+    const STUMBLE_FRAMES = 160;  // grace window after a first hit (~2.7s)
+    const TUMBLE_FRAMES = 55;    // knocked-out crash animation length
+    const BAR_H = 0.85;          // must be above this to clear a barrier
+    const SIGN_BOT = 0.9;        // overhead boards hang down to here — roll under
+    const HIT_DEPTH = 0.9;       // z half-window for solid collisions
+    const COIN_PTS = 10;
+    const LANE_TOL = 0.4;        // mid-tween bears can squeak past adjacent-lane obstacles
+
+    const best = EL.best('grizzles.best');
+    const clamp = EL.clamp, pick = EL.pick;
+    const playerName = EL.playerName;
+
+    // ---------- bears ----------
+    const SKINS = [
+      { fur: '#c99a63', dark: '#a9784a', pad: '#e8cba0', scarf: '#e94560', scarfDark: '#b22a44' },
+      { fur: '#b98a72', dark: '#996b52', pad: '#e3c4a4', scarf: '#3ec8be', scarfDark: '#2a9a92' }
+    ];
+
+    function makeBear(lane) {
+      return { lane: lane, laneF: lane, y: 0, jumpT: 0, rollT: 0, stumbleT: 0,
+               out: false, tumbleT: 0, outBy: '', coins: 0, score: 0 };
+    }
+
+    // ---------- state ----------
+    let state = 'select';        // 'select' | 'playing' | 'over'
+    let numPlayers = 2;
+    let players = [];
+    let ents = [];               // obstacles + coins, streaming toward the camera
+    let dist = 0;                // distance run, world units
+    let speed = 0;               // world units per 60fps-frame
+    let scroll = 0;              // total track scroll (drives dashes, run cycle, parallax)
+    let nextSpawnZ = 0;          // world z where the next chunk begins
+    let lastChunk = -1;
+    let overTimer = 0;           // small delay after the last bear crashes
+    let lastTs = 0, dtMs = 16.7, dtf = 1;
+
+    const setupEl = document.getElementById('setup');
+    const overEl = document.getElementById('over');
+
+    // ---------- projection ----------
+    function project(lane, z, y) {
+      const s = CAM / (CAM + z);
+      const g = HORIZON_Y + (BASE_Y - HORIZON_Y) * s;
+      return { x: W / 2 + lane * LANE_X0 * s, y: g - (y || 0) * Y_PX * s, g: g, s: s };
+    }
+
+    // ---------- chunks ----------
+    // Hand-authored obstacle patterns. Rules that keep every chunk survivable for
+    // both bears from any lane: at any z-slice at most 2 lanes hold a train and the
+    // rest hold only jumpable/rollable pieces; decision rows sit >= ~15 units apart.
+    function bar(lane, dz)        { return { kind: 'bar',   lane: lane, dz: dz, len: 1.5 }; }
+    function sign(lane, dz)       { return { kind: 'sign',  lane: lane, dz: dz, len: 1.5 }; }
+    function train(lane, dz, len) { return { kind: 'train', lane: lane, dz: dz, len: len }; }
+    function coin(lane, dz, y)    { return { kind: 'coin',  lane: lane, dz: dz, len: 0, y: y == null ? 0.3 : y }; }
+    function row(lane, dz, n) {
+      const out = [];
+      for (let i = 0; i < n; i++) out.push(coin(lane, dz + i * 2.5));
+      return out;
+    }
+    function arc(lane, dzBar) {   // coin arc tracing the jump over a barrier at dzBar
+      const ys = [0.25, 0.8, 1.15, 0.8, 0.25];
+      return ys.map(function (y, i) { return coin(lane, dzBar + (i - 2) * 1.6, y); });
+    }
+
+    const CHUNKS = [
+      // --- tier 1 ---
+      { tier: 1, depth: 14, items: [bar(0, 4)].concat(arc(0, 4), row(-1, 2, 5)) },
+      { tier: 1, depth: 14, items: [sign(1, 4)].concat(row(1, 1, 6), row(0, 3, 4)) },
+      { tier: 1, depth: 18, items: [train(-1, 4, 14)].concat(row(0, 4, 6)) },
+      { tier: 1, depth: 12, items: row(-1, 1, 3).concat(row(0, 4, 3), row(1, 7, 3)) },
+      { tier: 1, depth: 14, items: [bar(-1, 4), bar(1, 4)].concat(arc(-1, 4), row(0, 2, 5)) },
+      // --- tier 2 ---
+      { tier: 2, depth: 30, items: [bar(-1, 4), sign(1, 4), bar(0, 20)].concat(row(0, 2, 5), arc(0, 20)) },
+      { tier: 2, depth: 26, items: [train(-1, 2, 20), train(1, 2, 20)].concat(row(0, 4, 7)) },
+      { tier: 2, depth: 30, items: [train(0, 2, 16), bar(1, 22)].concat(row(1, 3, 6), arc(1, 22)) },
+      { tier: 2, depth: 20, items: [sign(-1, 4), sign(0, 4), bar(1, 4)].concat(arc(1, 4), row(0, 8, 4)) },
+      { tier: 2, depth: 18, items: [bar(-1, 4), bar(0, 4), bar(1, 4)].concat(arc(0, 4), row(0, 10, 4)) },
+      // --- tier 3 ---
+      { tier: 3, depth: 40, items: [train(-1, 2, 26), bar(0, 16)].concat(arc(0, 16), row(1, 4, 8)) },
+      { tier: 3, depth: 36, items: [train(-1, 2, 20), train(0, 2, 20), sign(1, 28)].concat(row(1, 3, 7)) },
+      { tier: 3, depth: 52, items: [bar(-1, 4), bar(0, 20), bar(1, 36)].concat(arc(-1, 4), arc(0, 20), arc(1, 36)) },
+      { tier: 3, depth: 36, items: [sign(-1, 4), sign(0, 4), sign(1, 4), bar(-1, 20), bar(0, 20), bar(1, 20)].concat(arc(0, 20), row(0, 8, 4)) },
+      { tier: 3, depth: 30, items: [train(1, 2, 24), sign(0, 6), sign(0, 22)].concat(row(-1, 4, 8)) }
+    ];
+
+    // Dev sanity check: no z-slice of any chunk may have trains across all 3 lanes.
+    (function assertSolvable() {
+      CHUNKS.forEach(function (c, ci) {
+        for (let z = 0; z <= c.depth; z++) {
+          const blocked = {};
+          c.items.forEach(function (it) {
+            if (it.kind === 'train' && z >= it.dz && z <= it.dz + it.len) blocked[it.lane] = true;
+          });
+          if (blocked[-1] && blocked[0] && blocked[1]) console.warn('Chunk ' + ci + ' unsolvable at dz ' + z);
+        }
+      });
+    })();
+
+    function currentTier() { return dist < 300 ? 1 : (dist < 800 ? 2 : 3); }
+
+    function spawnChunk() {
+      const tier = currentTier();
+      const eligible = [];
+      CHUNKS.forEach(function (c, i) {
+        if (c.tier <= tier && i !== lastChunk) {
+          eligible.push(i);
+          if (c.tier === tier) eligible.push(i);   // weight toward the current tier
+        }
+      });
+      const idx = pick(eligible);
+      lastChunk = idx;
+      const c = CHUNKS[idx];
+      c.items.forEach(function (it) {
+        ents.push({ kind: it.kind, lane: it.lane, z: nextSpawnZ + it.dz, len: it.len,
+                    y: it.y || 0, color: it.kind === 'train' ? pick(TRAIN_COLORS) : null,
+                    hit: [false, false], taken: [false, false] });
+      });
+      nextSpawnZ += c.depth + 6 + speed * 8;       // breathing room grows with speed
+    }
+
+    const TRAIN_COLORS = ['#d23b3b', '#4a6cd4', '#e8a13c'];
+
+    // ---------- input ----------
+    function move(pi, dir) {
+      const pl = players[pi];
+      if (state !== 'playing' || !pl || pl.out) return;
+      const nl = clamp(pl.lane + dir, -1, 1);
+      if (nl !== pl.lane) { pl.lane = nl; sfxMove(); }
+    }
+    function jump(pi) {
+      const pl = players[pi];
+      if (state !== 'playing' || !pl || pl.out || pl.jumpT > 0 || pl.rollT > 0) return;
+      pl.jumpT = JUMP_FRAMES; sfxJump();
+    }
+    function roll(pi) {
+      const pl = players[pi];
+      if (state !== 'playing' || !pl || pl.out || pl.rollT > 0) return;
+      if (pl.jumpT > 0) { pl.jumpT = 0; pl.y = 0; }   // slam-cancel a jump into a roll
+      pl.rollT = ROLL_FRAMES; sfxRoll();
+    }
+
+    window.addEventListener('keydown', function (e) {
+      if (e.repeat) return;
+      const k = e.code;
+      if (state === 'select') {
+        if (k === 'Space' || k === 'Enter') { e.preventDefault(); beginGame(); }
+        return;
+      }
+      if (state === 'over') {
+        if (k === 'Space' || k === 'Enter') { e.preventDefault(); showSelect(); }
+        return;
+      }
+      // Player 1 — WASD (always controls bear 0)
+      if (k === 'KeyA') { e.preventDefault(); move(0, -1); }
+      else if (k === 'KeyD') { e.preventDefault(); move(0, 1); }
+      else if (k === 'KeyW') { e.preventDefault(); jump(0); }
+      else if (k === 'KeyS') { e.preventDefault(); roll(0); }
+      else {
+        // Arrows → bear 1 in 2P, bear 0 in solo
+        const pi = numPlayers === 2 ? 1 : 0;
+        if (k === 'ArrowLeft') { e.preventDefault(); move(pi, -1); }
+        else if (k === 'ArrowRight') { e.preventDefault(); move(pi, 1); }
+        else if (k === 'ArrowUp') { e.preventDefault(); jump(pi); }
+        else if (k === 'ArrowDown') { e.preventDefault(); roll(pi); }
+      }
+    });
+
+    // ---------- dialog wiring ----------
+    document.getElementById('count-choices').addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice');
+      if (!btn) return;
+      document.querySelectorAll('#count-choices .choice').forEach(function (c) { c.classList.remove('selected'); });
+      btn.classList.add('selected');
+    });
+    document.querySelector('#count-choices [data-players="1"]').classList.add('selected');
+
+    function selectedCount() {
+      const el = document.querySelector('#count-choices .choice.selected');
+      return el ? parseInt(el.dataset.players, 10) : 1;
+    }
+
+    document.getElementById('start-btn').addEventListener('click', function () { beginGame(); });
+    document.getElementById('again-btn').addEventListener('click', showSelect);
+
+    function showSelect() {
+      state = 'select';
+      overEl.hidden = true; setupEl.hidden = false;
+      document.getElementById('setup-best').textContent = '★ Best ' + best.load();
+    }
+    document.getElementById('setup-best').textContent = '★ Best ' + best.load();
+
+    function beginGame(count) {
+      numPlayers = count || selectedCount();
+      players = numPlayers === 1 ? [makeBear(0)] : [makeBear(-1), makeBear(1)];
+      ents = [];
+      dist = 0; scroll = 0; speed = 0.42;
+      nextSpawnZ = 22; lastChunk = -1; overTimer = 0;
+      while (nextSpawnZ < Z_SPAWN) spawnChunk();
+      setupEl.hidden = true; overEl.hidden = true;
+      state = 'playing';
+    }
+
+    // ---------- game over ----------
+    const OUT_REASONS = { bar: 'tripped over a barrier! 🚧', sign: 'bonked into a sign! 🪧', train: 'ran into a train! 🚆' };
+
+    function finish() {
+      state = 'over';
+      let winner = -1, lastOut = 0;
+      if (numPlayers === 2) {
+        winner = players[0].score === players[1].score ? -1 : (players[0].score > players[1].score ? 0 : 1);
+        lastOut = players[0].tumbleT <= players[1].tumbleT ? 0 : 1;   // smaller tumbleT = crashed later
+        document.getElementById('over-title').textContent =
+          winner < 0 ? "It's a tie! 🤝" : playerName(winner, 'Player ' + (winner + 1)) + ' wins! 🏆';
+        document.getElementById('over-l1').textContent = playerName(0, 'Player 1');
+        document.getElementById('over-l2').textContent = playerName(1, 'Player 2');
+        document.getElementById('over-score').textContent = players[0].score;
+        document.getElementById('over-best').textContent = players[1].score;
+        document.getElementById('over-sub').textContent =
+          playerName(lastOut, 'Player ' + (lastOut + 1)) + ' ' + (OUT_REASONS[players[lastOut].outBy] || 'crashed out!');
+      } else {
+        document.getElementById('over-title').textContent = 'Game Over';
+        document.getElementById('over-l1').textContent = 'Score';
+        document.getElementById('over-l2').textContent = 'Best';
+        document.getElementById('over-score').textContent = players[0].score;
+        document.getElementById('over-sub').textContent = 'Mr Grizzles ' + (OUT_REASONS[players[0].outBy] || 'crashed out!');
+        const b = Math.max(best.load(), players[0].score);
+        document.getElementById('over-best').textContent = b;
+      }
+      const top = Math.max.apply(null, players.map(function (p) { return p.score; }));
+      if (top > best.load()) best.save(top);
+      overEl.hidden = false;
+    }
+
+    // ---------- update ----------
+    function onHit(pl, ent) {
+      ent.hit[players.indexOf(pl)] = true;      // this piece is spent for this bear (no train re-hits)
+      if (pl.stumbleT > 0) {
+        pl.out = true; pl.tumbleT = 0.001; pl.outBy = ent.kind;
+        sfxCrash();
+      } else {
+        pl.stumbleT = STUMBLE_FRAMES; pl.outBy = ent.kind;
+        sfxStumble();
+      }
+    }
+
+    function update() {
+      if (state !== 'playing') return;
+
+      speed = Math.min(0.95, 0.42 + dist * 0.00022);
+      dist += speed * dtf;
+      scroll += speed * dtf;
+      nextSpawnZ -= speed * dtf;
+      while (nextSpawnZ < Z_SPAWN) spawnChunk();
+
+      // stream entities toward the camera
+      for (let e = ents.length - 1; e >= 0; e--) {
+        ents[e].z -= speed * dtf;
+        if (ents[e].z + ents[e].len < Z_KILL) ents.splice(e, 1);
+      }
+
+      let allOut = true;
+      for (let i = 0; i < players.length; i++) {
+        const pl = players[i];
+        if (pl.out) { pl.tumbleT += dtf; continue; }
+        allOut = false;
+
+        pl.laneF += (pl.lane - pl.laneF) * 0.28 * dtf;
+        if (pl.jumpT > 0) {
+          pl.jumpT -= dtf;
+          const t = 1 - Math.max(pl.jumpT, 0) / JUMP_FRAMES;
+          pl.y = JUMP_H * 4 * t * (1 - t);
+          if (pl.jumpT <= 0) { pl.jumpT = 0; pl.y = 0; }
+        }
+        if (pl.rollT > 0) { pl.rollT -= dtf; if (pl.rollT < 0) pl.rollT = 0; }
+        if (pl.stumbleT > 0) { pl.stumbleT -= dtf; if (pl.stumbleT < 0) pl.stumbleT = 0; }
+
+        const hitTop = pl.y + (pl.rollT > 0 ? 0.7 : 1.6);
+        for (let e = 0; e < ents.length; e++) {
+          const en = ents[e];
+          if (Math.abs(pl.laneF - en.lane) >= LANE_TOL) continue;
+          if (en.kind === 'coin') {
+            if (!en.taken[i] && Math.abs(en.z) < 1.2 && Math.abs(pl.y - en.y) < 0.6) {
+              en.taken[i] = true; pl.coins++; sfxCoin();
+            }
+            continue;
+          }
+          if (en.hit[i]) continue;
+          if (en.z >= HIT_DEPTH || en.z + en.len <= -HIT_DEPTH) continue;
+          if (en.kind === 'bar' && pl.y >= BAR_H) continue;      // cleared it
+          if (en.kind === 'sign' && hitTop <= SIGN_BOT) continue; // rolled under
+          onHit(pl, en);
+          if (pl.out) break;
+        }
+        if (!pl.out) pl.score = Math.floor(dist) + pl.coins * COIN_PTS;
+      }
+
+      // cull coins every active bear has taken
+      for (let e = ents.length - 1; e >= 0; e--) {
+        const en = ents[e];
+        if (en.kind !== 'coin') continue;
+        let done = true;
+        players.forEach(function (pl, i) { if (!pl.out && !en.taken[i]) done = false; });
+        if (done && en.z < 0) ents.splice(e, 1);
+      }
+
+      if (allOut) {
+        overTimer += dtf;
+        if (overTimer > TUMBLE_FRAMES) finish();
+      }
+    }
+
+    // ---------- audio ----------
+    let actx = null;
+    function beep(freq, dur, type, gain, slideTo) {
+      try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const t = actx.currentTime;
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type || 'sine';
+        o.frequency.setValueAtTime(freq, t);
+        if (slideTo) o.frequency.linearRampToValueAtTime(slideTo, t + dur);
+        g.gain.setValueAtTime(gain || 0.05, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o.connect(g); g.connect(actx.destination);
+        o.start(t); o.stop(t + dur);
+      } catch (e) {}
+    }
+    function sfxCoin()    { beep(880, 0.07, 'square', 0.035); setTimeout(function () { beep(1318, 0.09, 'square', 0.03); }, 40); }
+    function sfxJump()    { beep(330, 0.12, 'sine', 0.05, 660); }
+    function sfxRoll()    { beep(220, 0.1, 'sine', 0.04, 160); }
+    function sfxMove()    { beep(500, 0.05, 'sine', 0.03, 560); }
+    function sfxStumble() { beep(180, 0.18, 'square', 0.06, 120); }
+    function sfxCrash()   { beep(240, 0.35, 'sawtooth', 0.07, 60); }
+
+    // ---------- drawing helpers ----------
+    function rr(x, y, w, h, r) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function shade(hex, f) {
+      const n = parseInt(hex.slice(1), 16);
+      let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+      r = Math.floor(r * f); g = Math.floor(g * f); b = Math.floor(b * f);
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+
+    // ---------- draw: background ----------
+    const SKYLINE = [38, 62, 30, 84, 46, 70, 26, 92, 40, 58, 74, 34, 66, 28, 80, 44];   // building heights
+
+    function drawBackground() {
+      // dusk sky
+      const sky = ctx.createLinearGradient(0, 0, 0, HORIZON_Y + 40);
+      sky.addColorStop(0, '#1a1a2e');
+      sky.addColorStop(0.7, '#2a3560');
+      sky.addColorStop(1, '#4a3d6b');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, HORIZON_Y + 40);
+      // moon
+      ctx.fillStyle = '#ffe8b0';
+      ctx.beginPath(); ctx.arc(640, 62, 20, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2a3560';
+      ctx.beginPath(); ctx.arc(648, 56, 16, 0, Math.PI * 2); ctx.fill();
+
+      // two parallax skyline layers
+      drawSkyline(scroll * 0.8, 0.55, '#232b4d', 46);
+      drawSkyline(scroll * 2.2, 1, '#161d38', 0);
+
+      // ground either side of the track
+      ctx.fillStyle = '#141a2c';
+      ctx.fillRect(0, HORIZON_Y, W, H - HORIZON_Y);
+    }
+
+    function drawSkyline(drift, hScale, color, lift) {
+      ctx.fillStyle = color;
+      const bw = 48;
+      const total = SKYLINE.length * bw;
+      let off = -(drift % total);
+      for (let x = off - total; x < W + bw; x += bw) {
+        const idx = ((Math.round((x - off) / bw) % SKYLINE.length) + SKYLINE.length) % SKYLINE.length;
+        const h = SKYLINE[idx] * hScale;
+        ctx.fillRect(x, HORIZON_Y - h - lift, bw - 5, h + lift + 2);
+      }
+      // lit windows on the near layer only
+      if (hScale === 1) {
+        ctx.fillStyle = 'rgba(255,232,176,0.22)';
+        for (let x = off - total; x < W + bw; x += bw) {
+          const idx = ((Math.round((x - off) / bw) % SKYLINE.length) + SKYLINE.length) % SKYLINE.length;
+          const h = SKYLINE[idx];
+          for (let wy = HORIZON_Y - h + 8; wy < HORIZON_Y - 8; wy += 14) {
+            if ((idx * 7 + wy) % 3 !== 0) ctx.fillRect(x + 8, wy, 6, 6);
+          }
+        }
+      }
+    }
+
+    function trackQuad(l0, l1, z0, z1, color) {
+      const a = project(l0, z1, 0), b = project(l1, z1, 0), c = project(l1, z0, 0), d = project(l0, z0, 0);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.g); ctx.lineTo(b.x, b.g); ctx.lineTo(c.x, c.g); ctx.lineTo(d.x, d.g);
+      ctx.closePath(); ctx.fill();
+    }
+
+    function drawTrack() {
+      // asphalt bed
+      trackQuad(-1.55, 1.55, Z_NEAR, Z_SPAWN, '#353b4c');
+      // cross ties streaming toward the camera (the speed illusion)
+      const TIE = 8;
+      for (let k = 0; k < Z_SPAWN / TIE + 1; k++) {
+        const z0 = k * TIE - (scroll % TIE) - 1;
+        if (z0 + 0.8 < Z_NEAR || z0 > Z_SPAWN) continue;
+        trackQuad(-1.55, 1.55, Math.max(z0, Z_NEAR), z0 + 0.8, 'rgba(255,255,255,0.045)');
+      }
+      // dashed lane dividers at the lane boundaries
+      const GAP = 4;
+      for (const lb of [-0.5, 0.5]) {
+        for (let k = 0; k < Z_SPAWN / GAP + 1; k++) {
+          const z0 = k * GAP - (scroll % GAP) - 1;
+          if (z0 + 1.8 < Z_NEAR || z0 > Z_SPAWN) continue;
+          trackQuad(lb - 0.018, lb + 0.018, Math.max(z0, Z_NEAR), z0 + 1.8, 'rgba(255,255,255,0.35)');
+        }
+      }
+      // solid edge lines
+      trackQuad(-1.57, -1.51, Z_NEAR, Z_SPAWN, '#ffd23f');
+      trackQuad(1.51, 1.57, Z_NEAR, Z_SPAWN, '#ffd23f');
+    }
+
+    // ---------- draw: entities ----------
+    function drawBarEnt(en) {
+      const p = project(en.lane, en.z, 0);
+      const hw = 74 * p.s;
+      const yb = project(en.lane, en.z, 0.3).y, yt = project(en.lane, en.z, 0.8).y;
+      // legs
+      ctx.fillStyle = '#5a6070';
+      ctx.fillRect(p.x - hw + 4 * p.s, yb, 7 * p.s, p.g - yb);
+      ctx.fillRect(p.x + hw - 11 * p.s, yb, 7 * p.s, p.g - yb);
+      // striped board
+      ctx.save();
+      rr(p.x - hw, yt, hw * 2, yb - yt, 5 * p.s);
+      ctx.clip();
+      ctx.fillStyle = '#f2f2f2';
+      ctx.fillRect(p.x - hw, yt, hw * 2, yb - yt);
+      ctx.fillStyle = '#e94560';
+      const sw = 22 * p.s;
+      for (let x = p.x - hw - sw; x < p.x + hw + sw; x += sw * 2) {
+        ctx.beginPath();
+        ctx.moveTo(x, yb); ctx.lineTo(x + sw, yt); ctx.lineTo(x + sw * 2, yt); ctx.lineTo(x + sw, yb);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = Math.max(1, 2 * p.s);
+      rr(p.x - hw, yt, hw * 2, yb - yt, 5 * p.s); ctx.stroke();
+    }
+
+    function drawSignEnt(en) {
+      const p = project(en.lane, en.z, 0);
+      const pl = project(en.lane - 0.42, en.z, 0), pr = project(en.lane + 0.42, en.z, 0);
+      const yTop = project(en.lane, en.z, 1.7).y, yBot = project(en.lane, en.z, SIGN_BOT).y;
+      ctx.fillStyle = '#5a6070';
+      const pw = 7 * p.s;
+      ctx.fillRect(pl.x - pw / 2, yTop, pw, pl.g - yTop);
+      ctx.fillRect(pr.x - pw / 2, yTop, pw, pr.g - yTop);
+      // hanging board
+      ctx.fillStyle = '#2f6ad9';
+      rr(pl.x, yTop, pr.x - pl.x, yBot - yTop, 6 * p.s); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = Math.max(1, 2 * p.s);
+      rr(pl.x, yTop, pr.x - pl.x, yBot - yTop, 6 * p.s); ctx.stroke();
+      if (p.s > 0.3) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '800 ' + Math.round(26 * p.s) + "px 'Nunito', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('DUCK!', p.x, (yTop + yBot) / 2 + 9 * p.s);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    function drawTrainEnt(en) {
+      const zn = Math.max(en.z, -1.2);
+      const zf = Math.min(en.z + en.len, Z_SPAWN + 4);
+      if (zf <= zn) return;
+      const TH = 2.1;                                  // train height in world units
+      const pn = project(en.lane, zn, 0), pf = project(en.lane, zf, 0);
+      const hn = 88 * pn.s, hf = 88 * pf.s;
+      const tn = project(en.lane, zn, TH).y, tf = project(en.lane, zf, TH).y;
+      const body = en.color || '#d23b3b';
+      // side walls
+      ctx.fillStyle = shade(body, 0.55);
+      ctx.beginPath();
+      ctx.moveTo(pn.x - hn, pn.g); ctx.lineTo(pn.x - hn, tn); ctx.lineTo(pf.x - hf, tf); ctx.lineTo(pf.x - hf, pf.g);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(pn.x + hn, pn.g); ctx.lineTo(pn.x + hn, tn); ctx.lineTo(pf.x + hf, tf); ctx.lineTo(pf.x + hf, pf.g);
+      ctx.closePath(); ctx.fill();
+      // roof
+      ctx.fillStyle = shade(body, 0.75);
+      ctx.beginPath();
+      ctx.moveTo(pn.x - hn, tn); ctx.lineTo(pn.x + hn, tn); ctx.lineTo(pf.x + hf, tf); ctx.lineTo(pf.x - hf, tf);
+      ctx.closePath(); ctx.fill();
+      // front face
+      if (en.z > -1.2) {
+        ctx.fillStyle = body;
+        rr(pn.x - hn, tn, hn * 2, pn.g - tn, 10 * pn.s); ctx.fill();
+        // windshield
+        ctx.fillStyle = '#1a2440';
+        rr(pn.x - hn * 0.72, tn + (pn.g - tn) * 0.12, hn * 1.44, (pn.g - tn) * 0.3, 6 * pn.s); ctx.fill();
+        // headlights
+        ctx.fillStyle = '#ffe8b0';
+        ctx.beginPath(); ctx.arc(pn.x - hn * 0.55, pn.g - (pn.g - tn) * 0.22, 8 * pn.s, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(pn.x + hn * 0.55, pn.g - (pn.g - tn) * 0.22, 8 * pn.s, 0, Math.PI * 2); ctx.fill();
+        // bumper stripes
+        ctx.fillStyle = '#ffd23f';
+        ctx.fillRect(pn.x - hn * 0.9, pn.g - 8 * pn.s, hn * 1.8, 5 * pn.s);
+      }
+    }
+
+    function drawCoinEnt(en) {
+      const takers = [];
+      let anyTaken = false, allTaken = true;
+      players.forEach(function (pl, i) { if (!pl.out) { if (en.taken[i]) anyTaken = true; else allTaken = false; } });
+      if (allTaken && players.length) return;
+      const p = project(en.lane, en.z, en.y);
+      const r = 13 * p.s;
+      const sq = 0.35 + 0.65 * Math.abs(Math.cos(scroll * 0.22 + en.z * 0.35));
+      ctx.save();
+      if (anyTaken) ctx.globalAlpha = 0.4;   // one bear already grabbed it
+      ctx.fillStyle = '#e3a81f';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y - r, r * sq, r, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y - r, r * sq * 0.72, r * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffe89a';
+      ctx.beginPath(); ctx.ellipse(p.x - r * sq * 0.2, p.y - r * 1.25, r * sq * 0.25, r * 0.25, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // ---------- draw: bears ----------
+    function drawBear(pl, i) {
+      const skin = SKINS[i];
+      const side = players.length === 2 ? (i === 0 ? -0.16 : 0.16) : 0;
+      const ghost = pl.out && pl.tumbleT > TUMBLE_FRAMES * 0.8;
+      const tumbling = pl.out && !ghost;
+      const z = tumbling ? -Math.min(2.4, pl.tumbleT * 0.055) : 0;
+      const p = project(pl.laneF + side, z, 0);
+      const px = p.x, gy = p.g, k = p.s;
+      const ph = scroll * 0.55;
+
+      ctx.save();
+      if (ghost) ctx.globalAlpha = 0.22;
+      else if (pl.stumbleT > 0 && Math.floor(pl.stumbleT / 4) % 2 === 0) ctx.globalAlpha = 0.4;
+
+      // grounding shadow
+      if (!tumbling) {
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath();
+        ctx.ellipse(px, gy, 30 * k * (1 - pl.y * 0.3), 8 * k, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const py = gy - pl.y * Y_PX * k;    // feet position
+
+      if (pl.rollT > 0 || tumbling) {
+        // rolled up into a ball
+        const rot = tumbling ? pl.tumbleT * 0.25 : (1 - pl.rollT / ROLL_FRAMES) * Math.PI * 2.5;
+        const br = 26 * k;
+        ctx.save();
+        ctx.translate(px, py - br);
+        ctx.rotate(rot);
+        ctx.fillStyle = skin.fur;
+        ctx.beginPath(); ctx.arc(0, 0, br, 0, Math.PI * 2); ctx.fill();
+        // ears poking out of the ball
+        ctx.beginPath(); ctx.arc(-br * 0.65, -br * 0.65, br * 0.32, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(br * 0.65, -br * 0.65, br * 0.32, 0, Math.PI * 2); ctx.fill();
+        // scarf stripe wrapped around
+        ctx.strokeStyle = skin.scarf; ctx.lineWidth = 7 * k;
+        ctx.beginPath(); ctx.arc(0, 0, br * 0.62, 0.3, 2.4); ctx.stroke();
+        // belly pad
+        ctx.fillStyle = skin.pad;
+        ctx.beginPath(); ctx.arc(br * 0.2, br * 0.25, br * 0.35, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.restore();
+        return;
+      }
+
+      const wob = pl.stumbleT > STUMBLE_FRAMES - 22 ? Math.sin(pl.stumbleT * 0.9) * 4 * k : 0;
+      const bob = Math.sin(ph * 2) * 2 * k;
+      const jumping = pl.jumpT > 0;
+
+      // legs (seen from behind: paw pads flash on the lifted foot)
+      for (const s of [-1, 1]) {
+        const lift = jumping ? 12 * k : Math.max(0, Math.sin(ph + (s > 0 ? 0 : Math.PI))) * 9 * k;
+        const lx = px + s * 12 * k + wob;
+        ctx.fillStyle = skin.dark;
+        rr(lx - 7 * k, py - 30 * k, 14 * k, 30 * k - lift, 7 * k); ctx.fill();
+        if (lift > 4 * k || jumping) {
+          ctx.fillStyle = skin.pad;
+          ctx.beginPath(); ctx.ellipse(lx, py - lift - 2 * k, 6.5 * k, 4.5 * k, 0, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+
+      // body
+      ctx.fillStyle = skin.fur;
+      rr(px - 26 * k + wob, py - 66 * k + bob, 52 * k, 46 * k, 20 * k); ctx.fill();
+      // back seam stitch
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2 * k;
+      ctx.setLineDash([4 * k, 4 * k]);
+      ctx.beginPath(); ctx.moveTo(px + wob, py - 60 * k + bob); ctx.lineTo(px + wob, py - 28 * k + bob); ctx.stroke();
+      ctx.setLineDash([]);
+      // stubby tail
+      ctx.fillStyle = skin.pad;
+      ctx.beginPath(); ctx.arc(px + wob, py - 26 * k + bob, 7 * k, 0, Math.PI * 2); ctx.fill();
+
+      // arms (swing opposite the legs)
+      for (const s of [-1, 1]) {
+        const swing = jumping ? -8 * k : Math.sin(ph + (s > 0 ? Math.PI : 0)) * 6 * k;
+        ctx.fillStyle = skin.fur;
+        rr(px + s * 27 * k + wob, py - 58 * k + bob + swing, 11 * k, 24 * k, 5.5 * k); ctx.fill();
+      }
+
+      // scarf band + fluttering tail
+      const headY = py - 88 * k + bob;
+      ctx.fillStyle = skin.scarf;
+      rr(px - 16 * k + wob, py - 72 * k + bob, 32 * k, 9 * k, 4.5 * k); ctx.fill();
+      const flut = Math.sin(ph * 1.7) * 5 * k - (jumping ? 10 * k : 0);
+      ctx.beginPath();
+      ctx.moveTo(px + 4 * k + wob, py - 70 * k + bob);
+      ctx.lineTo(px + 26 * k + wob, py - 62 * k + bob + flut);
+      ctx.lineTo(px + 24 * k + wob, py - 50 * k + bob + flut);
+      ctx.lineTo(px + 2 * k + wob, py - 60 * k + bob);
+      ctx.closePath();
+      ctx.fillStyle = skin.scarfDark; ctx.fill();
+
+      // head + ears (rear view — no face, just fuzz)
+      ctx.fillStyle = skin.fur;
+      ctx.beginPath(); ctx.arc(px + wob, headY, 22 * k, 0, Math.PI * 2); ctx.fill();
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = skin.fur;
+        ctx.beginPath(); ctx.arc(px + s * 16 * k + wob, headY - 16 * k, 9 * k, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = skin.dark;
+        ctx.beginPath(); ctx.arc(px + s * 16 * k + wob, headY - 16 * k, 4.5 * k, 0, Math.PI * 2); ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    // ---------- draw: HUD ----------
+    function drawCoinIcon(x, y, r) {
+      ctx.fillStyle = '#e3a81f';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd23f';
+      ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawHUD() {
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      if (numPlayers === 1) {
+        const pl = players[0];
+        ctx.font = "800 34px 'Nunito', sans-serif"; ctx.textAlign = 'left';
+        ctx.fillStyle = '#fff';
+        ctx.strokeText(String(pl.score), 18, 44); ctx.fillText(String(pl.score), 18, 44);
+        drawCoinIcon(26, 66, 9);
+        ctx.font = "800 18px 'Nunito', sans-serif";
+        ctx.fillStyle = '#ffd23f';
+        ctx.strokeText('× ' + pl.coins, 40, 73); ctx.fillText('× ' + pl.coins, 40, 73);
+        ctx.font = "800 16px 'Nunito', sans-serif"; ctx.textAlign = 'right';
+        ctx.fillStyle = '#cfd6ea';
+        ctx.fillText('Best ' + Math.max(best.load(), pl.score), W - 16, 30);
+      } else {
+        for (let i = 0; i < 2; i++) {
+          const pl = players[i];
+          const right = i === 1;
+          const x = right ? W - 16 : 16;
+          ctx.textAlign = right ? 'right' : 'left';
+          ctx.font = "800 26px 'Nunito', sans-serif";
+          ctx.fillStyle = SKINS[i].scarf;
+          const label = playerName(i, 'P' + (i + 1)) + '  ' + pl.score;
+          ctx.strokeText(label, x, 36); ctx.fillText(label, x, 36);
+          drawCoinIcon(right ? W - 24 : 24, 56, 8);
+          ctx.font = "800 16px 'Nunito', sans-serif";
+          ctx.fillStyle = '#ffd23f';
+          const cx2 = right ? W - 38 : 38;
+          ctx.strokeText('× ' + pl.coins, cx2, 62); ctx.fillText('× ' + pl.coins, cx2, 62);
+          if (pl.out) {
+            ctx.font = "800 16px 'Nunito', sans-serif";
+            ctx.fillStyle = '#e94560';
+            ctx.strokeText('OUT', x, 84); ctx.fillText('OUT', x, 84);
+          }
+        }
+      }
+      ctx.textAlign = 'left';
+    }
+
+    // ---------- draw ----------
+    function draw() {
+      drawBackground();
+      drawTrack();
+
+      const showBears = state !== 'select';
+      const sorted = ents.slice().sort(function (a, b) { return b.z - a.z; });
+      let bearsDrawn = false;
+      for (const en of sorted) {
+        if (!bearsDrawn && en.z < 0 && showBears) { drawAllBears(); bearsDrawn = true; }
+        if (en.kind === 'bar') drawBarEnt(en);
+        else if (en.kind === 'sign') drawSignEnt(en);
+        else if (en.kind === 'train') drawTrainEnt(en);
+        else drawCoinEnt(en);
+      }
+      if (!bearsDrawn && showBears) drawAllBears();
+      if (state !== 'select') drawHUD();
+    }
+
+    function drawAllBears() {
+      // ghosts first so the live bear draws on top
+      players.forEach(function (pl, i) { if (pl.out) drawBear(pl, i); });
+      players.forEach(function (pl, i) { if (!pl.out) drawBear(pl, i); });
+    }
+
+    // ---------- main loop ----------
+    function loop(ts) {
+      if (ts == null) ts = lastTs + 16.7;
+      dtMs = Math.min(Math.max(ts - lastTs, 1), 100);  // clamp tab-switch gaps; refresh-rate independent
+      dtf = dtMs / 16.6667;
+      lastTs = ts;
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // ---------- test hook ----------
+    window.GZ = {
+      get state() { return state; },
+      get players() { return players; },
+      get ents() { return ents; },
+      get dist() { return dist; },
+      get speed() { return speed; },
+      begin: beginGame,
+      addEnt: function (e) {
+        ents.push({ kind: e.kind, lane: e.lane, z: e.z, len: e.len || 1.5, y: e.y || 0,
+                    color: null, hit: [false, false], taken: [false, false] });
+      }
+    };
+  })();
+  </script>
+
+  <script>
+    // On desktop the homepage loads this game in a pane. Hide only the "‹ Games" back link
+    // (it would reload the homepage inside the pane) while keeping the Pacifico game title
+    // visible. Standalone/mobile (top-level) pages keep the full topbar.
+    if (window.self !== window.top) {
+      var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden';
+    }
+  </script>
+</body>
+</html>
