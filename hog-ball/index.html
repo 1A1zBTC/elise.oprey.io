@@ -231,10 +231,10 @@
 
     // ---------- teams ----------
     const MOBS = {
-      pig:     { name: 'Pigs',     emoji: '🐷', tag: 'Balanced all-rounders',   accel: 0.36, maxSpd: 2.2, mass: 1.45, r: 15, shoot3: 1.00, steal: 1.00, color: '#f2a6c0', dark: '#d77fa0', face: '#ffc6dc' },
-      cow:     { name: 'Cows',     emoji: '🐮', tag: 'Big bodies, strong screens', accel: 0.31, maxSpd: 1.95, mass: 2.20, r: 17, shoot3: 0.95, steal: 0.95, color: '#f0ede6', dark: '#cfc9bd', face: '#e8a7b8' },
-      zombie:  { name: 'Zombies',  emoji: '🧟', tag: 'Tanky, sticky defense',   accel: 0.29, maxSpd: 1.85, mass: 2.40, r: 17, shoot3: 0.90, steal: 1.20, color: '#6a9a55', dark: '#4a7038', face: '#3a5a2c' },
-      creeper: { name: 'Creepers', emoji: '🟩', tag: 'Fast, deadly deep threes', accel: 0.40, maxSpd: 2.45, mass: 1.10, r: 14, shoot3: 1.25, steal: 0.90, color: '#5fc24f', dark: '#3f8f33', face: '#1d1d1d' },
+      pig:     { name: 'Pigs',     emoji: '🐷', tag: 'Balanced all-rounders',   accel: 0.36, maxSpd: 2.2, mass: 1.45, r: 15, shoot3: 1.00, steal: 1.00, fit: 1.00, color: '#f2a6c0', dark: '#d77fa0', face: '#ffc6dc' },
+      cow:     { name: 'Cows',     emoji: '🐮', tag: 'Big bodies, strong screens', accel: 0.31, maxSpd: 1.95, mass: 2.20, r: 17, shoot3: 0.95, steal: 0.95, fit: 0.85, color: '#f0ede6', dark: '#cfc9bd', face: '#e8a7b8' },
+      zombie:  { name: 'Zombies',  emoji: '🧟', tag: 'Tanky, sticky defense',   accel: 0.29, maxSpd: 1.85, mass: 2.40, r: 17, shoot3: 0.90, steal: 1.20, fit: 0.80, color: '#6a9a55', dark: '#4a7038', face: '#3a5a2c' },
+      creeper: { name: 'Creepers', emoji: '🟩', tag: 'Fast, deadly deep threes', accel: 0.40, maxSpd: 2.45, mass: 1.10, r: 14, shoot3: 1.25, steal: 0.90, fit: 1.15, color: '#5fc24f', dark: '#3f8f33', face: '#1d1d1d' },
     };
     const SC = 0.7;                                // mob sprite scale — keeps the court big relative to players
     const MOB_KEYS = ['pig', 'cow', 'zombie', 'creeper'];
@@ -272,9 +272,9 @@
       const contest = contestOn(o, side);
       return clamp((0.05 + (o.shoot3 - 0.9) * 0.10) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009), 0.015, 0.12);
     }
-    // 2K bar speed: elite shooters get the slowest bar; bricklayers a twitchy one.
-    // Runs at 4x — timing is meant to be HARD.
-    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 4; }
+    // 2K bar speed: paced like NBA 2K / 2K Mobile release timing — elite shooters
+    // get a slow ~0.8s bar, big men a snappy ~0.35s one.
+    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 1.5; }
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
@@ -289,17 +289,21 @@
       return { side: side, key: key, slot: slot,
         x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
         accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, shoot3: s.shoot3, steal: s.steal,
-        pName: s.pName || null, stars: s.stars || 0, fouls: 0, ejected: false,
+        pName: s.pName || null, stars: s.stars || 0, fouls: 0, ejected: false, stamina: 100, fit: s.fit || 1,
         aiShootCD: 0, aiPassCD: 0, aiJumpCD: 0, stealCD: 0, stunT: 0, crossT: 0, crossCD: 0,
         flash: 0, legPhase: 0, mark: null, dunk: null };
     }
     function buildTeam(side, key) {
-      return { side: side, key: key, onPitch: FORMATION.map(function (f, i) { return mkPlayer(side, key, i); }), active: 0 };
+      return { side: side, key: key,
+        onPitch: FORMATION.map(function (f, i) { return mkPlayer(side, key, i); }),
+        bench: [mkPlayer(side, key, null), mkPlayer(side, key, null)],
+        active: 0 };
     }
     // Season mode: a team whose three mobs each carry their own card stats
-    function buildCustomTeam(side, key, cards) {
+    function buildCustomTeam(side, key, cards, benchCards) {
       return { side: side, key: key,
         onPitch: FORMATION.map(function (f, i) { return mkPlayer(side, cards[i].key, i, cardStats(cards[i])); }),
+        bench: (benchCards || []).map(function (c) { return mkPlayer(side, c.key, null, cardStats(c)); }),
         active: 0 };
     }
     function activePlayer(t) { return t.onPitch[t.active]; }
@@ -312,7 +316,26 @@
     }
 
     // ---------- match flow ----------
+    // Dead-ball substitutions: gassed (or ejected) mobs come off for the freshest
+    // bench body. Fouled-out players never return.
+    function trySubs(t) {
+      if (!t.bench || !t.bench.length) return;
+      for (let i = 0; i < t.onPitch.length; i++) {
+        const p = t.onPitch[i];
+        if (!p.ejected && p.stamina >= 40) continue;
+        let bi = -1, bs = -1;
+        for (let j = 0; j < t.bench.length; j++) { const b = t.bench[j]; if (b.ejected) continue; if (b.stamina > bs) { bs = b.stamina; bi = j; } }
+        if (bi < 0 || (bs < 65 && !p.ejected)) continue;
+        const b = t.bench[bi];
+        b.slot = p.slot; b.side = t.side; b.x = p.x; b.y = p.y; b.vx = b.vy = 0; b.z = 0; b.vz = 0;
+        p.slot = null;
+        if (ball && ball.owner === p) ball.owner = b;
+        t.onPitch[i] = b; t.bench[bi] = p;
+        pops.push({ x: b.x, y: b.y - 40, txt: 'SUB 🔄', color: SIDE_COLOR[t.side], t: 0 });
+      }
+    }
     function placeInbound(side) {
+      trySubs(teams[0]); trySubs(teams[1]);
       ball = { x: VW / 2, y: CY, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 7, owner: null, freeCD: 0, lastSide: side, trail: [], passTo: null, settle: 0, shot: null };
       for (const t of teams) for (const p of t.onPitch) { if (p.ejected) continue; const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stealCD = 0; }
       possCD = 0;
@@ -652,6 +675,7 @@
       const p = activePlayer(teams[side]);
       if (ball.owner !== p || p.crossCD > 0 || p.dunk || p.stunT > 0) return;
       p.crossCD = 90; p.crossT = 22;
+      p.stamina = Math.max(0, p.stamina - 5);
       p.moveType = pick(['cross', 'spin', 'btb']);
       const k = keys[side];
       let ax = (k.r ? 1 : 0) - (k.l ? 1 : 0), ay = (k.d ? 1 : 0) - (k.u ? 1 : 0);
@@ -671,7 +695,7 @@
       if (state !== 'playing') return;
       const p = activePlayer(teams[side]);
       if (ball.owner === p || p.dunk || p.stunT > 0) return;
-      if (p.z <= 0) p.vz = 7.5;
+      if (p.z <= 0) { p.vz = 7.5; p.stamina = Math.max(0, p.stamina - 2); }
       const dx = ball.x - p.x, dy = ball.y - p.y, dl = Math.hypot(dx, dy) || 1;
       p.vx += (dx / dl) * p.maxSpd * 1.3; p.vy += (dy / dl) * p.maxSpd * 1.3;
       if (ball.owner && ball.owner.side !== side) {
@@ -889,7 +913,8 @@
         mass: ctr ? 2.4 : (c.pos === 'F' ? 1.7 : 1.2),
         r: ctr ? 18 : (c.pos === 'F' ? 16 : 14),
         shoot3: 0.82 + c.stars * 0.09 + g * 0.05 - ctr * 0.05,
-        steal: 0.82 + c.stars * 0.06 + g * 0.08
+        steal: 0.82 + c.stars * 0.06 + g * 0.08,
+        fit: 0.72 + c.stars * 0.07 + g * 0.05 - ctr * 0.06
       };
     }
 
@@ -1002,7 +1027,9 @@
       const nx = nextGameDesc(), fr = FRANCHISES[nx.opp];
       careerMatch = { oppName: fr.name, oppEmoji: MOBS[fr.key].emoji };
       numPlayers = 1;
-      teams = [ buildCustomTeam(0, 'pig', cards), buildCustomTeam(1, fr.key, cpuCards(fr, nx.boost)) ];
+      // bench: your signed players who aren't starting (up to 3); CPU brings two subs
+      const myBench = career.owned.filter(function (o) { return career.lineup.indexOf(o.id) < 0; }).slice(0, 3);
+      teams = [ buildCustomTeam(0, 'pig', cards, myBench), buildCustomTeam(1, fr.key, cpuCards(fr, nx.boost), cpuCards(fr, nx.boost).slice(0, 2)) ];
       applyDiff(teams[1]);
       score = [0, 0]; pops = []; freeze = 0;
       clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0];
@@ -1110,8 +1137,10 @@
 
     // ---------- movement / AI ----------
     function airFactor(m) { return m.z > 0 ? 0.45 : 1; }
+    // tired legs: a gassed mob moves at 60% pace until they rest (or get subbed)
+    function staminaFactor(m) { return 0.6 + 0.4 * (m.stamina / 100); }
     function steer(p, tx, ty, gain) {
-      const dx = tx - p.x, dy = ty - p.y, dl = Math.hypot(dx, dy) || 1, f = airFactor(p);
+      const dx = tx - p.x, dy = ty - p.y, dl = Math.hypot(dx, dy) || 1, f = airFactor(p) * staminaFactor(p);
       p.vx += (dx / dl) * p.accel * 2.4 * gain * f * dtf;
       p.vy += (dy / dl) * p.accel * 2.4 * gain * f * dtf;
     }
@@ -1121,7 +1150,7 @@
       let ay = (k.d ? 1 : 0) - (k.u ? 1 : 0);
       if (ax === 0 && ay === 0 && joy[side].active) { const dx = joy[side].tx - joy[side].bx, dy = joy[side].ty - joy[side].by, dl = Math.hypot(dx, dy); if (dl > 6) { ax = dx / dl; ay = dy / dl; } }
       if (ax === 0 && ay === 0 && !ball.owner && ball.passTo === m) { steer(m, ball.x + ball.vx * 8, ball.y + ball.vy * 8, 0.8); return; }
-      const l = Math.hypot(ax, ay) || 1, f = airFactor(m);
+      const l = Math.hypot(ax, ay) || 1, f = airFactor(m) * staminaFactor(m);
       m.vx += (ax / l) * m.accel * 2.4 * f * dtf;
       m.vy += (ay / l) * m.accel * 2.4 * f * dtf;
     }
@@ -1216,13 +1245,16 @@
     function moveMob(m) {
       if (m.z > 0 || m.vz > 0) { m.vz -= GRAV_Z * dtf; m.z += m.vz * dtf; if (m.z <= 0) { m.z = 0; m.vz = 0; } }
       m.vx *= Math.pow(0.84, dtf); m.vy *= Math.pow(0.84, dtf);
-      const cap = m.maxSpd * (m.crossT > 0 ? 2.4 : 1), sp = Math.hypot(m.vx, m.vy);
+      const cap = m.maxSpd * (m.crossT > 0 ? 2.4 : 1) * staminaFactor(m), sp = Math.hypot(m.vx, m.vy);
       if (sp > cap) { const k = cap / sp; m.vx *= k; m.vy *= k; }
       m.x += m.vx * dtf; m.y += m.vy * dtf;
       m.x = clamp(m.x, X0 + m.r * 0.6, X1 - m.r * 0.6);
       m.y = clamp(m.y, Y0 + m.r * 0.6, Y1 - m.r * 0.6);
       if (sp > 0.5) { m.fx = m.vx / sp; m.fy = m.vy / sp; }
       m.legPhase += sp * 0.22 * dtf;
+      // fatigue: effort drains the tank (~3-5 real minutes depending on fitness), resting refills a little
+      if (sp > 0.3) m.stamina = Math.max(0, m.stamina - (0.0035 + (sp / m.maxSpd) * 0.0065) / m.fit * dtf);
+      else m.stamina = Math.min(100, m.stamina + 0.006 * dtf);
     }
     function mobCollide(a, b) {
       const dx = b.x - a.x, dy = b.y - a.y; let d = Math.hypot(dx, dy); const min = a.r + b.r; if (d === 0) d = 0.01;
@@ -1282,10 +1314,10 @@
             if (q.z > 4 && ball.z > 8 && ball.z < q.z + 36 && Math.hypot(q.x - ball.x, q.y - ball.y) < q.r + ball.r + 5) {
               sh.blockTried = true;
               const r = Math.random();
-              if (r < 0.35) {
+              if (r < 0.15) {
                 pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'BLOCKED!', color: SIDE_COLOR[q.side], t: 0, big: true });
                 ball.shot = null; ball.vx = -ball.vx * 0.35 + rnd(-2, 2); ball.vy = -ball.vy * 0.35 + rnd(-2, 2); ball.vz = -2; ball.freeCD = 8;
-              } else if (r < 0.55) {
+              } else if (r < 0.30) {
                 // caught the arm — SHOOTING FOUL, always free throws
                 pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'SHOOTING FOUL!', color: '#ff9d9d', t: 0, big: true });
                 chargeFoul(q);
@@ -1443,6 +1475,9 @@
         }
       }
 
+      // bench mobs catch their breath fast
+      for (const t of teams) if (t.bench) for (const b of t.bench) b.stamina = Math.min(100, b.stamina + 0.05 * dtf);
+
       const court = teams[0].onPitch.concat(teams[1].onPitch);
       for (const m of court) if (!m.dunk && !m.ejected) moveMob(m);
       for (let i = 0; i < court.length; i++) for (let j = i + 1; j < court.length; j++) { if (court[i].dunk || court[j].dunk || court[i].ejected || court[j].ejected) continue; mobCollide(court[i], court[j]); }
@@ -1569,6 +1604,13 @@
         ctx.fillStyle = s.face; ctx.fillRect(x - 9, hy + 2, 18, 7);      // muzzle band
         ctx.fillStyle = '#7a4a5a'; ctx.fillRect(x - 5, hy + 4, 2, 3); ctx.fillRect(x + 3, hy + 4, 2, 3);
         ctx.fillStyle = '#b8b0a0'; ctx.fillRect(x - 12, yb - 49 - bob, 3, 5); ctx.fillRect(x + 9, yb - 49 - bob, 3, 5);   // horns
+      }
+      // stamina bar shows once a mob starts getting tired
+      if (!p.ejected && p.stamina < 65) {
+        const st = p.stamina / 100;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x - 10, yb - 56 - bob, 20, 4);
+        ctx.fillStyle = st > 0.4 ? '#ffd23f' : '#e94560';
+        ctx.fillRect(x - 10, yb - 56 - bob, 20 * st, 4);
       }
       // carried ball: held overhead when shooting/dunking, otherwise a live dribble
       // bouncing between hand and hardwood (keeps going even standing still)
