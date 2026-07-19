@@ -225,7 +225,7 @@
     const MOBS = {
       pig:     { name: 'Pigs',     emoji: '🐷', tag: 'Balanced all-rounders',   accel: 0.36, maxSpd: 2.2, mass: 1.45, r: 15, shoot3: 1.00, steal: 1.00, color: '#f2a6c0', dark: '#d77fa0', face: '#ffc6dc' },
       cow:     { name: 'Cows',     emoji: '🐮', tag: 'Big bodies, strong screens', accel: 0.31, maxSpd: 1.95, mass: 2.20, r: 17, shoot3: 0.95, steal: 0.95, color: '#f0ede6', dark: '#cfc9bd', face: '#e8a7b8' },
-      zombie:  { name: 'Zombies',  emoji: '🧟', tag: 'Tanky, super steals',     accel: 0.29, maxSpd: 1.85, mass: 2.40, r: 17, shoot3: 0.90, steal: 1.35, color: '#6a9a55', dark: '#4a7038', face: '#3a5a2c' },
+      zombie:  { name: 'Zombies',  emoji: '🧟', tag: 'Tanky, sticky defense',   accel: 0.29, maxSpd: 1.85, mass: 2.40, r: 17, shoot3: 0.90, steal: 1.20, color: '#6a9a55', dark: '#4a7038', face: '#3a5a2c' },
       creeper: { name: 'Creepers', emoji: '🟩', tag: 'Fast, deadly deep threes', accel: 0.40, maxSpd: 2.45, mass: 1.10, r: 14, shoot3: 1.25, steal: 0.90, color: '#5fc24f', dark: '#3f8f33', face: '#1d1d1d' },
     };
     const SC = 0.7;                                // mob sprite scale — keeps the court big relative to players
@@ -464,7 +464,8 @@
       const err = c <= 1 ? (1 - c) : (c - 1) * 1.6;
       const green = inGreen(o, three, c);
       if (D < 62 && green) { startDunk(side, o, h); return; }
-      let P0 = 0.95 - D * 0.0011;
+      // NBA-ish base percentages: ~85% at the rim, ~55% at the arc before timing
+      let P0 = 0.88 - D * 0.0013;
       if (three) P0 *= 0.92 * o.shoot3;
       const tim = green ? 1.30 : Math.max(0, 1 - err * 2.0);
       let d0 = Infinity, defAir = false;
@@ -503,9 +504,10 @@
       const d = Math.hypot(p.x - o.x, p.y - o.y);
       if (d > p.r + o.r + 22 * p.steal) { pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 }); return; }
       const roll = Math.random();
-      if (roll < 0.38 * p.steal) {
+      // NBA-realistic: most reaches are whiffs — clean steals are rare, fouls hurt
+      if (roll < 0.16 * p.steal) {
         setOwner(p); pops.push({ x: p.x, y: p.y - 34, txt: 'STEAL!', color: SIDE_COLOR[p.side], t: 0 });
-      } else if (roll < 0.38 * p.steal + 0.34) {
+      } else if (roll < 0.16 * p.steal + 0.26) {
         p.stunT = 70;
         pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
         if (!otMode) {   // no gimme points in sudden death
@@ -754,7 +756,7 @@
         mass: ctr ? 2.4 : (c.pos === 'F' ? 1.7 : 1.2),
         r: ctr ? 18 : (c.pos === 'F' ? 16 : 14),
         shoot3: 0.82 + c.stars * 0.09 + g * 0.05 - ctr * 0.05,
-        steal: 0.85 + c.stars * 0.08 + g * 0.1
+        steal: 0.82 + c.stars * 0.06 + g * 0.08
       };
     }
 
@@ -1018,7 +1020,7 @@
         // contest a charging or in-range shooter with a jump
         if (p.aiJumpCD <= 0 && d < 60 && (shootHeld[mark.side] || markNearHoop)) { if (p.z <= 0) p.vz = 7; p.aiJumpCD = 90; }
         // occasionally reach in for a steal ATTEMPT — the AI risks the foul too
-        if (d < p.r + mark.r + 18 && Math.random() < 0.012) attemptSteal(p, mark);
+        if (d < p.r + mark.r + 18 && Math.random() < 0.005) attemptSteal(p, mark);
       }
     }
 
@@ -1133,8 +1135,10 @@
         for (const t of teams) for (const p of t.onPitch) {
           if (ball.z > 26 + p.z) continue;
           const d = Math.hypot(p.x - ball.x, p.y - ball.y);
-          // tighter catch radius so you SEE the ball arrive rather than teleport
-          if (d < p.r + ball.r + (ball.passTo === p ? 10 : 7) && d < bd) { bd = d; best = p; }
+          // tighter catch radius so you SEE the ball arrive; a pass can only be
+          // intercepted if it flies straight into a defender
+          const grab = ball.passTo === p ? 10 : (ball.passTo && ball.passTo.side !== p.side ? 2 : 7);
+          if (d < p.r + ball.r + grab && d < bd) { bd = d; best = p; }
         }
         if (best) setOwner(best);
       }
@@ -1216,7 +1220,9 @@
           else if (ball.owner === p) driveCarrierAI(p, s);
           else if (!ball.owner && ball.passTo === p) steer(p, ball.x + ball.vx * 8, ball.y + ball.vy * 8, 0.95);
           else if (weOwn) driveOffBall(p, s);
-          else if (!ball.owner && !ball.shot && i === chaser) driveChase(p);
+          // chase only genuinely loose balls (rebounds/fumbles) — defenders don't
+          // teleport-read passes; interceptions only happen when a pass hits them
+          else if (!ball.owner && !ball.shot && !ball.passTo && i === chaser) driveChase(p);
           else driveDefense(p, s);
         }
       }
