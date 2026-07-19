@@ -87,6 +87,9 @@
     .cr-slot { flex: 1; background: #0f1830; border: 2px dashed #2a3a5e; border-radius: 12px; padding: 8px 4px; color: #8b93b0; font-size: 0.62rem; font-weight: 800; min-height: 62px; }
     .cr-slot.filled { border-style: solid; border-color: #ffd23f; color: #fff; }
     .cr-slot .em { display: block; font-size: 1.35rem; line-height: 1.3; }
+    .swatches { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+    .swatch { width: 30px; height: 30px; border-radius: 9px; border: 2px solid #0f3460; cursor: pointer; padding: 0; }
+    .swatch.selected { border-color: #ffd23f; box-shadow: 0 0 10px rgba(255,210,63,0.5); }
   </style>
 </head>
 <body>
@@ -164,6 +167,7 @@
         </div>
         <button class="start-btn" id="cr-play">▶ Play next game</button>
         <button class="secondary-btn" id="cr-lineup-btn">👥 Lineup &amp; trades</button>
+        <button class="secondary-btn" id="cr-jersey-btn">🎽 Jersey designer</button>
         <button class="secondary-btn" id="cr-market-btn">🛒 Transfer market</button>
         <button class="secondary-btn" id="cr-reset">🔁 Start a brand-new career</button>
         <button class="secondary-btn" id="cr-close">‹ Back to menu</button>
@@ -178,6 +182,26 @@
         <div class="cr-list" id="mk-list"></div>
         <button class="secondary-btn" id="mk-refresh">🔄 Scout different players</button>
         <button class="secondary-btn" id="mk-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Season mode: jersey designer -->
+    <div class="overlay" id="jersey" hidden>
+      <div class="panel">
+        <h2>Jersey Designer</h2>
+        <div class="sub">Design your team's threads — worn in every Season Mode game!</div>
+        <canvas id="jz-prev" width="140" height="96" style="background:#0f1830;border-radius:12px;border:2px solid #0f3460"></canvas>
+        <div class="group-label">Jersey colour</div>
+        <div class="swatches" id="jz-colors"></div>
+        <div class="group-label">Trim colour</div>
+        <div class="swatches" id="jz-trims"></div>
+        <div class="group-label">Style</div>
+        <div class="choices" id="jz-styles">
+          <button class="choice" data-style="solid">Solid</button>
+          <button class="choice" data-style="stripes">Stripes</button>
+          <button class="choice" data-style="hoops">Hoops</button>
+        </div>
+        <button class="secondary-btn" id="jz-back">‹ Back</button>
       </div>
     </div>
 
@@ -251,6 +275,9 @@
     let pops = [], freeze = 0, inboundSide = 0;
     let clockMs = HALF_MS, half = 1, otMode = false;
     let teamFouls = [0, 0];      // per-half team fouls: 10 puts the other team in the BONUS
+    let shotClock = 24000;       // NBA 24-second clock
+    let possFront = false;       // has this possession reached the frontcourt? (over-and-back)
+    let paintT = 0;              // offensive 3-seconds timer
     let possCD = 0;
     let careerMatch = null;      // set while a Season-mode game is being played
     let lastCareer = false;      // routes the over panel's Continue back to the season hub
@@ -337,7 +364,7 @@
       trySubs(teams[0]); trySubs(teams[1]);
       ball = { x: VW / 2, y: CY, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 7, owner: null, freeCD: 0, lastSide: side, trail: [], passTo: null, settle: 0, shot: null };
       for (const t of teams) for (const p of t.onPitch) { if (p.ejected) continue; const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stealCD = 0; }
-      possCD = 0;
+      possCD = 0; shotClock = 24000; possFront = false; paintT = 0;
       let taker = teams[side].onPitch.find(function (p) { return !p.ejected; }) || teams[side].onPitch[0];
       setOwner(taker);                    // takes it in the backcourt
       possCD = 45;                        // a moment of space to play it in
@@ -449,6 +476,7 @@
     }
     function setOwner(p) {
       const intercepted = ball.passTo && ball.passTo.side !== p.side;
+      if (ball.lastSide !== p.side) { shotClock = 24000; possFront = false; paintT = 0; }
       ball.owner = p; ball.lastSide = p.side; ball.vx = p.vx; ball.vy = p.vy; ball.z = 0; ball.vz = 0; ball.freeCD = 0; possCD = 10;
       ball.passTo = null; ball.shot = null;
       ball.settle = 10;
@@ -521,7 +549,7 @@
         make = Math.random() < P;
       }
       const airball = !make && (err > 0.30 || Math.random() < 0.15);
-      const T = clamp(16 + D * 0.055, 20, 44);
+      const T = clamp(22 + D * 0.075, 30, 60);   // long, high NBA rainbow arc
       let tx = h.x, ty = h.y;
       if (!make) {
         const a = rnd(0, 6.283), m = airball ? rnd(42, 70) : rnd(RIM_R * 1.1, RIM_R * 2.4);
@@ -541,6 +569,18 @@
     function startDunk(side, o, h) {
       o.dunk = { t: 0, T: 12, sx: o.x, sy: o.y, hx: h.x, hy: h.y };
       pops.push({ x: o.x, y: o.y - o.r - 24, txt: 'DUNK! 💥', color: '#ffe066', t: 0 });
+    }
+
+    // generic whistle-violation turnover: ball to the other team where it stands
+    function deadBallTurnover(toSide, label) {
+      ball.shot = null; ball.passTo = null; ball.vx = ball.vy = ball.vz = 0; ball.z = 0;
+      ball.x = clamp(ball.x, X0 + 22, X1 - 22); ball.y = clamp(ball.y, Y0 + 22, Y1 - 22);
+      pops.push({ x: ball.x, y: ball.y - 30, txt: label, color: '#fff', t: 0, big: true });
+      let taker = null, bd = Infinity;
+      for (const p of teams[toSide].onPitch) { if (p.ejected) continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < bd) { bd = d; taker = p; } }
+      if (!taker) return;
+      taker.x = ball.x; taker.y = ball.y; taker.vx = taker.vy = 0;
+      setOwner(taker); possCD = 45; freeze = 26;
     }
 
     // A shot flew out of bounds: whistle, quick sideline inbound to the other team
@@ -602,6 +642,7 @@
     // shared aftermath: made last FT = dead ball & inbound; missed = LIVE rebound
     function ftAftermath(side, lastMade) {
       const h = attackHoop(side);
+      shotClock = 24000; possFront = false; paintT = 0;
       ball.owner = null; ball.passTo = null; ball.shot = null;
       if (lastMade) {
         ball.x = h.x; ball.y = h.y; ball.z = RIM_Z; ball.vz = -0.5; ball.vx = ball.vy = 0;
@@ -725,7 +766,7 @@
     window.addEventListener('keydown', function (e) {
       if (state === 'select') {
         // don't launch a quick match while the season overlays are open
-        const seasonOpen = !document.getElementById('career').hidden || !document.getElementById('market').hidden || !document.getElementById('lineup').hidden;
+        const seasonOpen = !document.getElementById('career').hidden || !document.getElementById('market').hidden || !document.getElementById('lineup').hidden || !document.getElementById('jersey').hidden;
         if (!seasonOpen && (e.code === 'Space' || e.code === 'Enter')) { e.preventDefault(); beginGame(); }
         return;
       }
@@ -961,6 +1002,7 @@
     function saveCareer() { try { localStorage.setItem(CAREER_KEY, JSON.stringify(career)); } catch (e) {} }
     function loadCareer() {
       try { const c = JSON.parse(localStorage.getItem(CAREER_KEY)); if (c && c.owned && c.lineup) career = c; } catch (e) {}
+      if (career && !career.jersey) career.jersey = { color: '#6fa8ff', trim: '#f2f2f2', style: 'solid' };
     }
     function newCareer() {
       career = { season: 1, money: 40, wins: 0, losses: 0, gameIdx: 0, phase: 'regular', cupDone: false, cups: 0, titles: 0,
@@ -969,7 +1011,8 @@
           { id: 'k1', name: 'Rookie Moo', key: 'cow', pos: 'F', stars: 2 },
           { id: 'k2', name: 'Rookie Boo', key: 'zombie', pos: 'C', stars: 2 }
         ],
-        lineup: ['k0', 'k1', 'k2'], stock: [] };
+        lineup: ['k0', 'k1', 'k2'], stock: [],
+        jersey: { color: '#6fa8ff', trim: '#f2f2f2', style: 'solid' } };
       restock(); saveCareer();
     }
     function restock() {
@@ -1033,7 +1076,7 @@
       score = [0, 0]; pops = []; freeze = 0;
       clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0];
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0; defendHeld[0] = defendHeld[1] = false;
-      careerEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true; setupEl.hidden = true; overEl.hidden = true;
+      careerEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true; jerseyEl.hidden = true; setupEl.hidden = true; overEl.hidden = true;
       placeTip();   // Season games are 1P: every one opens with the jump ball
       setControls();
     }
@@ -1046,7 +1089,7 @@
     function openCareer() {
       if (!career) { loadCareer(); if (!career) newCareer(); }
       state = 'select';
-      setupEl.hidden = true; overEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true;
+      setupEl.hidden = true; overEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true; jerseyEl.hidden = true;
       careerEl.hidden = false;
       renderCareer(); setControls();
     }
@@ -1123,6 +1166,50 @@
         row.appendChild(tog); row.appendChild(sell); list.appendChild(row);
       });
     }
+    // ---- jersey designer ----
+    const jerseyEl = document.getElementById('jersey');
+    const JCOLORS = ['#6fa8ff', '#e94560', '#46c46a', '#ffd23f', '#b06bff', '#ff8a3c', '#3ec8be', '#f2f2f2', '#2a2a2a', '#ff5da2'];
+    function buildSwatches(elId, prop) {
+      const el = document.getElementById(elId); el.innerHTML = '';
+      JCOLORS.forEach(function (col) {
+        const b = document.createElement('button');
+        b.className = 'swatch'; b.style.background = col; b.dataset.col = col;
+        b.addEventListener('click', function () { career.jersey[prop] = col; saveCareer(); renderJersey(); });
+        el.appendChild(b);
+      });
+    }
+    function renderJerseyPreview() {
+      const cv = document.getElementById('jz-prev'), c2 = cv.getContext('2d');
+      c2.clearRect(0, 0, cv.width, cv.height);
+      const jz = career.jersey, x = 70, yb = 88;
+      c2.save(); c2.translate(x, yb); c2.scale(1.6, 1.6); c2.translate(-x, -yb);
+      c2.fillStyle = '#d77fa0'; c2.fillRect(x - 8, yb - 12, 7, 12); c2.fillRect(x + 1, yb - 12, 7, 12);
+      c2.fillStyle = '#f2a6c0'; c2.fillRect(x - 10, yb - 31, 20, 20);
+      c2.fillStyle = jz.color; c2.fillRect(x - 10, yb - 31, 20, 12);
+      if (jz.style === 'stripes') { c2.fillStyle = jz.trim; c2.fillRect(x - 7, yb - 31, 3, 12); c2.fillRect(x + 4, yb - 31, 3, 12); }
+      else if (jz.style === 'hoops') { c2.fillStyle = jz.trim; c2.fillRect(x - 10, yb - 27, 20, 4); }
+      c2.fillStyle = '#f2a6c0'; c2.fillRect(x - 9, yb - 49, 18, 18);
+      c2.fillStyle = '#2a2a2a'; c2.fillRect(x - 6, yb - 45, 3, 4); c2.fillRect(x + 3, yb - 45, 3, 4);
+      c2.fillStyle = '#ffc6dc'; c2.fillRect(x - 5, yb - 41, 10, 7);
+      c2.fillStyle = '#c76b94'; c2.fillRect(x - 3, yb - 39, 2, 3); c2.fillRect(x + 1, yb - 39, 2, 3);
+      c2.restore();
+    }
+    function renderJersey() {
+      ['jz-colors', 'jz-trims'].forEach(function (id, k) {
+        const prop = k === 0 ? 'color' : 'trim';
+        document.querySelectorAll('#' + id + ' .swatch').forEach(function (b) { b.classList.toggle('selected', b.dataset.col === career.jersey[prop]); });
+      });
+      document.querySelectorAll('#jz-styles .choice').forEach(function (b) { b.classList.toggle('selected', b.dataset.style === career.jersey.style); });
+      renderJerseyPreview();
+    }
+    buildSwatches('jz-colors', 'color'); buildSwatches('jz-trims', 'trim');
+    document.getElementById('jz-styles').addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice'); if (!btn) return;
+      career.jersey.style = btn.dataset.style; saveCareer(); renderJersey();
+    });
+    document.getElementById('cr-jersey-btn').addEventListener('click', function () { careerEl.hidden = true; jerseyEl.hidden = false; renderJersey(); });
+    document.getElementById('jz-back').addEventListener('click', function () { jerseyEl.hidden = true; openCareer(); });
+
     document.getElementById('season-btn').addEventListener('click', openCareer);
     document.getElementById('cr-close').addEventListener('click', function () { careerEl.hidden = true; setupEl.hidden = false; });
     document.getElementById('cr-play').addEventListener('click', startCareerMatch);
@@ -1329,6 +1416,16 @@
               break;   // contest tried — no second bite at this shot
             }
           }
+        } else if (sh.t >= 18 && ball.vz < 0 && Math.hypot(ball.x - h.x, ball.y - h.y) < 50) {
+          // GOALTENDING: touch it on the way down over the rim and the basket counts
+          for (const q of teams[1 - sh.side].onPitch) {
+            if (q.ejected) continue;
+            if (q.z > 4 && Math.hypot(q.x - ball.x, q.y - ball.y) < q.r + ball.r + 5 && ball.z < q.z + 36 && ball.z > 8) {
+              pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'GOALTENDING!', color: '#ff9d9d', t: 0, big: true });
+              basket(sh.side, sh.pts);
+              return;
+            }
+          }
         }
         if (!ball.shot) return;
         const d2 = Math.hypot(ball.x - h.x, ball.y - h.y);
@@ -1343,7 +1440,7 @@
             ball.vx = (ball.vx - 2 * vn * nx) * 0.45 + nx * 1.5;
             ball.vy = (ball.vy - 2 * vn * ny) * 0.45 + ny * 1.5;
             ball.vz = Math.abs(ball.vz) * 0.35;
-            ball.shot = null; ball.freeCD = 6;
+            ball.shot = null; ball.freeCD = 6; shotClock = 24000;
             pops.push({ x: h.x, y: h.y - RIM_Z - 16, txt: 'CLANG!', color: '#ffbd6b', t: 0 });
             return;
           }
@@ -1354,7 +1451,7 @@
         const pastBoard = h.dir === 1 ? ball.x < bx : ball.x > bx;
         if (towardBoard && pastBoard && Math.abs(ball.y - h.y) < BOARD_HY && ball.z > BOARD_Z0 && ball.z < BOARD_Z1) {
           ball.x = bx + h.dir * 1;
-          ball.vx *= -0.55; ball.vy *= 0.8;
+          ball.vx *= -0.55; ball.vy *= 0.8; shotClock = 24000;
         }
       }
 
@@ -1418,6 +1515,25 @@
       if (live && !otMode) {
         clockMs -= dtMs;
         if (clockMs <= 0) { clockMs = 0; endHalf(); if (state !== 'playing') { /* frozen for halftime/OT */ } }
+      }
+      // 24-second shot clock (rim contact and possession changes reset it)
+      if (live && state === 'playing') {
+        shotClock -= dtMs;
+        if (shotClock <= 0) {
+          const ps = ball.owner ? ball.owner.side : ball.lastSide;
+          deadBallTurnover(1 - ps, 'SHOT CLOCK!');
+        }
+      }
+      // over-and-back + offensive 3-seconds, judged on the ball-handler
+      if (live && state === 'playing' && ball.owner) {
+        const o = ball.owner, s2 = o.side;
+        const inFront = s2 === 0 ? o.x > VW / 2 + 6 : o.x < VW / 2 - 6;
+        const inBack = s2 === 0 ? o.x < VW / 2 - 6 : o.x > VW / 2 + 6;
+        if (inFront) possFront = true;
+        else if (possFront && inBack) deadBallTurnover(1 - s2, 'OVER & BACK!');
+        const inPaint = s2 === 0 ? (o.x > X1 - KEY_W && Math.abs(o.y - CY) < KEY_H / 2) : (o.x < X0 + KEY_W && Math.abs(o.y - CY) < KEY_H / 2);
+        if (inPaint) { paintT += dtf; if (paintT > 180) deadBallTurnover(1 - s2, '3 SECONDS!'); }
+        else paintT = 0;
       }
 
       // shot charging: set-shot feel — the shooter plants while the meter fills
@@ -1563,11 +1679,18 @@
       ctx.fillStyle = p.key === 'cow' ? '#2a2a2a' : (p.key === 'zombie' ? '#2a3f7a' : s.dark);
       ctx.fillRect(x - 8, yb - legH - Math.max(0, lo), 7, legH + Math.max(0, lo));
       ctx.fillRect(x + 1, yb - legH - Math.max(0, -lo), 7, legH + Math.max(0, -lo));
-      // body + jersey band in the side colour
+      // body + jersey (season mode: your custom design; otherwise the side colour)
       ctx.fillStyle = p.key === 'zombie' ? '#3b6bb5' : s.color;
       roundRect(x - 10, yb - 31 - bob, 20, 20, 3); ctx.fill();
-      ctx.fillStyle = SIDE_COLOR[p.side];
-      ctx.fillRect(x - 10, yb - 28 - bob, 20, 6);
+      const jz = (careerMatch && p.side === 0 && career && career.jersey) ? career.jersey : null;
+      if (jz) {
+        ctx.fillStyle = jz.color; ctx.fillRect(x - 10, yb - 31 - bob, 20, 11);
+        if (jz.style === 'stripes') { ctx.fillStyle = jz.trim; ctx.fillRect(x - 7, yb - 31 - bob, 3, 11); ctx.fillRect(x + 4, yb - 31 - bob, 3, 11); }
+        else if (jz.style === 'hoops') { ctx.fillStyle = jz.trim; ctx.fillRect(x - 10, yb - 27 - bob, 20, 4); }
+      } else {
+        ctx.fillStyle = SIDE_COLOR[p.side];
+        ctx.fillRect(x - 10, yb - 28 - bob, 20, 6);
+      }
       if (p.key === 'cow') { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(x + 2, yb - 20 - bob, 7, 6); }
       // arms: swing opposite the legs while running, thrown up when shooting/dunking/jumping
       // (creepers famously have no arms)
@@ -1761,6 +1884,12 @@
       ctx.fillStyle = low && Math.floor(lastTs / 300) % 2 === 0 ? '#ff5a5a' : '#cfd6ea';
       ctx.font = "800 15px 'Nunito', sans-serif";
       ctx.fillText((otMode ? 'OT · next basket wins' : (half === 1 ? '1st' : '2nd') + '  ' + fmtClock(clockMs)) + '  ·  F ' + teamFouls[0] + '–' + teamFouls[1], VW / 2, 52);
+      if (state === 'playing' && !otMode) {
+        const sc = Math.max(0, Math.ceil(shotClock / 1000));
+        ctx.fillStyle = sc <= 5 ? '#ff5a5a' : '#ffe066';
+        ctx.font = "800 17px 'Nunito', sans-serif";
+        ctx.fillText(sc, VW / 2 + 130, 33);
+      }
       if (ball && ball.owner) {
         const px = ball.owner.side === 0 ? VW / 2 - 116 : VW / 2 + 116;
         ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
@@ -1891,6 +2020,7 @@
       endNow: function (s0, s1) { score = [s0, s1]; endGame(); },
       ft: function () { return ft; },
       teamFouls: function (a, b) { if (a != null) teamFouls = [a, b]; return teamFouls.slice(); },
+      shotClock: function (v) { if (v != null) shotClock = v; return shotClock; },
       ftPress: ftPress,
       startFT: function (side) { startFT(activePlayer(teams[side])); },
       career: function () { return career; },
