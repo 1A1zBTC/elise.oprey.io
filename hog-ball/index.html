@@ -58,6 +58,35 @@
     .legend .row b { color: #fff; }
     .legend .row .d { color: #8b93b0; }
     .start-btn { margin-top: 16px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #fff; background: #e94560; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #b22a44; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn.gold { background: linear-gradient(135deg, #ffe27a, #ffb300); color: #1a1a2e; box-shadow: 0 6px 0 #c98f00; margin-top: 10px; }
+    .secondary-btn { margin-top: 8px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.9rem; color: #cfd6ea; background: #0f1830; border: 2px solid #0f3460; border-radius: 14px; padding: 10px 16px; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; }
+    .secondary-btn:hover { background: #16253f; }
+    .secondary-btn:active { transform: scale(0.98); }
+
+    /* ---------- Season mode ---------- */
+    .money { color: #7be39a; font-weight: 800; }
+    .cr-stats { display: flex; gap: 8px; margin: 10px 0 4px; }
+    .cr-stat { flex: 1; background: #0f1830; border: 2px solid #0f3460; border-radius: 14px; padding: 8px 4px; }
+    .cr-stat .v { color: #fff; font-size: 1.05rem; font-weight: 800; line-height: 1.2; }
+    .cr-stat .k { color: #8b93b0; font-size: 0.56rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+    .cr-list { max-height: 44vh; overflow-y: auto; padding-right: 2px; }
+    .cr-row { display: flex; align-items: center; gap: 8px; background: #0f1830; border: 2px solid #0f3460; border-radius: 12px; padding: 7px 9px; margin-bottom: 7px; text-align: left; }
+    .cr-row.inlineup { border-color: #ffd23f; background: rgba(255,210,63,0.07); }
+    .cr-row .em { font-size: 1.35rem; flex-shrink: 0; }
+    .cr-info { flex: 1; min-width: 0; }
+    .cr-nm { color: #fff; font-weight: 800; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cr-meta { color: #8b93b0; font-size: 0.63rem; font-weight: 800; }
+    .cr-meta .stars { color: #ffd23f; }
+    .cr-meta .pos { color: #6fa8ff; }
+    .cr-btn { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.68rem; color: #fff; background: #46c46a; border: none; border-radius: 9px; padding: 6px 9px; cursor: pointer; flex-shrink: 0; }
+    .cr-btn:active { transform: scale(0.95); }
+    .cr-btn:disabled { background: #3a4358; color: #6f7799; cursor: default; transform: none; }
+    .cr-btn.sell { background: #a84747; }
+    .cr-btn.bench { background: #3f6ea8; }
+    .cr-slots { display: flex; gap: 8px; margin-bottom: 10px; }
+    .cr-slot { flex: 1; background: #0f1830; border: 2px dashed #2a3a5e; border-radius: 12px; padding: 8px 4px; color: #8b93b0; font-size: 0.62rem; font-weight: 800; min-height: 62px; }
+    .cr-slot.filled { border-style: solid; border-color: #ffd23f; color: #fff; }
+    .cr-slot .em { display: block; font-size: 1.35rem; line-height: 1.3; }
   </style>
 </head>
 <body>
@@ -101,6 +130,7 @@
         </div>
         <div class="legend" id="legend"></div>
         <button class="start-btn" id="start-btn">Tip Off!</button>
+        <button class="start-btn gold" id="season-btn">🏆 Season Mode</button>
       </div>
     </div>
 
@@ -111,6 +141,46 @@
         <div class="scoreline"><span class="lbl" id="over-l1">Blue</span><span class="big" id="over-s1">0</span></div>
         <div class="scoreline"><span class="lbl" id="over-l2">Red</span><span class="big" id="over-s2">0</span></div>
         <button class="start-btn" id="again-btn">Play Again</button>
+      </div>
+    </div>
+
+    <!-- Season mode: franchise home -->
+    <div class="overlay" id="career" hidden>
+      <div class="panel">
+        <h2>Season Mode</h2>
+        <div class="sub" id="cr-status">Loading…</div>
+        <div class="cr-stats">
+          <div class="cr-stat"><div class="v money" id="cr-money">$0M</div><div class="k">Budget</div></div>
+          <div class="cr-stat"><div class="v" id="cr-record">0–0</div><div class="k">Record</div></div>
+          <div class="cr-stat"><div class="v" id="cr-troph">–</div><div class="k">Trophy case</div></div>
+        </div>
+        <button class="start-btn" id="cr-play">▶ Play next game</button>
+        <button class="secondary-btn" id="cr-lineup-btn">👥 Lineup &amp; trades</button>
+        <button class="secondary-btn" id="cr-market-btn">🛒 Transfer market</button>
+        <button class="secondary-btn" id="cr-reset">🔁 Start a brand-new career</button>
+        <button class="secondary-btn" id="cr-close">‹ Back to menu</button>
+      </div>
+    </div>
+
+    <!-- Season mode: transfer market -->
+    <div class="overlay" id="market" hidden>
+      <div class="panel">
+        <h2>Transfer Market</h2>
+        <div class="sub">Budget: <span class="money" id="mk-money">$0M</span> &nbsp;·&nbsp; sign anyone you can afford — any position, any team!</div>
+        <div class="cr-list" id="mk-list"></div>
+        <button class="secondary-btn" id="mk-refresh">🔄 Scout different players</button>
+        <button class="secondary-btn" id="mk-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Season mode: lineup builder -->
+    <div class="overlay" id="lineup" hidden>
+      <div class="panel">
+        <h2>My Lineup</h2>
+        <div class="sub">Tap <b style="color:#ffd23f">Start/Bench</b> to build your three — any position anywhere. <b style="color:#ff9d9d">Sell</b> pays 85% of value.</div>
+        <div class="cr-slots" id="lu-slots"></div>
+        <div class="cr-list" id="lu-list"></div>
+        <button class="secondary-btn" id="lu-back">‹ Back</button>
       </div>
     </div>
   </div>
@@ -141,7 +211,7 @@
 
     // ---------- gameplay constants ----------
     const GRAV_Z = 0.55;
-    const SHOT_MAX = 900;                          // ms to reach the TOP of the circle meter
+    const SHOT_MAX = 900;                          // legacy base — real bar speed comes from shotMaxFor(shooter)
     const OVERFILL = 1.25;                         // meter keeps creeping past the top, then auto-bricks
     const HALF_MS = 90000;
     const FORMATION = [ { fx: 0.30, fy: 0.50 }, { fx: 0.55, fy: 0.28 }, { fx: 0.55, fy: 0.72 } ];
@@ -172,13 +242,18 @@
     let pops = [], freeze = 0, inboundSide = 0;
     let clockMs = HALF_MS, half = 1, otMode = false;
     let possCD = 0;
+    let careerMatch = null;      // set while a Season-mode game is being played
+    let lastCareer = false;      // routes the over panel's Continue back to the season hub
     let animT = 0;               // global animation clock — keeps idle dribbles and bobs alive
     let lastTs = 0, dtMs = 16.7, dtf = 1;
     const shootHeld = [false, false], chargeT = [0, 0], defendHeld = [false, false];
 
-    // 2K green window: better shooters (team shoot3) get a bigger green; threes shrink it
+    // 2K green window: better shooters (shoot3) get a bigger green; threes shrink it
     function greenWindow(o, three) { return (0.07 + (o.shoot3 - 0.9) * 0.12) * (three ? 0.75 : 1); }
     function inGreen(o, three, c) { const gw = greenWindow(o, three); return c >= 1 - gw && c <= 1 + gw * 0.5; }
+    // 2K bar speed: elite shooters get a slow, buttery Curry bar; bricklayers get a
+    // twitchy Shaq bar that races to the top
+    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300); }
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
@@ -188,16 +263,23 @@
     function attackHoop(side) { return HOOP[side === 0 ? 1 : 0]; }
     function ownHoop(side) { return HOOP[side === 0 ? 0 : 1]; }
 
-    function mkPlayer(side, key, slot) {
-      const s = MOBS[key];
+    function mkPlayer(side, key, slot, st) {
+      const s = st || MOBS[key];
       return { side: side, key: key, slot: slot,
         x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
         accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, shoot3: s.shoot3, steal: s.steal,
+        pName: s.pName || null, stars: s.stars || 0,
         aiShootCD: 0, aiPassCD: 0, aiJumpCD: 0, stealCD: 0, stunT: 0, crossT: 0, crossCD: 0,
         flash: 0, legPhase: 0, mark: null, dunk: null };
     }
     function buildTeam(side, key) {
       return { side: side, key: key, onPitch: FORMATION.map(function (f, i) { return mkPlayer(side, key, i); }), active: 0 };
+    }
+    // Season mode: a team whose three mobs each carry their own card stats
+    function buildCustomTeam(side, key, cards) {
+      return { side: side, key: key,
+        onPitch: FORMATION.map(function (f, i) { return mkPlayer(side, cards[i].key, i, cardStats(cards[i])); }),
+        active: 0 };
     }
     function activePlayer(t) { return t.onPitch[t.active]; }
     function isHumanTeam(side) { return side === 0 || (side === 1 && numPlayers === 2); }
@@ -246,6 +328,7 @@
     }
 
     function beginGame() {
+      careerMatch = null; lastCareer = false;
       numPlayers = selectedCount();
       teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
       score = [0, 0]; pops = []; freeze = 60;
@@ -258,8 +341,14 @@
       setControls();
     }
 
-    function sideName(side) { return playerName(side, MOBS[teams[side].key].name) + (side === 1 && numPlayers === 1 ? ' (CPU)' : ''); }
-    function sideEmoji(side) { return MOBS[teams[side].key].emoji; }
+    function sideName(side) {
+      if (careerMatch) return side === 0 ? playerName(0, 'Your Mobs') : careerMatch.oppName;
+      return playerName(side, MOBS[teams[side].key].name) + (side === 1 && numPlayers === 1 ? ' (CPU)' : '');
+    }
+    function sideEmoji(side) {
+      if (careerMatch) return side === 0 ? '⭐' : careerMatch.oppEmoji;
+      return MOBS[teams[side].key].emoji;
+    }
 
     function basket(side, pts, label) {
       score[side] += pts;
@@ -293,6 +382,8 @@
       document.getElementById('over-l2').textContent = sideName(1);
       document.getElementById('over-s1').textContent = score[0];
       document.getElementById('over-s2').textContent = score[1];
+      if (careerMatch) careerFinish(winner);
+      else document.getElementById('again-btn').textContent = 'Play Again';
       overEl.hidden = false;
     }
 
@@ -470,7 +561,7 @@
       if (!shootHeld[side]) return;
       const c = chargeT[side]; shootHeld[side] = false; chargeT[side] = 0;
       const o = activePlayer(teams[side]);
-      if (c > 40 && ball.owner === o) releaseShot(side, c / SHOT_MAX);
+      if (c > 40 && ball.owner === o) releaseShot(side, c / shotMaxFor(o));
     }
 
     // ---------- input ----------
@@ -480,8 +571,20 @@
     const JOY_R = 64;
 
     window.addEventListener('keydown', function (e) {
-      if (state === 'select') { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); beginGame(); } return; }
-      if (state === 'over') { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); showSelect(); } return; }
+      if (state === 'select') {
+        // don't launch a quick match while the season overlays are open
+        const seasonOpen = !document.getElementById('career').hidden || !document.getElementById('market').hidden || !document.getElementById('lineup').hidden;
+        if (!seasonOpen && (e.code === 'Space' || e.code === 'Enter')) { e.preventDefault(); beginGame(); }
+        return;
+      }
+      if (state === 'over') {
+        if (e.code === 'Space' || e.code === 'Enter') {
+          e.preventDefault();
+          if (lastCareer) { lastCareer = false; overEl.hidden = true; openCareer(); }
+          else showSelect();
+        }
+        return;
+      }
       if (state === 'tip') { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); tipCount++; } return; }
       const as = numPlayers === 2 ? 1 : 0;
       switch (e.code) {
@@ -618,7 +721,229 @@
     document.querySelector('#count-choices [data-players="1"]').classList.add('selected');
     buildPickers();
     document.getElementById('start-btn').addEventListener('click', beginGame);
-    document.getElementById('again-btn').addEventListener('click', showSelect);
+    document.getElementById('again-btn').addEventListener('click', function () {
+      if (lastCareer) { lastCareer = false; overEl.hidden = true; openCareer(); }
+      else showSelect();
+    });
+
+    // ---------- Season mode: franchise, market, calendar ----------
+    // Signing/trading works like the soccer career: everyone has a value in $M,
+    // a star rating and a position — and you can start anyone anywhere.
+    const CAREER_KEY = 'hogball.career.v1';
+    const VALUES = [4, 10, 20, 34, 55];                 // $M by star rating
+    function valueOf(c) { return VALUES[c.stars - 1]; }
+    function starStr(n) { return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n); }
+
+    const ROSTER = [
+      ['Hoof Curry', 'cow', 'G', 5], ['Sir Dunksalot', 'pig', 'C', 5], ['Kevin Detonate', 'creeper', 'F', 5], ['ZeBron James', 'zombie', 'F', 5],
+      ['Moo-kic Doncic', 'cow', 'G', 4], ['Boar-is Diaw', 'pig', 'F', 4], ['Creepy Thompson', 'creeper', 'G', 4], ['Graveyard Shaq', 'zombie', 'C', 4],
+      ['Piggy Smalls', 'pig', 'G', 3], ['Sir Loin', 'cow', 'C', 3], ['Hissain Bolt', 'creeper', 'G', 3], ['Rigor Mortis', 'zombie', 'F', 3],
+      ['Truffle Shuffle', 'pig', 'F', 3], ['Milkshake Miller', 'cow', 'F', 3],
+      ['Bacon Bits', 'pig', 'G', 2], ['Curdled Kev', 'cow', 'C', 2], ['Fizzle', 'creeper', 'F', 2], ['Groanaldo', 'zombie', 'G', 2],
+      ['Snout McGee', 'pig', 'C', 2], ['Pasture Bedtime', 'cow', 'F', 2],
+      ['Lil Oink', 'pig', 'G', 1], ['Calf Curry', 'cow', 'G', 1], ['Mossy', 'zombie', 'C', 1], ['Sparky', 'creeper', 'F', 1]
+    ].map(function (r, i) { return { id: 'r' + i, name: r[0], key: r[1], pos: r[2], stars: r[3] }; });
+
+    // card → on-court stats. Guards are quick sharpshooters, centres are slow bruisers.
+    function cardStats(c) {
+      const g = c.pos === 'G' ? 1 : 0, ctr = c.pos === 'C' ? 1 : 0;
+      return {
+        pName: c.name, stars: c.stars,
+        accel: 0.26 + c.stars * 0.03 + g * 0.03,
+        maxSpd: 1.7 + c.stars * 0.16 + g * 0.2 - ctr * 0.2,
+        mass: ctr ? 2.4 : (c.pos === 'F' ? 1.7 : 1.2),
+        r: ctr ? 18 : (c.pos === 'F' ? 16 : 14),
+        shoot3: 0.82 + c.stars * 0.09 + g * 0.05 - ctr * 0.05,
+        steal: 0.85 + c.stars * 0.08 + g * 0.1
+      };
+    }
+
+    const FRANCHISES = [
+      { name: 'Porkchop City',   key: 'pig',     base: 2.3 },
+      { name: 'Moo York',        key: 'cow',     base: 2.8 },
+      { name: 'Creeper State',   key: 'creeper', base: 3.3 },
+      { name: 'Graveyard Squad', key: 'zombie',  base: 3.8 }
+    ];
+    function cpuCards(fr, boost) {
+      return ['G', 'F', 'C'].map(function (pos) {
+        const stars = clamp(Math.round(fr.base + (career.season - 1) * 0.35 + boost + rnd(-0.5, 0.5)), 1, 5);
+        return { id: 'cpu', name: fr.name + ' ' + pos, key: fr.key, pos: pos, stars: stars };
+      });
+    }
+
+    let career = null;
+    function saveCareer() { try { localStorage.setItem(CAREER_KEY, JSON.stringify(career)); } catch (e) {} }
+    function loadCareer() {
+      try { const c = JSON.parse(localStorage.getItem(CAREER_KEY)); if (c && c.owned && c.lineup) career = c; } catch (e) {}
+    }
+    function newCareer() {
+      career = { season: 1, money: 40, wins: 0, losses: 0, gameIdx: 0, phase: 'regular', cupDone: false, cups: 0, titles: 0,
+        owned: [
+          { id: 'k0', name: 'Rookie Rex', key: 'pig', pos: 'G', stars: 2 },
+          { id: 'k1', name: 'Rookie Moo', key: 'cow', pos: 'F', stars: 2 },
+          { id: 'k2', name: 'Rookie Boo', key: 'zombie', pos: 'C', stars: 2 }
+        ],
+        lineup: ['k0', 'k1', 'k2'], stock: [] };
+      restock(); saveCareer();
+    }
+    function restock() {
+      const ownedIds = {}; career.owned.forEach(function (o) { ownedIds[o.id] = true; });
+      career.stock = EL.shuffle(ROSTER.filter(function (r) { return !ownedIds[r.id]; }).map(function (r) { return r.id; })).slice(0, 8);
+      saveCareer();
+    }
+
+    // the season calendar: 8 regular games, the Mob Cup after game 4, playoffs after game 8
+    function nextGameDesc() {
+      const c = career;
+      if (c.phase === 'cup-semi') return { label: 'Mob Cup SEMIFINAL vs ' + FRANCHISES[1].name, opp: 1, boost: 0.2 };
+      if (c.phase === 'cup-final') return { label: 'MOB CUP FINAL vs ' + FRANCHISES[3].name + ' — win a $15M bonus!', opp: 3, boost: 0.3 };
+      if (c.phase === 'po-semi') return { label: 'PLAYOFF semifinal vs ' + FRANCHISES[2].name, opp: 2, boost: 0.25 };
+      if (c.phase === 'po-final') return { label: 'THE MOB FINALS vs ' + FRANCHISES[3].name + ' — win a $30M bonus!', opp: 3, boost: 0.5 };
+      return { label: 'Season game ' + (c.gameIdx + 1) + ' of 8 vs ' + FRANCHISES[c.gameIdx % 4].name, opp: c.gameIdx % 4, boost: 0 };
+    }
+    function newSeason() {
+      career.season++; career.gameIdx = 0; career.wins = 0; career.losses = 0;
+      career.cupDone = false; career.phase = 'regular';
+      career.money += 10;   // new TV deal
+    }
+    function careerFinish(winner) {
+      const won = winner === 0, c = career;
+      let reward = 0, head = '';
+      if (c.phase === 'regular') {
+        reward = won ? 6 : 2; if (won) c.wins++; else c.losses++; c.gameIdx++;
+        if (c.gameIdx === 4 && !c.cupDone) { c.phase = 'cup-semi'; head = '🏆 The Mob Cup begins! '; }
+        else if (c.gameIdx >= 8) { c.phase = 'po-semi'; head = '🔥 Playoff time! '; }
+      } else if (c.phase === 'cup-semi') {
+        if (won) { reward = 4; c.phase = 'cup-final'; head = 'Into the Cup final! '; }
+        else { reward = 1; c.cupDone = true; c.phase = 'regular'; head = 'Out of the Cup. '; }
+      } else if (c.phase === 'cup-final') {
+        c.cupDone = true; c.phase = 'regular';
+        if (won) { reward = 15; c.cups++; head = '🏆 MOB CUP CHAMPIONS! $15M bonus! '; } else { reward = 3; head = 'Cup runners-up. '; }
+      } else if (c.phase === 'po-semi') {
+        if (won) { reward = 8; c.phase = 'po-final'; head = 'You made THE FINALS! '; }
+        else { reward = 3; head = 'Season over — run it back! '; newSeason(); }
+      } else if (c.phase === 'po-final') {
+        if (won) { reward = 30; c.titles++; head = '🏆🏆 MOB FINALS CHAMPIONS! $30M bonus! '; } else { reward = 8; head = 'So close! '; }
+        newSeason();
+      }
+      c.money += reward;
+      saveCareer();
+      document.getElementById('over-sub').textContent = head + 'Earned $' + reward + 'M · budget $' + c.money + 'M · Next: ' + nextGameDesc().label;
+      document.getElementById('again-btn').textContent = 'Continue ▶';
+      lastCareer = true; careerMatch = null;
+    }
+
+    function lineupCards() { return career.lineup.map(function (id) { return career.owned.find(function (o) { return o.id === id; }) || null; }); }
+    function startCareerMatch() {
+      const cards = lineupCards();
+      if (cards.some(function (x) { return !x; })) return;
+      const nx = nextGameDesc(), fr = FRANCHISES[nx.opp];
+      careerMatch = { oppName: fr.name, oppEmoji: MOBS[fr.key].emoji };
+      numPlayers = 1;
+      teams = [ buildCustomTeam(0, 'pig', cards), buildCustomTeam(1, fr.key, cpuCards(fr, nx.boost)) ];
+      score = [0, 0]; pops = []; freeze = 0;
+      clockMs = HALF_MS; half = 1; otMode = false;
+      shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0; defendHeld[0] = defendHeld[1] = false;
+      careerEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true; setupEl.hidden = true; overEl.hidden = true;
+      placeTip();   // Season games are 1P: every one opens with the jump ball
+      setControls();
+    }
+
+    // ---- season UI ----
+    const careerEl = document.getElementById('career');
+    const marketEl = document.getElementById('market');
+    const lineupEl = document.getElementById('lineup');
+
+    function openCareer() {
+      if (!career) { loadCareer(); if (!career) newCareer(); }
+      state = 'select';
+      setupEl.hidden = true; overEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true;
+      careerEl.hidden = false;
+      renderCareer(); setControls();
+    }
+    function renderCareer() {
+      const c = career;
+      document.getElementById('cr-status').textContent = 'Season ' + c.season + ' · Next: ' + nextGameDesc().label;
+      document.getElementById('cr-money').textContent = '$' + c.money + 'M';
+      document.getElementById('cr-record').textContent = c.wins + '–' + c.losses;
+      document.getElementById('cr-troph').textContent = '🏆 ' + c.titles + ' · 🥇 ' + c.cups;
+      const ok = !lineupCards().some(function (x) { return !x; });
+      const play = document.getElementById('cr-play');
+      play.disabled = !ok;
+      play.textContent = ok ? '▶ Play next game' : 'Set your lineup first!';
+    }
+    function renderMarket() {
+      document.getElementById('mk-money').textContent = '$' + career.money + 'M';
+      const list = document.getElementById('mk-list'); list.innerHTML = '';
+      career.stock.forEach(function (id) {
+        const r = ROSTER.find(function (x) { return x.id === id; }); if (!r) return;
+        const row = document.createElement('div'); row.className = 'cr-row';
+        row.innerHTML = '<span class="em">' + MOBS[r.key].emoji + '</span><div class="cr-info"><div class="cr-nm">' + r.name + '</div>' +
+          '<div class="cr-meta"><span class="pos">' + r.pos + '</span> · <span class="stars">' + starStr(r.stars) + '</span> · $' + valueOf(r) + 'M</div></div>';
+        const btn = document.createElement('button'); btn.className = 'cr-btn';
+        btn.textContent = 'Sign $' + valueOf(r) + 'M';
+        btn.disabled = career.money < valueOf(r);
+        btn.addEventListener('click', function () {
+          if (career.money < valueOf(r)) return;
+          career.money -= valueOf(r);
+          career.owned.push({ id: r.id, name: r.name, key: r.key, pos: r.pos, stars: r.stars });
+          career.stock = career.stock.filter(function (x) { return x !== r.id; });
+          saveCareer(); renderMarket();
+        });
+        row.appendChild(btn); list.appendChild(row);
+      });
+    }
+    function renderLineup() {
+      const slots = document.getElementById('lu-slots'); slots.innerHTML = '';
+      lineupCards().forEach(function (card) {
+        const d = document.createElement('div');
+        d.className = 'cr-slot' + (card ? ' filled' : '');
+        d.innerHTML = card ? '<span class="em">' + MOBS[card.key].emoji + '</span>' + card.name + '<br><span style="color:#ffd23f">' + starStr(card.stars) + '</span>' : 'Empty —<br>tap Start below';
+        slots.appendChild(d);
+      });
+      const list = document.getElementById('lu-list'); list.innerHTML = '';
+      career.owned.forEach(function (o) {
+        const inL = career.lineup.indexOf(o.id) >= 0;
+        const row = document.createElement('div'); row.className = 'cr-row' + (inL ? ' inlineup' : '');
+        row.innerHTML = '<span class="em">' + MOBS[o.key].emoji + '</span><div class="cr-info"><div class="cr-nm">' + o.name + '</div>' +
+          '<div class="cr-meta"><span class="pos">' + o.pos + '</span> · <span class="stars">' + starStr(o.stars) + '</span> · worth $' + valueOf(o) + 'M</div></div>';
+        const tog = document.createElement('button'); tog.className = 'cr-btn' + (inL ? ' bench' : '');
+        tog.textContent = inL ? 'Bench' : 'Start';
+        tog.disabled = !inL && career.lineup.indexOf(null) < 0 && career.lineup.filter(function (id) { return career.owned.find(function (x) { return x.id === id; }); }).length >= 3;
+        tog.addEventListener('click', function () {
+          const at = career.lineup.indexOf(o.id);
+          if (at >= 0) career.lineup[at] = null;
+          else {
+            let empty = career.lineup.indexOf(null);
+            if (empty < 0) empty = career.lineup.findIndex(function (id) { return !career.owned.find(function (x) { return x.id === id; }); });
+            if (empty >= 0) career.lineup[empty] = o.id; else return;
+          }
+          saveCareer(); renderLineup();
+        });
+        const sell = document.createElement('button'); sell.className = 'cr-btn sell';
+        const price = Math.round(valueOf(o) * 0.85);
+        sell.textContent = 'Sell $' + price + 'M';
+        sell.disabled = career.owned.length <= 3;
+        sell.addEventListener('click', function () {
+          if (career.owned.length <= 3) return;
+          career.owned = career.owned.filter(function (x) { return x.id !== o.id; });
+          const at = career.lineup.indexOf(o.id); if (at >= 0) career.lineup[at] = null;
+          career.money += price;
+          saveCareer(); renderLineup();
+        });
+        row.appendChild(tog); row.appendChild(sell); list.appendChild(row);
+      });
+    }
+    document.getElementById('season-btn').addEventListener('click', openCareer);
+    document.getElementById('cr-close').addEventListener('click', function () { careerEl.hidden = true; setupEl.hidden = false; });
+    document.getElementById('cr-play').addEventListener('click', startCareerMatch);
+    document.getElementById('cr-market-btn').addEventListener('click', function () { careerEl.hidden = true; marketEl.hidden = false; renderMarket(); });
+    document.getElementById('cr-lineup-btn').addEventListener('click', function () { careerEl.hidden = true; lineupEl.hidden = false; renderLineup(); });
+    document.getElementById('cr-reset').addEventListener('click', function () { if (confirm('Start a brand-new career? Your current save will be wiped!')) { newCareer(); renderCareer(); } });
+    document.getElementById('mk-refresh').addEventListener('click', function () { restock(); renderMarket(); });
+    document.getElementById('mk-back').addEventListener('click', function () { marketEl.hidden = true; openCareer(); });
+    document.getElementById('lu-back').addEventListener('click', function () { lineupEl.hidden = true; openCareer(); });
+    loadCareer();
 
     // ---------- movement / AI ----------
     function airFactor(m) { return m.z > 0 ? 0.45 : 1; }
@@ -649,7 +974,9 @@
       p.aiShootCD -= dtf; p.aiPassCD -= dtf;
       const D = Math.hypot(h.x - p.x, h.y - p.y);
       if (p.aiShootCD <= 0 && (D < 90 || (D < 200 && ndd > 55) || (D < THREE_R + 20 && D > THREE_R && ndd > 80 && p.shoot3 > 1))) {
-        releaseShot(side, 1 + rnd(-0.13, 0.08), p);   // sampled near the top — good shooters green more
+        // release sampled near the top; elite shooters have far tighter timing
+        const spr = clamp(0.20 - (p.shoot3 - 0.85) * 0.25, 0.05, 0.20);
+        releaseShot(side, 1 + rnd(-spr, spr * 0.6), p);
         p.aiShootCD = 140;
       } else if (ndd < 48 && p.aiPassCD <= 0) {
         passFrom(side, p);
@@ -704,7 +1031,7 @@
       m.x = clamp(m.x, X0 + m.r * 0.6, X1 - m.r * 0.6);
       m.y = clamp(m.y, Y0 + m.r * 0.6, Y1 - m.r * 0.6);
       if (sp > 0.5) { m.fx = m.vx / sp; m.fy = m.vy / sp; }
-      m.legPhase += sp * 0.4 * dtf;
+      m.legPhase += sp * 0.22 * dtf;
     }
     function mobCollide(a, b) {
       const dx = b.x - a.x, dy = b.y - a.y; let d = Math.hypot(dx, dy); const min = a.r + b.r; if (d === 0) d = 0.01;
@@ -732,7 +1059,7 @@
           ball.x += (tx - ball.x) * k; ball.y += (ty - ball.y) * k;
           if (Math.hypot(tx - ball.x, ty - ball.y) < 2) ball.settle = 0;
         } else { ball.x = tx; ball.y = ty; }
-        ball.vx = o.vx; ball.vy = o.vy; ball.z = 0; ball.vz = 0; ball.spin += 0.12 * dtf;
+        ball.vx = o.vx; ball.vy = o.vy; ball.z = 0; ball.vz = 0; ball.spin += 0.06 * dtf;
         if (ball.trail.length) ball.trail.shift();
         if (possCD > 0) possCD -= dtf;
         // (no automatic contact steal — defenders must ATTEMPT a steal and risk the foul)
@@ -850,7 +1177,7 @@
         if (ball.owner === o) {
           chargeT[s] += dtMs;
           o.vx *= Math.pow(0.8, dtf); o.vy *= Math.pow(0.8, dtf);
-          if (chargeT[s] > SHOT_MAX * OVERFILL) shootRelease(s);   // crept past the top → late brick
+          if (chargeT[s] > shotMaxFor(o) * OVERFILL) shootRelease(s);   // crept past the top → late brick
         } else { shootHeld[s] = false; chargeT[s] = 0; }
       }
 
@@ -960,7 +1287,7 @@
       const charging = carrying && isHumanTeam(p.side) && t.onPitch[t.active] === p && shootHeld[p.side];
       const armsUp = charging || p.dunk || p.z > 2;
       // gentle idle bob so mobs never stand statue-still
-      const bob = Math.sin(animT * 0.12 + p.slot * 2 + p.side * 3) * 1.4;
+      const bob = Math.sin(animT * 0.07 + p.slot * 2 + p.side * 3) * 1.4;
       const yb = p.y - p.z - (p.z > 0 ? 0 : 0);
       // whole sprite drawn at SC scale around the feet — keeps the court big
       ctx.save();
@@ -1024,9 +1351,9 @@
           bx2 = x; by2 = yb - 62 - bob;
         } else {
           // crossover: the ball whips hand-to-hand across the body
-          const dphase = p.crossT > 0 ? animT * 0.9 : animT * 0.24 + p.legPhase * 0.4;
+          const dphase = p.crossT > 0 ? animT * 0.5 : animT * 0.13 + p.legPhase * 0.3;
           const bounce = Math.abs(Math.sin(dphase));
-          bx2 = p.crossT > 0 ? x + Math.sin(animT * 0.9) * 15 : x + p.fx * 14;
+          bx2 = p.crossT > 0 ? x + Math.sin(animT * 0.5) * 15 : x + p.fx * 14;
           const floorY = p.y + 4, handY = yb - 22 - bob;
           by2 = floorY + (handY - floorY) * bounce;
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -1117,7 +1444,7 @@
     // The green window sits just under the top, sized by the shooter's skill.
     function meterAngle(c) { return Math.PI / 2 + c * Math.PI; }   // 0 → bottom, 1 → top (via the left side)
     function drawMeter(p, side) {
-      const c = Math.min(chargeT[side] / SHOT_MAX, OVERFILL);
+      const c = Math.min(chargeT[side] / shotMaxFor(p), OVERFILL);
       const h = attackHoop(side);
       const three = Math.hypot(p.x - h.x, p.y - h.y) > THREE_R;
       const gw = greenWindow(p, three);
@@ -1143,7 +1470,7 @@
     // dashed line to the attacked hoop while charging — shows which basket you're aiming at
     function drawAimGuide(p, side) {
       const h = attackHoop(side);
-      const c = chargeT[side] / SHOT_MAX;
+      const c = chargeT[side] / shotMaxFor(p);
       const three = Math.hypot(p.x - h.x, p.y - h.y) > THREE_R;
       const gw = greenWindow(p, three);
       const col = (c >= 1 - gw && c <= 1 + gw * 0.5) ? '#7ed37e' : (c > 1 + gw * 0.5 ? '#ff5a5a' : '#ffd23f');
@@ -1267,7 +1594,11 @@
       setBall: function (o) { Object.assign(ball, o); },
       setClock: function (ms) { clockMs = ms; },
       setFreeze: function (f) { freeze = f; },
-      release: function (side, c, shooter) { chargeT[side] = c * SHOT_MAX; shootHeld[side] = true; shootRelease(side); },
+      release: function (side, c, shooter) { chargeT[side] = c * shotMaxFor(activePlayer(teams[side])); shootHeld[side] = true; shootRelease(side); },
+      endNow: function (s0, s1) { score = [s0, s1]; endGame(); },
+      career: function () { return career; },
+      startCareer: startCareerMatch,
+      openCareer: openCareer,
       hoop: HOOP,
       consts: { RIM_Z: RIM_Z, RIM_R: RIM_R, THREE_R: THREE_R, HALF_MS: HALF_MS }
     };
