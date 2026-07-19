@@ -186,10 +186,10 @@
   </div>
 
   <p class="hint">
-    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release at the <b>top</b> of the circle!) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> 💨 &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
+    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release at the <b>white line</b> on the bar!) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> 💨 &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
   </p>
   <p class="hint" style="margin-top:4px">
-    Inside the arc = <b>+2</b>, behind it = <b>+3</b>, green at the hoop = <b>DUNK!</b> 💥 &nbsp;·&nbsp; reaching in can draw a <b style="color:#ff9d9d">FOUL</b> (free throw!) &nbsp;·&nbsp; a crossover can break ankles 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b>
+    <b style="color:#7ed37e">GREEN = automatic bucket</b> — but the bar is lightning fast and the green sliver shrinks when you're guarded or deep &nbsp;·&nbsp; fouls = a <b>free-throw minigame</b>: stop both balls in the middle of the ➕ &nbsp;·&nbsp; dribble moves (E/3) can <b>break ankles</b> 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b>
   </p>
 
   <script src="../shared/game.js"></script>
@@ -236,6 +236,7 @@
     let state = 'select';        // 'select' | 'tip' | 'playing' | 'score' | 'half' | 'over'
     let tipT = 0, tipCount = 0;  // 1P tip-off: mash Space to win the jump ball
     const TIP_FRAMES = 130, TIP_NEED = 8;
+    let ft = null;               // free-throw minigame: {side, stage, offA, offB, t}
     let numPlayers = 1;
     let pickL = 'pig', pickR = 'creeper';
     let teams = [], ball = null, score = [0, 0];
@@ -248,12 +249,23 @@
     let lastTs = 0, dtMs = 16.7, dtf = 1;
     const shootHeld = [false, false], chargeT = [0, 0], defendHeld = [false, false];
 
-    // 2K green window: better shooters (shoot3) get a bigger green; threes shrink it
-    function greenWindow(o, three) { return (0.07 + (o.shoot3 - 0.9) * 0.12) * (three ? 0.75 : 1); }
-    function inGreen(o, three, c) { const gw = greenWindow(o, three); return c >= 1 - gw && c <= 1 + gw * 0.5; }
-    // 2K bar speed: elite shooters get a slow, buttery Curry bar; bricklayers get a
-    // twitchy Shaq bar that races to the top
-    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300); }
+    // how contested the shooter is right now (0 = wide open)
+    function contestOn(o, side) {
+      let d0 = Infinity, defAir = false;
+      for (const q of teams[1 - side].onPitch) { const d = Math.hypot(q.x - o.x, q.y - o.y); if (d < d0) { d0 = d; defAir = q.z > 8; } }
+      return d0 < 70 ? (1 - d0 / 70) * 0.40 * (defAir ? 1.6 : 1) : 0;
+    }
+    // The green SLIVER: sized by shooter skill, shrunk by distance and by how
+    // guarded they are. Landing in it is an automatic bucket.
+    function greenWindowFor(o, side) {
+      const h = attackHoop(side);
+      const D = Math.hypot(h.x - o.x, h.y - o.y);
+      const contest = contestOn(o, side);
+      return clamp((0.05 + (o.shoot3 - 0.9) * 0.10) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009), 0.015, 0.12);
+    }
+    // 2K bar speed: elite shooters get the slowest bar; bricklayers a twitchy one.
+    // Runs at 5x — timing is meant to be HARD.
+    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 5; }
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
@@ -460,19 +472,21 @@
       const sx = o.x, sy = o.y;
       const D = Math.hypot(h.x - sx, h.y - sy);
       const three = D > THREE_R;
-      // 2K meter: 1.0 = the top of the circle; early releases fall short of it, late ones creep past
+      // 1.0 = the top of the bar; early releases fall short, late ones creep past
       const err = c <= 1 ? (1 - c) : (c - 1) * 1.6;
-      const green = inGreen(o, three, c);
+      const gw = greenWindowFor(o, side);
+      const green = c >= 1 - gw && c <= 1 + gw * 0.4;
       if (D < 62 && green) { startDunk(side, o, h); return; }
-      // NBA-ish base percentages: ~85% at the rim, ~55% at the arc before timing
-      let P0 = 0.88 - D * 0.0013;
-      if (three) P0 *= 0.92 * o.shoot3;
-      const tim = green ? 1.30 : Math.max(0, 1 - err * 2.0);
-      let d0 = Infinity, defAir = false;
-      for (const p of teams[1 - side].onPitch) { const d = Math.hypot(p.x - sx, p.y - sy); if (d < d0) { d0 = d; defAir = p.z > 8; } }
-      const contest = d0 < 70 ? (1 - d0 / 70) * 0.40 * (defAir ? 1.6 : 1) : 0;
-      const P = clamp(P0 * tim - contest, 0.03, 0.97);
-      const make = Math.random() < P;
+      let make;
+      if (green) make = true;                       // a green is AUTOMATIC
+      else {
+        // NBA-ish base percentages: ~85% at the rim, ~55% at the arc before timing
+        let P0 = 0.88 - D * 0.0013;
+        if (three) P0 *= 0.92 * o.shoot3;
+        const tim = Math.max(0, 1 - err * 1.7);
+        const P = clamp(P0 * tim - contestOn(o, side), 0.02, 0.90);
+        make = Math.random() < P;
+      }
       const airball = !make && (err > 0.30 || Math.random() < 0.15);
       const T = clamp(16 + D * 0.055, 20, 44);
       let tx = h.x, ty = h.y;
@@ -507,6 +521,23 @@
       setOwner(taker); possCD = 45; freeze = 26;   // brief whistle
     }
 
+    // Free throw: two basketballs slide along the arms of a big ➕ — tap to stop
+    // the first in the middle, then the second. Both centred = the point.
+    const FT_TOL = 0.22, FT_SPEED = 0.085;
+    function startFT(side) { ft = { side: side, stage: 0, offA: 0, offB: 0, t: rnd(0, 70) }; state = 'ft'; }
+    function ftPress() {
+      if (!ft) return;
+      const cur = Math.sin(ft.t * FT_SPEED);
+      if (ft.stage === 0) { ft.offA = cur; ft.stage = 1; ft.t = rnd(0, 70); }
+      else {
+        ft.offB = cur;
+        const made = Math.abs(ft.offA) < FT_TOL && Math.abs(ft.offB) < FT_TOL;
+        if (made) { score[ft.side] += 1; pops.push({ x: VW / 2, y: CY - 80, txt: 'FREE THROW! +1', color: SIDE_COLOR[ft.side], t: 0, big: true }); }
+        else pops.push({ x: VW / 2, y: CY - 80, txt: 'CLANK! MISSED IT!', color: '#ff9d9d', t: 0, big: true });
+        ft = null; state = 'playing'; freeze = 26;
+      }
+    }
+
     // Stealing is an ATTEMPT with a risk: whiff, win the ball, or get whistled
     // for a reach-in foul (stunned + a free throw for the offense).
     function attemptSteal(p, o) {
@@ -522,21 +553,27 @@
         p.stunT = 70;
         pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
         if (!otMode) {   // no gimme points in sudden death
-          score[o.side] += 1;
-          pops.push({ x: o.x, y: o.y - 40, txt: 'FREE THROW +1', color: SIDE_COLOR[o.side], t: 0 });
+          if (isHumanTeam(o.side)) startFT(o.side);
+          else {
+            // CPU steps to the line and shoots it off-screen
+            const P = clamp(0.45 + (o.shoot3 - 0.85) * 0.9, 0.5, 0.92);
+            if (Math.random() < P) { score[o.side] += 1; pops.push({ x: o.x, y: o.y - 40, txt: 'FREE THROW GOOD +1', color: SIDE_COLOR[o.side], t: 0 }); }
+            else pops.push({ x: o.x, y: o.y - 40, txt: 'FREE THROW MISSED!', color: '#cfd6ea', t: 0 });
+          }
         }
       } else {
         pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 });
       }
     }
 
-    // Crossover dribble move (defend key while YOU have the ball): a burst of
-    // speed that can break a close defender's ankles.
+    // Dribble moves (defend key while YOU have the ball): crossover, spin or
+    // behind-the-back — a burst of speed that can break a close defender's ankles.
     function crossover(side) {
       if (state !== 'playing') return;
       const p = activePlayer(teams[side]);
       if (ball.owner !== p || p.crossCD > 0 || p.dunk || p.stunT > 0) return;
       p.crossCD = 90; p.crossT = 22;
+      p.moveType = pick(['cross', 'spin', 'btb']);
       const k = keys[side];
       let ax = (k.r ? 1 : 0) - (k.l ? 1 : 0), ay = (k.d ? 1 : 0) - (k.u ? 1 : 0);
       if (!ax && !ay) { ax = p.fx; ay = p.fy; }
@@ -599,6 +636,11 @@
         return;
       }
       if (state === 'tip') { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); tipCount++; } return; }
+      if (state === 'ft') {
+        const shootKey = ft && ft.side === 1 ? (e.code === 'Digit4' || e.code === 'Numpad4') : e.code === 'KeyQ';
+        if ((e.code === 'Space' || shootKey) && !e.repeat) { e.preventDefault(); ftPress(); }
+        return;
+      }
       const as = numPlayers === 2 ? 1 : 0;
       switch (e.code) {
         case 'KeyW': keys[0].u = true; e.preventDefault(); break;
@@ -642,6 +684,7 @@
     function canvasY(clientY) { const rect = canvas.getBoundingClientRect(); return (clientY - rect.top) / rect.height * VH; }
     function sideForX(px) { if (numPlayers === 1) return 0; return px < VW / 2 ? 0 : 1; }
     function onDown(e) {
+      if (state === 'ft') { if (e.cancelable) e.preventDefault(); ftPress(); return; }
       if (state !== 'playing' && state !== 'score') return;
       if (e.cancelable) e.preventDefault();
       const touches = e.changedTouches ? e.changedTouches : [e];
@@ -1000,7 +1043,8 @@
       const D = Math.hypot(h.x - p.x, h.y - p.y);
       if (p.aiShootCD <= 0 && (D < 90 || (D < 200 && ndd > 55) || (D < THREE_R + 20 && D > THREE_R && ndd > 80 && p.shoot3 > 1))) {
         // release sampled near the top; elite shooters have far tighter timing
-        const spr = clamp(0.20 - (p.shoot3 - 0.85) * 0.25, 0.05, 0.20);
+        // (floor raised since greens now auto-make)
+        const spr = clamp(0.22 - (p.shoot3 - 0.85) * 0.25, 0.08, 0.22);
         releaseShot(side, 1 + rnd(-spr, spr * 0.6), p);
         p.aiShootCD = 140;
       } else if (ndd < 48 && p.aiPassCD <= 0) {
@@ -1194,6 +1238,7 @@
         if (tipT >= TIP_FRAMES) settleTip();
         return;
       }
+      if (state === 'ft') { if (ft) ft.t += dtf; return; }
       if (state !== 'playing' && state !== 'score' && state !== 'half') return;
 
       if (freeze > 0) {
@@ -1341,6 +1386,10 @@
       // whole sprite drawn at SC scale around the feet — keeps the court big
       ctx.save();
       ctx.translate(p.x, p.y); ctx.scale(SC, SC); ctx.translate(-p.x, -p.y);
+      // spin move: the whole mob pirouettes through the dribble move
+      if (p.crossT > 0 && p.moveType === 'spin') {
+        ctx.translate(p.x, p.y - 24); ctx.rotate((1 - p.crossT / 22) * 6.283); ctx.translate(-p.x, -(p.y - 24));
+      }
       // shadow stays on the floor
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       const shk = 1 / (1 + p.z * 0.02);
@@ -1399,10 +1448,12 @@
         if (charging || p.dunk || armsUp) {
           bx2 = x; by2 = yb - 62 - bob;
         } else {
-          // crossover: the ball whips hand-to-hand across the body
+          // dribble moves: crossover whips hand-to-hand, behind-the-back loops
+          // around the body; plain dribble bounces at the lead hand
           const dphase = p.crossT > 0 ? animT * 0.5 : animT * 0.13 + p.legPhase * 0.3;
           const bounce = Math.abs(Math.sin(dphase));
-          bx2 = p.crossT > 0 ? x + Math.sin(animT * 0.5) * 15 : x + p.fx * 14;
+          if (p.crossT > 0 && p.moveType === 'btb') bx2 = x - Math.sin((1 - p.crossT / 22) * 3.14) * p.fx * 16;
+          else bx2 = p.crossT > 0 ? x + Math.sin(animT * 0.5) * 15 : x + p.fx * 14;
           const floorY = p.y + 4, handY = yb - 22 - bob;
           by2 = floorY + (handY - floorY) * bounce;
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -1488,41 +1539,33 @@
       ctx.beginPath(); ctx.moveTo(dx, dy + 12); ctx.lineTo(dx - 8, dy); ctx.lineTo(dx + 8, dy); ctx.closePath(); ctx.fill();
     }
 
-    // 2K26-style circular shot meter above the shooter: the bar sweeps from the
-    // bottom, up the left side, toward the TOP of the circle — release at the top.
-    // The green window sits just under the top, sized by the shooter's skill.
-    function meterAngle(c) { return Math.PI / 2 + c * Math.PI; }   // 0 → bottom, 1 → top (via the left side)
+    // 2K vertical shot meter beside the shooter: fill races bottom→top, release at
+    // the white target line. The green SLIVER breathes live with distance & contest.
     function drawMeter(p, side) {
       const c = Math.min(chargeT[side] / shotMaxFor(p), OVERFILL);
-      const h = attackHoop(side);
-      const three = Math.hypot(p.x - h.x, p.y - h.y) > THREE_R;
-      const gw = greenWindow(p, three);
-      const cx = p.x, cy = p.y - p.z - 58, R = 17;
-      // casing arc (bottom → past the top)
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 9;
-      ctx.beginPath(); ctx.arc(cx, cy, R, meterAngle(0), meterAngle(OVERFILL)); ctx.stroke();
-      // the green window (bigger for sharpshooters, smaller behind the arc)
-      ctx.strokeStyle = 'rgba(126,211,126,0.95)'; ctx.lineWidth = 9;
-      ctx.beginPath(); ctx.arc(cx, cy, R, meterAngle(1 - gw), meterAngle(1 + gw * 0.5)); ctx.stroke();
-      // fill sweep
-      const green = c >= 1 - gw && c <= 1 + gw * 0.5;
-      ctx.strokeStyle = green ? '#eaffea' : (c > 1 + gw * 0.5 ? '#ff5a5a' : '#ffd23f');
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.arc(cx, cy, R, meterAngle(0), meterAngle(c)); ctx.stroke();
-      // target tick at the very top
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(cx, cy - R - 7); ctx.lineTo(cx, cy - R + 3); ctx.stroke();
-      ctx.lineCap = 'butt';
+      const gw = greenWindowFor(p, side);
+      const w = 9, hgt = 54, mx = p.x + p.r * SC + 12, myTop = p.y - p.z - 80;
+      const yFor = function (cc) { return myTop + hgt * (1 - cc / OVERFILL); };
+      // casing
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'; roundRect(mx - 2, myTop - 2, w + 4, hgt + 4, 4); ctx.fill();
+      // the green sliver (auto-bucket zone)
+      ctx.fillStyle = '#7ed37e';
+      ctx.fillRect(mx, yFor(1 + gw * 0.4), w, Math.max(2, yFor(1 - gw) - yFor(1 + gw * 0.4)));
+      // fill from the bottom
+      const green = c >= 1 - gw && c <= 1 + gw * 0.4;
+      ctx.fillStyle = green ? '#eaffea' : (c > 1 + gw * 0.4 ? '#ff5a5a' : '#ffd23f');
+      ctx.fillRect(mx, yFor(c), w, yFor(0) - yFor(c));
+      // target line at the perfect release point
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(mx - 4, yFor(1)); ctx.lineTo(mx + w + 4, yFor(1)); ctx.stroke();
     }
 
     // dashed line to the attacked hoop while charging — shows which basket you're aiming at
     function drawAimGuide(p, side) {
       const h = attackHoop(side);
       const c = chargeT[side] / shotMaxFor(p);
-      const three = Math.hypot(p.x - h.x, p.y - h.y) > THREE_R;
-      const gw = greenWindow(p, three);
-      const col = (c >= 1 - gw && c <= 1 + gw * 0.5) ? '#7ed37e' : (c > 1 + gw * 0.5 ? '#ff5a5a' : '#ffd23f');
+      const gw = greenWindowFor(p, side);
+      const col = (c >= 1 - gw && c <= 1 + gw * 0.4) ? '#7ed37e' : (c > 1 + gw * 0.4 ? '#ff5a5a' : '#ffd23f');
       ctx.save();
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 7;
@@ -1591,6 +1634,38 @@
       ctx.globalAlpha = 1; ctx.textAlign = 'left';
       if (state !== 'select') drawHUD();
       if (state === 'playing' || state === 'score') for (let s = 0; s < 2; s++) { if (joy[s].active && isHumanTeam(s)) drawJoystick(joy[s]); }
+      if (state === 'ft' && ft) {
+        // free-throw scene: the big ➕ with two sliding basketballs
+        ctx.fillStyle = 'rgba(10,14,28,0.72)'; ctx.fillRect(0, 0, VW, VH);
+        const cx = VW / 2, cy = CY - 10, ARM = 92, TH = 30, AMP = 74;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = SIDE_COLOR[ft.side]; ctx.font = "800 26px 'Nunito', sans-serif";
+        ctx.fillText('FREE THROW', cx, cy - 140);
+        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 15px 'Nunito', sans-serif";
+        ctx.fillText(ft.stage === 0 ? 'Tap to stop ball 1 in the middle of the ➕' : 'Now stop ball 2 in the middle!', cx, cy - 116);
+        // plus-sign arms
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        roundRect(cx - ARM, cy - TH / 2, ARM * 2, TH, 8); ctx.fill();
+        roundRect(cx - TH / 2, cy - ARM, TH, ARM * 2, 8); ctx.fill();
+        // the sweet spot: middle of the addition sign
+        ctx.fillStyle = 'rgba(126,211,126,0.55)';
+        roundRect(cx - TH / 2, cy - TH / 2, TH, TH, 6); ctx.fill();
+        ctx.strokeStyle = '#7ed37e'; ctx.lineWidth = 2;
+        roundRect(cx - TH / 2, cy - TH / 2, TH, TH, 6); ctx.stroke();
+        // the two basketballs
+        function ftBall(bx, by, dim) {
+          ctx.globalAlpha = dim ? 0.45 : 1;
+          ctx.fillStyle = '#e2731d'; ctx.beginPath(); ctx.arc(bx, by, 11, 0, 6.28); ctx.fill();
+          ctx.strokeStyle = '#8a3d0f'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(bx - 11, by); ctx.lineTo(bx + 11, by); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(bx, by - 11); ctx.lineTo(bx, by + 11); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        const cur = Math.sin(ft.t * FT_SPEED);
+        ftBall(cx + (ft.stage === 0 ? cur : ft.offA) * AMP, cy, false);          // horizontal ball
+        ftBall(cx, cy + cur * AMP, ft.stage === 0);                              // vertical ball (waits its turn)
+        ctx.textAlign = 'left';
+      }
       if (state === 'tip') {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fff'; ctx.font = "800 26px 'Nunito', sans-serif";
@@ -1645,6 +1720,9 @@
       setFreeze: function (f) { freeze = f; },
       release: function (side, c, shooter) { chargeT[side] = c * shotMaxFor(activePlayer(teams[side])); shootHeld[side] = true; shootRelease(side); },
       endNow: function (s0, s1) { score = [s0, s1]; endGame(); },
+      ft: function () { return ft; },
+      ftPress: ftPress,
+      startFT: startFT,
       career: function () { return career; },
       startCareer: startCareerMatch,
       openCareer: openCareer,
