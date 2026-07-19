@@ -250,6 +250,7 @@
     let teams = [], ball = null, score = [0, 0];
     let pops = [], freeze = 0, inboundSide = 0;
     let clockMs = HALF_MS, half = 1, otMode = false;
+    let teamFouls = [0, 0];      // per-half team fouls: 10 puts the other team in the BONUS
     let possCD = 0;
     let careerMatch = null;      // set while a Season-mode game is being played
     let lastCareer = false;      // routes the over panel's Continue back to the season hub
@@ -288,7 +289,7 @@
       return { side: side, key: key, slot: slot,
         x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
         accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, shoot3: s.shoot3, steal: s.steal,
-        pName: s.pName || null, stars: s.stars || 0,
+        pName: s.pName || null, stars: s.stars || 0, fouls: 0, ejected: false,
         aiShootCD: 0, aiPassCD: 0, aiJumpCD: 0, stealCD: 0, stunT: 0, crossT: 0, crossCD: 0,
         flash: 0, legPhase: 0, mark: null, dunk: null };
     }
@@ -313,9 +314,10 @@
     // ---------- match flow ----------
     function placeInbound(side) {
       ball = { x: VW / 2, y: CY, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 7, owner: null, freeCD: 0, lastSide: side, trail: [], passTo: null, settle: 0, shot: null };
-      for (const t of teams) for (const p of t.onPitch) { const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stealCD = 0; }
+      for (const t of teams) for (const p of t.onPitch) { if (p.ejected) continue; const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stealCD = 0; }
       possCD = 0;
-      setOwner(teams[side].onPitch[0]);   // point guard takes it in the backcourt
+      let taker = teams[side].onPitch.find(function (p) { return !p.ejected; }) || teams[side].onPitch[0];
+      setOwner(taker);                    // takes it in the backcourt
       possCD = 45;                        // a moment of space to play it in
     }
 
@@ -323,7 +325,7 @@
     // and the human mashes Space to out-jump the CPU.
     function placeTip() {
       ball = { x: VW / 2, y: CY, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 7, owner: null, freeCD: 0, lastSide: 0, trail: [], passTo: null, settle: 0, shot: null };
-      for (const t of teams) for (const p of t.onPitch) { const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stunT = 0; }
+      for (const t of teams) for (const p of t.onPitch) { if (p.ejected) continue; const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.dunk = null; p.stunT = 0; }
       teams[0].onPitch[0].x = VW / 2 - 34; teams[0].onPitch[0].y = CY; teams[0].onPitch[0].fx = 1;
       teams[1].onPitch[0].x = VW / 2 + 34; teams[1].onPitch[0].y = CY; teams[1].onPitch[0].fx = -1;
       tipT = 0; tipCount = 0; possCD = 0;
@@ -353,7 +355,7 @@
       teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
       applyDiff(teams[1]);
       score = [0, 0]; pops = []; freeze = 60;
-      clockMs = HALF_MS; half = 1; otMode = false;
+      clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0];
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
       defendHeld[0] = defendHeld[1] = false;
       setupEl.hidden = true; overEl.hidden = true;
@@ -414,7 +416,7 @@
     function switchPlayer(side) {
       if (state !== 'playing' && state !== 'score') return;
       const t = teams[side]; let best = -1, bd = Infinity;
-      for (let i = 0; i < t.onPitch.length; i++) { if (i === t.active) continue; const p = t.onPitch[i]; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < bd) { bd = d; best = i; } }
+      for (let i = 0; i < t.onPitch.length; i++) { if (i === t.active) continue; const p = t.onPitch[i]; if (p.ejected) continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < bd) { bd = d; best = i; } }
       if (best >= 0) setActive(t, best);
     }
     function setActive(t, idx) {
@@ -443,7 +445,7 @@
       let tgt = forcedTgt || null, bestSc = -Infinity;
       if (!tgt) {
         for (let i = 0; i < t.onPitch.length; i++) {
-          const m = t.onPitch[i]; if (m === o) continue;
+          const m = t.onPitch[i]; if (m === o || m.ejected) continue;
           const dm = Math.hypot(m.x - o.x, m.y - o.y); if (dm > 520) continue;
           let open = Infinity;
           for (const q of teams[1 - side].onPitch) open = Math.min(open, Math.hypot(q.x - m.x, q.y - m.y));
@@ -509,7 +511,7 @@
       ball.vx = (tx - sx) / T; ball.vy = (ty - sy) / T;
       ball.vz = (RIM_Z - z0 + 0.5 * GRAV_Z * T * T) / T;
       ball.freeCD = T + 10;
-      ball.shot = { make: make, airball: airball, pts: three ? 3 : 2, side: side, t: 0, T: T, hoop: h };
+      ball.shot = { make: make, airball: airball, pts: three ? 3 : 2, side: side, t: 0, T: T, hoop: h, shooter: o, blockTried: false };
       if (o.z <= 0) o.vz = 6;    // jump shot
       pops.push({ x: sx, y: sy - o.r - 24, txt: green ? 'GREEN!' : 'SHOOT!', color: green ? '#7ed37e' : '#ffe066', t: 0 });
     }
@@ -530,6 +532,26 @@
       setOwner(taker); possCD = 45; freeze = 26;   // brief whistle
     }
 
+    // A player's 6th personal foul: FOULED OUT — off to the bench for good
+    function checkEject(p) {
+      if (p.fouls < 6 || p.ejected) return;
+      p.ejected = true; p.stunT = 0; p.dunk = null;
+      pops.push({ x: p.x, y: p.y - 44, txt: 'FOULED OUT! 🚫', color: '#ff9d9d', t: 0, big: true });
+      if (ball && ball.owner === p) { ball.owner = null; ball.freeCD = 8; }
+      // take a seat on the apron
+      p.x = VW / 2 + (p.side === 0 ? -180 : 180); p.y = Y0 - 16; p.vx = p.vy = 0; p.z = 0;
+      const t = teams[p.side];
+      if (isHumanTeam(p.side) && t.onPitch[t.active] === p) {
+        for (let i = 0; i < t.onPitch.length; i++) { if (!t.onPitch[i].ejected) { setActive(t, i); break; } }
+      }
+    }
+    // charge a personal + team foul; returns true when the fouled team is in the bonus
+    function chargeFoul(fouler) {
+      fouler.fouls++; teamFouls[fouler.side]++;
+      checkEject(fouler);
+      return teamFouls[fouler.side] >= 10;
+    }
+
     // Free throws: the game stops, the fouled mob steps to the LINE and shoots
     // TWO. Each shot is the ➕ minigame (stop both balls in the middle). A made
     // second FT is a dead ball (other team inbounds); a missed second FT comes
@@ -543,11 +565,11 @@
     // everyone to their free-throw spots: shooter at the line, rebounders on the key
     function stageFTScene() {
       const o = ft.shooter, side = ft.side, h = attackHoop(side);
-      for (const t of teams) for (const p of t.onPitch) { p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.stunT = 0; p.dunk = null; }
+      for (const t of teams) for (const p of t.onPitch) { if (p.ejected) continue; p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.stunT = 0; p.dunk = null; }
       o.x = h.x + h.dir * 106; o.y = CY; o.fx = -h.dir; o.fy = 0;   // the free-throw line
       ball.owner = o; ball.passTo = null; ball.shot = null; ball.trail = [];
-      const mates = teams[side].onPitch.filter(function (p) { return p !== o; });
-      const opps = teams[1 - side].onPitch;
+      const mates = teams[side].onPitch.filter(function (p) { return p !== o && !p.ejected; });
+      const opps = teams[1 - side].onPitch.filter(function (p) { return !p.ejected; });
       // lane spots: defenders get the inside boxes, shooter's teammates behind them
       if (opps[0]) { opps[0].x = h.x + h.dir * 30; opps[0].y = CY - KEY_H / 2 - 16; }
       if (opps[1]) { opps[1].x = h.x + h.dir * 30; opps[1].y = CY + KEY_H / 2 + 16; }
@@ -603,12 +625,20 @@
       // NBA-realistic: most reaches are whiffs — clean steals are rare, fouls hurt
       if (roll < 0.16 * p.steal) {
         setOwner(p); pops.push({ x: p.x, y: p.y - 34, txt: 'STEAL!', color: SIDE_COLOR[p.side], t: 0 });
-      } else if (roll < 0.16 * p.steal + 0.26) {
+      } else if (roll < 0.16 * p.steal + 0.22) {
         p.stunT = 70;
         pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
-        if (!otMode) {   // no gimme points in sudden death
-          if (isHumanTeam(o.side)) startFT(o);
-          else cpuFTs(o);
+        const bonus = chargeFoul(p);
+        if (!otMode) {
+          if (bonus) {
+            // 10 team fouls: the fouled team shoots the BONUS
+            pops.push({ x: o.x, y: o.y - 40, txt: 'BONUS — 2 SHOTS!', color: SIDE_COLOR[o.side], t: 0 });
+            if (isHumanTeam(o.side)) startFT(o); else cpuFTs(o);
+          } else {
+            // no free throws yet — just a whistle and the ball stays with them
+            pops.push({ x: o.x, y: o.y - 40, txt: 'SIDE BALL', color: '#cfd6ea', t: 0 });
+            possCD = 45; freeze = 26;
+          }
         }
       } else {
         pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 });
@@ -975,7 +1005,7 @@
       teams = [ buildCustomTeam(0, 'pig', cards), buildCustomTeam(1, fr.key, cpuCards(fr, nx.boost)) ];
       applyDiff(teams[1]);
       score = [0, 0]; pops = []; freeze = 0;
-      clockMs = HALF_MS; half = 1; otMode = false;
+      clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0];
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0; defendHeld[0] = defendHeld[1] = false;
       careerEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true; setupEl.hidden = true; overEl.hidden = true;
       placeTip();   // Season games are 1P: every one opens with the jump ball
@@ -1145,8 +1175,9 @@
       if (Math.hypot(sp.x - p.x, sp.y - p.y) > 26) steer(p, sp.x, sp.y, 0.6);
     }
     function assignMarks(t) {
-      const opps = teams[1 - t.side].onPitch.slice();
+      const opps = teams[1 - t.side].onPitch.filter(function (q) { return !q.ejected; });
       for (const p of t.onPitch) {
+        if (p.ejected) { p.mark = null; continue; }
         let best = null, bd = Infinity;
         for (const q of opps) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < bd) { bd = d; best = q; } }
         p.mark = best;
@@ -1154,7 +1185,9 @@
       }
     }
     function driveDefense(p, side, auto) {
-      const mark = p.mark || teams[1 - side].onPitch[p.slot];
+      let mark = p.mark || teams[1 - side].onPitch[p.slot];
+      if (mark && mark.ejected) mark = teams[1 - side].onPitch.find(function (q) { return !q.ejected; });
+      if (!mark) return;
       const own = ownHoop(side);
       const isCarrier = ball.owner === mark;
       p.aiJumpCD -= dtf; p.stealCD -= dtf;
@@ -1241,13 +1274,28 @@
       if (ball.shot) {
         const sh = ball.shot, h = sh.hoop;
         sh.t += dtf;
-        // block window: an airborne defender near the young shot swats it
-        if (sh.t < 18) {
-          for (const p of teams[1 - sh.side].onPitch) {
-            if (p.z > 4 && ball.z > 8 && ball.z < p.z + 48 && Math.hypot(p.x - ball.x, p.y - ball.y) < p.r + ball.r + 10) {
-              pops.push({ x: p.x, y: p.y - p.r - 26, txt: 'BLOCKED!', color: SIDE_COLOR[p.side], t: 0, big: true });
-              ball.shot = null; ball.vx = -ball.vx * 0.35 + rnd(-2, 2); ball.vy = -ball.vy * 0.35 + rnd(-2, 2); ball.vz = -2; ball.freeCD = 8;
-              break;
+        // block window: one shot only per attempt — an airborne defender who gets
+        // a hand near it might swat it, might FOUL the shooter, or might miss clean
+        if (sh.t < 18 && !sh.blockTried) {
+          for (const q of teams[1 - sh.side].onPitch) {
+            if (q.ejected) continue;
+            if (q.z > 4 && ball.z > 8 && ball.z < q.z + 36 && Math.hypot(q.x - ball.x, q.y - ball.y) < q.r + ball.r + 5) {
+              sh.blockTried = true;
+              const r = Math.random();
+              if (r < 0.35) {
+                pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'BLOCKED!', color: SIDE_COLOR[q.side], t: 0, big: true });
+                ball.shot = null; ball.vx = -ball.vx * 0.35 + rnd(-2, 2); ball.vy = -ball.vy * 0.35 + rnd(-2, 2); ball.vz = -2; ball.freeCD = 8;
+              } else if (r < 0.55) {
+                // caught the arm — SHOOTING FOUL, always free throws
+                pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'SHOOTING FOUL!', color: '#ff9d9d', t: 0, big: true });
+                chargeFoul(q);
+                const shooter = sh.shooter;
+                ball.shot = null; ball.vx = ball.vy = ball.vz = 0;
+                if (!otMode && shooter) { if (isHumanTeam(shooter.side)) startFT(shooter); else cpuFTs(shooter); }
+                else if (shooter) { setOwner(shooter); freeze = 20; }
+                return;
+              }
+              break;   // contest tried — no second bite at this shot
             }
           }
         }
@@ -1292,6 +1340,7 @@
       if (ball.freeCD <= 0 && !ball.shot) {
         let best = null, bd = Infinity;
         for (const t of teams) for (const p of t.onPitch) {
+          if (p.ejected) continue;
           if (ball.z > 26 + p.z) continue;
           const d = Math.hypot(p.x - ball.x, p.y - ball.y);
           // tighter catch radius so you SEE the ball arrive; a pass can only be
@@ -1323,7 +1372,7 @@
         freeze -= dtf;
         if (freeze <= 0) {
           if (state === 'score') { placeInbound(inboundSide); state = 'playing'; }
-          else if (state === 'half') { half = 2; clockMs = HALF_MS; placeInbound(1); state = 'playing'; }
+          else if (state === 'half') { half = 2; clockMs = HALF_MS; teamFouls = [0, 0]; placeInbound(1); state = 'playing'; }
         }
       }
       const live = state === 'playing' && freeze <= 0;
@@ -1369,9 +1418,10 @@
         const weOwn = ball.owner && ball.owner.side === s;
         if (!weOwn) assignMarks(t);
         let chaser = -1, cd = Infinity;
-        for (let i = 0; i < t.onPitch.length; i++) { const p = t.onPitch[i]; if (human && i === t.active) continue; if (ball.owner === p) continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < cd) { cd = d; chaser = i; } }
+        for (let i = 0; i < t.onPitch.length; i++) { const p = t.onPitch[i]; if (p.ejected) continue; if (human && i === t.active) continue; if (ball.owner === p) continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < cd) { cd = d; chaser = i; } }
         for (let i = 0; i < t.onPitch.length; i++) {
           const p = t.onPitch[i];
+          if (p.ejected) continue;
           if (p.crossT > 0) p.crossT -= dtf;
           if (p.crossCD > 0) p.crossCD -= dtf;
           if (p.stunT > 0) { p.stunT -= dtf; continue; }   // dazed: no driving, just coast
@@ -1394,8 +1444,8 @@
       }
 
       const court = teams[0].onPitch.concat(teams[1].onPitch);
-      for (const m of court) if (!m.dunk) moveMob(m);
-      for (let i = 0; i < court.length; i++) for (let j = i + 1; j < court.length; j++) { if (court[i].dunk || court[j].dunk) continue; mobCollide(court[i], court[j]); }
+      for (const m of court) if (!m.dunk && !m.ejected) moveMob(m);
+      for (let i = 0; i < court.length; i++) for (let j = i + 1; j < court.length; j++) { if (court[i].dunk || court[j].dunk || court[i].ejected || court[j].ejected) continue; mobCollide(court[i], court[j]); }
       for (const m of court) if (m.flash > 0) m.flash -= dtf;
       for (const t of teams) if (t.swFx && t.swFx.t < 1) t.swFx.t += dtf / 9;
 
@@ -1464,6 +1514,7 @@
       // whole sprite drawn at SC scale around the feet — keeps the court big
       ctx.save();
       ctx.translate(p.x, p.y); ctx.scale(SC, SC); ctx.translate(-p.x, -p.y);
+      if (p.ejected) ctx.globalAlpha = 0.4;   // sulking on the bench
       // spin move: the whole mob pirouettes through the dribble move
       if (p.crossT > 0 && p.moveType === 'spin') {
         ctx.translate(p.x, p.y - 24); ctx.rotate((1 - p.crossT / 22) * 6.283); ctx.translate(-p.x, -(p.y - 24));
@@ -1668,7 +1719,7 @@
       const low = !otMode && clockMs < 10000 && state === 'playing';
       ctx.fillStyle = low && Math.floor(lastTs / 300) % 2 === 0 ? '#ff5a5a' : '#cfd6ea';
       ctx.font = "800 15px 'Nunito', sans-serif";
-      ctx.fillText(otMode ? 'OT · next basket wins' : (half === 1 ? '1st' : '2nd') + '  ' + fmtClock(clockMs), VW / 2, 52);
+      ctx.fillText((otMode ? 'OT · next basket wins' : (half === 1 ? '1st' : '2nd') + '  ' + fmtClock(clockMs)) + '  ·  F ' + teamFouls[0] + '–' + teamFouls[1], VW / 2, 52);
       if (ball && ball.owner) {
         const px = ball.owner.side === 0 ? VW / 2 - 116 : VW / 2 + 116;
         ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
@@ -1775,7 +1826,7 @@
           numPlayers = np;
           teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
           score = [0, 0]; pops = []; freeze = 0;
-          clockMs = HALF_MS; half = 1; otMode = false;
+          clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0];
           shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
           defendHeld[0] = defendHeld[1] = false;
           placeInbound(0);
@@ -1798,6 +1849,7 @@
       release: function (side, c, shooter) { chargeT[side] = c * shotMaxFor(activePlayer(teams[side])); shootHeld[side] = true; shootRelease(side); },
       endNow: function (s0, s1) { score = [s0, s1]; endGame(); },
       ft: function () { return ft; },
+      teamFouls: function (a, b) { if (a != null) teamFouls = [a, b]; return teamFouls.slice(); },
       ftPress: ftPress,
       startFT: function (side) { startFT(activePlayer(teams[side])); },
       career: function () { return career; },
