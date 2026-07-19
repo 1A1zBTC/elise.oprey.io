@@ -575,3 +575,32 @@ Other instance has in-flight uncommitted work in the same file.
       poobags (walk jobs pre-dated the rule; don't cut off an existing family's income),
       and (2) when you still lack bags the call screen says so: bubble hint + Accept
       replaced by a disabled "💩 Need poo bags!" button. Verified headless both ways.
+- [x] v22: Pet Lovers — fish play is now hide & seek in the tank ('seek' mech): 5 tank
+      decorations (🪸🌿🪨🐚🌱), Bubbles hides behind one; tap to find, fish pops out then
+      swims to a new hiding spot (never the same twice); find 4 within 18s, wrong taps
+      flash red. Replaces pop-the-bubbles. Verified headless: full 4-find playthrough
+      with wrong-guess flashes, clean finish; screenshot confirmed.
+- [x] v23: Pet Lovers — two more store essentials with real perks: 💊 PET VITAMINS (12🪙,
+      aisle B 7th slot; sickness cooldowns ×2 everywhere → pets get sick half as often)
+      and 🪮 SOFT BRUSH (8🪙, bottom row 6th slot; +15 clean on every wash incl. fosters).
+      Regridded aisle B to the 7-slot grid and bottom row to 6 slots (200..700). Verified
+      headless: both purchasable at their new spots, wash path applies bonus (clamped test).
+      NOT deployed yet. (Left __t.reset out of cleanup — other instance mid-run on shared
+      test slots.)
+- [x] first pet via the clinic too: freshGame no longer pre-adopts a random starter — every
+      pet incl. the first is met at the vet clinic pen. Pocket money 20 → 90 so a first
+      dog/cat/parrot/bunny (fee+supplies 57-83🪙) is affordable day one; fish/crab/ferret/pig
+      stay earn-up goals. Intro copy updated + bobbing "Meet your first pet here!" arrow at
+      the clinic counter while you own zero pets.
+- [x] v24: Pet Lovers — you now LOAD new pets into their homes: extended the concurrent
+      instance's carrier-release step (dog/cat travel cage) to ALL enclosure pets — after
+      building the cage/tank/hutch/pen, the pet waits beside it (bobbing, flashing 🫳) and
+      one more tap "puts X into their <home>" ("💕 settles into their new tank!") before
+      adoption finalizes. releaseStep()/homeNoun() helpers; placeNext + build-site drawing
+      updated. Verified headless: fish needed 4 build taps + 1 loading tap (previously
+      adopted on the 4th); screenshot of Mango waiting to be put in their cage.
+- [x] pet fights: rival pairs (dog-cat, cat-parrot, ferret-bunny, dog-pig, ferret-parrot,
+      bunny-pig) squabble every ~3-5 min (paused during trips/sickness, one drama at a time).
+      Dust-cloud scrap with 25s countdown — run over to break it up (both grumpy + messy) or
+      one pet gets hurt 🤕 (sick+hurt flags) and needs the existing vet-clinic treatment.
+      fightCd saved with load grace; tank pets never fight; intro line added.

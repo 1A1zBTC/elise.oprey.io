@@ -81,6 +81,10 @@
       background: #1c2a4a; border: 2px solid #2a3a5e; border-radius: 14px; padding: 10px; cursor: pointer; }
     .ph-app .em { font-size: 1.4rem; }
     .ph-app:active { transform: scale(0.96); }
+    .ph-task { display: flex; align-items: center; gap: 8px; text-align: left;
+      background: rgba(255,255,255,0.07); border-radius: 10px; padding: 7px 10px; margin-bottom: 6px;
+      color: #e8ecf8; font-size: 0.78rem; font-weight: 700; }
+    .ph-task .em { font-size: 1.05rem; }
     .ph-frow { display: flex; align-items: center; gap: 8px; background: #1c2a4a; border-radius: 12px; padding: 7px 9px; margin-bottom: 7px; }
     .ph-frow .em { font-size: 1.6rem; }
     .ph-frow .fi { flex: 1; min-width: 0; }
@@ -244,7 +248,7 @@
       <div class="panel">
         <h2>Pet Lovers</h2>
         <div class="sub" style="text-align:left">
-          You start with one surprise pet — care for them, earn coins and adopt more! 💕<br><br>
+          Your house is ready for pets — now go meet them! Visit the <b>🏥 vet clinic</b>, meet the pets in the pen and adopt your <b>first friend</b> with your pocket money. Care for them, earn coins and adopt more! 💕<br><br>
           🚶 <b>Walk</b> with the arrows / WASD, or tap where to go<br>
           🐾 Stand <b>next to a pet</b> to feed, play, wash &amp; clean<br>
           🎮 Every chore is a <b>mini game</b> — and <b>every pet plays differently</b>! Do well and it helps your pet <b>lots more</b>!<br>
@@ -253,6 +257,7 @@
           🧴 Keep the <b>litter box</b> filled and 🧻 <b>pee pads</b> fresh — or your cat &amp; dog will <b>pee on the floor</b> and you'll have puddles to mop! And put 🏖️ <b>sand &amp; dirt</b> in the <b>hermit crab's tank</b> or Sheldon hides in his shell!<br>
           🐕 Take the dog for <b>walks</b> — tap the bones!<br>
           🚑 Sick pet? Visit the <b>vet clinic counter</b>, pick your pet and press <b>Go to the vet</b>!<br>
+          💢 Some pets <b>don't get along</b> — if a fight breaks out, <b>run over and break it up</b> fast, or someone gets <b>hurt 🤕</b> and needs the vet!<br>
           📱 Your <b>phone rings</b> when a neighbour wants a <b>dog walk</b> — press <b>P</b> to answer! You have <b>10s</b> to pick up and <b>5s</b> to say yes or no<br>
           🧺 Open the phone's <b>Foster app</b> (press <b>P</b>) to <b>choose a pet to foster</b> — happy fosters pay more!<br><br>
           Happy pets drop <b>hearts</b> — walk over them to grow your <b style="color:#ff7d9d">❤ Love</b>! Use your job money for supplies and <b>new pets</b>! 🐷
@@ -383,12 +388,29 @@
       { nm: 'Mittens',  em: '🐱', kind: 'Kitten' }
     ];
     const FOSTER_STAY = 150;   // seconds a foster pet stays
+    // every species has its own favourite toys; teddy & puzzle work for everyone
     const TOYS = [
-      { id: 'ball',   em: '🎾', nm: 'Bouncy Ball',  d: 'Everyone loves fetch',    cost: 10 },
-      { id: 'rope',   em: '🪢', nm: 'Tug Rope',     d: 'Great for tug-of-war',    cost: 15 },
-      { id: 'teddy',  em: '🧸', nm: 'Cuddly Teddy', d: 'For snuggly playtime',    cost: 20 },
-      { id: 'puzzle', em: '🧩', nm: 'Pet Puzzle',   d: 'Smart pets play smarter', cost: 30 }
+      { id: 'ball',     em: '🎾', nm: 'Bouncy Ball',   for: 'dog',    d: 'Dogs love fetch',            cost: 10 },
+      { id: 'rope',     em: '🪢', nm: 'Tug Rope',      for: 'dog',    d: 'Great for tug-of-war',       cost: 15 },
+      { id: 'yarn',     em: '🧶', nm: 'Yarn Ball',     for: 'cat',    d: 'Cats can\'t resist it',      cost: 10 },
+      { id: 'feather',  em: '🪶', nm: 'Feather Wand',  for: 'cat',    d: 'Swish swish — pounce!',      cost: 15 },
+      { id: 'bell',     em: '🔔', nm: 'Jingle Bell',   for: 'parrot', d: 'Ring-a-ding sing-along',     cost: 10 },
+      { id: 'carrot',   em: '🥕', nm: 'Carrot Chew',   for: 'bunny',  d: 'Crunchy bunny fun',          cost: 10 },
+      { id: 'bubbles',  em: '🫧', nm: 'Bubble Maker',  for: 'fish',   d: 'Pop pop pop!',               cost: 12 },
+      { id: 'shells',   em: '🐚', nm: 'Spare Shells',  for: 'crab',   d: 'New homes to try on',        cost: 12 },
+      { id: 'socktube', em: '🧦', nm: 'Crinkle Sock',  for: 'ferret', d: 'Ferrets dive right in',      cost: 10 },
+      { id: 'mudball',  em: '⚽', nm: 'Muddy Ball',    for: 'pig',    d: 'For muddy kickabouts',       cost: 12 },
+      { id: 'teddy',    em: '🧸', nm: 'Cuddly Teddy',                 d: 'EVERY pet loves teddy',      cost: 20 },
+      { id: 'puzzle',   em: '🧩', nm: 'Pet Puzzle',                   d: 'Smart pets play smarter',    cost: 30 }
     ];
+    // the toys this pet will actually play with (its species' own + universal ones)
+    function toysFor(sp) {
+      const b = sp.base || sp.key;
+      return G.toys.filter(function (id) {
+        const t = TOYS.find(function (x) { return x.id === id; });
+        return t && (!t.for || t.for === b);
+      });
+    }
     // gear you must own before the matching chore minigame unlocks
     const GEAR = [
       { id: 'soap',  em: '🧼', nm: 'Pet Soap',      d: 'Needed to wash pets',       cost: 8 },
@@ -415,6 +437,7 @@
     let hearts = [];             // { key, dx, dy, t }
     let cpops = [];              // canvas floating text { x, y, txt, color, t }
     let walkRun = null;
+    let fight = null;   // { a, b, x, y, t, nearT } — two rivals scrapping until you break it up
     let nearKey = null;          // pet key (or 'shop') the player stands next to
     let shopWasNear = false;
     let vetWasNear = false;
@@ -427,13 +450,11 @@
     function freshGame() {
       const pets = {};
       SPECIES.forEach(function (sp) { pets[sp.key] = freshPet(sp); });
-      // every new game starts with one random pet already at home
-      const starters = SPECIES.filter(function (sp) { return !sp.base; });
-      const starter = starters[Math.floor(Math.random() * starters.length)];
-      pets[starter.key].adopted = true;
-      return { coins: 20, food: 5, treats: 2, toys: [], gear: [], love: 0, pets: pets,
+      // no free starter: EVERY pet — including your first — is met at the vet
+      // clinic's adoption pen. Pocket money covers the first adoption + supplies.
+      return { coins: 90, food: 5, treats: 2, toys: [], gear: [], love: 0, pets: pets,
                litter: 0, litterLvl: 0, pads: 0, padLvl: 0, sand: 0, sandLvl: 0, puddles: [],
-               jobs: { nextCall: 30, foster: null }, sickCd: 120, meet: null,
+               jobs: { nextCall: 30, foster: null }, sickCd: 120, fightCd: 200, meet: null,
                savedAt: Date.now() };
     }
     // ---------- saves: named slots, same pattern as Pet Vet ----------
@@ -494,6 +515,8 @@
         if (s.jobs) for (const k in g.jobs) if (k in s.jobs) g.jobs[k] = s.jobs[k];
         if (typeof s.sickCd === 'number') g.sickCd = s.sickCd;
         g.sickCd = Math.max(g.sickCd, 90);   // no sickness in the first moments of a session
+        if (typeof s.fightCd === 'number') g.fightCd = s.fightCd;
+        g.fightCd = Math.max(g.fightCd, 120);   // no squabbles right after loading either
         SPECIES.forEach(function (sp) {
           const p = s.pets[sp.key]; if (!p) return;
           const t = g.pets[sp.key];
@@ -524,6 +547,7 @@
       phone.call = null; phone.open = false; phone.note = 'No new messages 💤'; renderPhone();
       shopEl.hidden = true; vetEl.hidden = true;
       clinicTrip = null; storeTrip = null;   // a loaded save always starts at home
+      fight = null;
       document.getElementById('home-btn').hidden = true;
       shopWasNear = vetWasNear = false; nearKey = null;
       player.x = player.tx = 340; player.y = player.ty = 330;
@@ -605,7 +629,7 @@
       return s / n.length;
     }
     function moodEmoji(sp, p) {
-      if (p.sick) return '🤒';
+      if (p.sick) return p.hurt ? '🤕' : '🤒';
       const m = mood(sp, p);
       return m > 78 ? '😍' : (m > 55 ? '🙂' : (m > 30 ? '😕' : '😢'));
     }
@@ -621,8 +645,8 @@
     // everything a new pet needs before you can bring them home (order = build order,
     // enclosure first). Shelf ids from STORE_SHELVES; keyed by base species.
     const SUPPLIES = {
-      dog:    ['beds', 'bowls', 'leash', 'poobags', 'peepads'],
-      cat:    ['litter', 'beds', 'bowls', 'water'],
+      dog:    ['cage', 'beds', 'bowls', 'leash', 'poobags', 'peepads'],
+      cat:    ['cage', 'litter', 'beds', 'bowls', 'water'],
       parrot: ['cage', 'bowls', 'water', 'climb'],
       bunny:  ['beds', 'bowls', 'water', 'broom'],
       fish:   ['tank', 'rocks', 'water', 'bowls'],
@@ -631,6 +655,17 @@
       pig:    ['beds', 'bowls', 'water', 'broom']
     };
     function suppliesFor(sp) { return SUPPLIES[baseOf(sp)]; }
+    // dogs & cats come home IN their cage — it's carried, not placed in the habitat
+    function hasCarrierStep(sp) { return !sp.home && suppliesFor(sp).indexOf('cage') >= 0; }
+    function homeNoun(sp) { return sp.home === 'tank' ? 'tank' : (sp.home === 'hutch' ? 'hutch' : (sp.home === 'pen' ? 'pen' : 'cage')); }
+    // EVERY new pet gets loaded into their home as the final step: carrier pets
+    // are let out of the travel cage, enclosure pets are placed into their
+    // cage/tank/hutch/pen by hand
+    function releaseStep(sp) { return hasCarrierStep(sp) || !!sp.home; }
+    function buildListFor(sp) {
+      const l = suppliesFor(sp);
+      return hasCarrierStep(sp) ? l.filter(function (id) { return id !== 'cage'; }) : l;
+    }
     let needT = rnd(8, 14);   // first need arrives shortly after play starts
 
     function needyStats(sp, p) {
@@ -742,6 +777,9 @@
     let stationHintCd = 0;
 
     function stationReady(st) { return !st.gear || hasGear(st.gear); }
+    // store essentials with passive perks
+    function vitaminBoost() { return hasGear('vitamins') ? 2 : 1; }   // sick half as often
+    function brushBonus() { return hasGear('brush') ? 15 : 0; }       // washes work better
     function tickStations(secs) {
       stationHintCd = Math.max(0, stationHintCd - secs);
       if (clinicTrip || storeTrip) return;   // accidents wait while you're out
@@ -786,6 +824,7 @@
       for (const sp of SPECIES) {
         const p = G.pets[sp.key];
         if (!p.adopted) continue;
+        if (!p.sick) p.hurt = false;   // the fight bruise heals with the vet visit
         if (p.vetT > 0) {
           p.vetT -= secs;
           if (p.vetT <= 0) { p.vetT = 0; p.sick = false;
@@ -793,7 +832,7 @@
             cpop(sp.x, sp.y - 44, nmOf(sp) + ' is all better! 💚', '#7be39a');
             p.restT = restFor(sp.key);                       // freshly cured pets rest a while
             p.sickT = rnd(60, 120);                          // the cured pet isn't next in line
-            G.sickCd = Math.max(G.sickCd, rnd(220, 320));   // a good rest after a cure
+            G.sickCd = Math.max(G.sickCd, rnd(220, 320) * vitaminBoost());   // a good rest after a cure
           }
           continue;
         }
@@ -807,7 +846,7 @@
             const m = mood(sp, p);
             if (Math.random() < 0.003 + 0.025 * (1 - m / 100) * (m < 45 ? 1 : 0.25)) {
               p.sick = true;
-              G.sickCd = rnd(220, 360);
+              G.sickCd = rnd(220, 360) * vitaminBoost();
               cpop(sp.x, sp.y - 44, nmOf(sp) + ' feels sick! 🤒', '#b06bff');
             }
           }
@@ -824,6 +863,85 @@
         }
       }
       tickJobs(secs);
+      tickFight(secs);
+    }
+
+    // ---------- rivalries: some pets just don't get along ----------
+    // A squabble breaks out between rivals; run over within ~25s to break it up
+    // (they're just grumpy and messy) — ignore it and someone gets hurt 🤕 and
+    // needs a trip to the vet clinic.
+    const RIVALS = [
+      ['dog', 'cat'], ['cat', 'parrot'], ['ferret', 'bunny'],
+      ['dog', 'pig'], ['ferret', 'parrot'], ['bunny', 'pig']
+    ];
+    const FIGHT_TIME = 25;
+    function fightEligible(key) {
+      const sp = spOf(key), p = G.pets[key];
+      return p.adopted && !p.sick && p.vetT <= 0 && sp.home !== 'tank' &&
+             !(walkRun && walkRun.key === key) && !(clinicTrip && clinicTrip.key === key);
+    }
+    function fightPairs() {
+      const out = [];
+      for (const sp of SPECIES) {
+        if (!fightEligible(sp.key)) continue;
+        for (const sq of SPECIES) {
+          if (sp.key >= sq.key || !fightEligible(sq.key)) continue;
+          const ab = baseOf(sp), bb = baseOf(sq);
+          if (RIVALS.some(function (r) { return (r[0] === ab && r[1] === bb) || (r[0] === bb && r[1] === ab); })) out.push([sp.key, sq.key]);
+        }
+      }
+      return out;
+    }
+    function startFight(a, b) {
+      const A = spOf(a), B = spOf(b);
+      fight = { a: a, b: b, t: FIGHT_TIME, nearT: 0,
+                x: clamp((A.x + B.x) / 2, 170, 690), y: clamp((A.y + B.y) / 2, 260, 410) };
+      cpop(fight.x, fight.y - 60, '💢 ' + nmOf(A) + ' and ' + nmOf(B) + ' are fighting! Break it up!', '#ff7d7d');
+      return true;
+    }
+    function endFightPeacefully() {
+      const A = spOf(fight.a), B = spOf(fight.b);
+      for (const k of [fight.a, fight.b]) {
+        const p = G.pets[k];
+        p.fun = clamp(p.fun - 12, 0, 100);
+        p.clean = clamp(p.clean - 15, 0, 100);
+        p.restT = Math.max(p.restT || 0, 8);
+      }
+      cpop(fight.x, fight.y - 50, '🕊️ You broke it up! They\'re a bit grumpy…', '#9be79b');
+      fight = null;
+      G.fightCd = rnd(180, 280);
+      save();
+    }
+    function endFightBadly() {
+      const loserKey = Math.random() < 0.5 ? fight.a : fight.b;
+      const L = spOf(loserKey), p = G.pets[loserKey];
+      p.sick = true; p.hurt = true;
+      cpop(fight.x, fight.y - 50, '😿 ' + nmOf(L) + ' got hurt! Take them to the vet!', '#b06bff');
+      fight = null;
+      G.fightCd = rnd(240, 340);
+      save();
+    }
+    function tickFight(secs) {
+      if (clinicTrip || storeTrip) return;
+      if (!document.getElementById('setup').hidden) return;
+      if (fight) {
+        fight.t -= secs;
+        // standing close for a moment breaks it up
+        if (Math.hypot(player.x - fight.x, player.y - fight.y) < 72) {
+          fight.nearT += secs;
+          if (fight.nearT > 0.6) { endFightPeacefully(); return; }
+        } else fight.nearT = 0;
+        if (fight.t <= 0) endFightBadly();
+        return;
+      }
+      const anySick = SPECIES.some(function (sp) { return G.pets[sp.key].sick; });
+      if (anySick) return;   // one drama at a time
+      G.fightCd = Math.max(0, (G.fightCd || 0) - secs);
+      if (G.fightCd > 0) return;
+      const pairs = fightPairs();
+      if (!pairs.length) { G.fightCd = 60; return; }
+      const pick = pairs[Math.floor(Math.random() * pairs.length)];
+      startFight(pick[0], pick[1]);
     }
 
     // ---------- the phone: calls asking you to walk or foster ----------
@@ -963,7 +1081,11 @@
       const c = phone.call;
       if (!c || c.phase !== 'decide') return false;
       if (clinicTrip) { phone.note = '🏥 Finish up at the vet first!'; renderPhone(); return false; }
-      if (!hasGear('poobags')) { phone.note = '💩 You need poo bags to walk dogs — get some at the pet store!'; renderPhone(); return false; }
+      if (!hasGear('poobags')) {
+        phone.note = '💩 You need poo bags to walk dogs — get some at the pet store!';
+        cpop(player.x, player.y - 54, '💩 Buy poo bags at the pet store first!', '#ffd23f');
+        renderPhone(); return false;
+      }
       phone.call = null; phone.open = false;
       G.jobs.nextCall = rnd(90, 160);
       phone.note = '✅ You walked ' + c.dog.nm + ' for ' + c.callerNm;
@@ -987,6 +1109,56 @@
       renderPhone();
       return true;
     }
+    // ---------- the To-Do app: everything a good pet owner should do right now ----------
+    function ownerTasks() {
+      const tasks = [];
+      if (G.meet) {
+        const msp = spOf(G.meet.key), total = suppliesFor(msp).length, missing = meetMissing().length;
+        if (G.meet.stage === 'shop') {
+          tasks.push(missing
+            ? { em: '🛒', txt: 'Buy supplies for ' + nmOf(msp) + ' ' + msp.em + ' (' + (total - missing) + '/' + total + ')' }
+            : { em: '🏥', txt: 'Go pay for ' + nmOf(msp) + ' at the vet clinic!' });
+        } else tasks.push({ em: '🔨', txt: 'Build ' + nmOf(msp) + '\'s home at their spot' });
+      }
+      for (const sp of SPECIES) {
+        const p = G.pets[sp.key];
+        if (!p.adopted || p.vetT > 0) continue;
+        if (p.sick) { tasks.push({ em: '🚑', txt: 'Take ' + nmOf(sp) + ' to the vet' }); continue; }
+        for (const k of needsOf(sp)) {
+          if (p[k] >= NEEDY) continue;
+          const verb = { food: 'Feed', fun: 'Play with', clean: 'Wash', home: 'Clean up for', walk: 'Walk' }[k];
+          tasks.push({ em: BAR_IC[k], txt: verb + ' ' + nmOf(sp) + ' ' + sp.em });
+        }
+      }
+      for (const st of STATIONS) {
+        if (!stationReady(st) || !anyAdopted(st.key) || G[st.lvlKey] > 25) continue;
+        tasks.push({ em: st.pourEm || '🧻',
+          txt: (st.pourEm ? 'Pour fresh ' : 'Lay out a fresh ') + st.nm.toLowerCase() +
+               (G[st.supplyKey] > 0 ? '' : ' — buy more first!') });
+      }
+      if (G.puddles.length) tasks.push({ em: '🧽', txt: 'Mop up ' + (G.puddles.length === 1 ? 'the puddle!' : G.puddles.length + ' puddles!') });
+      if (G.jobs.foster) {
+        const f = G.jobs.foster;
+        if ((f.food + f.fun + f.clean) / 3 < 60) tasks.push({ em: '🧺', txt: 'Look after foster ' + f.nm + ' ' + f.em });
+      }
+      if (G.food < 1) tasks.push({ em: '🛍️', txt: 'Buy pet food at the store' });
+      return tasks;
+    }
+    function renderTodoApp(body) {
+      document.getElementById('ph-title').textContent = '📋 To-Do List';
+      const tasks = ownerTasks();
+      body.innerHTML =
+        (tasks.length
+          ? tasks.slice(0, 8).map(function (t) {
+              return '<div class="ph-task"><span class="em">' + t.em + '</span><span>' + t.txt + '</span></div>';
+            }).join('') +
+            (tasks.length > 8 ? '<div class="ph-idle">…and ' + (tasks.length - 8) + ' more</div>' : '')
+          : '<div class="ph-idle">🎉 Nothing to do — your pets are happy!</div>') +
+        '<button class="ph-app" id="ph-todo-back"><span class="em">↩️</span><span>Back</span></button>';
+      tap(document.getElementById('ph-todo-back'), function () { phone.view = 'home'; renderPhone(); });
+    }
+    let todoTick = 0;
+
     function renderPhone() {
       phoneBtn.classList.toggle('ringing', !!(phone.call && phone.call.phase === 'ring'));
       phoneEl.hidden = !phone.open;
@@ -995,12 +1167,16 @@
       const c = phone.call;
       if (!c) {
         if (phone.view === 'foster') { renderFosterApp(body); return; }
-        // home screen: the note + the Foster app
+        if (phone.view === 'todo') { renderTodoApp(body); return; }
+        // home screen: the note + the apps
         document.getElementById('ph-title').textContent = 'Phone';
+        const nTasks = ownerTasks().length;
         body.innerHTML =
           '<div class="ph-idle">' + phone.note + '</div>' +
+          '<button class="ph-app" id="ph-app-todo"><span class="em">📋</span><span>To-Do List' + (nTasks ? ' (' + nTasks + ')' : ' ✅') + '</span></button>' +
           '<button class="ph-app" id="ph-app-foster"><span class="em">🧺</span><span>Foster</span></button>' +
           '<div class="ph-idle" style="padding-top:4px">📱 Press <b>P</b> to close</div>';
+        tap(document.getElementById('ph-app-todo'), function () { phone.view = 'todo'; renderPhone(); });
         tap(document.getElementById('ph-app-foster'), function () { phone.view = 'foster'; renderPhone(); });
         return;
       }
@@ -1021,7 +1197,7 @@
         '<div class="ph-caller"><span class="em">' + c.callerEm + '</span><span class="n">' + c.callerNm + '</span></div>' +
         '<div class="ph-bubble">' + c.msg + (canAccept ? '' : '<br><b>💩 You need poo bags first — pet store!</b>') + '</div>' +
         '<div class="ph-timer"><i id="ph-timer-fill" style="width:100%"></i></div>' +
-        '<div class="ph-btns"><button class="ph-accept" id="ph-accept"' + (canAccept ? '' : ' disabled style="opacity:0.5"') + '>' +
+        '<div class="ph-btns"><button class="ph-accept" id="ph-accept"' + (canAccept ? '' : ' style="opacity:0.6"') + '>' +
           (canAccept ? '✅ Accept' : '💩 Need poo bags!') + '</button><button class="ph-decline" id="ph-decline">❌ No thanks</button></div>';
       tap(document.getElementById('ph-accept'), acceptCall);
       tap(document.getElementById('ph-decline'), declineCall);
@@ -1038,6 +1214,11 @@
       if (phone.open && phone.view === 'foster' && G.jobs.foster) {
         const stay = document.getElementById('ph-foster-stay');
         if (stay) stay.textContent = Math.ceil(G.jobs.foster.stay);
+      }
+      // the To-Do list updates itself as you finish (or neglect!) things
+      if (phone.open && phone.view === 'todo' && !c) {
+        todoTick = (todoTick + 1) % 60;
+        if (todoTick === 0) renderPhone();
       }
     }
     tap(phoneBtn, togglePhone);
@@ -1083,13 +1264,19 @@
       return true;
     }
     function fosterPlay() {
-      const f = G.jobs.foster; if (!f || G.toys.length === 0 || miniActive()) return false;
+      const f = G.jobs.foster; if (!f || miniActive()) return false;
+      const fsp = spOf(FOSTER_AS[f.kind] || 'cat');
+      const mine = toysFor(fsp);
+      if (!mine.length) {
+        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '🧸 ' + f.nm + ' needs a ' + fsp.kind.toLowerCase() + ' toy — pet store!', '#ffd23f');
+        return false;
+      }
       if (f.fun >= 95) {
         cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '😊 ' + f.nm + ' is done playing for now!', '#7ec8ff');
         return false;
       }
       openMini('play', FOSTER_AS[f.kind] || 'cat', f.em, f.nm, function (s) {
-        if (G.jobs.foster === f) f.fun = clamp(f.fun + scaled(26 + 6 * Math.min(G.toys.length, 6), s), 0, 100);
+        if (G.jobs.foster === f) f.fun = clamp(f.fun + scaled(26 + 8 * Math.min(mine.length, 4), s), 0, 100);
         cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, f.fun >= 95 ? '🎉 ' + f.nm + ' is done playing — so happy!' : '🎾 So fun!', '#7ec8ff');
         afterAction();
       });
@@ -1098,7 +1285,7 @@
     function fosterGroom() {
       const f = G.jobs.foster; if (!f || !hasGear('soap') || miniActive()) return false;
       openMini('wash', FOSTER_AS[f.kind] || 'cat', f.em, f.nm, function (s) {
-        if (G.jobs.foster === f) f.clean = clamp(f.clean + scaled(55, s), 0, 100);
+        if (G.jobs.foster === f) f.clean = clamp(f.clean + scaled(55, s) + brushBonus(), 0, 100);
         cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '🫧 Squeaky clean!', '#7ec8ff');
         afterAction();
       });
@@ -1147,7 +1334,7 @@
       ferret: { mech: 'order',    item: '🦦', sub: 'Follow Noodle through the tubes — in order!' },
       dog:    { mech: 'tug',      sub: 'Tap fast — tug the rope away from Biscuit!' },
       pig:    { mech: 'meter',    item: '💦', sub: 'Stop in the green for the biggest puddle splash!' },
-      fish:   { mech: 'catch',    item: '🫧', motion: 'rise', speed: 15, sub: 'Pop the bubbles!', bg: WATER_BG },
+      fish:   { mech: 'seek',     sub: 'Where are they hiding? Search the tank!', bg: WATER_BG },
       parrot: { mech: 'sequence', sub: 'Watch the song, then sing it back!' },
       crab:   { mech: 'shells',   sub: 'Follow the crab under the shells!' }
     };
@@ -1379,6 +1566,32 @@
           if (inZone) { m.hit++; m.speed += 0.35; }
           m.big.textContent = inZone ? '🌟' : '💨';
           m.round++; m.waitT = 0.7;
+        });
+      } else if (mech === 'seek') {
+        // hide & seek in the tank: the fish hides behind a decoration — find it!
+        m.total = 4; m.dur = 18; m.reveal = 0; m.spots = [];
+        const decos = ['🪸', '🌿', '🪨', '🐚', '🌱'];
+        const pos = [[16, 32], [50, 22], [84, 32], [30, 74], [70, 74]];
+        m.fishEl = document.createElement('div');
+        m.fishEl.className = 'mini-big'; m.fishEl.textContent = petEm; m.fishEl.hidden = true;
+        miniArena.appendChild(m.fishEl);
+        m.fishAt = Math.floor(Math.random() * pos.length);
+        pos.forEach(function (xy, i) {
+          const b = miniTarget(decos[i], xy[0], xy[1]);
+          b.style.fontSize = '2.4rem';
+          tap(b, function () {
+            if (m.reveal > 0 || m.hit >= m.total) return;
+            if (i === m.fishAt) {
+              m.hit++; m.reveal = 0.9;
+              m.fishEl.style.left = xy[0] + '%'; m.fishEl.style.top = (xy[1] - 16) + '%';
+              m.fishEl.hidden = false;
+              document.getElementById('mini-sub').textContent = 'You found ' + petNm + '! 🎉';
+            } else {
+              b.classList.add('mini-wrong');
+              const bb = b; setTimeout(function () { bb.classList.remove('mini-wrong'); }, 250);
+            }
+          });
+          m.spots.push({ el: b, x: xy[0], y: xy[1] });
         });
       }
       document.getElementById('mini-title').textContent = title;
@@ -1682,6 +1895,21 @@
         }
         m.markEl.style.left = (8 + m.p * 84) + '%';
         if ((m.round >= m.total && m.waitT <= 0) || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'seek') {
+        if (m.reveal > 0) {
+          m.reveal -= secs;
+          if (m.reveal <= 0) {
+            m.reveal = 0; m.fishEl.hidden = true;
+            if (m.hit < m.total) {
+              // swim to a new hiding place (never the same one twice)
+              let nxt = Math.floor(Math.random() * m.spots.length);
+              if (nxt === m.fishAt) nxt = (nxt + 1) % m.spots.length;
+              m.fishAt = nxt;
+              document.getElementById('mini-sub').textContent = m.cfg.sub;
+            }
+          }
+        }
+        if ((m.hit >= m.total && m.reveal <= 0) || m.t >= m.dur) endMini(m.hit / m.total);
       }
     }
 
@@ -1703,7 +1931,10 @@
     }
 
     // ---------- actions ----------
-    function busy(p) { return p.vetT > 0 || (walkRun && G.pets[walkRun.key] === p); }
+    function busy(p) {
+      return p.vetT > 0 || (walkRun && G.pets[walkRun.key] === p) ||
+             (fight && (G.pets[fight.a] === p || G.pets[fight.b] === p));
+    }
     function feed(key, treat) {
       const p = G.pets[key], sp = spOf(key);
       if (!p.adopted || busy(p) || miniActive()) return false;
@@ -1726,13 +1957,18 @@
     }
     function play(key) {
       const p = G.pets[key], sp = spOf(key);
-      if (!p.adopted || busy(p) || G.toys.length === 0 || miniActive()) return false;
+      if (!p.adopted || busy(p) || miniActive()) return false;
+      const mine = toysFor(sp);
+      if (!mine.length) {
+        cpop(sp.x, sp.y - 40, '🧸 ' + nmOf(sp) + ' needs a ' + sp.kind.toLowerCase() + ' toy — pet store!', '#ffd23f');
+        return false;
+      }
       if (p.fun >= 95) {   // already all played out — don't waste a play session
         cpop(sp.x, sp.y - 40, '😊 ' + nmOf(sp) + ' is done playing for now!', '#7ec8ff');
         return false;
       }
       openMini('play', sp.key, sp.em, nmOf(sp), function (s) {
-        p.fun = clamp(p.fun + scaled(26 + 6 * Math.min(G.toys.length, 6), s), 0, 100);   // toy bonus caps at 6 toys
+        p.fun = clamp(p.fun + scaled(26 + 8 * Math.min(mine.length, 4), s), 0, 100);   // bonus for this pet's own toys
         p.food = clamp(p.food - 4, 0, 100);
         p.restT = restFor(key);
         cpop(sp.x, sp.y - 40, p.fun >= 95 ? '🎉 ' + nmOf(sp) + ' is done playing — so happy!'
@@ -1745,7 +1981,7 @@
       const p = G.pets[key], sp = spOf(key);
       if (!p.adopted || busy(p) || !sp.groom || !hasGear('soap') || miniActive()) return false;
       openMini('wash', sp.key, sp.em, nmOf(sp), function (s) {
-        p.clean = clamp(p.clean + scaled(55, s), 0, 100);
+        p.clean = clamp(p.clean + scaled(55, s) + brushBonus(), 0, 100);
         p.restT = restFor(key);
         cpop(sp.x, sp.y - 40, s >= 0.8 ? '🫧 Squeaky clean!' : (s >= 0.4 ? '🫧 Nice and fresh!' : '🫧 Still a bit grubby…'), '#7ec8ff');
         afterAction();
@@ -1786,11 +2022,22 @@
     // one tap at the build site = one component placed; the last one finishes the home
     function placeNext() {
       const m = G.meet; if (!m || m.stage !== 'build') return false;
-      const sp = spOf(m.key), list = suppliesFor(sp);
+      const sp = spOf(m.key), list = buildListFor(sp);
       if (m.placed < list.length) {
         m.placed++;
         cpop(sp.x, sp.y - 54, '🔨 ' + shelfEm(list[m.placed - 1]) + ' placed!', '#9be79b');
         save();
+        if (m.placed >= list.length && releaseStep(sp)) {
+          cpop(sp.x, sp.y - 74, hasCarrierStep(sp)
+            ? '🔓 All ready — let ' + nmOf(sp) + ' out of the cage!'
+            : '🫳 All ready — put ' + nmOf(sp) + ' into their ' + homeNoun(sp) + '!', '#7ec8ff');
+          return true;   // one more tap loads the pet into their new home
+        }
+      } else if (releaseStep(sp)) {
+        cpop(sp.x, sp.y - 54, hasCarrierStep(sp)
+          ? '🔓 ' + nmOf(sp) + ' is out of the cage — free at last!'
+          : '💕 ' + nmOf(sp) + ' settles into their new ' + homeNoun(sp) + '!', '#9be79b');
+        return adoptFinalize(m.key);
       }
       if (m.placed >= list.length) adoptFinalize(m.key);
       return true;
@@ -2129,7 +2376,7 @@
         };
         tap(mk('feed', '🍽', G.food > 0 ? 'Feed' : 'Need food!'), function () { fosterFeed(false); });
         tap(mk('treat', '🍪', 'Treat'), function () { fosterFeed(true); });
-        tap(mk('play', '🎾', G.toys.length ? 'Play' : 'Need a toy!'), fosterPlay);
+        tap(mk('play', '🎾', toysFor(spOf(FOSTER_AS[f.kind] || 'cat')).length ? 'Play' : 'Need a toy!'), fosterPlay);
         tap(mk('groom', '🧼', hasGear('soap') ? 'Wash' : 'Need soap!'), fosterGroom);
         updateCare();
         careEl.classList.add('show');
@@ -2163,7 +2410,7 @@
         };
         tap(mk('feed', '🍽', G.food > 0 ? 'Feed' : 'Need food!'), function () { feed(nearKey, false); });
         tap(mk('treat', '🍪', 'Treat'), function () { feed(nearKey, true); });
-        tap(mk('play', '🎾', G.toys.length ? 'Play' : 'Need a toy!'), function () { play(nearKey); });
+        tap(mk('play', '🎾', toysFor(sp).length ? 'Play' : 'Need a ' + sp.kind.toLowerCase() + ' toy!'), function () { play(nearKey); });
         if (sp.groom) tap(mk('groom', '🧼', hasGear('soap') ? 'Wash' : 'Need soap!'), function () { groom(nearKey); });
         if (sp.home) tap(mk('home', '🧹', hasGear('broom') ? 'Clean' : 'Need a broom!'), function () { cleanHome(nearKey); });
         if (sp.walk) tap(mk('walk', '🚶', !hasGear('leash') ? 'Need a leash!' : (!hasGear('poobags') ? 'Need poo bags!' : 'Walk')), function () { startWalk(nearKey); });
@@ -2191,7 +2438,7 @@
             if (b.innerHTML !== fl) b.innerHTML = fl;
           }
           else if (a === 'treat') b.disabled = G.treats < 1;
-          else if (a === 'play') b.disabled = G.toys.length === 0;
+          else if (a === 'play') b.disabled = toysFor(spOf(FOSTER_AS[f.kind] || 'cat')).length === 0;
           else if (a === 'groom') b.disabled = !hasGear('soap');
         });
         return;
@@ -2213,7 +2460,7 @@
           if (b.innerHTML !== fl) b.innerHTML = fl;
         }
         else if (a === 'treat') b.disabled = isBusy || G.treats < 1;
-        else if (a === 'play') b.disabled = isBusy || G.toys.length === 0;
+        else if (a === 'play') b.disabled = isBusy || toysFor(sp).length === 0;
         else if (a === 'walk') b.disabled = isBusy || !!walkRun || !hasGear('leash') || !hasGear('poobags');
         else if (a === 'groom') b.disabled = isBusy || !hasGear('soap');
         else if (a === 'home') b.disabled = isBusy || !hasGear('broom');
@@ -2473,7 +2720,7 @@
           p.sick = false; p.sickT = rnd(60, 120); p.restT = restFor(t.key);
           for (const k of needsOf(sp)) p[k] = clamp(p[k] + 25, 0, 100);
           G.coins = Math.max(0, G.coins - VET_COST);
-          G.sickCd = Math.max(G.sickCd, rnd(220, 320));   // a good rest after the visit
+          G.sickCd = Math.max(G.sickCd, rnd(220, 320) * vitaminBoost());   // a good rest after the visit
           cpop(t.need.x, t.need.y + 60, '💚 ' + nmOf(sp) + ' is all better!', '#7be39a');
           renderHud(); save();
         }
@@ -2570,18 +2817,20 @@
       { id: 'soap',    em: '🧼', nm: 'SOAP',         cost: 8,  x: 508, y: 190 },
       { id: 'broom',   em: '🧹', nm: 'BROOMS',       cost: 8,  x: 612, y: 190 },
       { id: 'leash',   em: '🦮', nm: 'LEASHES',      cost: 12, x: 716, y: 190 },
-      { id: 'toys',    em: '🎾', nm: 'TOYS',                   x: 150, y: 350 },
-      { id: 'beds',    em: '🛏️', nm: 'PET BEDS',     cost: 14, x: 255, y: 350 },
-      { id: 'litter',  em: '🧴', nm: 'LITTER & BOX', cost: 12, x: 360, y: 350 },
-      { id: 'cage',    em: '🏡', nm: 'BIG CAGES',    cost: 14, x: 465, y: 350 },
-      { id: 'tank',    em: '🐠', nm: 'TANKS & WATER', cost: 16, x: 570, y: 350 },
-      { id: 'sand',    em: '🏖️', nm: 'SAND & DIRT ×3', cost: 6, multi: true, x: 675, y: 350 },
+      { id: 'toys',    em: '🎾', nm: 'TOYS',                   x: 92,  y: 350 },
+      { id: 'beds',    em: '🛏️', nm: 'PET BEDS',     cost: 14, x: 196, y: 350 },
+      { id: 'litter',  em: '🧴', nm: 'LITTER & BOX', cost: 12, x: 300, y: 350 },
+      { id: 'cage',    em: '🏡', nm: 'BIG CAGES',    cost: 14, x: 404, y: 350 },
+      { id: 'tank',    em: '🐠', nm: 'TANKS & WATER', cost: 16, x: 508, y: 350 },
+      { id: 'sand',    em: '🏖️', nm: 'SAND & DIRT ×3', cost: 6, multi: true, x: 612, y: 350 },
+      { id: 'vitamins', em: '💊', nm: 'PET VITAMINS', cost: 12, x: 716, y: 350 },
       // habitat supplies for new-pet adoptions (bottom row, where the pen used to be)
-      { id: 'bowls',   em: '🥣', nm: 'FOOD BOWLS',   cost: 6,  x: 260, y: 490 },
-      { id: 'water',   em: '💧', nm: 'WATER KIT',    cost: 5,  x: 360, y: 490 },
-      { id: 'climb',   em: '🪜', nm: 'CLIMBING SET', cost: 10, x: 460, y: 490 },
-      { id: 'dirt',    em: '🟫', nm: 'HABITAT DIRT', cost: 6,  x: 560, y: 490 },
-      { id: 'rocks',   em: '🪨', nm: 'ROCKS & PLANTS', cost: 10, x: 660, y: 490 }
+      { id: 'bowls',   em: '🥣', nm: 'FOOD BOWLS',   cost: 6,  x: 200, y: 490 },
+      { id: 'water',   em: '💧', nm: 'WATER KIT',    cost: 5,  x: 300, y: 490 },
+      { id: 'climb',   em: '🪜', nm: 'CLIMBING SET', cost: 10, x: 400, y: 490 },
+      { id: 'dirt',    em: '🟫', nm: 'HABITAT DIRT', cost: 6,  x: 500, y: 490 },
+      { id: 'rocks',   em: '🪨', nm: 'ROCKS & PLANTS', cost: 10, x: 600, y: 490 },
+      { id: 'brush',   em: '🪮', nm: 'SOFT BRUSH',   cost: 8,  x: 700, y: 490 }
     ];
     const STORE_REG = { x: 96, y: 470 };
     let storeTrip = null;   // { basket: [{id?, adopt?, em, nm, cost}] }
@@ -2617,10 +2866,19 @@
         return;
       }
       if (s.id === 'toys') {
-        const next = TOYS.find(function (toy) { return G.toys.indexOf(toy.id) < 0 && !inBasket('toy:' + toy.id); });
+        // offer toys for pets you actually have (or are adopting) before the rest
+        const rank = function (toy) {
+          if (toy.for && (anyAdopted(toy.for) ||
+              (G.meet && (spOf(G.meet.key).base || G.meet.key) === toy.for))) return 0;
+          return toy.for ? 2 : 1;   // universal toys in the middle, other pets' toys last
+        };
+        const wanted = TOYS.filter(function (toy) { return G.toys.indexOf(toy.id) < 0 && !inBasket('toy:' + toy.id); })
+          .sort(function (a, b) { return rank(a) - rank(b); });
+        const next = wanted[0];
         if (!next) { cpop(s.x, s.y + 48, 'You have all the toys! 🎉', '#ffd23f'); return; }
+        const who = next.for ? ' (for ' + spOf(next.for).kind.toLowerCase() + 's)' : '';
         t.basket.push({ id: 'toy:' + next.id, em: next.em, nm: next.nm, cost: next.cost });
-        cpop(s.x, s.y + 48, '🧺 + ' + next.em + ' ' + next.nm + ' · ' + next.cost + ' 🪙', '#9be79b');
+        cpop(s.x, s.y + 48, '🧺 + ' + next.em + ' ' + next.nm + who + ' · ' + next.cost + ' 🪙', '#9be79b');
         return;
       }
       if (s.multi) {
@@ -2841,6 +3099,13 @@
       em('🚑', VET_SPOT.x, VET_SPOT.y - 2, 30);
       ctx.fillStyle = '#e2ccff'; ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign = 'center';
       ctx.fillText('VET CLINIC', VET_SPOT.x, VET_SPOT.y + 40);
+      // no pets yet? big friendly nudge toward the clinic's adoption pen
+      if (!SPECIES.some(function (s) { return G.pets[s.key].adopted; })) {
+        const bob2 = Math.sin(ts * 0.005) * 6;
+        em('⬇️', VET_SPOT.x + 74, VET_SPOT.y - 46 + bob2, 26);
+        ctx.fillStyle = '#ffe8b0'; ctx.font = "800 15px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText('Meet your first pet here!', VET_SPOT.x + 96, VET_SPOT.y - 62);
+      }
       // dog bed
       ctx.fillStyle = '#5a4632'; ctx.beginPath(); ctx.ellipse(150, 400, 62, 26, 0, 0, 6.283); ctx.fill();
       ctx.fillStyle = '#e8d9b8'; ctx.beginPath(); ctx.ellipse(150, 396, 50, 19, 0, 0, 6.283); ctx.fill();
@@ -2938,7 +3203,9 @@
       if (!p.adopted && !building) return;   // pets are met at the vet clinic now
       if (building) {
         // the build site: place each bought component to make this pet's home
-        const list = suppliesFor(sp);
+        const list = buildListFor(sp);
+        const carrier = hasCarrierStep(sp);
+        const ready = G.meet.placed >= list.length;
         ctx.save();
         ctx.setLineDash([7, 6]);
         ctx.strokeStyle = 'rgba(255,210,63,0.8)'; ctx.lineWidth = 3;
@@ -2949,12 +3216,29 @@
           const a = i * 2.1;
           em(shelfEm(list[i]), sp.x + Math.cos(a) * 30, sp.y + Math.sin(a) * 22 + 8, 16);
         }
-        em('🚧', sp.x, sp.y - 40 + Math.sin(ts * 0.005) * 3, 22);
+        if (carrier) {
+          // the new pet waits in its travel cage
+          const cy = sp.y - (ready ? 4 : 0);
+          em(sp.em, sp.x, cy + Math.sin(ts * 0.006) * 2, 24);
+          ctx.fillStyle = 'rgba(20,28,50,0.28)'; roundRect(sp.x - 26, cy - 24, 52, 46, 8); ctx.fill();
+          ctx.strokeStyle = '#c9a441'; ctx.lineWidth = 2.5; roundRect(sp.x - 26, cy - 24, 52, 46, 8); ctx.stroke();
+          ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(201,164,65,0.85)';
+          for (let b = 1; b < 4; b++) { ctx.beginPath(); ctx.moveTo(sp.x - 26 + b * 13, cy - 22); ctx.lineTo(sp.x - 26 + b * 13, cy + 20); ctx.stroke(); }
+          if (ready && Math.sin(ts * 0.008) > 0) em('🔓', sp.x + 32, cy - 22, 16);
+        }
+        if (!carrier && ready) {
+          // the new pet waits beside their finished home, ready to be lowered in
+          em(sp.em, sp.x - 44, sp.y + 32 + Math.sin(ts * 0.006) * 3, 22);
+          if (Math.sin(ts * 0.008) > 0) em('🫳', sp.x, sp.y - 44, 18);
+        }
+        if (!ready) em('🚧', sp.x, sp.y - 40 + Math.sin(ts * 0.005) * 3, 22);
         ctx.fillStyle = '#ffd23f'; ctx.font = "800 12px 'Nunito', sans-serif"; ctx.textAlign = 'center';
-        ctx.fillText('Tap to build! ' + G.meet.placed + '/' + list.length, sp.x, sp.y + 66);
+        ctx.fillText(ready ? (carrier ? '🔓 Tap to let ' + nmOf(sp) + ' out!' : '🫳 Tap to put ' + nmOf(sp) + ' in their ' + homeNoun(sp) + '!')
+                           : 'Tap to build! ' + G.meet.placed + '/' + list.length, sp.x, sp.y + 66);
         return;
       }
       drawEnclosure(sp);
+      if (fight && (fight.a === sp.key || fight.b === sp.key)) return;   // off scrapping — drawFight has them
       let px = sp.x, py = sp.y;
       if (sp.wander > 0 && p.vetT <= 0) {
         px += Math.sin(ts * 0.0006 + sp.x) * sp.wander;
@@ -2978,6 +3262,26 @@
         for (const k of needsOf(sp)) if (p[k] < wv) { wv = p[k]; worst = k; }
         if (worst && Math.sin(ts * 0.008) > -0.2) em(BAR_IC[worst] === undefined ? '❗' : BAR_IC[worst], px - 22, py - 30 + bob, 15);
       }
+    }
+
+    function drawFight(ts) {
+      if (!fight) return;
+      const A = spOf(fight.a), B = spOf(fight.b);
+      const shake = Math.sin(ts * 0.03) * 6;
+      // dust cloud
+      ctx.fillStyle = 'rgba(200,200,210,0.35)';
+      for (let i = 0; i < 4; i++) {
+        const a = ts * 0.004 + i * 1.57;
+        ctx.beginPath(); ctx.arc(fight.x + Math.cos(a) * 24, fight.y + Math.sin(a) * 12, 16 + Math.sin(ts * 0.01 + i) * 4, 0, 6.283); ctx.fill();
+      }
+      em(A.em, fight.x - 16 + shake, fight.y + Math.sin(ts * 0.02) * 4, 32, true);
+      em(B.em, fight.x + 16 - shake, fight.y - Math.sin(ts * 0.02) * 4, 32);
+      em('💢', fight.x + Math.sin(ts * 0.01) * 8, fight.y - 32, 22);
+      em('💥', fight.x - 20, fight.y - 20 + Math.cos(ts * 0.013) * 5, 14);
+      // countdown + call to action
+      ctx.fillStyle = fight.t < 8 ? '#ff7d7d' : '#ffe8b0';
+      ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('Run over and break it up! ' + Math.ceil(fight.t) + 's', fight.x, fight.y + 42);
     }
 
     function drawHearts(ts) {
@@ -3040,6 +3344,7 @@
         drawPet(sp, ts);
       }
       if (!playerDrawn) drawPlayer(ts);
+      drawFight(ts);
       drawJobs(ts);
       drawHearts(ts);
       drawPops(secs);
@@ -3121,6 +3426,7 @@
       tick: tick, feed: feed, play: play, groom: groom, cleanHome: cleanHome,
       walk: startWalk, walkStep: stepWalk, vet: vet, adopt: adoptFinalize, buy: buyItem,
       walkPoo: function () { return walkRun && walkRun.poo ? { t: Math.round(walkRun.poo.t * 10) / 10, bagged: walkRun.poo.bagged } : null; },
+      timeDraw: function (n) { const t0 = performance.now(); for (let i = 0; i < (n || 100); i++) draw(t0 + i * 16, 0); return Math.round((performance.now() - t0) / (n || 100) * 100) / 100; },
       hygiene: function () { return { litter: G.litter, litterLvl: Math.round(G.litterLvl), pads: G.pads, padLvl: Math.round(G.padLvl), sand: G.sand, sandLvl: Math.round(G.sandLvl), puddles: G.puddles.slice(), peeT: { cat: Math.round(peeT.cat * 10) / 10, dog: Math.round(peeT.dog * 10) / 10, crab: Math.round(peeT.crab * 10) / 10 } }; },
       pee: function (key) { peeT[key] = 0.01; },
       dryStation: function (key) { G[key === 'cat' ? 'litterLvl' : (key === 'crab' ? 'sandLvl' : 'padLvl')] = 0; },
@@ -3133,6 +3439,7 @@
       move: function (x, y) { player.x = player.tx = x; player.y = player.ty = y; movePlayer(0); },
       step: movePlayer,
       sicken: function (key) { G.pets[key].sick = true; },
+      todo: ownerTasks,
       pour: {
         start: function (key) { const st = STATIONS.find(function (s) { return s.key === key; }); if (st) startPour(st); },
         step: stepPour, end: endPour,
@@ -3158,6 +3465,11 @@
       stepMini: stepMini,
       fosterTime: function (s) { if (G.jobs.foster) G.jobs.foster.stay = s; },
       coins: function (n) { G.coins += n; renderHud(); refreshCare(); },
+      fight: {
+        state: function () { return fight ? { a: fight.a, b: fight.b, t: Math.round(fight.t * 10) / 10, x: fight.x, y: fight.y } : null; },
+        start: startFight, tick: tickFight, pairs: fightPairs,
+        cd: function (s) { G.fightCd = s; }
+      },
       heart: function (key) { hearts.push({ key: key, dx: 0, dy: -40, t: 0 }); },
       saves: { list: listSaves, write: writeSave, read: readSave, del: deleteSave,
                load: function (name) { return applySave(readSave(name)); },
