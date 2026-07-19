@@ -117,6 +117,14 @@
           <button class="choice" data-players="1"><span>1P</span><span style="display:block;font-size:0.6rem;color:#8b93b0">vs computer</span></button>
           <button class="choice" data-players="2"><span>2P</span><span style="display:block;font-size:0.6rem;color:#8b93b0">vs a friend</span></button>
         </div>
+        <div class="group-label">Computer difficulty</div>
+        <div class="choices" id="diff-choices" style="gap:5px">
+          <button class="choice" data-diff="rookie" style="font-size:0.62rem;padding:8px 2px">Rookie</button>
+          <button class="choice" data-diff="beginner" style="font-size:0.62rem;padding:8px 2px">Beginner</button>
+          <button class="choice" data-diff="medium" style="font-size:0.62rem;padding:8px 2px">Medium</button>
+          <button class="choice" data-diff="pro" style="font-size:0.62rem;padding:8px 2px">Pro</button>
+          <button class="choice" data-diff="champion" style="font-size:0.62rem;padding:8px 2px">Champion</button>
+        </div>
         <div class="group-label">Choose your team</div>
         <div class="teams">
           <div class="team left">
@@ -186,7 +194,7 @@
   </div>
 
   <p class="hint">
-    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release at the <b>white line</b> on the bar!) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> 💨 &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
+    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release in the <b style="color:#7ed37e">green at the top</b> of the bar!) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> 💨 &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
   </p>
   <p class="hint" style="margin-top:4px">
     <b style="color:#7ed37e">GREEN = automatic bucket</b> — but the bar is lightning fast and the green sliver shrinks when you're guarded or deep &nbsp;·&nbsp; fouls = a <b>free-throw minigame</b>: stop both balls in the middle of the ➕ &nbsp;·&nbsp; dribble moves (E/3) can <b>break ankles</b> 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b>
@@ -264,8 +272,8 @@
       return clamp((0.05 + (o.shoot3 - 0.9) * 0.10) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009), 0.015, 0.12);
     }
     // 2K bar speed: elite shooters get the slowest bar; bricklayers a twitchy one.
-    // Runs at 5x — timing is meant to be HARD.
-    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 5; }
+    // Runs at 4x — timing is meant to be HARD.
+    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 4; }
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
@@ -343,6 +351,7 @@
       careerMatch = null; lastCareer = false;
       numPlayers = selectedCount();
       teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
+      applyDiff(teams[1]);
       score = [0, 0]; pops = []; freeze = 60;
       clockMs = HALF_MS; half = 1; otMode = false;
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
@@ -521,10 +530,45 @@
       setOwner(taker); possCD = 45; freeze = 26;   // brief whistle
     }
 
-    // Free throw: two basketballs slide along the arms of a big ➕ — tap to stop
-    // the first in the middle, then the second. Both centred = the point.
+    // Free throws: the game stops, the fouled mob steps to the LINE and shoots
+    // TWO. Each shot is the ➕ minigame (stop both balls in the middle). A made
+    // second FT is a dead ball (other team inbounds); a missed second FT comes
+    // off the rim LIVE — anyone can grab the rebound and play on.
     const FT_TOL = 0.22, FT_SPEED = 0.085;
-    function startFT(side) { ft = { side: side, stage: 0, offA: 0, offB: 0, t: rnd(0, 70) }; state = 'ft'; }
+    function startFT(shooter) {
+      ft = { side: shooter.side, shooter: shooter, taken: 0, stage: 0, offA: 0, offB: 0, t: rnd(0, 70) };
+      stageFTScene();
+      state = 'ft';
+    }
+    // everyone to their free-throw spots: shooter at the line, rebounders on the key
+    function stageFTScene() {
+      const o = ft.shooter, side = ft.side, h = attackHoop(side);
+      for (const t of teams) for (const p of t.onPitch) { p.vx = p.vy = 0; p.z = 0; p.vz = 0; p.stunT = 0; p.dunk = null; }
+      o.x = h.x + h.dir * 106; o.y = CY; o.fx = -h.dir; o.fy = 0;   // the free-throw line
+      ball.owner = o; ball.passTo = null; ball.shot = null; ball.trail = [];
+      const mates = teams[side].onPitch.filter(function (p) { return p !== o; });
+      const opps = teams[1 - side].onPitch;
+      // lane spots: defenders get the inside boxes, shooter's teammates behind them
+      if (opps[0]) { opps[0].x = h.x + h.dir * 30; opps[0].y = CY - KEY_H / 2 - 16; }
+      if (opps[1]) { opps[1].x = h.x + h.dir * 30; opps[1].y = CY + KEY_H / 2 + 16; }
+      if (mates[0]) { mates[0].x = h.x + h.dir * 66; mates[0].y = CY - KEY_H / 2 - 16; }
+      if (mates[1]) { mates[1].x = h.x + h.dir * 66; mates[1].y = CY + KEY_H / 2 + 16; }
+      if (opps[2]) { opps[2].x = h.x + h.dir * 150; opps[2].y = CY + 84; }
+    }
+    // shared aftermath: made last FT = dead ball & inbound; missed = LIVE rebound
+    function ftAftermath(side, lastMade) {
+      const h = attackHoop(side);
+      ball.owner = null; ball.passTo = null; ball.shot = null;
+      if (lastMade) {
+        ball.x = h.x; ball.y = h.y; ball.z = RIM_Z; ball.vz = -0.5; ball.vx = ball.vy = 0;
+        state = 'score'; freeze = 46; inboundSide = 1 - side;
+      } else {
+        ball.x = h.x + h.dir * rnd(4, 14); ball.y = h.y + rnd(-12, 12); ball.z = RIM_Z + 4;
+        ball.vx = h.dir * rnd(1.5, 3.2); ball.vy = rnd(-2.2, 2.2); ball.vz = 1.4; ball.freeCD = 12;
+        pops.push({ x: h.x + h.dir * 40, y: h.y - 60, txt: 'REBOUND!', color: '#ffe066', t: 0 });
+        state = 'playing'; freeze = 0;
+      }
+    }
     function ftPress() {
       if (!ft) return;
       const cur = Math.sin(ft.t * FT_SPEED);
@@ -532,10 +576,20 @@
       else {
         ft.offB = cur;
         const made = Math.abs(ft.offA) < FT_TOL && Math.abs(ft.offB) < FT_TOL;
-        if (made) { score[ft.side] += 1; pops.push({ x: VW / 2, y: CY - 80, txt: 'FREE THROW! +1', color: SIDE_COLOR[ft.side], t: 0, big: true }); }
-        else pops.push({ x: VW / 2, y: CY - 80, txt: 'CLANK! MISSED IT!', color: '#ff9d9d', t: 0, big: true });
-        ft = null; state = 'playing'; freeze = 26;
+        ft.taken++;
+        if (made) { score[ft.side] += 1; pops.push({ x: VW / 2, y: CY - 84, txt: 'FT ' + ft.taken + ' GOOD! +1', color: SIDE_COLOR[ft.side], t: 0, big: true }); }
+        else pops.push({ x: VW / 2, y: CY - 84, txt: 'FT ' + ft.taken + ' CLANKS!', color: '#ff9d9d', t: 0, big: true });
+        if (ft.taken < 2) { ft.stage = 0; ft.offA = 0; ft.offB = 0; ft.t = rnd(0, 70); }
+        else { const side = ft.side; ft = null; ftAftermath(side, made); }
       }
+    }
+    // CPU free throws resolve by shooter rating — two quick rolls
+    function cpuFTs(o) {
+      const P = clamp(0.45 + (o.shoot3 - 0.85) * 0.9, 0.5, 0.92);
+      const m1 = Math.random() < P, m2 = Math.random() < P;
+      if (m1) score[o.side] += 1; if (m2) score[o.side] += 1;
+      pops.push({ x: o.x, y: o.y - 44, txt: 'CPU FREE THROWS ' + ((m1 ? 1 : 0) + (m2 ? 1 : 0)) + '/2', color: SIDE_COLOR[o.side], t: 0 });
+      ftAftermath(o.side, m2);
     }
 
     // Stealing is an ATTEMPT with a risk: whiff, win the ball, or get whistled
@@ -553,13 +607,8 @@
         p.stunT = 70;
         pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
         if (!otMode) {   // no gimme points in sudden death
-          if (isHumanTeam(o.side)) startFT(o.side);
-          else {
-            // CPU steps to the line and shoots it off-screen
-            const P = clamp(0.45 + (o.shoot3 - 0.85) * 0.9, 0.5, 0.92);
-            if (Math.random() < P) { score[o.side] += 1; pops.push({ x: o.x, y: o.y - 40, txt: 'FREE THROW GOOD +1', color: SIDE_COLOR[o.side], t: 0 }); }
-            else pops.push({ x: o.x, y: o.y - 40, txt: 'FREE THROW MISSED!', color: '#cfd6ea', t: 0 });
-          }
+          if (isHumanTeam(o.side)) startFT(o);
+          else cpuFTs(o);
         }
       } else {
         pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 });
@@ -814,6 +863,33 @@
       };
     }
 
+    // ---------- computer difficulty ----------
+    // spr scales AI shot-timing sloppiness, spd their wheels, iq their defensive nous
+    const DIFFS = {
+      rookie:   { spr: 2.2,  spd: 0.85, iq: 0.4 },
+      beginner: { spr: 1.6,  spd: 0.92, iq: 0.7 },
+      medium:   { spr: 1.0,  spd: 1.00, iq: 1.0 },
+      pro:      { spr: 0.75, spd: 1.06, iq: 1.4 },
+      champion: { spr: 0.55, spd: 1.12, iq: 1.8 },
+    };
+    let diffKey = 'medium';
+    try { if (DIFFS[localStorage.getItem('hogball.diff')]) diffKey = localStorage.getItem('hogball.diff'); } catch (e) {}
+    function cpuDiff() { return DIFFS[diffKey]; }
+    // beef up (or slow down) the CPU squad to the chosen level
+    function applyDiff(t) {
+      if (t.side !== 1 || numPlayers !== 1) return;
+      const d = cpuDiff();
+      for (const p of t.onPitch) { p.accel *= d.spd; p.maxSpd *= d.spd; }
+    }
+    document.getElementById('diff-choices').addEventListener('click', function (e) {
+      const btn = e.target.closest('.choice'); if (!btn) return;
+      document.querySelectorAll('#diff-choices .choice').forEach(function (c) { c.classList.remove('selected'); });
+      btn.classList.add('selected');
+      diffKey = btn.dataset.diff;
+      try { localStorage.setItem('hogball.diff', diffKey); } catch (e2) {}
+    });
+    document.querySelector('#diff-choices [data-diff="' + diffKey + '"]').classList.add('selected');
+
     const FRANCHISES = [
       { name: 'Porkchop City',   key: 'pig',     base: 2.3 },
       { name: 'Moo York',        key: 'cow',     base: 2.8 },
@@ -897,6 +973,7 @@
       careerMatch = { oppName: fr.name, oppEmoji: MOBS[fr.key].emoji };
       numPlayers = 1;
       teams = [ buildCustomTeam(0, 'pig', cards), buildCustomTeam(1, fr.key, cpuCards(fr, nx.boost)) ];
+      applyDiff(teams[1]);
       score = [0, 0]; pops = []; freeze = 0;
       clockMs = HALF_MS; half = 1; otMode = false;
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0; defendHeld[0] = defendHeld[1] = false;
@@ -1042,9 +1119,9 @@
       p.aiShootCD -= dtf; p.aiPassCD -= dtf;
       const D = Math.hypot(h.x - p.x, h.y - p.y);
       if (p.aiShootCD <= 0 && (D < 90 || (D < 200 && ndd > 55) || (D < THREE_R + 20 && D > THREE_R && ndd > 80 && p.shoot3 > 1))) {
-        // release sampled near the top; elite shooters have far tighter timing
-        // (floor raised since greens now auto-make)
-        const spr = clamp(0.22 - (p.shoot3 - 0.85) * 0.25, 0.08, 0.22);
+        // release sampled near the top; elite shooters have far tighter timing,
+        // scaled by the chosen computer difficulty
+        const spr = clamp(0.22 - (p.shoot3 - 0.85) * 0.25, 0.08, 0.22) * (isHumanTeam(side) ? 1 : cpuDiff().spr);
         releaseShot(side, 1 + rnd(-spr, spr * 0.6), p);
         p.aiShootCD = 140;
       } else if (ndd < 48 && p.aiPassCD <= 0) {
@@ -1090,11 +1167,12 @@
         const gap = charging ? 14 : (nearHoop ? 24 : 38);
         steer(p, mark.x + dx / dl * gap, mark.y + dy / dl * gap, 0.9);
         if (auto || !isHumanTeam(side)) {
+          const iq = isHumanTeam(side) ? 1 : cpuDiff().iq;
           const d = Math.hypot(p.x - mark.x, p.y - mark.y);
-          // contest shots with a jump
-          if (p.aiJumpCD <= 0 && d < 60 && (charging || nearHoop)) { if (p.z <= 0) p.vz = 7; p.aiJumpCD = 90; }
+          // contest shots with a jump (sharper CPUs contest more often)
+          if (p.aiJumpCD <= 0 && d < 60 && (charging || nearHoop)) { if (p.z <= 0) p.vz = 7; p.aiJumpCD = 90 / iq; }
           // the rare disciplined reach — mostly they just guard
-          if (d < p.r + mark.r + 18 && Math.random() < 0.004) attemptSteal(p, mark);
+          if (d < p.r + mark.r + 18 && Math.random() < 0.004 * iq) attemptSteal(p, mark);
         }
       } else {
         // off-ball: deny goal-side, a third of the way back to our hoop
@@ -1539,25 +1617,22 @@
       ctx.beginPath(); ctx.moveTo(dx, dy + 12); ctx.lineTo(dx - 8, dy); ctx.lineTo(dx + 8, dy); ctx.closePath(); ctx.fill();
     }
 
-    // 2K vertical shot meter beside the shooter: fill races bottom→top, release at
-    // the white target line. The green SLIVER breathes live with distance & contest.
+    // 2K vertical shot meter beside the shooter: fill races bottom→top. The tiny
+    // GREEN AREA sits at the very top of the bar and breathes with distance & contest.
     function drawMeter(p, side) {
       const c = Math.min(chargeT[side] / shotMaxFor(p), OVERFILL);
       const gw = greenWindowFor(p, side);
       const w = 9, hgt = 54, mx = p.x + p.r * SC + 12, myTop = p.y - p.z - 80;
-      const yFor = function (cc) { return myTop + hgt * (1 - cc / OVERFILL); };
+      const yFor = function (cc) { return myTop + hgt * (1 - Math.min(cc, 1)); };
       // casing
       ctx.fillStyle = 'rgba(0,0,0,0.65)'; roundRect(mx - 2, myTop - 2, w + 4, hgt + 4, 4); ctx.fill();
-      // the green sliver (auto-bucket zone)
-      ctx.fillStyle = '#7ed37e';
-      ctx.fillRect(mx, yFor(1 + gw * 0.4), w, Math.max(2, yFor(1 - gw) - yFor(1 + gw * 0.4)));
-      // fill from the bottom
+      // fill from the bottom (turns red once you've blown past the top)
       const green = c >= 1 - gw && c <= 1 + gw * 0.4;
       ctx.fillStyle = green ? '#eaffea' : (c > 1 + gw * 0.4 ? '#ff5a5a' : '#ffd23f');
       ctx.fillRect(mx, yFor(c), w, yFor(0) - yFor(c));
-      // target line at the perfect release point
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(mx - 4, yFor(1)); ctx.lineTo(mx + w + 4, yFor(1)); ctx.stroke();
+      // the tiny green area at the very top of the bar
+      ctx.fillStyle = '#2fbf2f';
+      ctx.fillRect(mx, yFor(1), w, Math.max(2, yFor(1 - gw) - yFor(1)));
     }
 
     // dashed line to the attacked hoop while charging — shows which basket you're aiming at
@@ -1635,14 +1710,16 @@
       if (state !== 'select') drawHUD();
       if (state === 'playing' || state === 'score') for (let s = 0; s < 2; s++) { if (joy[s].active && isHumanTeam(s)) drawJoystick(joy[s]); }
       if (state === 'ft' && ft) {
-        // free-throw scene: the big ➕ with two sliding basketballs
-        ctx.fillStyle = 'rgba(10,14,28,0.72)'; ctx.fillRect(0, 0, VW, VH);
-        const cx = VW / 2, cy = CY - 10, ARM = 92, TH = 30, AMP = 74;
+        // free-throw scene: shooter staged at the line, the big ➕ minigame above
+        ctx.fillStyle = 'rgba(10,14,28,0.38)'; ctx.fillRect(0, 0, VW, VH);
+        const atRight = attackHoop(ft.side).dir < 0;
+        const cx = atRight ? VW / 2 - 130 : VW / 2 + 130, cy = CY - 40, ARM = 82, TH = 28, AMP = 66;
         ctx.textAlign = 'center';
-        ctx.fillStyle = SIDE_COLOR[ft.side]; ctx.font = "800 26px 'Nunito', sans-serif";
-        ctx.fillText('FREE THROW', cx, cy - 140);
-        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 15px 'Nunito', sans-serif";
-        ctx.fillText(ft.stage === 0 ? 'Tap to stop ball 1 in the middle of the ➕' : 'Now stop ball 2 in the middle!', cx, cy - 116);
+        ctx.fillStyle = SIDE_COLOR[ft.side]; ctx.font = "800 24px 'Nunito', sans-serif";
+        ctx.fillText('FREE THROW ' + (ft.taken + 1) + ' of 2', cx, cy - 130);
+        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 14px 'Nunito', sans-serif";
+        ctx.fillText(ft.stage === 0 ? 'Tap to stop ball 1 in the middle of the ➕' : 'Now stop ball 2 in the middle!', cx, cy - 108);
+        if (ft.taken === 1) { ctx.fillStyle = '#ffe066'; ctx.fillText('Miss this one and the rebound is LIVE!', cx, cy + 128); }
         // plus-sign arms
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         roundRect(cx - ARM, cy - TH / 2, ARM * 2, TH, 8); ctx.fill();
@@ -1722,7 +1799,7 @@
       endNow: function (s0, s1) { score = [s0, s1]; endGame(); },
       ft: function () { return ft; },
       ftPress: ftPress,
-      startFT: startFT,
+      startFT: function (side) { startFT(activePlayer(teams[side])); },
       career: function () { return career; },
       startCareer: startCareerMatch,
       openCareer: openCareer,
