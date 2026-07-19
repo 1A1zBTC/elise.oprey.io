@@ -496,6 +496,17 @@
       pops.push({ x: o.x, y: o.y - o.r - 24, txt: 'DUNK! 💥', color: '#ffe066', t: 0 });
     }
 
+    // A shot flew out of bounds: whistle, quick sideline inbound to the other team
+    function oobInbound(toSide) {
+      ball.shot = null; ball.vx = ball.vy = ball.vz = 0; ball.z = 0;
+      ball.x = clamp(ball.x, X0 + 22, X1 - 22); ball.y = clamp(ball.y, Y0 + 22, Y1 - 22);
+      pops.push({ x: ball.x, y: ball.y - 30, txt: 'OUT OF BOUNDS!', color: '#fff', t: 0 });
+      let taker = null, bd = Infinity;
+      for (const p of teams[toSide].onPitch) { const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < bd) { bd = d; taker = p; } }
+      taker.x = ball.x; taker.y = ball.y; taker.vx = taker.vy = 0;
+      setOwner(taker); possCD = 45; freeze = 26;   // brief whistle
+    }
+
     // Stealing is an ATTEMPT with a risk: whiff, win the ball, or get whistled
     // for a reach-in foul (stunned + a free throw for the offense).
     function attemptSteal(p, o) {
@@ -970,9 +981,21 @@
       const h = attackHoop(side);
       let nd = null, ndd = Infinity;
       for (const q of teams[1 - side].onPitch) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < ndd) { ndd = d; nd = q; } }
-      let tx = h.x + h.dir * 30, ty = h.y;
-      if (nd && ndd < 80) ty += (p.y - nd.y >= 0 ? 1 : -1) * 70;
-      steer(p, tx, ty, 0.85);
+      // is the on-ball defender set squarely in the driving lane?
+      const hx = h.x - p.x, hy = h.y - p.y, hl = Math.hypot(hx, hy) || 1;
+      let walled = false, sideSign = 1;
+      if (nd && ndd < 64) {
+        const ax = nd.x - p.x, ay = nd.y - p.y, al = Math.hypot(ax, ay) || 1;
+        if ((ax * hx + ay * hy) / (al * hl) > 0.72) { walled = true; sideSign = (hx * ay - hy * ax) >= 0 ? -1 : 1; }
+      }
+      if (walled && Math.hypot(hx, hy) > 110) {
+        // probe sideways like a real point guard instead of plowing into the chest
+        steer(p, p.x + (-hy / hl) * sideSign * 70, p.y + (hx / hl) * sideSign * 70, 0.7);
+      } else {
+        let tx = h.x + h.dir * 30, ty = h.y;
+        if (nd && ndd < 80) ty += (p.y - nd.y >= 0 ? 1 : -1) * 70;
+        steer(p, tx, ty, 0.85);
+      }
       p.aiShootCD -= dtf; p.aiPassCD -= dtf;
       const D = Math.hypot(h.x - p.x, h.y - p.y);
       if (p.aiShootCD <= 0 && (D < 90 || (D < 200 && ndd > 55) || (D < THREE_R + 20 && D > THREE_R && ndd > 80 && p.shoot3 > 1))) {
@@ -985,7 +1008,8 @@
         p.aiPassCD = 120;
       }
     }
-    // spacing spots around the attacked hoop: two corners + top of the arc
+    // spacing spots around the attacked hoop: two corners + top of the arc.
+    // Off-ball mobs periodically CUT to a different spot like real players relocating.
     function driveOffBall(p, side) {
       const h = attackHoop(side);
       const spots = [
@@ -993,7 +1017,10 @@
         { x: h.x + h.dir * 56, y: Y0 + 46 },
         { x: h.x + h.dir * 56, y: Y1 - 46 },
       ];
-      const sp = spots[p.slot % 3];
+      p.cutT = (p.cutT || 0) - dtf;
+      if (p.spotIdx == null) p.spotIdx = p.slot % 3;
+      if (p.cutT <= 0) { p.spotIdx = (p.spotIdx + (Math.random() < 0.5 ? 1 : 2)) % 3; p.cutT = 240 + rnd(0, 200); }
+      const sp = spots[p.spotIdx];
       if (Math.hypot(sp.x - p.x, sp.y - p.y) > 26) steer(p, sp.x, sp.y, 0.6);
     }
     function assignMarks(t) {
@@ -1009,18 +1036,25 @@
       const mark = p.mark || teams[1 - side].onPitch[p.slot];
       const own = ownHoop(side);
       const isCarrier = ball.owner === mark;
-      // on-ball: press the carrier chest-to-chest (contact triggers the steal);
-      // off-ball: sag 30% toward our own hoop
-      const k = isCarrier ? 0.02 : 0.30;
-      steer(p, mark.x + (own.x - mark.x) * k, mark.y + (own.y - mark.y) * k, isCarrier ? 0.95 : 0.8);
       p.aiJumpCD -= dtf; p.stealCD -= dtf;
-      if ((auto || !isHumanTeam(side)) && isCarrier) {
-        const d = Math.hypot(p.x - mark.x, p.y - mark.y);
-        const markNearHoop = Math.hypot(mark.x - attackHoop(mark.side).x, mark.y - attackHoop(mark.side).y) < 230;
-        // contest a charging or in-range shooter with a jump
-        if (p.aiJumpCD <= 0 && d < 60 && (shootHeld[mark.side] || markNearHoop)) { if (p.z <= 0) p.vz = 7; p.aiJumpCD = 90; }
-        // occasionally reach in for a steal ATTEMPT — the AI risks the foul too
-        if (d < p.r + mark.r + 18 && Math.random() < 0.005) attemptSteal(p, mark);
+      if (isCarrier) {
+        // real man defense: sit GOAL-SIDE with an arm's-length cushion and mirror
+        // the drive — close out tight only when they're shooting or at the rim
+        const dx = own.x - mark.x, dy = own.y - mark.y, dl = Math.hypot(dx, dy) || 1;
+        const charging = shootHeld[mark.side];
+        const nearHoop = Math.hypot(mark.x - attackHoop(mark.side).x, mark.y - attackHoop(mark.side).y) < 230;
+        const gap = charging ? 14 : (nearHoop ? 24 : 38);
+        steer(p, mark.x + dx / dl * gap, mark.y + dy / dl * gap, 0.9);
+        if (auto || !isHumanTeam(side)) {
+          const d = Math.hypot(p.x - mark.x, p.y - mark.y);
+          // contest shots with a jump
+          if (p.aiJumpCD <= 0 && d < 60 && (charging || nearHoop)) { if (p.z <= 0) p.vz = 7; p.aiJumpCD = 90; }
+          // the rare disciplined reach — mostly they just guard
+          if (d < p.r + mark.r + 18 && Math.random() < 0.004) attemptSteal(p, mark);
+        }
+      } else {
+        // off-ball: deny goal-side, a third of the way back to our hoop
+        steer(p, mark.x + (own.x - mark.x) * 0.33, mark.y + (own.y - mark.y) * 0.33, 0.75);
       }
     }
 
@@ -1123,7 +1157,10 @@
         }
       }
 
-      // walls: the court has invisible walls, the ball never goes dead
+      // boundaries: a wild SHOT that sails out is whistled dead — sideline
+      // inbound for the other team. Everything else stays live off the walls.
+      const out = ball.x < X0 + ball.r || ball.x > X1 - ball.r || ball.y < Y0 + ball.r || ball.y > Y1 - ball.r;
+      if (out && ball.shot) { oobInbound(1 - ball.shot.side); return; }
       if (ball.x < X0 + ball.r) { ball.x = X0 + ball.r; ball.vx = Math.abs(ball.vx) * 0.6; }
       if (ball.x > X1 - ball.r) { ball.x = X1 - ball.r; ball.vx = -Math.abs(ball.vx) * 0.6; }
       if (ball.y < Y0 + ball.r) { ball.y = Y0 + ball.r; ball.vy = Math.abs(ball.vy) * 0.6; }
@@ -1167,6 +1204,12 @@
         }
       }
       const live = state === 'playing' && freeze <= 0;
+
+      // made basket: the ball drips down through the net during the celebration
+      if (state === 'score' && ball && !ball.owner && ball.z > 0) {
+        ball.vz = Math.max(ball.vz - GRAV_Z * 0.12 * dtf, -2.2); ball.z += ball.vz * dtf;
+        if (ball.z <= 0) { ball.z = 0; ball.vz = 0; }
+      }
 
       // game clock (regulation only — OT is sudden death, untimed)
       if (live && !otMode) {
