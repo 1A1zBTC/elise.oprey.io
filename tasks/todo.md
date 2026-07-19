@@ -788,3 +788,10 @@ detail pages are Cloudflare-blocked headless). Key real mechanics adopted:
       (desk+receptionist+adoption room+worker clerk) → Milo adopted at step 812 with tag
       visible in screenshot; cat path → Kuku. NOTE: adds one Math.random call per adoption
       (parity harness sequences shift). NOT deployed yet.
+- [x] v30: Pet Lovers — hamster (foster Pip) had no visible toys: added 🎡 Hamster Wheel
+      (10🪙, ferret-family toy → works for hamster fosters via FOSTER_AS and for ferrets);
+      toy descriptions now name the foster pals (yarn: kittens, bell: chicks, carrot:
+      hedgehogs, shells: turtles, sock: hamsters); foster play refusal message now says
+      "Pip the hamster plays with ferret toys (or any teddy) — pet store!" instead of the
+      confusing bare "needs a ferret toy". Verified headless: play blocked without suitable
+      toys, wheel purchasable from the cycling toys shelf, play works after. NOT deployed.

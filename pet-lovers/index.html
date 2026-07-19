@@ -392,18 +392,19 @@
     const TOYS = [
       { id: 'ball',     em: '🎾', nm: 'Bouncy Ball',   for: 'dog',    d: 'Dogs love fetch',            cost: 10 },
       { id: 'rope',     em: '🪢', nm: 'Tug Rope',      for: 'dog',    d: 'Great for tug-of-war',       cost: 15 },
-      { id: 'yarn',     em: '🧶', nm: 'Yarn Ball',     for: 'cat',    d: 'Cats can\'t resist it',      cost: 10 },
+      { id: 'yarn',     em: '🧶', nm: 'Yarn Ball',     for: 'cat',    d: 'Cats & kittens can\'t resist', cost: 10 },
       { id: 'feather',  em: '🪶', nm: 'Feather Wand',  for: 'cat',    d: 'Swish swish — pounce!',      cost: 15 },
-      { id: 'bell',     em: '🔔', nm: 'Jingle Bell',   for: 'parrot', d: 'Ring-a-ding sing-along',     cost: 10 },
+      { id: 'bell',     em: '🔔', nm: 'Jingle Bell',   for: 'parrot', d: 'Birds & chicks sing along',  cost: 10 },
       { id: 'mirror',   em: '🪞', nm: 'Birdie Mirror', for: 'parrot', d: 'Who\'s that gorgeous bird?', cost: 14 },
-      { id: 'carrot',   em: '🥕', nm: 'Carrot Chew',   for: 'bunny',  d: 'Crunchy bunny fun',          cost: 10 },
+      { id: 'carrot',   em: '🥕', nm: 'Carrot Chew',   for: 'bunny',  d: 'Bunnies & hedgehogs crunch away', cost: 10 },
       { id: 'tunnel',   em: '🕳️', nm: 'Play Tunnel',   for: 'bunny',  d: 'Zoom-zoom-zoomies!',         cost: 14 },
       { id: 'bubbles',  em: '🫧', nm: 'Bubble Maker',  for: 'fish',   d: 'Pop pop pop!',               cost: 12 },
       { id: 'castle',   em: '🏰', nm: 'Tank Castle',   for: 'fish',   d: 'A castle to explore',        cost: 16 },
-      { id: 'shells',   em: '🐚', nm: 'Spare Shells',  for: 'crab',   d: 'New homes to try on',        cost: 12 },
+      { id: 'shells',   em: '🐚', nm: 'Spare Shells',  for: 'crab',   d: 'Crabs & turtles try new homes', cost: 12 },
       { id: 'coral',    em: '🪸', nm: 'Coral Playset', for: 'crab',   d: 'Climb it, hide in it',       cost: 14 },
-      { id: 'socktube', em: '🧦', nm: 'Crinkle Sock',  for: 'ferret', d: 'Ferrets dive right in',      cost: 10 },
+      { id: 'socktube', em: '🧦', nm: 'Crinkle Sock',  for: 'ferret', d: 'Ferrets & hamsters dive right in', cost: 10 },
       { id: 'rattle',   em: '🏐', nm: 'Rattle Ball',   for: 'ferret', d: 'Rattly chase-about fun',     cost: 12 },
+      { id: 'wheel',    em: '🎡', nm: 'Hamster Wheel', for: 'ferret', d: 'Hamsters & ferrets go zoomies!', cost: 10 },
       { id: 'mudball',  em: '⚽', nm: 'Muddy Ball',    for: 'pig',    d: 'For muddy kickabouts',       cost: 12 },
       { id: 'pool',     em: '🛁', nm: 'Splash Pool',   for: 'pig',    d: 'Splish-splash wallowing',    cost: 16 },
       { id: 'teddy',    em: '🧸', nm: 'Cuddly Teddy',                 d: 'EVERY pet loves teddy',      cost: 20 },
@@ -1286,7 +1287,8 @@
       const fsp = spOf(FOSTER_AS[f.kind] || 'cat');
       const mine = toysFor(fsp);
       if (!mine.length) {
-        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '🧸 ' + f.nm + ' needs a ' + fsp.kind.toLowerCase() + ' toy — pet store!', '#ffd23f');
+        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44,
+          '🧸 ' + f.nm + ' the ' + f.kind.toLowerCase() + ' plays with ' + fsp.kind.toLowerCase() + ' toys (or any teddy) — pet store!', '#ffd23f');
         return false;
       }
       if (f.fun >= 95) {
