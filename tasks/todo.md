@@ -604,3 +604,187 @@ Other instance has in-flight uncommitted work in the same file.
       Dust-cloud scrap with 25s countdown — run over to break it up (both grumpy + messy) or
       one pet gets hurt 🤕 (sick+hurt flags) and needs the existing vet-clinic treatment.
       fightCd saved with load grace; tank pets never fight; intro line added.
+- [x] v25: Pet Lovers — lag fixes: (1) emoji sprite cache in em() — each (emoji,size,flip)
+      rasterized once to an offscreen canvas then blitted (same as Pet Vet's char cache;
+      per-frame color-emoji fillText is the top canvas cost on tablets); (2) the RAF loop
+      no longer repaints the canvas while a full-screen .overlay is open — overlays have
+      backdrop-filter blur(4px) (shared/game.css) and re-blurring an animating canvas
+      every frame is a tablet killer during minigames/walks. Added __t.timeDraw(n) probe.
+      Desktop draw 0.15→0.13 ms/frame (tablet wins are the real target); visuals verified
+      identical; minigame open/close clean. NOT deployed yet.
+
+## Scroot Rooms: scarier entities, Level Fun rebuild, harder maps (2026-07-19)
+- [x] Entities: Clark (feather, peg straps, nails, cheek scratches), Bacteria (ichor drips,
+      vertebrae, taut-skin glints, maw strand), Smiler (slit pupils, pointed fangs + dark gullet,
+      body & jumpscare), Partygoer (sagging hat, running smile, gloves, confetti), Hound (spine
+      knobs, hip bone, mange, whip tail, drool, glowing eye, torn ear, claws), Faceling (head
+      cocked 0.09rad, tie, sweat stains, knee dirt, taut-skin mounds). All deterministic.
+- [x] Level Fun rebuilt (buildParty): lobby wall w/ 2 doorways, speaker-ring dance floor with
+      3-tier cake centerpiece, present-row gift maze, snack-table rows, streamer poles + balloons.
+      New PA props: cake, presents×3, speaker, streamer — each with custom 3D boxes.
+- [x] Complexity: maze openP 0.5/0.38→0.44/0.3 scaling down w/ level + 1-4 partition runs;
+      forest 0.12→0.15 density + 2-5 bramble ridges; grocery aisle cut-throughs + storeroom +
+      pallet chokes + carts; garage serpentine dividers w/ nose-in parking (shortcut gap <lvl4);
+      school/hospital shared-wall interconnect doors + collapsed-hall barricades (lvl≥2) + ward
+      clutter; subway 2 fare-fence lines + kiosk; office partition maze + corner office; factory
+      2-4 offset-hatch vat chambers. Door/slide reachability safe by construction (BFS-picked).
+- [x] Verified: 52 gens (13 themes × lvl 1/5/10/20) clean, spawn never walled; ASCII map dumps
+      confirm garage/office/subway structure; party + all 6 entity screenshots reviewed; hunters
+      still catch (Partygoers/Smiler got the idle QA player); tools/test.mjs 31 pages green.
+      New __sr QA hooks: clear() / tp(x,y,d) / map(). sw.js → v72 (pending deploy).
+
+## Burgle Cats: capture cinematics + floor-scoped dogs + gacha lure (2026-07-19)
+
+- Decoy vault now plays a cage CINEMATIC (S.cine, input-blocked): 2 alert guard dogs leap
+  out of the vault in an arc to the cat's flanks, a birdcage drops with a rattle + CAGED!
+  pop, then the capture resolves — and those 2 dogs are permanently added to that FLOOR's
+  patrol (spawnDecoyDogs picks the free row cells nearest the vault; rows can now hold 3 dogs).
+- Ordinary dog captures got the same cage-drop cine (kind 'cage', capturing dog looms beside).
+  capture() is now two-step: fxCaught + set S.cine; resolveCine() applies the state change.
+- Dog aggro is FLOOR-SCOPED: rouse(x,y,radius) replaced by rouseRow(y,turns). Spike trap →
+  that row chases cfg.chase turns; alarm trap → cfg.chase+3; REAL vault → current row only,
+  cfg.chase*2 (replaced the old permanent all-dog 999 hunt). cfg.wakeR removed. Dogs
+  otherwise just pace their row randomly — they never head for you unprovoked.
+- Real vault open got jackpot juice (gold flash/shake/burst + 💎 JACKPOT! pop).
+- Gacha re-themed as BAITS: Kibble Bait 1💎 / Sardine Bait 3💎 (Rare+) / Tuna Bait 6💎
+  (Epic+) / Golden Tuna 12💎 (Legendary+). Every pull plays a lure animation on the reveal
+  canvas: pitch-black stray (glowing eyes) creeps in, spots the bait emoji ("!"), darts to
+  it, cage slams down, then the normal reveal (big best cat + mini strip). drawCage/rrect2
+  shared between game + gacha; lure guarded against double-pulls + closes cleanly if the
+  panel is dismissed mid-animation.
+- __bc grew: cine(), gacha.luring().
+- Verified headless (dedicated tab 10 + chain to dodge tab hijacking by other instances;
+  tab closed + test localStorage cleared after): decoy → cine 'decoy', dogs 5→7 with 3 on
+  that row, captures/phase correct, mid-cine screenshot shows dogs+cage+CAGED!; spike trap
+  row 1 → only row 1 dog chases; real vault row 3 → only row 3 chases; Golden Tuna lure
+  animation screenshots (cage-slam frame + Legendary reveal with 5-mini strip); no JS errors;
+  node --check clean. NOT committed/deployed (sw.js already at v65 pending).
+- [x] v26: Pet Lovers — investigated "home/More/choose-pet not working": could NOT reproduce
+      on (a) current working copy, (b) the EXACT live v71 html byte-for-byte, (c) a save
+      stuck mid-build. All three flows pass headless via the real user path (vet counter →
+      Visit → pen). Likeliest cause: a torn deploy snapshot — 3 deploys today from a
+      working tree both instances edit live; a mid-edit sync = script parse error = every
+      button dead (matches symptoms exactly). Fix for Elise: full reload (sw is network-
+      first). PROCESS FLAG: deploys should happen from committed state or with instances
+      coordinated, never from a mid-edit tree.
+
+## Burgle Cats: real-game fidelity pass (2026-07-19, same session)
+
+Researched the actual PONOS game (web: mrguider/appgamer/miraheze/fandom snippets; the
+detail pages are Cloudflare-blocked headless). Key real mechanics adopted:
+- DROWSY DOGES, SAFE TO PASS (the real game's core stealth loop): calm doges are harmless —
+  walking into their room or them wandering into yours does nothing ("🤫 You slip past the
+  drowsy doge…"), and they're drawn dozing in your room. Only noise (spike clatter, alarm
+  bell, creaky chest lids, the vault jackpot) alerts that FLOOR's pack; alert dogs beeline
+  and capture on contact, incl. waking up with the cat in their room. Alert wears off back
+  to drowsy. (Kept them roaming per Dan's earlier request — real game has them asleep in
+  place; drowsy-wandering preserves both.)
+- TREASURE CHESTS (real game: "snatch as much treasure as you can"): 3-6 chests/manor,
+  +20×level loot on walk-in, 35% creaky lid wakes the floor. Chest sprite (closed/opened
+  w/ gems), minimap gold squares, drawn in room + map views.
+- SPIDERWEB TRAP (real game has movement-hampering traps): silent, no damage, snares the
+  cat — next move is spent wriggling free (S.stuck). Web sprite w/ spider, drawn LARGE
+  (0.62) in room view so it peeks around the cat. Trap kinds now cycle spike/alarm/web,
+  traps 5+level. Map view now draws proper alarm/web sprites too (was spikes for all).
+- Real game manor = 3 roaming doges + 2 hidden in fake vaults — our decoy-dog spawn
+  already matches that shape.
+- Verified headless (bc-test.js in dedicated tabs; HEAVY tab hijacking from concurrent
+  instances — single atomic chains newtab+eval+screenshot was the only reliable recipe):
+  drowsy walk-in safe, alert walk-in captures (cage cine), web stuck=1/no hp/turn wasted/
+  then free, chest +20 loot, trap kind distribution 2/2/2 at L1, screenshots of chest+
+  drowsy-doge room and web room. node --check clean, no JS errors.
+- NOT committed/deployed; sw.js v65 still pending.
+
+### Follow-up (same day): realistic 3D props, better characters, scarier jumpscares, no red alert
+- [x] Removed the red proximity pulse entirely (nearHunter gone, per request)
+- [x] Real multi-part 3D models in boxesFor: cars (wheels/body-color-by-spot/bumpers/glasshouse/
+      roof/headlights), chalkboards (frame/slate/tray/chalk), lockers (kick/seams/vent), desks
+      (legs/chair/workbook), gurneys (mattress/pillow/rails/legs), stocked shelves (goods rows
+      vary per spot), freezers (glass doors), trains (under-skirt/window band/red livery/roof +
+      open doorway on door cars), turnstiles (tripod arms), benches (slats/iron ends), columns
+      (plinth/capital), cubicles (cap rail/monitor+glowing screen/papers), vats (rim/dome/pipe),
+      party tables (cloth/punch bowl), speakers (grilles/glow trim), wheelchair, IV stand, cart,
+      lollipop, gumball machine, balloons, subsign, log, cooler
+- [x] Characters: grounding contact shadows under all hunters + corpses (not Smiler), high-quality
+      upscaling
+- [x] Jumpscare: two-phase hang-then-SNAP lunge, motion-smear ghost, crushing iris vignette,
+      signal-loss static bursts + horizontal screen tear, white blink at the snap; screech gains
+      a 58→27Hz sub-bass slam + late-arriving 880/932Hz shriek pair
+- [x] __sr.scare(type, jumpT) + freeze() QA hooks; verified: train livery/school lockers/garage
+      car/grocery shelves/party + Clark snap-frame screenshots, 13-theme live render sweep clean,
+      tools/test.mjs green. sw.js → v73 (pending deploy)
+
+### Follow-up (2026-07-19): real-time dogs, safe side columns, spike DoT, Jimmy the Mythic
+- Dogs now move in REAL TIME on their own clocks (simTick, called from the frame loop):
+  one room per 1.5s drowsy / 1.0s alert, whether or not the player moves. All turn-based
+  dogesTurn() calls removed; Speedy remaps to a 1.35x interval slowdown; chaseT now counts
+  alert steps (~seconds). dt is capped 0.05/frame so backgrounded tabs slow the sim (fine).
+- SIDE DOOR COLUMNS ARE SAFE GROUND: dogs can never enter x=0 / cols-1 — even chasing a
+  cat standing there (enterable() requires !shutter for the cat's cell too). Verified: an
+  alert dog hunted a door-camping cat for 12 sim-seconds, paced at x=1-2, never captured.
+- Spikes now damage-over-time: standing on a sprung spike ticks 40% of trapDmg (tough-
+  reduced) every second until you leave (can kill). Room view draws spikes ARMED under
+  your paws; verified 3 ticks x7 dmg in 3.1s, stops on leaving.
+- JIMMY THE RACCOON, rarity 7 MYTHIC (#ff8ad8, w=1 like a single Secret): GACHA_N 300→301,
+  index 300; raccoon coat (eye mask, pale muzzle/brow/belly, setLineDash ringed tail);
+  +26 HP / Tough 55% / Speedy / Vault Sense; 'MYTHIC ·' reveal prefix; realistic odds path
+  is the Golden Tuna Legendary+ guarantee pool (~2%). gOwned() PADS old 300-length saves
+  (no collection wipe).
+- New __bc.tick(dt) = simTick for deterministic headless testing (tab-hijack-proof single-
+  eval tests; the shared daemon was extremely contended this session — real-time waits in
+  background tabs are RAF-throttled and useless, atomic eval + tick() is the recipe).
+- Verified: all 5 dogs step once per interval standing still; side ban; DoT; rollMin(7)
+  → Jimmy; forced pull → lure → "Jimmy the Raccoon ✨NEW / MYTHIC ★★★★★" reveal screenshot;
+  node --check clean; test storage cleared. NOT committed/deployed (sw.js v65 pending).
+- [x] v27: Pet Lovers — clinic "not working" root cause: a mid-BUILD adoption hard-blocked
+      choosing any other pen pet, with only a 1.4s fading popup as explanation — to a kid
+      (esp. on mobile) the whole clinic looks dead. Fixes: (1) never trap — tapping another
+      pen pet mid-build REFUNDS the paid adoption and switches to the new pet (verified:
+      +200🪙 refund, clean switch to shop stage); tapping your own mid-build pet says
+      "Go home and tap X's spot to build!"; (2) mobile touch fixes — pen hit radius 44→54,
+      MORE arrow 30→42 (off-center taps land), canvas touch-action:none so taps never
+      become scroll gestures; (3) all clinic flows re-verified with touch-flavored events
+      (pointerType:'touch' + touchstart, no click). NOT deployed yet.
+- [x] toys: every species now has ≥2 dedicated toy types (added Birdie Mirror, Play Tunnel,
+      Tank Castle, Coral Playset, Rattle Ball, Splash Pool) on top of the per-species toy
+      system (toysFor gating, "needs a dog toy" messaging, store prioritisation) that the
+      concurrent instance shipped; teddy + puzzle stay universal. 18 toy types total.
+- [x] v28: Pet Lovers — To-Do app now lists ONLY buttonless jobs: removed per-pet
+      feed/play/wash/clean/walk lines (care panel + pet alert icons already cover those)
+      and the foster line (basket has buttons); kept adoption pipeline, sick→vet trips,
+      station refills, puddle mopping, out-of-food; added "buy poo bags" when unowned.
+      Verified headless: with 4+ active pet needs the list shows zero chore lines.
+      Deployed (targeted pet-lovers cp + invalidation).
+- [x] "clinic still not working" diagnosis: engine + input flow verified working end-to-end
+      (trip start from vet panel, walk-at-clinic, wrong-room hint, right-room treatment, cure,
+      home). Root cause of user-visible breakage: stale client — live sw.js was v71 (local
+      v73) and the offline-first SW serves cached pages until a new SW installs. Ran
+      tools/deploy.sh: sw.js v74 live, full sync + CloudFront invalidation completed.
+- [x] clinic dead-inputs report (round 2): could not reproduce his exact freeze on fresh,
+      migrated-legacy, or virgin saves (all flows pass incl. real pointer events). Fixed the
+      real bugs found while hunting: (1) vet/shop counters now win proximity vs pet spots
+      (dog bed could block the vet panel), (2) canvas draw-freeze now limited to the 5 known
+      overlays and never during trips (stray overlay can't freeze the screen), (3) plain
+      clinic visits: Dr. Paws + rooms respond with friendly pops instead of dead silence,
+      (4) on-screen error beacon (red bar with message/line) + __t.debug() dump. Deployed.
+- [x] CLINIC FREEZE ROOT CAUSE (via the new on-screen beacon, Dan's screenshot):
+      draw()'s clinic block did spOf(clinicTrip.key).em with key=null on PLAIN visits
+      (the carry-your-pet visual, added for treatment trips) → TypeError every frame →
+      RAF loop dead → frozen screen, all canvas input apparently dead, home button
+      "disappearing". Treatment trips were unaffected, which is why every treatment-flow
+      test passed. Fixed (guard on clinicTrip.key) + loop body now try/catch-wrapped so a
+      bad frame reports to the beacon instead of killing the game. Deployed v76.
+      LESSON: never grep-filter console output when hunting a bug — the TypeError was in
+      my earlier console dump but filtered/tail'd away.
+- [x] v29: Pet Vet (grindy-vet) — LEGENDARY adoptions: 2% of adopted cats/dogs are a named
+      legendary with a fixed name (never renameable — no naming exists in Pet Vet anyway).
+      Cats: Mona (calico), Smidge (tortoiseshell), Kuku (tuxedo), Mimi (calico-tortie),
+      Sweet Pea (snowy calico). Dogs: Funny (border collie, medium-small), Pijiu (all-white
+      corgi), Milo (english cream retriever, larger) — dogs adopt out at their true breed
+      size/kind. Shown via: golden 2.6s "✨ LEGENDARY! <name> joins a family!" floater,
+      custom coat colors + patches on the drawn pet (sprite cache bypassed for legends),
+      and a persistent gold "✨ name" tag over the pet (over the carrier for cats).
+      __t: forceLegend(), legendPool(), visitors().legend. Verified in-sim: full pipeline
+      (desk+receptionist+adoption room+worker clerk) → Milo adopted at step 812 with tag
+      visible in screenshot; cat path → Kuku. NOTE: adds one Math.random call per adoption
+      (parity harness sequences shift). NOT deployed yet.

@@ -61,6 +61,44 @@
 
     .name-line { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 0.78rem; font-weight: 800; color: #cfd6ea; }
     .fhud.right .name-line { flex-direction: row-reverse; }
+    .faction-line { margin-top: 1px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #8e9ab8; }
+    .fhud.right .faction-line { text-align: right; }
+    /* career */
+    .car-head { display: flex; align-items: center; gap: 12px; margin: 8px 0; text-align: left; }
+    .car-head canvas { width: 68px; height: 68px; flex: 0 0 68px; border-radius: 12px; border: 2px solid #2c3a58; }
+    .car-info { flex: 1; min-width: 0; }
+    .car-name { font-weight: 800; font-size: 1.05rem; color: #fff; }
+    .car-rec { font-size: 0.78rem; font-weight: 800; color: #cfd6ea; }
+    .car-right { text-align: right; }
+    .car-rank { font-weight: 800; font-size: 1rem; color: #ffd24a; }
+    .car-money { font-weight: 800; font-size: 0.85rem; color: #9be79b; }
+    .car-sec { margin: 10px 0 5px; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.1em; color: #8e9ab8; text-align: left; }
+    .car-attrs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; }
+    .car-attr { display: flex; align-items: center; gap: 6px; font-size: 0.74rem; font-weight: 800; color: #cfd6ea; }
+    .car-attr .abar { flex: 1; height: 9px; background: rgba(0,0,0,0.4); border-radius: 5px; overflow: hidden; }
+    .car-attr .abar i { display: block; height: 100%; background: #36d1dc; border-radius: 5px; }
+    .car-attr .tbtn { font-family: inherit; font-weight: 800; font-size: 0.68rem; color: #0b2018;
+      background: #46c46a; border: none; border-radius: 8px; padding: 3px 7px; cursor: pointer; }
+    .car-attr .tbtn:disabled { background: #3a4560; color: #8e9ab8; cursor: default; }
+    .car-tape { background: rgba(0,0,0,0.28); border-radius: 12px; padding: 8px 10px; }
+    .tape-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .tape-head canvas { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 10px; border: 2px solid #2c3a58; }
+    .tape-side { flex: 1; min-width: 0; }
+    .tape-side.right { text-align: right; }
+    .tape-nm { font-weight: 800; font-size: 0.85rem; color: #fff; }
+    .tape-sub { font-size: 0.66rem; font-weight: 800; color: #8e9ab8; text-transform: uppercase; letter-spacing: 0.06em; }
+    .tape-vs { font-weight: 800; color: #e94560; font-size: 0.9rem; }
+    .tape-row { display: flex; align-items: center; gap: 7px; font-size: 0.68rem; font-weight: 800; color: #cfd6ea; margin: 3px 0; }
+    .tape-row .tb { flex: 1; height: 7px; background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden; }
+    .tape-row .tb i { display: block; height: 100%; border-radius: 4px; }
+    .tape-row .tb.you i { background: #36d1dc; }
+    .tape-row .tb.foe i { background: #e94560; float: right; }
+    .tape-row .tlbl { width: 84px; text-align: center; }
+    .car-result { border-radius: 12px; padding: 8px 10px; margin-bottom: 8px; font-weight: 800; font-size: 0.85rem; }
+    .car-result.win { background: rgba(70,196,106,0.18); color: #9be79b; }
+    .car-result.loss { background: rgba(233,69,96,0.16); color: #ff8aa0; }
+    .car-picks { max-height: 300px; overflow-y: auto; }
     .pips { display: flex; gap: 4px; }
     .fhud.right .pips { flex-direction: row-reverse; }
     .pip { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); }
@@ -162,6 +200,7 @@
         <div class="super-bar" id="sbar0"><div class="super-fill s0" id="sf0" style="width:0%"></div><div class="super-seg" style="left:33%"></div><div class="super-seg" style="left:66%"></div></div>
       </div>
       <div class="name-line"><span id="hudn0">Player 1</span><span class="pips" id="pips0"><span class="pip c0"></span><span class="pip c0"></span></span></div>
+      <div class="faction-line" id="hudf0"></div>
     </div>
     <div class="timer-wrap">
       <div class="timer" id="timer">99</div>
@@ -177,6 +216,7 @@
         <div class="super-bar" id="sbar1"><div class="super-fill s1" id="sf1" style="width:0%"></div><div class="super-seg" style="left:33%"></div><div class="super-seg" style="left:66%"></div></div>
       </div>
       <div class="name-line"><span id="hudn1">Player 2</span><span class="pips" id="pips1"><span class="pip c1"></span><span class="pip c1"></span></span></div>
+      <div class="faction-line" id="hudf1"></div>
     </div>
   </div>
 
@@ -213,7 +253,7 @@
     </div>
   </div>
 
-  <p class="hint kbd"><b>P1</b> WASD move · <b>Q</b> punch <b>E</b> kick <b>R</b> super &nbsp;·&nbsp; <b>P2</b> Arrows · <b>1</b> punch <b>2</b> kick <b>4</b> super <i>(1-player: either set works)</i> &nbsp;·&nbsp; hold <b>back</b> to block &nbsp;·&nbsp; chain hits for <b>COMBOS</b>; super a low-HP rival for a <b>FINISHER</b></p>
+  <p class="hint kbd"><b>P1</b> WASD move · <b>Q</b> punch <b>E</b> kick <b>R</b> super &nbsp;·&nbsp; <b>P2</b> Arrows · <b>1</b> punch <b>2</b> kick <b>4</b> super <i>(1-player: either set works)</i> &nbsp;·&nbsp; <b>W+Q</b> uppercut · <b>E+Q</b> strong punch · kick <b>in the air</b> for a dropkick &nbsp;·&nbsp; hold <b>back</b> to block &nbsp;·&nbsp; chain hits for <b>COMBOS</b>; super a low-HP rival for a <b>FINISHER</b> — and a first knockout only puts them <b>down</b>: they get back up once!</p>
   <p class="hint touchonly">Hold <b>back</b> to block · chain hits for <b>combos</b> · fill the meter, then tap <b>SUPER</b> — finish a low-HP rival with it!</p>
 
   <!-- character select -->
@@ -223,6 +263,7 @@
       <div class="mode-toggle">
         <button class="mode-btn active" id="mode1">1 Player</button>
         <button class="mode-btn" id="mode2">2 Players</button>
+        <button class="mode-btn" id="modeC">🥊 Career</button>
       </div>
       <div class="selcols">
         <div class="selcol c0"><div class="who" id="who0">Player 1</div><div class="picks" id="picks0"></div></div>
@@ -230,6 +271,42 @@
       </div>
       <div class="charblurb" id="blurb">Pick your fighters!</div>
       <button class="start-btn" id="fightBtn">FIGHT!</button>
+    </div>
+  </div>
+
+  <!-- MMA career -->
+  <div class="overlay" id="careerOv" hidden>
+    <div class="panel" style="max-width:600px">
+      <h2>🥊 Fight Career</h2>
+      <div id="carPick" hidden>
+        <div class="sub">Choose the fighter for your career!</div>
+        <div class="picks car-picks" id="carPicks"></div>
+        <div class="charblurb" id="carBlurb">Every fighter starts at rank #20. Climb to #1 and win the belt!</div>
+        <button class="ghost-btn" id="carPickBack">Back</button>
+      </div>
+      <div id="carHome" hidden>
+        <div class="car-result" id="carResult" hidden></div>
+        <div class="car-head">
+          <canvas id="carPort" width="68" height="68"></canvas>
+          <div class="car-info">
+            <div class="car-name" id="carName"></div>
+            <div class="faction-line" id="carFac"></div>
+            <div class="car-rec" id="carRec"></div>
+          </div>
+          <div class="car-right">
+            <div class="car-rank" id="carRank"></div>
+            <div class="car-money" id="carMoney"></div>
+          </div>
+        </div>
+        <div class="car-sec">TRAINING — spend purse money to grow stronger</div>
+        <div class="car-attrs" id="carAttrs"></div>
+        <div class="car-sec">NEXT MATCHUP — tale of the tape</div>
+        <div class="car-tape" id="carTape"></div>
+        <button class="start-btn" id="carFightBtn">FIGHT!</button>
+        <br>
+        <button class="ghost-btn" id="carBackBtn">Menu</button>
+        <button class="ghost-btn" id="carRetireBtn">Retire</button>
+      </div>
     </div>
   </div>
 
@@ -264,7 +341,7 @@
   var CHARS = {
     // ---- Imperium of Man ----
     marine: {
-      key:'marine', name:'Intercessor',
+      key:'marine', faction:'Imperium of Man', name:'Intercessor',
       body:'#2a5caa', limb:'#1d4076', head:'#2a5caa', trim:'#ffd24a', eye:'#ff4444',
       speed:2.9, jump:12.6,
       special:{ name:'Bolter Volley', dmg:9, spd:9, r:12, color:'#ffb066', glow:'#ff7a3c', kb:6, life:95 },
@@ -273,7 +350,7 @@
             weapon:{ kind:'rifle', c1:'#22262e' } }
     },
     sororitas: {
-      key:'sororitas', name:'Battle Sister',
+      key:'sororitas', faction:'Imperium of Man', name:'Battle Sister',
       body:'#23252f', limb:'#15161d', head:'#23252f', trim:'#e8e0c8', eye:'#ff5a5a',
       speed:2.8, jump:12.4,
       special:{ name:'Holy Flame', dmg:8, spd:8.5, r:13, color:'#ffd9a0', glow:'#ff9a3c', kb:5.5, life:90 },
@@ -282,7 +359,7 @@
             weapon:{ kind:'rifle', c1:'#26262c', glow:'#ff9a3c' } }
     },
     custodes: {
-      key:'custodes', name:'Custodian Guard',
+      key:'custodes', faction:'Imperium of Man', name:'Custodian Guard',
       body:'#d4a531', limb:'#a5791f', head:'#d4a531', trim:'#8a1e2c', eye:'#ff4040',
       speed:2.7, jump:12.2,
       special:{ name:'Sentinel Beam', dmg:10, spd:8.5, r:14, color:'#ffedb0', glow:'#ffce4a', kb:6.5, life:100 },
@@ -291,7 +368,7 @@
             weapon:{ kind:'halberd', shaft:'#6a5426', blade:'#ffd24a', glow:'#ffe8a0' } }
     },
     greyknight: {
-      key:'greyknight', name:'Grey Knight',
+      key:'greyknight', faction:'Imperium of Man', name:'Grey Knight',
       body:'#9fa9b8', limb:'#6f7886', head:'#9fa9b8', trim:'#3c6df0', eye:'#7ab0ff',
       speed:2.9, jump:12.8,
       special:{ name:'Psybolt', dmg:8, spd:10, r:11, color:'#cfe0ff', glow:'#7aa8ff', kb:5, life:90 },
@@ -300,7 +377,7 @@
             weapon:{ kind:'halberd', shaft:'#3a3f4a', blade:'#d8dde6', glow:'#7aa8ff' } }
     },
     mechanicus: {
-      key:'mechanicus', name:'Skitarii Ranger',
+      key:'mechanicus', faction:'Imperium of Man', name:'Skitarii Ranger',
       body:'#7a1f1f', limb:'#4d1313', head:'#101218', trim:'#c8c2a8', eye:'#4dff88',
       speed:2.6, jump:11.8,
       special:{ name:'Arc Volley', dmg:8, spd:10.5, r:10, color:'#d8f4ff', glow:'#4db8ff', kb:4.5, life:85 },
@@ -309,7 +386,7 @@
             weapon:{ kind:'rifle', c1:'#3a3026', glow:'#4dff88' } }
     },
     guard: {
-      key:'guard', name:'Cadian Trooper',
+      key:'guard', faction:'Imperium of Man', name:'Cadian Trooper',
       body:'#6d6a3f', limb:'#4c4a2c', head:'#5c5a35', trim:'#c8b06a', eye:'#2a2416',
       speed:3.0, jump:12.6,
       special:{ name:'Lasgun Volley', dmg:6, spd:12.5, r:8, color:'#ff9a90', glow:'#ff3b30', kb:3, life:60 },
@@ -318,7 +395,7 @@
             weapon:{ kind:'rifle', c1:'#4c4a2c', glow:'#ff3b30' } }
     },
     knight: {
-      key:'knight', name:'Armiger',
+      key:'knight', faction:'Imperium of Man', name:'Armiger',
       body:'#2e4f8f', limb:'#20355e', head:'#c9d2dd', trim:'#ffd24a', eye:'#ffb63c',
       speed:2.3, jump:11.2,
       special:{ name:'Battle Cannon', dmg:12, spd:7, r:18, color:'#ffcf7a', glow:'#ff9a3c', kb:8, life:115 },
@@ -328,7 +405,7 @@
     },
     // ---- Chaos ----
     chaos: {
-      key:'chaos', name:'Chaos Legionary',
+      key:'chaos', faction:'Chaos', name:'Chaos Legionary',
       body:'#26262c', limb:'#17171c', head:'#26262c', trim:'#b08a3e', eye:'#ff3b3b',
       speed:2.9, jump:12.6,
       special:{ name:'Doombolt', dmg:9, spd:9, r:12, color:'#ff8a66', glow:'#d62828', kb:6, life:95 },
@@ -337,7 +414,7 @@
             weapon:{ kind:'rifle', c1:'#1c1c20', glow:'#d62828' } }
     },
     worldeater: {
-      key:'worldeater', name:'Khorne Berzerker',
+      key:'worldeater', faction:'Chaos', name:'Khorne Berzerker',
       body:'#a02828', limb:'#6e1a1a', head:'#a02828', trim:'#c8963c', eye:'#ffdf4d',
       speed:3.4, jump:13,
       special:{ name:'Blood Fury', dmg:10, spd:10, r:11, color:'#ff6a5a', glow:'#c41f1f', kb:6.5, life:70 },
@@ -346,7 +423,7 @@
             weapon:{ kind:'axe', blade:'#b8bec9' } }
     },
     deathguard: {
-      key:'deathguard', name:'Plague Marine',
+      key:'deathguard', faction:'Chaos', name:'Plague Marine',
       body:'#7a8a4a', limb:'#565f33', head:'#7a8a4a', trim:'#8a6a2a', eye:'#b6ff4d',
       speed:2.4, jump:11.4,
       special:{ name:'Plague Spew', dmg:9, spd:6.5, r:16, color:'#cde06a', glow:'#8aa826', kb:5, life:120 },
@@ -355,7 +432,7 @@
             weapon:{ kind:'rifle', c1:'#4a4430', glow:'#b6ff4d' } }
     },
     tsons: {
-      key:'tsons', name:'Rubric Marine',
+      key:'tsons', faction:'Chaos', name:'Rubric Marine',
       body:'#2456b0', limb:'#183a78', head:'#2456b0', trim:'#ffd24a', eye:'#7ad0ff',
       speed:2.7, jump:12.4,
       special:{ name:'Warpflame', dmg:8, spd:9.5, r:12, color:'#9fdcff', glow:'#3c8aff', kb:5.5, life:95 },
@@ -364,7 +441,7 @@
             weapon:{ kind:'rifle', c1:'#1d3f7a', glow:'#7ad0ff' } }
     },
     noise: {
-      key:'noise', name:'Noise Marine',
+      key:'noise', faction:'Chaos', name:'Noise Marine',
       body:'#a03a9e', limb:'#6e2a6c', head:'#a03a9e', trim:'#1c1c24', eye:'#8affff',
       speed:3.2, jump:13.2,
       special:{ name:'Sonic Blast', dmg:8, spd:11, r:10, color:'#ffb0f2', glow:'#e050d8', kb:5, life:80 },
@@ -373,7 +450,7 @@
             weapon:{ kind:'rifle', c1:'#2a1c2e', glow:'#ff7ae8' } }
     },
     daemon: {
-      key:'daemon', name:'Bloodletter',
+      key:'daemon', faction:'Chaos', name:'Bloodletter',
       body:'#b22222', limb:'#8a1a1a', head:'#b22222', trim:'#1c1c1c', eye:'#ffd24a',
       speed:3.5, jump:13.8,
       special:{ name:'Hellfire', dmg:9, spd:9.5, r:12, color:'#ffb066', glow:'#ff5a1e', kb:5.5, life:85 },
@@ -382,7 +459,7 @@
             weapon:{ kind:'sword', blade:'#2a2026', glow:'#ff5a1e' } }
     },
     chaosknight: {
-      key:'chaosknight', name:'War Dog',
+      key:'chaosknight', faction:'Chaos', name:'War Dog',
       body:'#2c2430', limb:'#1c161f', head:'#4a3f52', trim:'#c02828', eye:'#ff4040',
       speed:2.3, jump:11.2,
       special:{ name:'Reaper Volley', dmg:12, spd:7, r:18, color:'#ff8a66', glow:'#c41f1f', kb:8, life:115 },
@@ -392,7 +469,7 @@
     },
     // ---- Xenos ----
     aeldari: {
-      key:'aeldari', name:'Guardian Defender',
+      key:'aeldari', faction:'Xenos', name:'Guardian Defender',
       body:'#3558b8', limb:'#25407e', head:'#e8e4d4', trim:'#ffd24a', eye:'#3affd4',
       speed:3.5, jump:14.2,
       special:{ name:'Shuriken Storm', dmg:6, spd:12.5, r:9, color:'#e8fcff', glow:'#7ae8ff', kb:3.5, life:65 },
@@ -401,7 +478,7 @@
             weapon:{ kind:'rifle', c1:'#ded8c4', glow:'#7ae8ff' } }
     },
     drukhari: {
-      key:'drukhari', name:'Kabalite Warrior',
+      key:'drukhari', faction:'Xenos', name:'Kabalite Warrior',
       body:'#2c2438', limb:'#1a1524', head:'#3a3050', trim:'#4dd0a0', eye:'#c4ff4d',
       speed:3.6, jump:13.8,
       special:{ name:'Splinter Storm', dmg:7, spd:11.5, r:9, color:'#d0a8ff', glow:'#8a4dff', kb:4, life:70 },
@@ -410,7 +487,7 @@
             weapon:{ kind:'rifle', c1:'#241c30', glow:'#c4ff4d' } }
     },
     ork: {
-      key:'ork', name:'Ork Boy',
+      key:'ork', faction:'Xenos', name:'Ork Boy',
       body:'#5a8a34', limb:'#4a7a2c', head:'#5a8a34', trim:'#c9c0a8', eye:'#ff3b3b',
       speed:3.0, jump:12.2,
       special:{ name:'Dakka Dakka', dmg:10, spd:8.5, r:14, color:'#ffb066', glow:'#ff6a3c', kb:7, life:85 },
@@ -419,7 +496,7 @@
             weapon:{ kind:'choppa', blade:'#9aa0aa' } }
     },
     tyranid: {
-      key:'tyranid', name:'Termagant',
+      key:'tyranid', faction:'Xenos', name:'Termagant',
       body:'#7a3a8a', limb:'#5c2a68', head:'#e0d4c0', trim:'#e0d4c0', eye:'#ff4d6a',
       speed:3.6, jump:14,
       special:{ name:'Bio-Plasma', dmg:8, spd:10, r:11, color:'#d6ff8a', glow:'#8ae83c', kb:4.5, life:75 },
@@ -428,7 +505,7 @@
             weapon:{ kind:'organic', c1:'#c9a0a8', glow:'#8ae83c' } }
     },
     gsc: {
-      key:'gsc', name:'Neophyte Hybrid',
+      key:'gsc', faction:'Xenos', name:'Neophyte Hybrid',
       body:'#4a5a9e', limb:'#38466e', head:'#b8a8d4', trim:'#d4c9e8', eye:'#1a1a2e',
       speed:3.1, jump:13,
       special:{ name:'Mining Laser', dmg:8, spd:11, r:9, color:'#fff2b0', glow:'#ffd24a', kb:4, life:75 },
@@ -437,7 +514,7 @@
             weapon:{ kind:'rifle', c1:'#38466e', glow:'#ffd24a' } }
     },
     votann: {
-      key:'votann', name:'Hearthkyn Warrior',
+      key:'votann', faction:'Xenos', name:'Hearthkyn Warrior',
       body:'#c9722c', limb:'#8a4e1c', head:'#8a9099', trim:'#2ee8a8', eye:'#2ee8a8',
       speed:2.5, jump:11.4,
       special:{ name:'Ion Blast', dmg:10, spd:8, r:13, color:'#b0ffe4', glow:'#2ee8a8', kb:6.5, life:95 },
@@ -446,7 +523,7 @@
             weapon:{ kind:'rifle', c1:'#5a4a38', glow:'#2ee8a8' } }
     },
     tau: {
-      key:'tau', name:'Pathfinder',
+      key:'tau', faction:'Xenos', name:'Pathfinder',
       body:'#2b6fb0', limb:'#1d4a78', head:'#d8c79a', trim:'#ffce4a', eye:'#0a2540',
       speed:2.7, jump:12.4,
       special:{ name:'Pulse Blast', dmg:9, spd:8, r:16, color:'#ffe07a', glow:'#ffce4a', kb:7, life:105 },
@@ -455,7 +532,7 @@
             weapon:{ kind:'rifle', c1:'#1d4a78', glow:'#8ad0ff' } }
     },
     necron: {
-      key:'necron', name:'Necron Warrior',
+      key:'necron', faction:'Xenos', name:'Necron Warrior',
       body:'#9aa5af', limb:'#69737d', head:'#b4bec7', trim:'#39ff8e', eye:'#39ff8e',
       speed:2.8, jump:12.8,
       special:{ name:'Gauss Beam', dmg:8, spd:10.5, r:11, color:'#7dffb8', glow:'#39ff8e', kb:5, life:85 },
@@ -465,7 +542,7 @@
     },
     // ---- guest hunters ----
     predator: {
-      key:'predator', name:'Predator',
+      key:'predator', faction:'Hunter', name:'Predator',
       body:'#5d6b34', limb:'#3f4a25', head:'#7b8a45', trim:'#b9d94a', eye:'#ff3b3b',
       speed:3.1, jump:13.2,
       special:{ name:'Plasma Bolt', dmg:8, spd:9.5, r:13, color:'#bdecff', glow:'#7fe0ff', kb:5.5, life:95 },
@@ -473,7 +550,7 @@
       art:{ helm:'predator', back:'cannon', decor:'predator' }
     },
     alien: {
-      key:'alien', name:'Xenomorph',
+      key:'alien', faction:'Hunter', name:'Xenomorph',
       body:'#1f2533', limb:'#0c0f18', head:'#2a3146', trim:'#9fb0cf', eye:'#c6ff4d',
       speed:3.7, jump:14,
       special:{ name:'Acid Spit', dmg:7, spd:11.5, r:10, color:'#d6ff66', glow:'#b6f23a', kb:3.5, life:62 },
@@ -492,14 +569,18 @@
     heavy:       { startup:7, active:4, recovery:18, dmg:10, kb:6.2, reach:86, cy:72, halfH:30, hit:'mid',  knockdown:false, stun:18 },
     crouchLight: { startup:3, active:3, recovery:9,  dmg:4,  kb:2.6, reach:66, cy:40, halfH:20, hit:'mid',  knockdown:false, stun:11 },
     sweep:       { startup:6, active:4, recovery:20, dmg:9,  kb:4.5, reach:90, cy:18, halfH:18, hit:'low',  knockdown:true,  stun:16 },
-    air:         { startup:3, active:7, recovery:8,  dmg:8,  kb:4.0, reach:62, cy:60, halfH:34, hit:'over', knockdown:false, stun:15 }
+    air:         { startup:3, active:7, recovery:8,  dmg:8,  kb:4.0, reach:62, cy:60, halfH:34, hit:'over', knockdown:false, stun:15 },
+    // command moves: uppercut = hold UP + punch · strong punch = hold kick + punch · dropkick = kick in the air
+    uppercut:    { startup:5, active:5, recovery:16, dmg:12, kb:3.0, reach:52, cy:84, halfH:52, hit:'mid',  knockdown:true,  stun:22, launch:true },
+    strong:      { startup:10, active:5, recovery:22, dmg:14, kb:8.5, reach:80, cy:70, halfH:30, hit:'mid', knockdown:false, stun:20 },
+    dropkick:    { startup:4, active:10, recovery:10, dmg:11, kb:8.0, reach:66, cy:58, halfH:36, hit:'over', knockdown:true, stun:18 }
   };
 
   // ======================= world =======================
   var W = 900, H = 520, GROUND = 462;
   var WALL_L = 56, WALL_R = W - 56;
   var BODY_HW = 22;
-  var MAX_HP = 100, ROUND_TIME = 99, WINS_NEEDED = 2;
+  var MAX_HP = 120, ROUND_TIME = 99, WINS_NEEDED = 2;
   var METER_MAX = 100, METER_PASSIVE = 0.14;
   var GRAV = 0.62;
   // combos: chain hits before the window lapses; later hits scale down so a string
@@ -514,19 +595,38 @@
   fit(); window.addEventListener('resize', fit);
 
   // ======================= state =======================
-  var fighters = null, shots = [], particles = [], embers = [];
+  var fighters = null, shots = [], particles = [], embers = [], decals = [];
   var gstate = 'select';
   var stateT = 0, round = 1, timeLeft = ROUND_TIME*60, hitstop = 0, shake = 0;
   var banner = null, gtick = 0, superFlash = 0;
   var sel = [ 'marine', 'ork' ], onePlayer = true;
 
-  function newFighter(charKey, startX, face, cpu){
+  // career attributes (1..10 each) → combat multipliers. No attrs = all neutral,
+  // so 1P/2P quick matches play exactly as before.
+  function attrMods(a){
+    a = a || {};
+    function g(k){ return clamp(a[k] || 1, 1, 10); }
+    return {
+      dmgMul:   1 + 0.08 * (g('strength') - 1),               // hit harder
+      spdMul:   1 + 0.05 * (g('agility') - 1),                // move & jump quicker
+      defMul:   Math.max(0.55, 1 - 0.05 * (g('toughness') - 1)),  // take less damage
+      atkCdMax: Math.max(14, 30 - 2 * (g('stamina') - 1)),    // attack more often
+      hpMax:    MAX_HP + 8 * (g('health') - 1),               // bigger health bar
+      spDmgMul: 1 + 0.08 * (g('special') - 1),                // scarier super
+      mtrMul:   1 + 0.05 * (g('special') - 1)                 // meter builds faster
+    };
+  }
+  function newFighter(charKey, startX, face, cpu, attrs){
+    var m = attrMods(attrs);
     return {
       char:charKey, x:startX, y:GROUND, vx:0, vy:0, face:face, onGround:true,
-      hp:MAX_HP, meter:0, wins:0, cpu:!!cpu,
+      hp:m.hpMax, hpMax:m.hpMax, meter:0, wins:0, cpu:!!cpu,
+      dmgMul:m.dmgMul, defMul:m.defMul, spdMul:m.spdMul,
+      spDmgMul:m.spDmgMul, mtrMul:m.mtrMul,
       state:'idle', stateT:0, crouch:false, blocking:false,
       move:null, moveT:0, hasHit:false, walkF:0,
       hitstun:0, blockstun:0, flash:0, spCd:0,
+      atkCd:0, atkCdMax:m.atkCdMax, secondWind:false, jumpT:0,
       combo:0, comboTimer:0,
       ai:{ t:0, plan:'approach' }, name:''
     };
@@ -586,18 +686,23 @@
            p.state!=='special';
   }
   function faceOpponent(p, foe){ if (p.onGround && p.state!=='attack' && p.state!=='special') p.face = (foe.x >= p.x) ? 1 : -1; }
-  function gainMeter(p, amt){ if (p && p.state!=='ko') p.meter = clamp(p.meter + amt, 0, METER_MAX); }
+  function gainMeter(p, amt){ if (p && p.state!=='ko') p.meter = clamp(p.meter + amt * (p.mtrMul || 1), 0, METER_MAX); }
 
   function startMove(p, name){
     p.state='attack'; p.move = MOVES[name]; p.moveT=0; p.hasHit=false;
     if (p.onGround) p.vx = 0;
   }
   function tryAttack(p, kind){
-    if (!actionable(p)) return;
-    if (!p.onGround) { startMove(p, 'air'); return; }
-    if (kind==='light') startMove(p, p.crouch ? 'crouchLight' : 'light');
+    if (!actionable(p)) return false;
+    if (p.atkCd > 0) return false;                   // half a second between attacks — no spamming!
+    p.atkCd = p.atkCdMax || 30;
+    if (!p.onGround) { startMove(p, kind==='heavy' ? 'dropkick' : 'air'); return true; }
+    if (kind==='strong') startMove(p, 'strong');
+    else if (kind==='uppercut') startMove(p, 'uppercut');
+    else if (kind==='light') startMove(p, p.crouch ? 'crouchLight' : 'light');
     else startMove(p, p.crouch ? 'sweep' : 'heavy');
     gainMeter(p, 1.5);
+    return true;
   }
   function trySpecial(p){
     if (!actionable(p) || !p.onGround || p.spCd>0) return;
@@ -632,11 +737,13 @@
     att.combo = (att.comboTimer > 0) ? att.combo + 1 : 1;
     att.comboTimer = COMBO_WINDOW;
     def.combo = 0; def.comboTimer = 0;               // getting hit ends your own combo
-    var dmg = Math.max(1, Math.round(mv.dmg * comboScale(att.combo)));
+    var dmg = Math.max(1, Math.round(mv.dmg * comboScale(att.combo) * (att.dmgMul || 1) * (def.defMul || 1)));
     def.hp = Math.max(0, def.hp - dmg);
     def.hitstun = mv.stun; def.state = 'hit'; def.move = null; def.blocking=false;
     def.vx = att.face * mv.kb;
-    if (mv.knockdown) { def.vy = -7.5; def.onGround=false; def.state='down'; def.hitstun = mv.stun+18; }
+    if (mv.knockdown) { def.vy = mv.launch ? -11.5 : -7.5; def.onGround=false; def.state='down'; def.hitstun = mv.stun+18; }
+    // blood stains the arena floor and stays there for the round
+    if (decals.length < 44) decals.push({ x: def.x + EL.rnd(-26, 26), y: GROUND + EL.rnd(3, 15), r: EL.rnd(3, 6 + mv.dmg*0.4), color: 'rgba(150,22,26,0.5)' });
     // cap an over-long string with a hard knockdown so combos can't loop forever
     if (att.combo >= COMBO_MAX && !mv.knockdown) { def.vy = -7.5; def.onGround=false; def.state='down'; def.hitstun = mv.stun+18; }
     if (att.combo >= 2) comboFx = { i: (att===fighters[0]?0:1), n: att.combo, t: 0 };
@@ -668,7 +775,7 @@
     var sp = ps.sp, su = ps.isSuper, fin = ps.isFinisher;
     var r = fin ? sp.r*2.7 : (su ? sp.r*1.9 : sp.r);
     shots.push({ x:p.x + p.face*42, y:p.y-74, vx:p.face*(fin?sp.spd*0.8:(su?sp.spd*0.92:sp.spd)), r:r,
-                 dmg: fin?sp.dmg+26:(su?sp.dmg+10:sp.dmg), kb: fin?sp.kb+6:(su?sp.kb+3:sp.kb),
+                 dmg: Math.round((fin?sp.dmg+26:(su?sp.dmg+10:sp.dmg)) * (p.spDmgMul || 1)), kb: fin?sp.kb+6:(su?sp.kb+3:sp.kb),
                  color: fin?'#fff7d6':ps.color, glow: fin?'#ffd24a':ps.glow,
                  owner:p, life: fin?sp.life+60:(su?sp.life+30:sp.life), t:0, isSuper:su, isFinisher:fin, knockdown:su||fin });
     shake = Math.min(shake+(fin?11:(su?7:3)), fin?16:12);
@@ -715,6 +822,7 @@
       case 'jumpin':   o[toward]=true; o.up=true; break;
       case 'special':  if (ready) { o.special=true; p.ai.plan='approach'; p.ai.t=14; } else { o[toward]=true; } break;
       case 'attack':
+        if (p.atkCd > 0) { o[ad<80 ? away : toward]=true; break; }   // attack on cooldown — reposition
         if (ad<96) { var k=Math.random(); if (k<0.4) o.light=true; else if (k<0.72) o.heavy=true; else { o.down=true; o.heavy=true; } p.ai.plan='approach'; p.ai.t=EL.rint(8,16); }
         else o[toward]=true; break;
     }
@@ -725,6 +833,7 @@
   function stepFighter(p, foe, control){
     if (p.flash>0) p.flash--;
     if (p.spCd>0) p.spCd--;
+    if (p.atkCd>0) p.atkCd--;
     if (p.hitstun>0) p.hitstun--;
     if (p.comboTimer>0) { p.comboTimer--; if (p.comboTimer===0) p.combo=0; }
     if (p.blockstun>0) { p.blockstun--; if (p.blockstun===0 && p.state!=='ko') p.state='idle'; }
@@ -768,23 +877,26 @@
     if (p.onGround) {
       p.crouch = !!control.down;
       p.blocking = !!holdBack;
-      if (control.up) { p.vy = -c.jump; p.onGround=false; p.state='jump'; p.crouch=false; p.blocking=false; }
+      // tiny jump delay leaves a window to press UP+punch for the uppercut
+      if (control.up) { p.jumpT = (p.jumpT || 0) + 1; } else p.jumpT = 0;
+      if (control.up && p.jumpT >= 4) { p.jumpT = 0; p.vy = -c.jump * (p.spdMul || 1); p.onGround=false; p.state='jump'; p.crouch=false; p.blocking=false; }
       else if (!p.crouch && !p.blocking) {
         var mvx = 0; if (control.left) mvx -= 1; if (control.right) mvx += 1;
-        p.vx = mvx * c.speed; p.x += p.vx;
+        p.vx = mvx * c.speed * (p.spdMul || 1); p.x += p.vx;
         p.state = mvx!==0 ? 'walk' : 'idle';
         p.walkF = (mvx!==0) ? p.walkF + Math.abs(c.speed) : 0;
         if (mvx!==0 && Math.random()<0.12) dust(p.x - p.face*10, GROUND, 1);
       } else { p.state = p.crouch ? 'crouch' : 'block'; p.vx = 0; }
     } else {
       var ax = 0; if (control.left) ax -= 1; if (control.right) ax += 1;
-      p.vx += ax*0.25; p.vx = clamp(p.vx, -c.speed*1.4, c.speed*1.4); p.x += p.vx;
+      p.vx += ax*0.25; p.vx = clamp(p.vx, -c.speed*1.4*(p.spdMul||1), c.speed*1.4*(p.spdMul||1)); p.x += p.vx;
       if (p.state!=='attack') p.state='jump';
     }
 
     var i = p.idx;
     if (pressed(i,'special')) trySpecial(p);
-    else if (pressed(i,'light')) tryAttack(p,'light');
+    else if ((pressed(i,'light') && control.heavy) || (pressed(i,'heavy') && control.light)) tryAttack(p,'strong');   // punch+kick chord
+    else if (pressed(i,'light')) tryAttack(p, (control.up && p.onGround) ? 'uppercut' : 'light');                     // UP+punch = uppercut
     else if (pressed(i,'heavy')) tryAttack(p,'heavy');
     clampX(p);
   }
@@ -797,8 +909,13 @@
   }
 
   // ======================= round / match flow =======================
-  function beginMatch(){
-    fighters = [ newFighter(sel[0], 300, 1, false), newFighter(sel[1], 600, -1, onePlayer) ];
+  function beginMatch(attrs0, attrs1){
+    // fight somewhere that fits the fighters — career away-games happen on the foe's turf
+    var homeOf = function(i){ return FACTION_STAGE[CHARS[sel[i]].faction] || 'city'; };
+    stageKey = careerActive ? homeOf(1)
+             : (Math.random() < 0.2 ? 'city' : homeOf(Math.random() < 0.5 ? 0 : 1));
+    bgCache = null; vgCache = null; embers = [];
+    fighters = [ newFighter(sel[0], 300, 1, false, attrs0), newFighter(sel[1], 600, -1, onePlayer, attrs1) ];
     fighters[0].idx = 0; fighters[1].idx = 1;
     fighters[0].name = pname(0, 'Player 1');
     fighters[1].name = onePlayer ? CHARS[sel[1]].name + ' (CPU)' : pname(1, 'Player 2');
@@ -806,6 +923,8 @@
     drawPortraits();
     document.getElementById('hudn0').textContent = fighters[0].name;
     document.getElementById('hudn1').textContent = fighters[1].name;
+    document.getElementById('hudf0').textContent = CHARS[sel[0]].faction || '';
+    document.getElementById('hudf1').textContent = CHARS[sel[1]].faction || '';
     nextRound();
   }
   function nextRound(){
@@ -813,13 +932,14 @@
     var sx=[300,600], fc=[1,-1];
     fighters.forEach(function(p,i){
       p.x=sx[i]; p.y=GROUND; p.vx=0; p.vy=0; p.face=fc[i]; p.onGround=true;
-      p.hp=MAX_HP; p.meter=0; p.state='idle'; p.move=null; p.hitstun=0; p.blockstun=0; p.spCd=0;
+      p.hp=p.hpMax; p.meter=0; p.state='idle'; p.move=null; p.hitstun=0; p.blockstun=0; p.spCd=0; p.atkCd=0;
+      p.secondWind=false; p.jumpT=0;
       p.crouch=false; p.blocking=false; p.flash=0; p.walkF=0; p.ai.t=0; p.ai.plan='approach';
       p.combo=0; p.comboTimer=0;
     });
     comboFx=null; finishFx=0;
-    shots=[]; particles=[]; timeLeft = ROUND_TIME*60;
-    banner = { text:'ROUND '+round, color:'#ffe8b0', sub:null, t:0 };
+    shots=[]; particles=[]; decals=[]; timeLeft = ROUND_TIME*60;
+    banner = { text:'ROUND '+round, color:'#ffe8b0', sub: round===1 ? (STAGES[stageKey]||STAGES.city).nm : null, t:0 };
     gstate='intro'; stateT=0; updateHUD();
   }
   function endRound(winnerIdx, reason){
@@ -833,7 +953,9 @@
   function afterRound(){
     var w0=fighters[0].wins, w1=fighters[1].wins;
     if (w0>=WINS_NEEDED || w1>=WINS_NEEDED) {
-      var wi = w0>w1?0:1; gstate='matchend';
+      var wi = w0>w1?0:1;
+      if (careerActive) { careerFinish(wi); gstate='select'; fighters=null; openCareer(); return; }
+      gstate='matchend';
       document.getElementById('winName').textContent = fighters[wi].name;
       document.getElementById('winName').style.color = wi===0?'#36d1dc':'#e94560';
       document.getElementById('winSub').textContent = 'wins '+w0+' – '+w1+'!';
@@ -868,6 +990,20 @@
     separate(a,b); stepShots(); stepParticles();
     gainMeter(a, METER_PASSIVE); gainMeter(b, METER_PASSIVE);
 
+    // a first "knockout" only knocks you DOWN — you dig deep and get back up once
+    // per round. Only the second one is a real KO, so finishes are earned.
+    [a, b].forEach(function(p){
+      if (p.hp <= 0 && !p.secondWind) {
+        p.secondWind = true;
+        p.hp = Math.round((p.hpMax || MAX_HP) * 0.3);
+        p.state = 'down'; p.vy = -8; p.onGround = false; p.hitstun = 42;
+        p.combo = 0; p.comboTimer = 0;
+        banner = { text: (p.name || CHARS[p.char].name).toUpperCase() + ' GETS BACK UP!', color: '#ffd24a', sub: null, t: 0, ttl: 80 };
+        burst(p.x, p.y - 70, '#ffd24a', 18);
+        shake = Math.min(shake + 8, 14);
+      }
+    });
+    if (banner && banner.ttl) { banner.ttl--; if (banner.ttl <= 0) banner = null; }
     if (a.hp<=0 || b.hp<=0){
       if (a.hp<=0){ a.state='ko'; a.vy=-6; a.onGround=false; }
       if (b.hp<=0){ b.state='ko'; b.vy=-6; b.onGround=false; }
@@ -882,7 +1018,7 @@
   function updateHUD(){
     if (!fighters) return;
     for (var i=0;i<2;i++){
-      var f=fighters[i], hpct=f.hp/MAX_HP*100;
+      var f=fighters[i], hpct=f.hp/(f.hpMax||MAX_HP)*100;
       document.getElementById('hp'+i).style.width = hpct+'%';
       document.getElementById('chip'+i).style.width = hpct+'%';
       var mpct=f.meter/METER_MAX*100, ready=f.meter>=METER_MAX;
@@ -916,10 +1052,11 @@
     ctx.save();
     if (shake>0.1){ ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake); shake=Math.max(0,shake-0.6); }
     drawArena();
+    // blood on the canvas floor sticks around all round
+    decals.forEach(function(d){ ctx.fillStyle = d.color; ctx.beginPath(); ctx.ellipse(d.x, d.y, d.r*1.6, d.r*0.55, 0, 0, 7); ctx.fill(); });
     if (fighters){
-      fighters.forEach(drawShadow);
       var order = fighters[0].y <= fighters[1].y ? [0,1] : [1,0];
-      order.forEach(function(i){ drawFighter(ctx, fighters[i], fighters[i].char); });
+      order.forEach(function(i){ drawFighter(ctx, fighters[i], fighters[i].char); drawBattleDamage(fighters[i]); });
     }
     shots.forEach(drawShot);
     particles.forEach(drawParticle);
@@ -928,6 +1065,29 @@
     if (finishFx>0) drawFinishFx();
     drawVignette();
     if (banner) drawBanner();
+    ctx.restore();
+  }
+
+  // the more beat up you are, the bloodier you look
+  function drawBattleDamage(p){
+    var ratio = p.hp / (p.hpMax || MAX_HP);
+    var hurt = 1 - ratio;
+    if (hurt <= 0.3) return;
+    var top = bodyTop(p);
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.85, (hurt - 0.3) * 1.6);
+    ctx.fillStyle = '#a01820';
+    // seeded-looking splotches: head cut, shoulder, torso
+    ctx.beginPath(); ctx.arc(p.x + p.face*6, top + 14, 3.4, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x - p.face*9, top + 38, 4.2, 0, 7); ctx.fill();
+    if (hurt > 0.55) {
+      ctx.beginPath(); ctx.arc(p.x + p.face*4, top + 58, 5, 0, 7); ctx.fill();
+      ctx.fillRect(p.x + p.face*6 - 1, top + 16, 2, 12);   // drip from the head cut
+    }
+    if (hurt > 0.75) {
+      ctx.beginPath(); ctx.arc(p.x - p.face*5, top + 78, 5.6, 0, 7); ctx.fill();
+      ctx.fillRect(p.x - p.face*9 - 1, top + 41, 2, 16);
+    }
     ctx.restore();
   }
 
@@ -940,9 +1100,154 @@
   // offscreen canvases. Redrawing them per frame (~700 fillRects + several gradient
   // allocations) caused GC hitches — the intermittent "pauses".
   var bgCache = null, vgCache = null;
+  // ---- themed stages: each fight happens somewhere that LOOKS like its fighters ----
+  var STAGES = {
+    city:      { nm: 'Midnight City',      ember: '#ffb46a' },
+    cathedral: { nm: 'Imperial Cathedral', ember: '#ffd98a' },
+    warp:      { nm: 'Chaos Wastes',       ember: '#ff6a3c' },
+    alien:     { nm: 'Alien World',        ember: '#8affc0' },
+    jungle:    { nm: 'Hunting Grounds',    ember: '#b9ff7a' }
+  };
+  var FACTION_STAGE = { 'Imperium of Man': 'cathedral', 'Chaos': 'warp', 'Xenos': 'alien', 'Hunter': 'jungle' };
+  var stageKey = 'city';
+
+  function paintCathedral(g){
+    // vast dark nave, stained glass, candle light — simple and holy
+    var sky = g.createLinearGradient(0,0,0,GROUND);
+    sky.addColorStop(0,'#0d1026'); sky.addColorStop(1,'#26203c');
+    g.fillStyle=sky; g.fillRect(0,0,W,GROUND);
+    // stained-glass windows
+    for (var i=0;i<4;i++){
+      var wx = 90 + i*210, wy = 46, ww = 92, wh = 240;
+      g.fillStyle='#0a0c1e'; g.fillRect(wx-8, wy-8, ww+16, wh+30);
+      var cols = [['#b03a4a','#3a58b0'],['#b08a3a','#3ab06a'],['#7a3ab0','#b03a4a'],['#3a58b0','#b08a3a']][i];
+      var wg = g.createLinearGradient(0,wy,0,wy+wh); wg.addColorStop(0,cols[0]); wg.addColorStop(1,cols[1]);
+      g.globalAlpha=0.75; g.fillStyle=wg;
+      g.beginPath(); g.moveTo(wx,wy+40); g.quadraticCurveTo(wx+ww/2, wy-34, wx+ww, wy+40); g.lineTo(wx+ww, wy+wh); g.lineTo(wx, wy+wh); g.closePath(); g.fill();
+      g.globalAlpha=1;
+      g.strokeStyle='#0a0c1e'; g.lineWidth=5;
+      g.beginPath(); g.moveTo(wx+ww/2, wy-10); g.lineTo(wx+ww/2, wy+wh); g.stroke();
+      g.beginPath(); g.moveTo(wx, wy+wh*0.45); g.lineTo(wx+ww, wy+wh*0.45); g.stroke();
+      // light falling from the window
+      g.globalAlpha=0.08; g.fillStyle=cols[0];
+      g.beginPath(); g.moveTo(wx, wy+wh); g.lineTo(wx+ww, wy+wh); g.lineTo(wx+ww+70, GROUND); g.lineTo(wx-70, GROUND); g.closePath(); g.fill();
+      g.globalAlpha=1;
+    }
+    // candle rows
+    for (var c=0;c<12;c++){
+      var cx = 40 + c*74, cy = GROUND-26;
+      g.fillStyle='#d8cfae'; g.fillRect(cx-2, cy, 4, 16);
+      var cg = g.createRadialGradient(cx, cy-6, 1, cx, cy-6, 26);
+      cg.addColorStop(0,'rgba(255,214,120,0.8)'); cg.addColorStop(1,'rgba(255,214,120,0)');
+      g.fillStyle=cg; g.beginPath(); g.arc(cx, cy-6, 26, 0, 7); g.fill();
+      g.fillStyle='#ffd870'; g.beginPath(); g.arc(cx, cy-8, 3, 0, 7); g.fill();
+    }
+    // stone floor
+    var gr = g.createLinearGradient(0,GROUND,0,H); gr.addColorStop(0,'#3c3a45'); gr.addColorStop(1,'#191722');
+    g.fillStyle=gr; g.fillRect(0,GROUND,W,H-GROUND);
+    g.strokeStyle='rgba(0,0,0,0.3)'; g.lineWidth=2;
+    for (var fx=0; fx<=W; fx+=90){ g.beginPath(); g.moveTo(fx,GROUND); g.lineTo(fx-30,H); g.stroke(); }
+    g.beginPath(); g.moveTo(0,GROUND+26); g.lineTo(W,GROUND+26); g.stroke();
+    g.strokeStyle='rgba(255,214,120,0.35)'; g.lineWidth=3; g.beginPath(); g.moveTo(0,GROUND); g.lineTo(W,GROUND); g.stroke();
+  }
+  function paintWarp(g){
+    // blood sky, black sun, spiked wasteland — obviously Chaos
+    var sky = g.createLinearGradient(0,0,0,GROUND);
+    sky.addColorStop(0,'#3a0a12'); sky.addColorStop(0.6,'#7a1420'); sky.addColorStop(1,'#b0402a');
+    g.fillStyle=sky; g.fillRect(0,0,W,GROUND);
+    // black sun with sickly corona
+    var mx=W/2, my=110;
+    var cg = g.createRadialGradient(mx,my,30,mx,my,150);
+    cg.addColorStop(0,'rgba(255,120,60,0.55)'); cg.addColorStop(1,'rgba(255,120,60,0)');
+    g.fillStyle=cg; g.beginPath(); g.arc(mx,my,150,0,7); g.fill();
+    g.fillStyle='#12060a'; g.beginPath(); g.arc(mx,my,52,0,7); g.fill();
+    // eight arrows of chaos around the sun
+    g.strokeStyle='rgba(255,120,60,0.7)'; g.lineWidth=4;
+    for (var a=0;a<8;a++){ var an=a*Math.PI/4;
+      g.beginPath(); g.moveTo(mx+Math.cos(an)*58, my+Math.sin(an)*58); g.lineTo(mx+Math.cos(an)*84, my+Math.sin(an)*84); g.stroke(); }
+    // jagged mountains
+    g.fillStyle='#1c0a10';
+    g.beginPath(); g.moveTo(0,GROUND);
+    for (var x=0;x<=W;x+=60){ g.lineTo(x+30, GROUND-70-((x*73)%110)); g.lineTo(x+60, GROUND); }
+    g.closePath(); g.fill();
+    // ground: scorched with lava cracks
+    var gr = g.createLinearGradient(0,GROUND,0,H); gr.addColorStop(0,'#2a1414'); gr.addColorStop(1,'#120708');
+    g.fillStyle=gr; g.fillRect(0,GROUND,W,H-GROUND);
+    g.strokeStyle='rgba(255,110,40,0.5)'; g.lineWidth=2;
+    for (var k=0;k<7;k++){ var lx=(k*151)%W; g.beginPath(); g.moveTo(lx,GROUND+6);
+      g.lineTo(lx+18,GROUND+18); g.lineTo(lx+6,GROUND+30); g.lineTo(lx+26,GROUND+44); g.stroke(); }
+    // spikes on the horizon floor
+    g.fillStyle='#1c0a10';
+    for (var s=0;s<6;s++){ var sx2=(s*167+40)%W; g.beginPath(); g.moveTo(sx2-8,GROUND); g.lineTo(sx2,GROUND-42-(s%3)*14); g.lineTo(sx2+8,GROUND); g.closePath(); g.fill(); }
+    g.strokeStyle='rgba(255,110,40,0.45)'; g.lineWidth=3; g.beginPath(); g.moveTo(0,GROUND); g.lineTo(W,GROUND); g.stroke();
+  }
+  function paintAlien(g){
+    // green sky, twin moons, glowing crystals — an unmistakably alien world
+    var sky = g.createLinearGradient(0,0,0,GROUND);
+    sky.addColorStop(0,'#04241e'); sky.addColorStop(0.6,'#0a4436'); sky.addColorStop(1,'#12604a');
+    g.fillStyle=sky; g.fillRect(0,0,W,GROUND);
+    for (var s=0;s<50;s++){ var sx=(s*173)%W, sy=(s*67)%(GROUND-140); g.globalAlpha=0.3+0.4*((s*3)%4)/4; g.fillStyle='#c0ffe8'; g.fillRect(sx,sy,1.5,1.5); }
+    g.globalAlpha=1;
+    // twin moons
+    g.fillStyle='#d8ffe0'; g.beginPath(); g.arc(W-170, 90, 34, 0, 7); g.fill();
+    g.fillStyle='#9adfc0'; g.beginPath(); g.arc(W-92, 140, 18, 0, 7); g.fill();
+    // crystal clusters
+    function crystal(cx, ch, w){
+      var grd = g.createLinearGradient(cx,GROUND-ch,cx,GROUND);
+      grd.addColorStop(0,'#c08aff'); grd.addColorStop(1,'#5a2a9a');
+      g.fillStyle=grd;
+      g.beginPath(); g.moveTo(cx-w,GROUND); g.lineTo(cx,GROUND-ch); g.lineTo(cx+w,GROUND); g.closePath(); g.fill();
+      g.globalAlpha=0.35; g.fillStyle='#e8d0ff';
+      g.beginPath(); g.moveTo(cx-w*0.3,GROUND); g.lineTo(cx,GROUND-ch*0.92); g.lineTo(cx+w*0.12,GROUND); g.closePath(); g.fill();
+      g.globalAlpha=1;
+    }
+    crystal(90,150,26); crystal(150,90,18); crystal(W-110,180,30); crystal(W-190,100,20); crystal(W/2+130,70,14);
+    // ground: mossy alien soil
+    var gr = g.createLinearGradient(0,GROUND,0,H); gr.addColorStop(0,'#1a4034'); gr.addColorStop(1,'#0a1c14');
+    g.fillStyle=gr; g.fillRect(0,GROUND,W,H-GROUND);
+    g.fillStyle='rgba(140,255,190,0.15)';
+    for (var p2=0;p2<24;p2++){ var px=(p2*113)%W, py=GROUND+6+((p2*37)%(H-GROUND-12)); g.beginPath(); g.arc(px,py,2.4,0,7); g.fill(); }
+    g.strokeStyle='rgba(140,255,190,0.4)'; g.lineWidth=3; g.beginPath(); g.moveTo(0,GROUND); g.lineTo(W,GROUND); g.stroke();
+  }
+  function paintJungle(g){
+    // deep jungle night — layered trees, vines, a fat moon. Predator country.
+    var sky = g.createLinearGradient(0,0,0,GROUND);
+    sky.addColorStop(0,'#06121c'); sky.addColorStop(1,'#123024');
+    g.fillStyle=sky; g.fillRect(0,0,W,GROUND);
+    var mx=140,my=100;
+    var mg=g.createRadialGradient(mx,my,10,mx,my,110); mg.addColorStop(0,'rgba(230,255,220,0.5)'); mg.addColorStop(1,'rgba(230,255,220,0)');
+    g.fillStyle=mg; g.beginPath(); g.arc(mx,my,110,0,7); g.fill();
+    g.fillStyle='#e8f5d8'; g.beginPath(); g.arc(mx,my,40,0,7); g.fill();
+    // far tree wall
+    g.fillStyle='rgba(8,26,18,0.85)';
+    for (var t=0;t<10;t++){ var tx=t*96-20, th=180+((t*77)%120);
+      g.fillRect(tx+34, GROUND-th, 16, th);
+      g.beginPath(); g.arc(tx+42, GROUND-th, 52, 0, 7); g.fill();
+      g.beginPath(); g.arc(tx+8, GROUND-th+40, 40, 0, 7); g.fill();
+      g.beginPath(); g.arc(tx+80, GROUND-th+36, 44, 0, 7); g.fill();
+    }
+    // hanging vines
+    g.strokeStyle='rgba(30,70,44,0.9)'; g.lineWidth=3;
+    for (var v2=0;v2<9;v2++){ var vx=(v2*109+30)%W, vl=60+((v2*53)%110);
+      g.beginPath(); g.moveTo(vx,0); g.quadraticCurveTo(vx+10, vl*0.6, vx-4, vl); g.stroke();
+      g.fillStyle='rgba(50,110,60,0.9)'; g.beginPath(); g.arc(vx-4, vl, 5, 0, 7); g.fill(); }
+    // jungle floor
+    var gr = g.createLinearGradient(0,GROUND,0,H); gr.addColorStop(0,'#1c3020'); gr.addColorStop(1,'#0a140c');
+    g.fillStyle=gr; g.fillRect(0,GROUND,W,H-GROUND);
+    // grass tufts
+    g.strokeStyle='rgba(80,160,90,0.5)'; g.lineWidth=2;
+    for (var gt=0;gt<40;gt++){ var gx=(gt*61)%W, gy=GROUND+4+((gt*29)%(H-GROUND-10));
+      g.beginPath(); g.moveTo(gx,gy); g.lineTo(gx-3,gy-7); g.moveTo(gx,gy); g.lineTo(gx+3,gy-8); g.stroke(); }
+    g.strokeStyle='rgba(120,200,110,0.35)'; g.lineWidth=3; g.beginPath(); g.moveTo(0,GROUND); g.lineTo(W,GROUND); g.stroke();
+  }
+
   function buildStatics(){
     bgCache = document.createElement('canvas'); bgCache.width=W*dpr; bgCache.height=H*dpr;
     var g = bgCache.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+    if (stageKey === 'cathedral') { paintCathedral(g); buildVignette(); return; }
+    if (stageKey === 'warp')      { paintWarp(g); buildVignette(); return; }
+    if (stageKey === 'alien')     { paintAlien(g); buildVignette(); return; }
+    if (stageKey === 'jungle')    { paintJungle(g); buildVignette(); return; }
     // sky
     var sky = g.createLinearGradient(0,0,0,GROUND);
     sky.addColorStop(0,'#150f2b'); sky.addColorStop(0.55,'#2a1b4d'); sky.addColorStop(1,'#5a2a63');
@@ -978,7 +1283,9 @@
     // center spotlight
     var sp=g.createRadialGradient(W/2,GROUND,40,W/2,GROUND,360); sp.addColorStop(0,'rgba(255,240,210,0.10)'); sp.addColorStop(1,'rgba(255,240,210,0)');
     g.fillStyle=sp; g.fillRect(0,GROUND-200,W,H-GROUND+200);
-    // vignette overlay
+    buildVignette();
+  }
+  function buildVignette(){
     vgCache = document.createElement('canvas'); vgCache.width=W*dpr; vgCache.height=H*dpr;
     var vg = vgCache.getContext('2d'); vg.setTransform(dpr,0,0,dpr,0,0);
     var v=vg.createRadialGradient(W/2,H/2,H*0.35,W/2,H/2,H*0.75);
@@ -990,18 +1297,13 @@
     ctx.drawImage(bgCache, 0, 0, W, H);
     // embers stay live (ambient motion)
     if (embers.length<26){ embers.push({ x:EL.rnd(0,W), y:EL.rnd(0,GROUND), vy:EL.rnd(-0.6,-0.2), r:EL.rnd(0.8,2.2), a:EL.rnd(0.2,0.7) }); }
-    ctx.fillStyle='#ffb46a';
+    ctx.fillStyle=(STAGES[stageKey]||STAGES.city).ember;
     embers.forEach(function(e){ e.y+=e.vy; e.x+=Math.sin((gtick+e.r*40)*0.02)*0.3; if (e.y<-4){ e.y=GROUND+4; e.x=EL.rnd(0,W); } ctx.globalAlpha=e.a*(0.6+0.4*Math.sin(gtick*0.05+e.x)); ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,7); ctx.fill(); });
     ctx.globalAlpha=1;
   }
   function drawVignette(){
     if (!vgCache) buildStatics();
     ctx.drawImage(vgCache, 0, 0, W, H);
-  }
-  function drawShadow(p){
-    var s = p.onGround ? 1 : clamp(1 - (GROUND-p.y)/360, 0.4, 1);
-    ctx.fillStyle='rgba(0,0,0,0.34)';
-    ctx.beginPath(); ctx.ellipse(p.x, GROUND+6, 32*s*(p.crouch?1.1:1), 9*s, 0, 0, 7); ctx.fill();
   }
   function drawShot(s){
     ctx.save(); ctx.shadowColor=s.glow; ctx.shadowBlur=s.isSuper?28:18;
@@ -1730,7 +2032,7 @@
         b.addEventListener('click', function(){
           sel[side]=key;
           Array.prototype.forEach.call(wrap.children, function(ch){ ch.classList.toggle('sel', ch.dataset.key===key); });
-          document.getElementById('blurb').textContent = c.name + ' — ' + c.desc;
+          document.getElementById('blurb').textContent = c.name + ' [' + (c.faction || '?') + '] — ' + c.desc;
         });
       });
     });
@@ -1746,9 +2048,186 @@
     document.body.classList.toggle('onep', one);
   }
 
+  // ======================= MMA career =======================
+  // Climb from rank #20 to the title. Purses buy training; every attribute
+  // genuinely changes the fight math (see attrMods).
+  var TEST_MODE = location.search.indexOf('test') >= 0;
+  var CAREER_KEY = TEST_MODE ? 'streetfighter.career.test' : 'streetfighter.career.v1';
+  var ATTRS = [
+    { key:'strength',  nm:'Strength',  em:'💪' },
+    { key:'agility',   nm:'Agility',   em:'🏃' },
+    { key:'toughness', nm:'Toughness', em:'🛡️' },
+    { key:'stamina',   nm:'Stamina',   em:'⚡' },
+    { key:'health',    nm:'Health',    em:'❤️' },
+    { key:'special',   nm:'Special',   em:'🌟' }
+  ];
+  var career = null, careerActive = false;
+  function saveCareer(){ try{ localStorage.setItem(CAREER_KEY, JSON.stringify(career)); }catch(e){} }
+  function loadCareer(){
+    try{
+      var c = JSON.parse(localStorage.getItem(CAREER_KEY) || 'null');
+      if (c && c.fighter && c.attrs && CHARS[c.fighter]) career = c;
+    }catch(e){}
+  }
+  function foeAttrsFor(rank){
+    var lvl = 1 + (20 - rank) * 0.45;
+    var o = {};
+    ATTRS.forEach(function(a){ o[a.key] = clamp(Math.round(lvl + EL.rnd(-1, 1)), 1, 10); });
+    return o;
+  }
+  function genFoe(){
+    var pool = ORDER.filter(function(k){ return k !== career.fighter; });
+    var key = pool[EL.rint(0, pool.length - 1)];
+    var title = career.rank === 1 || career.champion;
+    var rank = title ? 1 : Math.max(1, career.rank - EL.rint(1, 2));
+    return { key:key, rank:rank, title:title, attrs: title ? foeAttrsFor(0) : foeAttrsFor(rank) };
+  }
+  function newCareer(fkey){
+    career = { fighter:fkey, rank:20, champion:false, defenses:0,
+               wins:0, losses:0, kos:0, streak:0, money:20,
+               attrs:{ strength:1, agility:1, toughness:1, stamina:1, health:1, special:1 },
+               nextFoe:null, lastResult:null };
+    career.nextFoe = genFoe();
+    saveCareer();
+  }
+  function trainCost(lvl){ return 10 + lvl * 8; }
+  function train(attrKey){
+    if (!career) return false;
+    var lvl = career.attrs[attrKey];
+    if (lvl >= 10) return false;
+    var cost = trainCost(lvl);
+    if (career.money < cost) return false;
+    career.money -= cost; career.attrs[attrKey] = lvl + 1;
+    saveCareer(); renderCareer();
+    return true;
+  }
+  function beginCareerFight(){
+    if (!career || !career.nextFoe) return;
+    careerActive = true; onePlayer = true;
+    sel[0] = career.fighter; sel[1] = career.nextFoe.key;
+    document.getElementById('careerOv').hidden = true;
+    beginMatch(career.attrs, career.nextFoe.attrs);
+    fighters[1].name = CHARS[sel[1]].name + ' · #' + career.nextFoe.rank + (career.nextFoe.title ? ' 🏆' : '');
+    document.getElementById('hudn1').textContent = fighters[1].name;
+  }
+  function careerFinish(wi){
+    var f = career.nextFoe, won = wi === 0, purse;
+    if (won) {
+      purse = 12 + (20 - f.rank) + (f.title ? 25 : 0);
+      career.wins++; career.streak++;
+      if (fighters && fighters[1] && fighters[1].hp <= 0) career.kos++;
+      if (f.title) { if (career.champion) career.defenses++; else career.champion = true; career.rank = 1; }
+      else career.rank = f.rank;
+    } else {
+      purse = 4;
+      career.losses++; career.streak = 0;
+      if (f.title && career.champion) { career.champion = false; career.defenses = 0; career.rank = 2; }
+      else career.rank = Math.min(20, career.rank + 1);
+    }
+    career.money += purse;
+    career.lastResult = { won:won, purse:purse, foeName:CHARS[f.key].name, title:!!f.title };
+    career.nextFoe = genFoe();
+    saveCareer();
+    careerActive = false;
+    return purse;
+  }
+  function openCareer(){
+    document.getElementById('selOv').hidden = true;
+    document.getElementById('careerOv').hidden = false;
+    document.getElementById('carPick').hidden = !!career;
+    document.getElementById('carHome').hidden = !career;
+    if (career) renderCareer(); else buildCarPick();
+  }
+  function closeCareer(){
+    document.getElementById('careerOv').hidden = true;
+    document.getElementById('selOv').hidden = false;
+  }
+  function buildCarPick(){
+    var wrap = document.getElementById('carPicks'); wrap.innerHTML = '';
+    ORDER.forEach(function(key){
+      var c = CHARS[key];
+      var b = document.createElement('button'); b.className = 'pick'; b.dataset.key = key;
+      var cnv = document.createElement('canvas'); cnv.width = 120; cnv.height = 120; b.appendChild(cnv);
+      var nm = document.createElement('div'); nm.className = 'pname'; nm.textContent = c.name; b.appendChild(nm);
+      wrap.appendChild(b); drawPortraitInto(cnv, key);
+      b.addEventListener('click', function(){
+        newCareer(key);
+        document.getElementById('carPick').hidden = true;
+        document.getElementById('carHome').hidden = false;
+        renderCareer();
+      });
+    });
+  }
+  function renderCareer(){
+    if (!career) return;
+    var me = CHARS[career.fighter], foe = career.nextFoe;
+    drawPortraitInto(document.getElementById('carPort'), career.fighter);
+    document.getElementById('carName').textContent = me.name;
+    document.getElementById('carFac').textContent = me.faction || '';
+    document.getElementById('carRec').textContent = career.wins + 'W – ' + career.losses + 'L (' + career.kos + ' KO)' +
+      (career.streak >= 2 ? ' · 🔥' + career.streak : '');
+    document.getElementById('carRank').textContent = career.champion ? '🏆 CHAMPION' + (career.defenses ? ' ×' + career.defenses : '') : 'Rank #' + career.rank;
+    document.getElementById('carMoney').textContent = career.money + ' 🪙';
+    // last result banner
+    var res = document.getElementById('carResult');
+    if (career.lastResult) {
+      var r = career.lastResult;
+      res.hidden = false;
+      res.className = 'car-result ' + (r.won ? 'win' : 'loss');
+      res.textContent = r.won
+        ? '🏅 You beat ' + r.foeName + (r.title ? ' for the TITLE' : '') + '! +' + r.purse + ' 🪙'
+        : '😵 ' + r.foeName + ' got you this time. +' + r.purse + ' 🪙 anyway.';
+      career.lastResult = null; saveCareer();
+    } else res.hidden = true;
+    // training grid
+    var grid = document.getElementById('carAttrs'); grid.innerHTML = '';
+    ATTRS.forEach(function(a){
+      var lvl = career.attrs[a.key], cost = trainCost(lvl);
+      var row = document.createElement('div'); row.className = 'car-attr';
+      row.innerHTML = '<span>' + a.em + '</span><span style="width:76px;text-align:left">' + a.nm + '</span>' +
+        '<span class="abar"><i style="width:' + lvl * 10 + '%"></i></span><span>' + lvl + '</span>';
+      var btn = document.createElement('button'); btn.className = 'tbtn';
+      btn.textContent = lvl >= 10 ? 'MAX' : '+ ' + cost + '🪙';
+      btn.disabled = lvl >= 10 || career.money < cost;
+      btn.addEventListener('click', function(){ train(a.key); });
+      row.appendChild(btn);
+      grid.appendChild(row);
+    });
+    // tale of the tape
+    var fc = CHARS[foe.key];
+    var tape = document.getElementById('carTape');
+    tape.innerHTML =
+      '<div class="tape-head">' +
+        '<canvas id="tapeP0" width="52" height="52"></canvas>' +
+        '<div class="tape-side"><div class="tape-nm">' + me.name + '</div><div class="tape-sub">' + (me.faction || '') + ' · #' + career.rank + '</div></div>' +
+        '<div class="tape-vs">VS</div>' +
+        '<div class="tape-side right"><div class="tape-nm">' + fc.name + (foe.title ? ' 🏆' : '') + '</div><div class="tape-sub">' + (fc.faction || '') + ' · #' + foe.rank + '</div></div>' +
+        '<canvas id="tapeP1" width="52" height="52"></canvas>' +
+      '</div>' +
+      ATTRS.map(function(a){
+        var mine = career.attrs[a.key], theirs = foe.attrs[a.key];
+        return '<div class="tape-row">' +
+          '<span>' + mine + '</span><span class="tb you"><i style="width:' + mine * 10 + '%;float:right"></i></span>' +
+          '<span class="tlbl">' + a.em + ' ' + a.nm + '</span>' +
+          '<span class="tb foe"><i style="width:' + theirs * 10 + '%"></i></span><span>' + theirs + '</span>' +
+        '</div>';
+      }).join('');
+    drawPortraitInto(document.getElementById('tapeP0'), career.fighter);
+    drawPortraitInto(document.getElementById('tapeP1'), foe.key);
+  }
+
   // ======================= wire UI =======================
   document.getElementById('mode1').addEventListener('click', function(){ setMode(true); });
   document.getElementById('mode2').addEventListener('click', function(){ setMode(false); });
+  document.getElementById('modeC').addEventListener('click', openCareer);
+  document.getElementById('carFightBtn').addEventListener('click', beginCareerFight);
+  document.getElementById('carBackBtn').addEventListener('click', closeCareer);
+  document.getElementById('carPickBack').addEventListener('click', closeCareer);
+  document.getElementById('carRetireBtn').addEventListener('click', function(){
+    if (!confirm('Retire and start a brand new career?')) return;
+    career = null; try{ localStorage.removeItem(CAREER_KEY); }catch(e){}
+    openCareer();
+  });
   document.getElementById('fightBtn').addEventListener('click', function(){ document.getElementById('selOv').hidden = true; beginMatch(); });
   document.getElementById('rematchBtn').addEventListener('click', function(){ document.getElementById('overOv').hidden = true; beginMatch(); });
   document.getElementById('changeBtn').addEventListener('click', function(){
@@ -1756,7 +2235,7 @@
     document.getElementById('selOv').hidden = false; buildSelect();
   });
 
-  setMode(true); buildSelect();
+  setMode(true); buildSelect(); loadCareer();
   document.getElementById('blurb').textContent = 'Pick your fighters!';
   requestAnimationFrame(frame);
 
@@ -1765,7 +2244,13 @@
                  get round(){ return round; }, get timeLeft(){ return timeLeft; },
                  get comboFx(){ return comboFx; }, get finishFx(){ return finishFx; }, get shots(){ return shots; },
                  beginMatch:beginMatch, blocksHit:blocksHit, step:step, render:render, tick:function(){ gtick++; },
-                 setHP:function(i,v){ fighters[i].hp=v; }, setMeter:function(i,v){ fighters[i].meter=v; } };
+                 setHP:function(i,v){ fighters[i].hp=v; }, setMeter:function(i,v){ fighters[i].meter=v; },
+                 tryAttack:tryAttack, attrMods:attrMods, applyHit:applyHit,
+                 setSel:function(a,b){ sel[0]=a; sel[1]=b; }, get stage(){ return stageKey; },
+                 career:{ state:function(){ return career ? JSON.parse(JSON.stringify(career)) : null; },
+                          open:openCareer, pick:newCareer, train:train, cost:trainCost,
+                          fight:beginCareerFight, finish:careerFinish,
+                          get active(){ return careerActive; } } };
 })();
 </script>
 </body>

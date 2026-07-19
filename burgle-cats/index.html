@@ -155,9 +155,9 @@
         <div class="brief">
           <div class="r"><span class="e">🚪</span><span><b>Pick an entry door</b> on any wall to send a cat in</span></div>
           <div class="r"><span class="e">🐾</span><span>Tap a doorway (or use <b>arrow keys</b>) to creep through</span></div>
-          <div class="r"><span class="e">💥</span><span><b>Traps</b> drain your <b>health</b> — empty &amp; you're done</span></div>
-          <div class="r"><span class="e">🐕</span><span><b>Guard dogs roam</b> — get caught &amp; a cat is captured</span></div>
-          <div class="r"><span class="e">💎</span><span>Loot the real vault, then reach any <b>door</b> to escape</span></div>
+          <div class="r"><span class="e">💥</span><span><b>Traps</b> hurt, snare, or ring alarms — <b>noise</b> wakes the doges</span></div>
+          <div class="r"><span class="e">🐕</span><span>Doges <b>doze</b> as they wander — slip right past, but a woken floor <b>hunts you</b>!</span></div>
+          <div class="r"><span class="e">💰</span><span>Snatch <b>treasure chests</b>, loot the real vault, then reach a <b>door</b></span></div>
         </div>
         <div class="best-line">Best heist: <b id="menu-best">0</b> &nbsp;·&nbsp; <b id="menu-gems">0</b> 💎</div>
         <div class="menu-btns">
@@ -186,7 +186,7 @@
       <div class="panel gacha-panel">
         <button class="x" id="gacha-close">✕</button>
         <h2>Cat Gacha</h2>
-        <div class="sub">Adopt new cats! Win heists to earn 💎 — <b>save up for bundles</b> with guaranteed rare cats!</div>
+        <div class="sub">Lay out <b>bait</b> to lure stray cats! Fancier bait attracts <b>rarer cats</b> — win heists to earn 💎 and save up.</div>
         <div class="gem-line">You have <b id="gacha-gems">0</b> 💎</div>
         <div class="reveal" id="gacha-reveal">
           <canvas id="gacha-canvas" width="240" height="240"></canvas>
@@ -203,7 +203,7 @@
       <div class="panel coll-panel">
         <button class="x" id="coll-close">✕</button>
         <h2>Cat Collection</h2>
-        <div class="sub"><b id="coll-count">0</b> / 300 cats adopted</div>
+        <div class="sub"><b id="coll-count">0</b> / 301 cats adopted</div>
         <div class="equip-line" id="coll-equip">Tap cats to build your heist team of 5 — rarer cats have better abilities.</div>
         <div class="coll-grid" id="coll-grid"></div>
       </div>
@@ -225,7 +225,7 @@
     <div class="chip">Loot <span class="v" id="m-loot">0</span></div>
   </div>
 
-  <p class="hint">Pick an entry <b>door</b> on the wall 🚪 &nbsp;·&nbsp; the view <b>zooms in</b> — use the minimap to navigate &nbsp;·&nbsp; dodge <b>traps</b> (they drain health) &nbsp;·&nbsp; dogs <b>roam</b> — get caught &amp; a cat is captured &nbsp;·&nbsp; vaults look <b>identical</b>, so open carefully!</p>
+  <p class="hint">Pick an entry <b>door</b> on the wall 🚪 &nbsp;·&nbsp; doges <b>doze</b> — you can slip right past them, but springing a <b>trap</b> wakes that floor's pack &nbsp;·&nbsp; the <b>side door columns are safe</b> — doges can't go there &nbsp;·&nbsp; don't linger on <b>spikes</b>, they keep hurting &nbsp;·&nbsp; grab <b>chests</b> 💰 · vaults look <b>identical</b> — crack a decoy and guard dogs burst out!</p>
 
   <script src="../shared/game.js"></script>
   <script>
@@ -250,9 +250,9 @@
         cols: cols,
         rows: rows,
         dogsPerRow: 1,                                        // ONE dog guards each row
-        traps: clamp(4 + level, 4, 20),
+        traps: clamp(5 + level, 5, 20),
+        chests: clamp(3 + (level >> 1), 3, 6),                // bonus treasure to snatch
         trapDmg: clamp(15 + level * 2, 15, 30),               // gentler health loss
-        wakeR: level >= 5 ? 2 : 1,                            // trap noise radius (Chebyshev)
         chase: 3 + level,                                     // shorter chases
         loot: 100 * level
       };
@@ -275,7 +275,7 @@
         level: level, cfg: cfg, cols: cols, rows: rows,
         grid: [], doges: [], cat: null, entry: null,
         phase: 'entry',                 // 'entry' = pick a door; 'play' = sneak
-        captures: 0, maxHp: maxHp, hp: maxHp, dispHp: maxHp, pendingDeath: false, looted: false, loot: 0,
+        captures: 0, maxHp: maxHp, hp: maxHp, dispHp: maxHp, pendingDeath: false, looted: false, loot: 0, stuck: 0,
         team: team, toughMult: 1, speedy: false, guideR: 0, dogTick: 0,
         tr: null,                       // room-move / jump-down animation
         shakeT: 0, shakeMag: 0, flash: null, pops: [], bursts: [],
@@ -286,7 +286,8 @@
       var i, x, y;
       for (i = 0; i < cols * rows; i++) {
         st.grid.push({ x: i % cols, y: (i / cols) | 0, type: 'empty', seen: false,
-                       shutter: false, vault: null, trap: false, trapKind: null, sprung: false });
+                       shutter: false, vault: null, trap: false, trapKind: null, sprung: false,
+                       chest: false, chestOpen: false });
       }
 
       // EVERY room on the left & right walls is an entry/exit door
@@ -308,10 +309,13 @@
       pick(vaultRooms).vault.real = true;
       st.vaults = vaultRooms;
 
-      // traps: a mix of spike traps (hurt you) and alarm traps (rouse the dogs)
+      // traps: spikes (hurt + noise), alarms (big noise), webs (snare you a turn)
       for (i = 0; i < cfg.traps && p < interior.length; i++) {
-        var tr = interior[p++]; tr.trap = true; tr.trapKind = (i % 2 === 0) ? 'spike' : 'alarm';
+        var tr = interior[p++]; tr.trap = true; tr.trapKind = ['spike', 'alarm', 'web'][i % 3];
       }
+
+      // treasure chests — bonus loot worth grabbing on the way to the vault
+      for (i = 0; i < cfg.chests && p < interior.length; i++) { interior[p++].chest = true; }
 
       // ONE guard dog in EVERY row — each is chained to its row and only
       // patrols across it (never up or down)
@@ -375,27 +379,32 @@
 
     // ---- player action on a tapped room ----
     function tapRoom(x, y) {
-      if (!S.running || !inGrid(x, y)) return;
+      if (!S.running || S.cine || !inGrid(x, y)) return;
       if (S.phase === 'entry') { enterAt(x, y); return; }   // choosing where to break in
 
       var c = S.cat;
       if (!adj(c.x, c.y, x, y)) return;          // adjacent rooms only
+      // snared in a spiderweb — this turn is spent wriggling free
+      if (S.stuck > 0) { S.stuck--; flash('🕸️ Stuck! You wriggle free…'); return; }
       var r = room(x, y);
       var dx = x - c.x, dy = y - c.y;
-      // you can't see into the next room — blundering into a guard dog = captured
-      if (dogeAt(x, y)) { c.x = x; c.y = y; r.seen = true; reveal(x, y); capture(); return; }
+      // Doges doze as they wander — you can slip right past a drowsy one.
+      // Only an ALERT dog (woken by noise) catches a cat that walks in.
+      var dg = dogeAt(x, y);
+      if (dg && dg.chaseT > 0) { c.x = x; c.y = y; r.seen = true; reveal(x, y); capture(); return; }
+      if (dg) flash('🤫 You slip past the drowsy doge…');
 
       // move (vaults are now entered, not auto-opened — you choose to crack them)
       c.x = x; c.y = y; r.seen = true; reveal(x, y);
 
       if (r.trap && !r.sprung) { r.sprung = true; springTrap(x, y); if (!S.running) return; }
+      if (r.chest && !r.chestOpen) { r.chestOpen = true; lootChest(x, y); }
 
       // win check: escape after looting
       if (S.looted && r.shutter) { endRound(true); return; }
 
       if (r.vault && !r.vault.opened) flash('🔐 A vault! Tap it to crack it open.');
 
-      dogesTurn();
       // animate the walk into the new room (skip if the move ended the run)
       if (S.running && S.phase === 'play' && S.cat) S.tr = { kind: 'slide', dx: dx, dy: dy, t: 0, dur: 0.24 };
     }
@@ -405,43 +414,65 @@
       if (r.vault.real) {
         S.looted = true; S.loot += S.cfg.loot;
         flash('💎 The real vault! Now get out!');
-        // the whole pack is roused and hunts you to the exit
-        for (var i = 0; i < S.doges.length; i++) S.doges[i].chaseT = 999;
-        if (S.running) dogesTurn();
+        // jackpot juice
+        S.shakeT = 0.3; S.shakeMag = 6; S.flash = { r: 255, g: 214, b: 90, a: 0.45 };
+        S.pops.push({ cx: r.x, cy: r.y, txt: '💎 JACKPOT!', color: '#ffe08a', age: 0, life: 1.2, big: true });
+        S.bursts.push({ cx: r.x, cy: r.y, age: 0, life: 0.7 });
+        // only THIS floor's dogs pick up the commotion
+        rouseRow(S.cat.y, S.cfg.chase * 2);
       } else {
-        // a hidden guard dog captures this cat (this clears S.cat & returns
-        // to the entry phase, so the dogs must NOT take a turn afterwards)
-        flash('🚨 Decoy! A hidden guard dog nabs your cat!');
-        capture();
+        // decoy: two guard dogs burst out of the vault and cage this cat.
+        // The cage cinematic plays first; capture resolves when it finishes,
+        // and the two dogs then join this floor's patrol for good.
+        flash('🚨 Decoy! Guard dogs burst out of the vault!');
+        capture('decoy');
       }
     }
 
-    function rouse(x, y, radius) {
+    // Dogs are chained to their row (floor) — so noise only ever matters to
+    // the dogs on THAT floor. No cross-floor chasing.
+    function rouseRow(y, turns) {
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i];
-        if (cheb(d.x, d.y, x, y) <= radius) d.chaseT = S.cfg.chase;
+        if (d.y === y) d.chaseT = Math.max(d.chaseT, turns);
       }
+    }
+    // treasure chest — bonus loot, but a creaky lid can wake this floor's doges
+    function lootChest(x, y) {
+      var amt = 20 * S.level;
+      S.loot += amt;
+      S.pops.push({ cx: x, cy: y, txt: '+' + amt + ' 💰', color: '#ffd96b', age: 0, life: 1.0, big: false });
+      S.bursts.push({ cx: x, cy: y, age: 0, life: 0.5 });
+      if (Math.random() < 0.35) { rouseRow(y, S.cfg.chase); flash('💰 +' + amt + ' loot… but the lid CREAKED! 🐕'); }
+      else flash('💰 Treasure chest! +' + amt + ' loot.');
     }
     function springTrap(x, y) {
       var kind = room(x, y).trapKind;
+      if (kind === 'web') {
+        // SPIDERWEB: silent, but you're snared — the next move is lost
+        S.stuck = 1;
+        S.shakeT = 0.15; S.shakeMag = 3;
+        flash('🕸️ A spiderweb! You\'re tangled up…');
+        return;
+      }
       if (kind === 'alarm') {
-        // ALARM trap: no damage, but the whole nearby pack is alerted
-        rouse(x, y, S.cfg.wakeR + 1);
+        // ALARM trap: no damage, but this floor's pack charges at you
+        rouseRow(y, S.cfg.chase + 3);
         S.shakeT = 0.25; S.shakeMag = 5; S.flash = { r: 255, g: 200, b: 60, a: 0.4 };
-        flash('🔔 ALARM! The guard dogs are on alert!');
+        flash('🔔 ALARM! This floor\'s dogs are coming!');
         return;
       }
       // SPIKE trap: drains health (reduced by the active cat's Tough rating)
       var dmg = Math.round(S.cfg.trapDmg * S.toughMult);
       S.hp = Math.max(0, S.hp - dmg);
       fxDamage(dmg);
-      rouse(x, y, 1);                         // a little noise
+      rouseRow(y, S.cfg.chase);               // the clatter alerts this floor's dogs
       if (S.hp <= 0) {
         S.running = false; S.pendingDeath = true;   // bar drains to empty, then end (frame loop)
         flash('💥 A spike trap finishes off your crew!');
         return;
       }
-      flash('💥 Spike trap! −' + dmg + ' health!');
+      flash('💥 Spike trap! −' + dmg + ' health — this floor\'s dogs heard that!');
     }
 
     // empty, in-grid tiles a dog may step onto (no other dog, not a vault/door it would camp)
@@ -451,48 +482,67 @@
       return !r.vault && !r.shutter;
     }
 
-    // ---- dogs roam every turn; roused ones chase the cat ----
-    // Every dog is chained to its own row: it slides left/right only, NEVER up
-    // or down. A roused dog can therefore only run the cat down along its row.
-    function dogesTurn() {
-      if (!S.cat) return;     // no active cat (e.g. just captured) — nothing to chase
-      // "Speedy" cats are nimble — the dogs only get to act every other move
-      if (S.speedy) { S.dogTick = (S.dogTick || 0) + 1; if (S.dogTick % 2 === 1) return; }
-      var dirs = [[1, 0], [-1, 0]];                          // across the row only
-      for (var i = 0; i < S.doges.length; i++) {
-        var d = S.doges[i], bx = d.x, by = d.y, k;
-        if (d.chaseT > 0) {                                  // hunt the cat along the row
-          var bestD = 1e9;
-          for (k = 0; k < dirs.length; k++) {
-            var nx = d.x + dirs[k][0], ny = d.y + dirs[k][1];
-            if ((nx !== S.cat.x || ny !== S.cat.y) && !dogFree(nx, ny)) continue;
-            var dist = Math.abs(nx - S.cat.x) + Math.abs(ny - S.cat.y);
-            if (dist < bestD) { bestD = dist; bx = nx; by = ny; }
-          }
-          d.chaseT--;
-        } else {                                             // pace the row at random
-          var opts = [];
-          for (k = 0; k < dirs.length; k++) {
-            var rx = d.x + dirs[k][0], ry = d.y + dirs[k][1];
-            if ((rx === S.cat.x && ry === S.cat.y) || dogFree(rx, ry)) opts.push([rx, ry]);
-          }
-          if (opts.length) { var o = pick(opts); bx = o[0]; by = o[1]; }   // always on the move
+    // ---- dogs move in REAL TIME on their own clock (driven from the frame
+    // loop): one room every 1.5s while drowsy, every 1.0s while alert — they
+    // keep moving whether or not you do. Every dog is chained to its own row
+    // AND banned from the door columns on either side: the walls where you
+    // break in are safe ground a dog can never reach.
+    function dogStep(d) {
+      var dirs = [[1, 0], [-1, 0]], k, bx = d.x, by = d.y;   // across the row only
+      function catAt(x, y) { return !!S.cat && S.cat.x === x && S.cat.y === y; }
+      function enterable(x, y) { return (catAt(x, y) && !room(x, y).shutter) || dogFree(x, y); }
+      if (d.chaseT > 0 && S.cat) {                           // hunt the cat along the row
+        // woke up with the cat right here → it's caught
+        if (S.running && catAt(d.x, d.y)) { capture(); return; }
+        var bestD = 1e9;
+        for (k = 0; k < dirs.length; k++) {
+          var nx = d.x + dirs[k][0], ny = d.y + dirs[k][1];
+          if (!enterable(nx, ny)) continue;
+          var dist = Math.abs(nx - S.cat.x) + Math.abs(ny - S.cat.y);
+          if (dist < bestD) { bestD = dist; bx = nx; by = ny; }
         }
-        d.x = bx; d.y = by;
-        if (S.running && d.x === S.cat.x && d.y === S.cat.y) { capture(); return; }
+        d.chaseT--;
+      } else {                                               // drowsily pace the row
+        var opts = [];
+        for (k = 0; k < dirs.length; k++) {
+          var rx = d.x + dirs[k][0], ry = d.y + dirs[k][1];
+          if (enterable(rx, ry)) opts.push([rx, ry]);
+        }
+        if (opts.length) { var o = pick(opts); bx = o[0]; by = o[1]; }   // always on the move
       }
+      d.x = bx; d.y = by;
+      // only an ALERT dog catches on contact — a drowsy one wanders past
+      if (S.running && d.chaseT > 0 && catAt(d.x, d.y)) { capture(); }
     }
 
-    function capture() {
-      if (S.cat) fxCaught(S.cat.x, S.cat.y);
+    // capture is a two-step: the cage cinematic (S.cine) plays in the room view,
+    // then resolveCine() applies the real state change.
+    //   kind 'cage'  — a guard dog got you (dog + cage drop)
+    //   kind 'decoy' — a decoy vault: 2 dogs leap out, cage drops, dogs stay
+    function capture(kind) {
+      if (!S.cat) return;
+      fxCaught(S.cat.x, S.cat.y);
+      S.cine = { kind: kind || 'cage', t: 0, dur: kind === 'decoy' ? 1.9 : 1.1, vx: S.cat.x, vy: S.cat.y };
+    }
+    // the two vault dogs join this floor's patrol, popping out beside the vault
+    function spawnDecoyDogs(vx, vy) {
+      var xs = [];
+      for (var x = 0; x < S.cols; x++) if (dogFree(x, vy)) xs.push(x);
+      xs.sort(function (a, b) { return Math.abs(a - vx) - Math.abs(b - vx); });
+      for (var i = 0; i < 2 && i < xs.length; i++) S.doges.push({ x: xs[i], y: vy, chaseT: 0 });
+    }
+    function resolveCine() {
+      var c = S.cine; S.cine = null;
+      if (c.kind === 'decoy') spawnDecoyDogs(c.vx, c.vy);
       S.captures++;
       if (S.captures >= CREW) { endRound(false, 'caught'); return; }
       // that cat is caged; the next team slot takes over — ITS abilities apply now
-      S.cat = null; S.entry = null; S.phase = 'entry';
+      S.cat = null; S.entry = null; S.phase = 'entry'; S.stuck = 0;
       applyActiveCat(S);
       for (var i = 0; i < S.doges.length; i++) S.doges[i].chaseT = 0;
       var nxt = activeCat();
-      flash('🐾 Cat captured! ' + (CREW - S.captures) + ' left — send in ' + nxt.name + '.');
+      flash('🐾 Cat caged! ' + (CREW - S.captures) + ' left — send in ' + nxt.name + '.');
+      syncHUD();
     }
 
     function endRound(won, reason) {
@@ -714,6 +764,66 @@
       ctx.restore();
     }
 
+    // a birdcage-style cage, centred on (cx, cy) — used by the capture
+    // cinematic and the gacha lure trap (any 2D context)
+    function drawCage(g, cx, cy, s) {
+      g.save(); g.translate(cx, cy); var k = s / 100; g.scale(k, k);
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      g.strokeStyle = '#c9ced8'; g.lineWidth = 5;
+      g.beginPath(); g.arc(0, -14, 40, Math.PI, 0); g.stroke();          // dome
+      g.beginPath(); g.moveTo(-40, -14); g.lineTo(-40, 34); g.stroke();  // side bars
+      g.beginPath(); g.moveTo(40, -14); g.lineTo(40, 34); g.stroke();
+      for (var i = -1; i <= 1; i++) {
+        var bx = i * 20, ty = -14 - Math.sqrt(Math.max(0, 1600 - bx * bx));
+        g.beginPath(); g.moveTo(bx, ty); g.lineTo(bx, 34); g.stroke();
+      }
+      g.strokeStyle = '#9aa2b2'; g.lineWidth = 4;
+      g.beginPath(); g.moveTo(-32, 8); g.lineTo(32, 8); g.stroke();      // waist band
+      g.fillStyle = '#8a92a2'; rrect2(g, -46, 32, 92, 9, 4); g.fill();   // base plate
+      g.strokeStyle = '#c9ced8'; g.lineWidth = 4;
+      g.beginPath(); g.arc(0, -60, 6, 0, 7); g.stroke();                 // hanging ring
+      g.restore();
+    }
+    // rrect against an arbitrary context (rrect() is bound to the main ctx)
+    function rrect2(g, x, y, w, h, r) {
+      g.beginPath();
+      g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r);
+      g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r);
+      g.arcTo(x, y, x + w, y, r); g.closePath();
+    }
+
+    function drawChest(cx, cy, s, open, t) {
+      ctx.save(); ctx.translate(cx, cy); var k = s / 100; ctx.scale(k, k); ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#3a2412'; ctx.lineWidth = 4;
+      if (open) {
+        ctx.fillStyle = '#6b3f1e'; rrect(-30, -46, 60, 18, 6); ctx.fill(); ctx.stroke();   // lid flipped up
+        ctx.fillStyle = '#241206'; rrect(-26, -26, 52, 14, 4); ctx.fill();                 // dark interior
+        gem(-8, -20, 6, '#6be0c0'); gem(7, -18, 5, '#ffd96b');
+        if (t) sparkle(16, -34, 6, t);
+      } else {
+        ctx.fillStyle = '#8a5730'; rrect(-32, -28, 64, 18, 6); ctx.fill(); ctx.stroke();   // lid
+      }
+      ctx.fillStyle = '#7a4a26'; rrect(-30, -12, 60, 32, 6); ctx.fill(); ctx.stroke();     // base
+      ctx.fillStyle = '#e2b13a'; ctx.fillRect(-30, -6, 60, 7);                             // gold band
+      ctx.fillStyle = '#c8991f'; ctx.beginPath(); ctx.arc(0, -2, 6, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#7a5a16'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -2, 6, 0, 7); ctx.stroke();
+      ctx.restore();
+    }
+    function drawWeb(cx, cy, s, sprung) {
+      ctx.save(); ctx.translate(cx, cy); var k = s / 100; ctx.scale(k, k);
+      ctx.strokeStyle = sprung ? 'rgba(150,150,160,0.35)' : 'rgba(232,238,248,0.85)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      for (var i = 0; i < 8; i++) { var a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 34, Math.sin(a) * 34); ctx.stroke(); }
+      for (var r = 11; r <= 31; r += 10) {
+        ctx.beginPath();
+        for (var j = 0; j <= 8; j++) { var b = j * Math.PI / 4, px = Math.cos(b) * r, py = Math.sin(b) * r; if (j) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+        ctx.stroke();
+      }
+      if (!sprung) { ctx.fillStyle = '#2b2b30'; ctx.beginPath(); ctx.arc(12, -10, 4, 0, 7); ctx.fill();   // resident spider
+        ctx.strokeStyle = '#2b2b30'; ctx.lineWidth = 1.5;
+        for (var l = 0; l < 4; l++) { ctx.beginPath(); ctx.moveTo(12, -10); ctx.lineTo(12 + Math.cos(l * 0.8) * 8, -10 + Math.sin(l * 0.8 + 2) * 7); ctx.stroke(); } }
+      ctx.restore();
+    }
+
     function drawShutter(rc, x, y, seen, looted) {
       var cell = rc.s, side;
       if (y === S.rows - 1) side = 'b'; else if (y === 0) side = 't'; else if (x === 0) side = 'l'; else side = 'r';
@@ -755,6 +865,8 @@
           if (r.vault) {  // generic vault dot — identical for fake & real until opened
             ctx.fillStyle = r.vault.opened ? (r.vault.real ? '#6be0c0' : '#9a4a52') : '#c2c8d2';
             ctx.beginPath(); ctx.arc(px + mc / 2, py + mc / 2, mc * 0.24, 0, 7); ctx.fill();
+          } else if (r.chest && !r.chestOpen) {
+            ctx.fillStyle = '#ffd96b'; ctx.fillRect(px + mc * 0.32, py + mc * 0.32, mc * 0.36, mc * 0.36);
           } else if (r.trap && r.sprung) {
             ctx.fillStyle = '#ff7a88'; ctx.fillRect(px + mc * 0.35, py + mc * 0.35, mc * 0.3, mc * 0.3);
           }
@@ -1025,6 +1137,7 @@
       var dropDY = 0;
       if (S.tr && S.tr.kind === 'drop') { var dp = clamp(S.tr.t / S.tr.dur, 0, 1), de = 1 - (1 - dp) * (1 - dp); dropDY = -(1 - de) * ih * 0.85; }
 
+      var catY, catS;
       if (cur.vault) {
         var vsz = Math.min(iw, ih) * 0.5, vy = iy + ih * 0.42;
         if (!cur.vault.opened) {
@@ -1034,13 +1147,50 @@
           var st = 'closed';
         } else { var st = cur.vault.real ? 'openreal' : 'opendecoy'; }
         drawVault(W / 2, vy, vsz, st, t);
-        drawBurglarCat(W / 2, iy + ih * 0.76 + dropDY, Math.min(iw, ih) * 0.32, S.looted, t);
+        catY = iy + ih * 0.76; catS = Math.min(iw, ih) * 0.32;
+        drawBurglarCat(W / 2, catY + dropDY, catS, S.looted, t);
       } else {
+        if (cur.chest) drawChest(W / 2, iy + ih * 0.34, Math.min(iw, ih) * 0.34, cur.chestOpen, cur.chestOpen ? t : 0);
         if (cur.trap) {
           if (cur.trapKind === 'alarm') drawAlarm(W / 2, iy + ih * 0.5, Math.min(iw, ih) * 0.3, t);
-          else drawTrap(W / 2, iy + ih * 0.52, Math.min(iw, ih) * 0.32, cur.sprung);
+          else if (cur.trapKind === 'web') drawWeb(W / 2, iy + ih * 0.52, Math.min(iw, ih) * 0.62, cur.sprung);
+          else drawTrap(W / 2, iy + ih * 0.52, Math.min(iw, ih) * 0.32, false);   // spikes stay up under your paws — they still hurt!
         }
-        drawBurglarCat(W / 2, iy + ih * 0.52 + dropDY, Math.min(iw, ih) * 0.42, S.looted, t);
+        catY = iy + ih * 0.52; catS = Math.min(iw, ih) * 0.42;
+        drawBurglarCat(W / 2, catY + dropDY, catS, S.looted, t);
+      }
+
+      // a doge sharing your room — drowsy (harmless) or alert (about to pounce)
+      var dHere = dogeAt(cat.x, cat.y);
+      if (dHere && !S.cine) drawDoge(W / 2 - iw * 0.3, iy + ih * 0.6, Math.min(iw, ih) * 0.3, dHere.chaseT > 0, t);
+
+      // ---- capture cinematic: dogs pounce, then a cage drops on the cat ----
+      if (S.cine) {
+        var cn = S.cine, ct = cn.t, dS = Math.min(iw, ih) * 0.32;
+        if (cn.kind === 'decoy') {
+          // two guard dogs LEAP out of the vault, arcing to the cat's flanks
+          var vy2 = iy + ih * 0.42;
+          var lp = clamp((ct - 0.05) / 0.55, 0, 1), le = 1 - (1 - lp) * (1 - lp);
+          for (var sgn = -1; sgn <= 1; sgn += 2) {
+            var dxp = lerp(W / 2, W / 2 + sgn * iw * 0.28, le);
+            var dyp = lerp(vy2, catY, le) - Math.sin(lp * Math.PI) * ih * 0.28;
+            drawDoge(dxp, dyp, dS, true, t + (sgn + 1));
+          }
+        } else {
+          // the guard dog that got you looms beside the cage
+          drawDoge(W / 2 - iw * 0.28, catY, dS, true, t);
+        }
+        // cage drop (with a rattle once it lands)
+        var c0 = cn.kind === 'decoy' ? 0.6 : 0.05, c1 = c0 + 0.35;
+        if (ct >= c0) {
+          var cp = clamp((ct - c0) / (c1 - c0), 0, 1), ce = 1 - (1 - cp) * (1 - cp);
+          var wig = ct > c1 ? Math.sin((ct - c1) * 22) * 4 * Math.max(0, 1.2 - (ct - c1)) : 0;
+          drawCage(ctx, W / 2 + wig, lerp(iy - catS, catY + catS * 0.05, ce), catS * 1.6);
+          if (ct > c1 && !cn.popped) {
+            cn.popped = true;
+            S.pops.push({ cx: cn.vx, cy: cn.vy, txt: 'CAGED!', color: '#ffd0d6', age: 0, life: 1.0, big: true });
+          }
+        }
       }
       ctx.restore();   // end slide transform
     }
@@ -1120,7 +1270,12 @@
           // every unopened vault looks identical — no fake/real tell
           var st = cr0.vault.opened ? (cr0.vault.real ? 'openreal' : 'opendecoy') : 'closed';
           drawVault(ccx, ccy, cell * 0.82, st, t);
-        } else if (cr0.trap) drawTrap(ccx, ccy, cell * 0.7, cr0.sprung);
+        } else if (cr0.chest) drawChest(ccx, ccy, cell * 0.62, cr0.chestOpen, cr0.chestOpen ? 0 : t);
+        else if (cr0.trap) {
+          if (cr0.trapKind === 'alarm') drawAlarm(ccx, ccy, cell * 0.55, t);
+          else if (cr0.trapKind === 'web') drawWeb(ccx, ccy, cell * 0.62, cr0.sprung);
+          else drawTrap(ccx, ccy, cell * 0.7, cr0.sprung);
+        }
       }
 
       // ---- movable-room highlight ----
@@ -1257,7 +1412,7 @@
     // move one room in a direction (handles vault/dog/trap via tapRoom, plus
     // escaping out through a shutter wall once you've looted)
     function move(dx, dy) {
-      if (!S || !S.running || !S.cat || S.tr) return;
+      if (!S || !S.running || !S.cat || S.tr || S.cine) return;
       var nx = S.cat.x + dx, ny = S.cat.y + dy;
       if (inGrid(nx, ny)) tapRoom(nx, ny);
       else {                                  // walking into an outer wall
@@ -1270,7 +1425,7 @@
     function onTap(e) {
       if (!S || !S.running) return;
       e.preventDefault();
-      if (S.tr) return;                       // mid-animation — ignore taps
+      if (S.tr || S.cine) return;             // mid-animation — ignore taps
       var p = EL.canvasPos(canvas, e, W, H), g = S.geo;
       if (S.phase === 'entry') {
         // full-map view: tap a door cell to break in
@@ -1296,7 +1451,7 @@
 
     // arrow keys / WASD move the cat
     window.addEventListener('keydown', function (e) {
-      if (!S || !S.running || S.phase !== 'play' || !S.cat || S.tr) return;
+      if (!S || !S.running || S.phase !== 'play' || !S.cat || S.tr || S.cine) return;
       var k = e.key, dx = 0, dy = 0;
       if (k === ' ' || k === 'Spacebar' || k === 'Enter') {     // open the vault you're standing in
         var here = room(S.cat.x, S.cat.y);
@@ -1312,6 +1467,40 @@
       move(dx, dy);
     });
 
+    // real-time simulation: cage cinematic, dog clocks, spike damage-over-time.
+    // Called from the frame loop each frame, and exposed as __bc.tick for
+    // deterministic headless testing.
+    function simTick(dt) {
+      if (!S) return;
+      if (S.cine) { S.cine.t += dt; if (S.cine.t >= S.cine.dur) resolveCine(); }   // cage cinematic
+      // dogs: each moves on its own clock, whether you move or not
+      if (S.running && !S.cine && S.phase === 'play' && S.cat) {
+        var ivMul = S.speedy ? 1.35 : 1;      // Speedy cats make the pack sluggish
+        for (var j = 0; j < S.doges.length; j++) {
+          var d = S.doges[j];
+          d.mt = (d.mt || 0) + dt;
+          if (d.mt >= (d.chaseT > 0 ? 1.0 : 1.5) * ivMul) {
+            d.mt = 0; dogStep(d);
+            if (!S.running || !S.cat || S.cine) break;
+          }
+        }
+      }
+      // spikes keep hurting the longer you stand on them (1 tick per second)
+      if (S.running && !S.cine && S.cat) {
+        var cr2 = room(S.cat.x, S.cat.y);
+        if (cr2.trap && cr2.trapKind === 'spike' && cr2.sprung) {
+          S.standT = (S.standT || 0) + dt;
+          if (S.standT >= 1) {
+            S.standT -= 1;
+            var dot = Math.max(1, Math.round(S.cfg.trapDmg * 0.4 * S.toughMult));
+            S.hp = Math.max(0, S.hp - dot); fxDamage(dot);
+            if (S.hp <= 0) { S.running = false; S.pendingDeath = true; flash('💥 The spikes finish off your crew!'); }
+            else flash('💥 Ouch — get off the spikes!');
+          }
+        } else S.standT = 0;
+      }
+    }
+
     // ---------- loop ----------
     var last = 0;
     function frame(ts) {
@@ -1326,6 +1515,7 @@
         for (j = S.pops.length - 1; j >= 0; j--) { S.pops[j].age += dt; if (S.pops[j].age >= S.pops[j].life) S.pops.splice(j, 1); }
         for (j = S.bursts.length - 1; j >= 0; j--) { S.bursts[j].age += dt; if (S.bursts[j].age >= S.bursts[j].life) S.bursts.splice(j, 1); }
         if (S.tr) { S.tr.t += dt; if (S.tr.t >= S.tr.dur) S.tr = null; }   // room-move / jump animation
+        simTick(dt);
         updateHpBar(dt);
         // once the bar finishes draining to empty, the crew is out
         if (S.pendingDeath && S.dispHp <= 0.5) { S.pendingDeath = false; endRound(false, 'hurt'); }
@@ -1338,7 +1528,7 @@
     // ============================================================
     //  Cat Gacha — 300 collectible cats, pulled with gems
     // ============================================================
-    var GACHA_N = 300;
+    var GACHA_N = 301;    // 300 cats + one MYTHIC raccoon in the last slot
     var FUR = {
       black: '#2b2b30', white: '#f4f1ea', grey: '#8c8c96', ginger: '#d9863f', cream: '#ecdcb8',
       brown: '#6b4a30', bluegrey: '#7d8a99', chocolate: '#4a3526', fawn: '#caa97e', charcoal: '#3f3f47',
@@ -1357,7 +1547,8 @@
       { name: 'Rare', col: '#5aa6e0', w: 160 },
       { name: 'Epic', col: '#b07ae0', w: 45 },
       { name: 'Legendary', col: '#e2b13a', w: 10 },
-      { name: 'Secret', col: '#ff5a6e', w: 1 }
+      { name: 'Secret', col: '#ff5a6e', w: 1 },
+      { name: 'Mythic', col: '#ff8ad8', w: 1 }
     ];
     // your real cats — the rarest "secret" pulls
     var SPECIALS = [
@@ -1368,8 +1559,12 @@
       { name: 'Mimi', rarity: 6, base: FUR.black, pattern: 'calico', belly: WHITEP, patches: [{ c: ORANGE, n: 3 }], eye: '#e2b13a' }
     ];
     var PATTERNS = ['solid', 'tuxedo', 'tabby', 'calico', 'tortie', 'point', 'bicolor', 'spotted'];
+    // the one MYTHIC: Jimmy, the viral trash-panda legend (last collection slot)
+    var JIMMY = { name: 'Jimmy the Raccoon', rarity: 7, base: '#8c8c96', pattern: 'raccoon',
+                  raccoon: true, belly: '#d8d4c8', eye: '#2b2b30' };
 
     function buildCat(i) {
+      if (i === GACHA_N - 1) { var jm = {}; for (var jk in JIMMY) jm[jk] = JIMMY[jk]; jm.seed = 777; return jm; }
       if (i < SPECIALS.length) { var c = {}; for (var key in SPECIALS[i]) c[key] = SPECIALS[i][key]; c.seed = i + 1; return c; }
       var R = rng(i * 40503 + 17);
       var coat = {
@@ -1403,17 +1598,17 @@
       while (lo < hi) { var m = (lo + hi) >> 1; if (pool.cum[m] < r) lo = m + 1; else hi = m; }
       return pool.idxs[lo];
     }
-    // Gem bundles — saving up buys more cats AND a guaranteed-rarity floor.
+    // Gem baits — saving up buys fancier bait: more cats AND a rarity floor.
     var BUNDLES = [
-      { id: 'single', name: 'Pull',          cost: 1,  pulls: 1, minR: 0, note: '1 cat' },
-      { id: 'triple', name: 'Triple Pull',   cost: 3,  pulls: 3, minR: 3, note: '3 cats · a ★★★ Rare or better guaranteed' },
-      { id: 'epic',   name: 'Epic Bundle',   cost: 6,  pulls: 4, minR: 4, note: '4 cats · a ★★★★ Epic or better guaranteed' },
-      { id: 'royal',  name: 'Royal Bundle',  cost: 12, pulls: 5, minR: 5, note: '5 cats · a ★★★★★ Legendary or better guaranteed' }
+      { id: 'single', name: 'Kibble Bait',  emoji: '🥣', cost: 1,  pulls: 1, minR: 0, note: 'lures 1 stray cat' },
+      { id: 'triple', name: 'Sardine Bait', emoji: '🐟', cost: 3,  pulls: 3, minR: 3, note: '3 cats · a ★★★ Rare or better guaranteed' },
+      { id: 'epic',   name: 'Tuna Bait',    emoji: '🐠', cost: 6,  pulls: 4, minR: 4, note: '4 cats · a ★★★★ Epic or better guaranteed' },
+      { id: 'royal',  name: 'Golden Tuna',  emoji: '✨🐟', cost: 12, pulls: 5, minR: 5, note: '5 cats · a ★★★★★ Legendary or better guaranteed' }
     ];
 
     function gGems() { try { return parseInt(localStorage.getItem('burgle-cats.gems') || '0', 10) || 0; } catch (e) { return 0; } }
     function gSetGems(v) { try { localStorage.setItem('burgle-cats.gems', String(v)); } catch (e) {} }
-    function gOwned() { try { var a = JSON.parse(localStorage.getItem('burgle-cats.owned')); if (a && a.length === GACHA_N) return a; } catch (e) {} return new Array(GACHA_N).fill(0); }
+    function gOwned() { try { var a = JSON.parse(localStorage.getItem('burgle-cats.owned')); if (a && a.length === GACHA_N) return a; if (a && a.length > 0 && a.length < GACHA_N) { while (a.length < GACHA_N) a.push(0); return a; } } catch (e) {} return new Array(GACHA_N).fill(0); }
     function gSetOwned(a) { try { localStorage.setItem('burgle-cats.owned', JSON.stringify(a)); } catch (e) {} }
     function awardGem() { gSetGems(gGems() + 1); }
     // ---- heist team: up to 5 cats from your collection ----------------------
@@ -1447,8 +1642,8 @@
         return { idx: -1, coat: DEFAULT_COAT, name: 'Alley Cat', rarity: 0, hp: 0, toughMult: 1, speedy: false, guideR: 0, abilities: [] };
       var c = CATS[idx], r = c.rarity;
       var inf = { idx: idx, coat: c, name: c.name, rarity: r,
-        hp: [0, 4, 6, 8, 12, 16, 20][r],
-        toughMult: [1, 1, 0.85, 0.8, 0.7, 0.6, 0.5][r],
+        hp: [0, 4, 6, 8, 12, 16, 20, 26][r],
+        toughMult: [1, 1, 0.85, 0.8, 0.7, 0.6, 0.5, 0.45][r],
         speedy: r >= 3,
         guideR: r >= 6 ? 99 : r === 5 ? 3 : r === 4 ? 2 : 0,
         abilities: [] };
@@ -1505,11 +1700,22 @@
           for (var n = 0; n < pc.n; n++) { var rx = (R() * 2 - 1) * 30, ry = (R() * 1.6 - 0.4) * 40, rr = 7 + R() * 9; g.beginPath(); g.ellipse(rx, ry, rr, rr * 0.85, 0, 0, 7); g.fill(); }
         }
       }
+      if (coat.raccoon) {
+        // trash-panda markings: dark eye mask, pale muzzle, light brow
+        g.fillStyle = '#d8d4c8'; g.beginPath(); g.ellipse(0, -30, 15, 8, 0, 0, 7); g.fill();
+        g.fillStyle = '#26262c'; g.beginPath(); g.ellipse(0, -16, 27, 10, 0, 0, 7); g.fill();
+        g.fillStyle = '#d8d4c8'; g.beginPath(); g.ellipse(0, -3, 11, 8, 0, 0, 7); g.fill();
+      }
     }
     function drawCatPortrait(g, cx, cy, s, coat, opts) {
       var k = s / 120; g.save(); g.translate(cx, cy); g.scale(k, k); g.lineJoin = 'round';
       g.strokeStyle = coat.base; g.lineCap = 'round'; g.lineWidth = 13;
       g.beginPath(); g.moveTo(30, 34); g.quadraticCurveTo(54, 26, 50, 2); g.stroke();
+      if (coat.raccoon) {
+        // ringed raccoon tail
+        g.save(); g.strokeStyle = '#3f3f47'; g.lineWidth = 13; g.setLineDash([8, 8]);
+        g.beginPath(); g.moveTo(30, 34); g.quadraticCurveTo(54, 26, 50, 2); g.stroke(); g.restore();
+      }
       g.fillStyle = coat.base; catSil(g); g.fill();
       g.save(); catSil(g); g.clip(); applyCoat(g, coat); g.restore();
       g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.4)'; catSil(g); g.stroke();
@@ -1560,7 +1766,7 @@
       var nm = document.getElementById('reveal-name');
       nm.textContent = coat.name + (isNew ? '  ✨NEW' : ''); nm.style.color = rar.col;
       var st = document.getElementById('reveal-stars');
-      st.textContent = (coat.rarity === 6 ? 'SECRET · ' : '') + starStr(coat.rarity) + ' ' + rar.name; st.style.color = rar.col;
+      st.textContent = (coat.rarity === 7 ? 'MYTHIC · ' : coat.rarity === 6 ? 'SECRET · ' : '') + starStr(coat.rarity) + ' ' + rar.name; st.style.color = rar.col;
       var rv = document.getElementById('gacha-reveal'); rv.classList.remove('pop'); void rv.offsetWidth; rv.classList.add('pop');
     }
     // bundle reveal: best cat gets the big portrait, the whole haul shows as minis
@@ -1581,16 +1787,17 @@
       }
     }
     function doBundle(b) {
+      if (lure) return;                       // a lure is already playing out
       var g = gGems(); if (g < b.cost) return;
       gSetGems(g - b.cost);
       var results = [], news = [], owned = gOwned();
       for (var i = 0; i < b.pulls; i++) results.push(rollCat());
-      // guarantee: if no pull hit the bundle's rarity floor, upgrade the last one
+      // guarantee: if no pull hit the bait's rarity floor, upgrade the last one
       if (b.minR && !results.some(function (ix) { return CATS[ix].rarity >= b.minR; }))
         results[results.length - 1] = rollCatMin(b.minR);
       results.forEach(function (ix) { news.push(owned[ix] === 0); owned[ix]++; });
       gSetOwned(owned);
-      refreshGemDisplays(); showRevealMulti(results, news);
+      refreshGemDisplays(); startLure(b, results, news);
       return results;
     }
     function doPull() { return doBundle(BUNDLES[0]); }
@@ -1599,12 +1806,75 @@
       BUNDLES.forEach(function (b) {
         var btn = document.createElement('button');
         btn.className = 'bundle-btn' + (b.id === 'royal' ? ' best' : ''); btn.dataset.cost = b.cost;
-        btn.innerHTML = '<div class="b-name">' + b.name + ' 🎁</div><div class="b-cost">' + b.cost + ' 💎</div><div class="b-note">' + b.note + '</div>';
+        btn.innerHTML = '<div class="b-name">' + b.emoji + ' ' + b.name + '</div><div class="b-cost">' + b.cost + ' 💎</div><div class="b-note">' + b.note + '</div>';
         btn.addEventListener('click', function () { doBundle(b); });
         wrap.appendChild(btn);
       });
     }
     buildBundleBtns();
+
+    // ---- the lure: a pitch-black stray creeps up, takes the bait, and the
+    // trap cage drops — THEN the catch is revealed ----
+    var lure = null;
+    function drawLureCat(g, cx, cy, s, t) {
+      g.save(); g.translate(cx, cy); var k = s / 120; g.scale(k, k);
+      g.lineJoin = 'round'; g.lineCap = 'round';
+      g.strokeStyle = '#0b0a10'; g.lineWidth = 13;
+      g.beginPath(); g.moveTo(30, 34); g.quadraticCurveTo(54, 26 + Math.sin(t * 5) * 7, 50, 2 + Math.sin(t * 5) * 4); g.stroke();
+      g.fillStyle = '#0b0a10'; catSil(g); g.fill();
+      // glowing eyes are the only thing you can make out
+      g.fillStyle = '#ffd96b'; g.shadowColor = '#ffd96b'; g.shadowBlur = 10;
+      g.beginPath(); g.ellipse(-11, -16, 4.5, 6.5, 0, 0, 7); g.ellipse(11, -16, 4.5, 6.5, 0, 0, 7); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = '#0b0a10';
+      g.beginPath(); g.ellipse(-11, -15, 1.7, 5, 0, 0, 7); g.ellipse(11, -15, 1.7, 5, 0, 0, 7); g.fill();
+      g.restore();
+    }
+    function startLure(b, results, news) {
+      lure = { b: b, results: results, news: news, t0: performance.now() };
+      document.getElementById('reveal-strip').innerHTML = '';
+      var nm = document.getElementById('reveal-name');
+      nm.textContent = 'Something\'s sniffing the ' + b.name.toLowerCase() + '…'; nm.style.color = '#9aa0ad';
+      document.getElementById('reveal-stars').textContent = '';
+      requestAnimationFrame(lureFrame);
+    }
+    function lureFrame() {
+      if (!lure) return;
+      // panel closed mid-lure → skip straight to the reveal
+      if (document.getElementById('gacha').hidden) { finishLure(); return; }
+      var t = (performance.now() - lure.t0) / 1000;
+      var cv = document.getElementById('gacha-canvas'), g = cv.getContext('2d');
+      g.clearRect(0, 0, 240, 240);
+      // moonlit alley
+      var bg = g.createLinearGradient(0, 0, 0, 240); bg.addColorStop(0, '#10162c'); bg.addColorStop(1, '#080b18');
+      g.fillStyle = bg; g.fillRect(0, 0, 240, 240);
+      g.fillStyle = 'rgba(255,245,210,0.35)'; g.beginPath(); g.arc(196, 38, 17, 0, 7); g.fill();
+      g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.ellipse(120, 196, 92, 14, 0, 0, 7); g.fill();
+      // the bait, glinting
+      g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.globalAlpha = 0.75 + 0.25 * Math.sin(t * 7);
+      g.font = '34px sans-serif'; g.fillText(lure.b.emoji, 158, 176);
+      g.restore();
+      // the stray: creeps in (0–0.8s), pauses, then darts for the bait (1.0–1.5s)
+      var inP = clamp(t / 0.8, 0, 1), inE = 1 - (1 - inP) * (1 - inP);
+      var lureP = clamp((t - 1.0) / 0.5, 0, 1), lureE = lureP * lureP;
+      var cx = lerp(-50, 74, inE) + lerp(0, 58, lureE);
+      drawLureCat(g, cx, 158, 105, t);
+      if (t > 0.85 && t < 1.05) { g.font = 'bold 26px Nunito, sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffd96b'; g.fillText('!', cx + 26, 92); }
+      // the trap springs (1.55s): cage slams down over cat + bait
+      if (t >= 1.55) {
+        var cp = clamp((t - 1.55) / 0.22, 0, 1), ce = 1 - (1 - cp) * (1 - cp);
+        var wig = t > 1.77 ? Math.sin((t - 1.77) * 24) * 4 * Math.max(0, 1.4 - (t - 1.77)) : 0;
+        drawCage(g, 145 + wig, lerp(-70, 148, ce), 150);
+        if (cp >= 1 && !lure.landed) { lure.landed = true; }
+      }
+      if (t >= 2.35) { finishLure(); return; }
+      requestAnimationFrame(lureFrame);
+    }
+    function finishLure() {
+      var l = lure; lure = null;
+      if (l) showRevealMulti(l.results, l.news);
+    }
     function openGacha() { refreshGemDisplays(); document.getElementById('gacha').hidden = false; }
     function updateTeamLine() {
       var t = gTeam();
@@ -1669,7 +1939,9 @@
       open: function () { var r = room(S.cat.x, S.cat.y); if (r.vault && !r.vault.opened) { openVault(r); syncHUD(); } },
       start: startLevel,
       gacha: { gems: gGems, setGems: gSetGems, pull: doPull, owned: gOwned, setOwned: gSetOwned, cats: CATS, roll: rollCat, specials: SPECIALS.length,
-               bundles: BUNDLES, bundle: doBundle, rollMin: rollCatMin },
+               bundles: BUNDLES, bundle: doBundle, rollMin: rollCatMin, luring: function () { return !!lure; } },
+      cine: function () { return S && S.cine; },
+      tick: simTick,
       team: { get: gTeam, set: gSetTeam, info: teamInfo, catInfo: catInfo, active: function () { return activeCat(); } }
     };
   })();

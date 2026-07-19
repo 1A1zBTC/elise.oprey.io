@@ -848,6 +848,28 @@
     var ADOPT_PENS = 4;                    // pen crates on the back wall = stock cap
     var ADOPT_FEE = 60;                    // paid to the clinic per adoption
     var SURRENDER_FEE = 10;                // handling fee per pet given away
+    // Legendary pets: a 2% adoption is one of these named, one-of-a-kind friends.
+    // Their names are fixed forever — nobody gets to rename a legend.
+    var LEGEND_CHANCE = 0.02;
+    var legendNext = false;                // test hook: force the next adoption legendary
+    var LEGENDARIES = {
+      cat: [
+        { nm: 'Mona',      coat: 'calico',            base: '#f4ede1', patch: '#e8963f', patch2: '#3a3430' },
+        { nm: 'Smidge',    coat: 'tortoiseshell',     base: '#4a3a2c', patch: '#c77b3a', patch2: '#23201c' },
+        { nm: 'Kuku',      coat: 'tuxedo',            base: '#2b2b30', patch: '#f6f3ea', patch2: '#f6f3ea' },
+        { nm: 'Mimi',      coat: 'calico-tortie',     base: '#d9c9b2', patch: '#b5713a', patch2: '#43392f' },
+        { nm: 'Sweet Pea', coat: 'calico (snowy)',    base: '#faf6ee', patch: '#e2a05a', patch2: '#4a4038' }
+      ],
+      dog: [
+        { nm: 'Funny', coat: 'border collie',           kind: 'dog-m', sz: 0.9,  base: '#f6f3ea', patch: '#2e2b28', patch2: '#2e2b28' },
+        { nm: 'Pijiu', coat: 'all-white corgi',         kind: 'dog-s', sz: 1,    base: '#faf7f0', patch: '#faf7f0', patch2: '#f0e9da' },
+        { nm: 'Milo',  coat: 'english cream retriever', kind: 'dog-m', sz: 1.1,  base: '#efe3c8', patch: '#efe3c8', patch2: '#e6d6b4' }
+      ]
+    };
+    function pickLegendary(species) {
+      var pool = LEGENDARIES[species] || LEGENDARIES.cat;
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
     var adoptions = [];                    // [{gx,gy,rot,door,occupant,stock:[petKind],dirty,cleanProg,grimeT}]
     function adoptionTiles(gx, gy) {
       var t = [];
@@ -2705,10 +2727,16 @@
       if (seated) {
         // pet set down on the floor in front of the seated owner (at their feet)
         if (isDog && !dogLoose) cachedDog(v, cx + 9, s.y + 13, false);
-        else if (!isDog && !v.petBoarded && !v.petless) cachedCarrier(cx, s.y + 2, v.carrier, mirror);
+        else if (!isDog && !v.petBoarded && !v.petless) {
+          cachedCarrier(cx, s.y + 2, v.carrier, mirror);
+          if (v.legend) drawLegendTag(v.legend.nm, cx, s.y - 20);   // the legend rides in the carrier
+        }
       } else {
         // cat carrier held in front of the body (empty-handed while the cat boards / pet given away)
-        if (!isDog && !v.petBoarded && !v.petless) cachedCarrier(cx, baseY - 14, v.carrier, mirror);
+        if (!isDog && !v.petBoarded && !v.petless) {
+          cachedCarrier(cx, baseY - 14, v.carrier, mirror);
+          if (v.legend) drawLegendTag(v.legend.nm, cx, baseY - 34);
+        }
         // dog drawn after the body when it should appear in front (walking up, back to us)
         if (isDog && !dogLoose && !front) cachedDog(v, cx - 16 * mirror, s.y + 4, mirror > 0);
       }
@@ -2863,7 +2891,9 @@
     // the on-leash, still pose for dogs walking beside their owner.
     function drawDog(v, cx, cy, faceRight, opts) {
       opts = opts || {};
-      var sz = DOG_SIZE[v.pet] || 1, col = DOG_COLOR[v.pet] || '#9c6b43';
+      var lg = v.legend;
+      var sz = (DOG_SIZE[v.pet] || 1) * (lg && lg.sz ? lg.sz : 1);
+      var col = lg ? lg.base : (DOG_COLOR[v.pet] || '#9c6b43');
       var f = faceRight ? 1 : -1;
       var sw = opts.run ? Math.sin(opts.run) * 2.4 * sz : 0;        // leg swing while running
       var tw = opts.wag ? Math.sin(opts.wag * 9) * 3 * sz : 0;      // tail wag
@@ -2906,13 +2936,35 @@
         ctx.beginPath(); ctx.moveTo(hx - 3 * sz * f, hy + 1 * sz);
         ctx.lineTo(cx + (faceRight ? 12 : -12), cy - 28); ctx.stroke();
       }
+      if (lg) drawLegendMarks(lg, cx, cy, sz, f, hx, hy);
+    }
+
+    // Legendary coat patches + the fixed golden name tag (legends keep their names!)
+    function drawLegendMarks(lg, cx, cy, sz, f, hx, hy) {
+      ctx.fillStyle = lg.patch;
+      ctx.beginPath(); ctx.ellipse(cx - 3 * sz, cy - 9.5 * sz, 3.4 * sz, 2.6 * sz, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = lg.patch2;
+      ctx.beginPath(); ctx.ellipse(cx + 3.5 * sz, cy - 6.8 * sz, 2.4 * sz, 1.9 * sz, -0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(hx - 1.5 * sz * f, hy - 2 * sz, 1.8 * sz, 1.4 * sz, 0, 0, Math.PI * 2); ctx.fill();
+      drawLegendTag(lg.nm, cx, cy - 24 * sz);
+    }
+    function drawLegendTag(nm, x, y) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '800 11px Nunito, sans-serif';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(60,40,0,0.7)';
+      ctx.strokeText('✨ ' + nm, x, y);
+      ctx.fillStyle = '#ffd24a';
+      ctx.fillText('✨ ' + nm, x, y);
+      ctx.restore();
     }
 
     // Side-profile cat, out of its carrier in the cat park. Same contract as
     // drawDog ({ run, wag } opts) but smaller, grey, pointy-eared, upright tail.
     function drawCat(v, cx, cy, faceRight, opts) {
       opts = opts || {};
-      var sz = 0.75, col = '#8a8f98';
+      var lg = v.legend;
+      var sz = 0.75, col = lg ? lg.base : '#8a8f98';
       var f = faceRight ? 1 : -1;
       var sw = opts.run ? Math.sin(opts.run) * 2.4 * sz : 0;        // leg swing while running
       var tw = opts.wag ? Math.sin(opts.wag * 6) * 2.5 * sz : 0;    // lazy tail sway
@@ -2950,6 +3002,7 @@
       ctx.strokeStyle = 'rgba(240,244,248,0.8)'; ctx.lineWidth = 0.7;
       ctx.beginPath(); ctx.moveTo(hx + 3 * sz * f, hy + 1.4 * sz); ctx.lineTo(hx + 7 * sz * f, hy + 0.6 * sz); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(hx + 3 * sz * f, hy + 2 * sz); ctx.lineTo(hx + 7 * sz * f, hy + 2.4 * sz); ctx.stroke();
+      if (lg) drawLegendMarks(lg, cx, cy, sz, f, hx, hy);
     }
 
     // Pet carrier (for cats): a coloured box with a grille door and a top handle.
@@ -2984,7 +3037,7 @@
     // exact frame the bucket represents; leash geometry is a fixed offset from the
     // dog's anchor, so it bakes safely too. Anchor = the pet's ground centre.
     function cachedDog(v, cx, cy, faceRight, opts) {
-      if (!charSpritesOn) return drawDog(v, cx, cy, faceRight, opts);
+      if (v.legend || !charSpritesOn) return drawDog(v, cx, cy, faceRight, opts);   // legends are one-offs — draw live
       opts = opts || {};
       var swb = opts.run ? Math.round(Math.sin(opts.run) * 3) : 0;
       var twb = opts.wag ? Math.round(Math.sin(opts.wag * 9) * 3) : 0;
@@ -2995,7 +3048,7 @@
       }), PET_BOX, cx, cy);
     }
     function cachedCat(v, cx, cy, faceRight, opts) {
-      if (!charSpritesOn) return drawCat(v, cx, cy, faceRight, opts);
+      if (v.legend || !charSpritesOn) return drawCat(v, cx, cy, faceRight, opts);   // legends are one-offs — draw live
       opts = opts || {};
       var swb = opts.run ? Math.round(Math.sin(opts.run) * 3) : 0;
       var twb = opts.wag ? Math.round(Math.sin(opts.wag * 6) * 3) : 0;
@@ -6426,6 +6479,13 @@
           } else {                           // adopt: take the longest-waiting pet home
             if (arm && arm.stock.length) { v.pet = arm.stock.shift(); v.petless = false; }
             v.adopted = true;
+            // ✨ 2% of adopted cats & dogs turn out to be a named LEGENDARY pet
+            if (!v.petless && (legendNext || Math.random() < LEGEND_CHANCE)) {
+              legendNext = false;
+              v.legend = pickLegendary(petSpecies(v.pet));
+              if (v.legend.kind) v.pet = v.legend.kind;   // legends come in their true breed size
+              floaters.push({ v: v, t: 0, legend: v.legend.nm });
+            }
             money += ADOPT_FEE; renderMoney();
             floaters.push({ v: v, t: 0, amt: ADOPT_FEE });
             v.happy = true; releaseAdopt(v);
@@ -6917,7 +6977,7 @@
       // advance + retire the +10 coin pops
       for (var fi = floaters.length - 1; fi >= 0; fi--) {
         floaters[fi].t += dt;
-        if (floaters[fi].t > 1.2) floaters.splice(fi, 1);
+        if (floaters[fi].t > (floaters[fi].legend ? 2.6 : 1.2)) floaters.splice(fi, 1);
       }
 
       // automatic doors open when the vet or any visitor is near the doorway
@@ -7109,6 +7169,19 @@
       ctx.font = '800 16px Nunito, sans-serif';
       floaters.forEach(function (fl) {
         if (!fl.v) return;
+        if (fl.legend) {   // golden legendary announcement — bigger, slower, sparklier
+          var ls = iso(fl.v.x, fl.v.y), ly = ls.y - 58 - fl.t * 16;
+          ctx.globalAlpha = Math.min(1, Math.max(0, 1 - fl.t / 2.6));
+          ctx.font = '800 19px Nunito, sans-serif';
+          ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(60,40,0,0.7)';
+          ctx.strokeText('✨ LEGENDARY! ✨', ls.x, ly - 20);
+          ctx.strokeText(fl.legend + ' joins a family!', ls.x, ly);
+          ctx.fillStyle = '#ffd24a';
+          ctx.fillText('✨ LEGENDARY! ✨', ls.x, ly - 20);
+          ctx.fillText(fl.legend + ' joins a family!', ls.x, ly);
+          ctx.font = '800 16px Nunito, sans-serif';
+          return;
+        }
         var s = iso(fl.v.x, fl.v.y), y = s.y - 48 - fl.t * 34, txt = '+' + (fl.amt || 10);
         ctx.globalAlpha = Math.max(0, 1 - fl.t / 1.2);
         ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,30,20,0.55)';
@@ -7852,7 +7925,9 @@
       placeDesk: function (gx, gy, r) { window.__t.place('desk', gx, gy, r); },
       placeChair: function (gx, gy, r) { window.__t.place('chair', gx, gy, r); },
       vet: function (x, y) { if (x != null) { vet.x = x; vet.y = y; } return { x: vet.x, y: vet.y }; },
-      visitors: function () { return visitors.map(function (v) { return { phase: v.phase, seated: !!v.seated, pet: v.pet, patience: Math.round(v.patience * 10) / 10, x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100, chair: v.chair || null }; }); },
+      visitors: function () { return visitors.map(function (v) { return { phase: v.phase, seated: !!v.seated, pet: v.pet, legend: v.legend ? v.legend.nm : null, patience: Math.round(v.patience * 10) / 10, x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100, chair: v.chair || null }; }); },
+      forceLegend: function () { legendNext = true; },
+      legendPool: function () { return { cat: LEGENDARIES.cat.map(function (l) { return l.nm; }), dog: LEGENDARIES.dog.map(function (l) { return l.nm; }) }; },
       buildCorridor: function (sx, sy, ex, ey) { commitCorridor(sx, sy, ex, ey); return Object.keys(corridor); },
       buildBlank: function (sx, sy, ex, ey) { commitBlank(sx, sy, ex, ey); return Object.keys(openRoom); },
       buildPark: function (sx, sy, ex, ey) { commitPark(sx, sy, ex, ey); return Object.keys(park); },

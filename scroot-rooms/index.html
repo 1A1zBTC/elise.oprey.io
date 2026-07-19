@@ -119,6 +119,7 @@
       sceneImg = sceneCtx.createImageData(RW, RH);
       buf32 = new Uint32Array(sceneImg.data.buffer);
       ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       if (typeof updateCamera === 'function' && dirX !== undefined) updateCamera();
     }
     window.addEventListener('resize', resize);
@@ -167,7 +168,7 @@
       yellow: 'maze', pool: 'maze', haunted: 'maze', sewer: 'maze',
       forest: 'forest', grocery: 'aisles', garage: 'garage',
       school: 'rooms', hospital: 'rooms',
-      subway: 'hall', office: 'hall', party: 'hall', factory: 'hall'
+      subway: 'hall', office: 'hall', party: 'party', factory: 'hall'
     };
     let curArch = 'maze';
     function blankMap(w, h) { mapW = w; mapH = h; map = []; for (let y = 0; y < h; y++) map.push(new Array(w).fill(1)); }
@@ -194,7 +195,8 @@
         map[ny * 2 + 1][nx * 2 + 1] = 0;
         visited[ny][nx] = true; stack.push([nx, ny]);
       }
-      const openP = theme === 'pool' ? 0.5 : 0.38;
+      // fewer knocked-out walls (and fewer still as you go deeper) -> twistier halls
+      const openP = Math.max(0.2, (theme === 'pool' ? 0.44 : 0.3) - lvl * 0.006);
       for (let y = 1; y < mapH - 1; y++) for (let x = 1; x < mapW - 1; x++) {
         if (map[y][x] !== 1) continue;
         if (x % 2 === 0 && y % 2 === 0) continue;
@@ -205,20 +207,45 @@
         const rw = rint(3, 6), rh = rint(3, 6), rx = rint(1, mapW - rw - 2), ry = rint(1, mapH - rh - 2);
         for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) { if (x % 2 === 0 && y % 2 === 0) continue; map[y][x] = 0; }
       }
+      // long partition runs with only a couple of gaps — the halls dead-end and
+      // double back, so finding a door means actually learning the level
+      const runs = clamp(1 + (lvl >> 2), 1, 4);
+      for (let rIdx = 0; rIdx < runs; rIdx++) {
+        if (Math.random() < 0.5) {
+          const wx = rint(4, mapW - 5), g1 = rint(2, mapH - 3), g2 = rint(2, mapH - 3);
+          for (let y = 1; y < mapH - 1; y++) { if (Math.abs(y - g1) <= 1 || Math.abs(y - g2) <= 1) continue; map[y][wx] = 1; }
+        } else {
+          const wy = rint(4, mapH - 5), g1 = rint(2, mapW - 3), g2 = rint(2, mapW - 3);
+          for (let x = 1; x < mapW - 1; x++) { if (Math.abs(x - g1) <= 1 || Math.abs(x - g2) <= 1) continue; map[wy][x] = 1; }
+        }
+      }
       px = 1.5; py = 1.5; dir = 0;
+      map[1][1] = 0; map[1][2] = 0; map[2][1] = 0;   // never wall in the spawn corner
     }
 
     function buildForest(lvl) {                            // open dark woods: weave between tall trees
       const w = clamp(28 + lvl * 2, 28, 48), h = clamp(22 + lvl * 2, 22, 40);
       blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
       px = 2.5; py = 2.5; dir = 0.5;
-      const target = Math.floor(w * h * 0.12);
+      const target = Math.floor(w * h * 0.15);
       let placed = 0, guard = 0;
       while (placed < target && guard < target * 12) {
         guard++;
         const tx = rint(2, w - 3), ty = rint(2, h - 3);
         if (Math.hypot(tx + 0.5 - px, ty + 0.5 - py) < 4) continue;
         if (addObst(tx, ty, PA.pine, 1.95, 0.72)) placed++;
+      }
+      // bramble ridges: winding runs of dense thicket that wall the woods into
+      // twisting paths you have to feel your way along
+      const ridges = clamp(2 + (lvl >> 2), 2, 5);
+      for (let r = 0; r < ridges; r++) {
+        let bx = rint(4, w - 5), by = rint(4, h - 5), ang = rnd(0, 6.28);
+        for (let s = 0, len = rint(7, 13); s < len; s++) {
+          if (Math.hypot(bx + 0.5 - px, by + 0.5 - py) > 3.5) addObst(bx, by, PA.bush, 0.52, 0.66);
+          ang += rnd(-0.55, 0.55);
+          bx = clamp(Math.round(bx + Math.cos(ang)), 2, w - 3);
+          by = clamp(Math.round(by + Math.sin(ang)), 2, h - 3);
+        }
       }
       // undergrowth woven between the pines: fallen logs, ferns, bushes, boulders
       const UV = [[PA.fern, 0.42, 0.52], [PA.bush, 0.34, 0.46], [PA.rock, 0.26, 0.42], [PA.log, 0.3, 0.82], [PA.fern, 0.42, 0.52], [PA.bush, 0.34, 0.46]];
@@ -233,22 +260,60 @@
       }
     }
 
-    function buildAisles(lvl) {                            // supermarket: long parallel shelving aisles
-      const w = clamp(24 + lvl, 24, 40), h = clamp(18 + lvl, 18, 32);
+    function buildAisles(lvl) {                            // supermarket: shelving aisles gone wrong
+      const w = clamp(26 + lvl, 26, 42), h = clamp(20 + lvl, 20, 34);
       blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
       px = 2.5; py = (h / 2 | 0) + 0.5; dir = 0;
-      // shelves run vertically with open top + bottom corridors connecting every aisle
-      for (let ax = 4; ax < w - 3; ax += 3) for (let y = 3; y < h - 3; y++) addObst(ax, y, PA.shelf, 0.95, 0.84);
+      // back-of-store storeroom sealed behind a wall with two swing doors
+      const bx = w - 6;
+      for (let y = 1; y < h - 1; y++) map[y][bx] = 1;
+      map[rint(3, (h / 2 | 0) - 1)][bx] = 0;
+      map[rint((h / 2 | 0) + 1, h - 4)][bx] = 0;
+      for (let i = 0, n = Math.floor(h / 4); i < n; i++) addObst(rint(bx + 2, w - 3), rint(2, h - 3), PA.shelf, 0.95, 0.84);   // pallet racks
+      // shelving aisles: each with only 1-2 cut-throughs, in different places per
+      // aisle, so the store zig-zags instead of reading at a glance
+      for (let ax = 4; ax < bx - 2; ax += 3) {
+        const g1 = rint(4, h - 5), g2 = lvl >= 3 ? rint(4, h - 5) : -9;
+        for (let y = 3; y < h - 3; y++) {
+          if (y === g1 || y === g2) continue;
+          addObst(ax, y, PA.shelf, 0.95, 0.84);
+        }
+      }
+      // dumped pallet clusters choke the top/bottom corridors at random spots
+      for (let i = 0, n = clamp(2 + (lvl >> 2), 2, 5); i < n; i++) {
+        const cxp = rint(5, bx - 3), row = i % 2 ? 2 : h - 3;
+        addObst(cxp, row, PA.freezer, 0.9, 0.8); addObst(cxp + 1, row, PA.freezer, 0.9, 0.8);
+      }
+      // stray carts adrift in the aisles
+      for (let i = 0; i < 4; i++) addObst(rint(4, bx - 2), rint(3, h - 4), PA.cart, 0.4, 0.55);
     }
 
-    function buildGarage(lvl) {                            // open concrete deck: pillar grid + parked cars
+    function buildGarage(lvl) {                            // parking levels: serpentine ramp lanes
       const w = clamp(26 + lvl, 26, 42), h = clamp(20 + lvl, 20, 34);
       blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
       px = 2.5; py = 2.5; dir = 0.3;
-      for (let y = 4; y < h - 3; y += 4) for (let x = 5; x < w - 4; x += 5) map[y][x] = 1;   // concrete pillars
-      const cars = Math.floor(w * h * 0.025);
+      // full-width concrete dividers with the opening at alternating ends — you
+      // snake back and forth across the deck like driving down the ramp levels
+      let flip = false;
+      for (let y = 5; y < h - 4; y += 5) {
+        for (let x = 1; x < w - 1; x++) map[y][x] = 1;
+        if (flip) { map[y][2] = 0; map[y][3] = 0; map[y][4] = 0; }
+        else { map[y][w - 3] = 0; map[y][w - 4] = 0; map[y][w - 5] = 0; }
+        if (lvl < 4) map[y][rint(7, w - 8)] = 0;          // early levels get a shortcut gap
+        flip = !flip;
+      }
+      for (let y = 3; y < h - 2; y += 5) for (let x = 6; x < w - 5; x += 5) map[y][x] = 1;   // pillar rows between dividers
+      // cars parked nose-in along each divider
+      for (let y = 5; y < h - 4; y += 5) {
+        for (let x = 4; x < w - 5; x += 3) {
+          if (Math.random() < 0.55) continue;
+          if (map[y - 1] && map[y - 1][x] === 0 && Math.hypot(x - px, y - 1 - py) > 4) addObst(x, y - 1, PA.car, 0.5, 1.05);
+          if (map[y + 1] && map[y + 1][x] === 0) addObst(x, y + 1, PA.car, 0.5, 1.05);
+        }
+      }
+      const strays = Math.floor(w * h * 0.012);
       let n = 0, gd = 0;
-      while (n < cars && gd < cars * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (Math.hypot(tx - px, ty - py) < 4) continue; if (addObst(tx, ty, PA.car, 0.5, 1.05)) n++; }
+      while (n < strays && gd < strays * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (Math.hypot(tx - px, ty - py) < 4) continue; if (addObst(tx, ty, PA.car, 0.5, 1.05)) n++; }
     }
 
     function buildRooms(theme, lvl) {                      // school / hospital: rooms + a big gym/ward off a hall
@@ -261,7 +326,7 @@
       function door(x, y) { if (x > 0 && y > 0 && x < mapW - 1 && y < mapH - 1) map[y][x] = 0; }
       const gymW = 9, gymX = w - 3 - gymW;
       let x = 3;
-      const doorCols = {};
+      const doorCols = {}, wallCols = [];
       while (x < gymX - 2) {                                // classrooms / wards down both sides
         const rw = rint(5, 7), rhT = rint(4, 6), rhB = rint(4, 6);
         const cx = x + (rw / 2 | 0);
@@ -282,6 +347,20 @@
           addObst(x + rw - 2, botY1 - 1, PA.gurney, 0.4, 0.71);
         }
         x += rw + 1;
+        if (x < gymX - 2) wallCols.push(x - 1);             // the shared wall to the NEXT room pair
+      }
+      // interconnecting doors punched through every shared classroom wall (the
+      // row just off the hall is inside every room, whatever its depth)
+      for (const wc of wallCols) { door(wc, hallTop - 2); door(wc, hallTop + hallH + 1); }
+      // collapsed-ceiling barricades block the hall itself — you must detour
+      // through a room, through the hole in its side wall, and back out
+      if (lvl >= 2 && wallCols.length > 1) {
+        const nBlock = clamp(1 + Math.floor(lvl / 6), 1, Math.min(3, wallCols.length - 1));
+        const cands = wallCols.slice(0, wallCols.length);
+        for (let b = 0; b < nBlock; b++) {
+          const bi = cands.splice(rint(0, cands.length - 1), 1)[0];
+          for (let hy = hallTop; hy < hallTop + hallH; hy++) map[hy][bi] = 1;
+        }
       }
       carveRect(gymX, 3, gymW, h - 6);                      // the gym / ward — one big open room, merged with the hall
       if (isSchool) {                                       // lockers line the hall walls between doorways
@@ -289,6 +368,12 @@
           if (doorCols[lx] || lx % 2 !== 0) continue;
           addObst(lx, hallTop, PA.lockers, 0.9, 0.84);
           addObst(lx, hallTop + hallH - 1, PA.lockers, 0.9, 0.84);
+        }
+      } else {                                              // abandoned gurneys + IV stands clutter the ward hall
+        for (let i = 0; i < 4; i++) {
+          const hx = rint(6, gymX - 2), hy = hallTop + rint(0, hallH - 1);
+          if (Math.hypot(hx + 0.5 - px, hy + 0.5 - py) < 3) continue;
+          addObst(hx, hy, i % 2 ? PA.wheelchair : PA.ivstand, i % 2 ? 0.44 : 0.6, i % 2 ? 0.5 : 0.3);
         }
       }
     }
@@ -313,21 +398,87 @@
         addObst(w - 6, (h / 2 | 0) - 1, PA.departures, 0.62, 0.72);                           // departures board
         addObst(4, (py | 0), PA.turnstile, 0.5, 0.42);
         addObst(4, (py | 0) + 1, PA.turnstile, 0.5, 0.42);
-      } else if (theme === 'office') {
-        for (let cy = 5; cy < h - 5; cy += 6) for (let cx = 6; cx < w - 6; cx += 8) {        // cubicle pods
-          addObst(cx, cy, PA.cubicle, 0.52, 0.71); addObst(cx + 1, cy, PA.cubicle, 0.52, 0.71);
-          map[cy + 1][cx] = 1; map[cy - 1] && (map[cy - 1][cx + 1] = 1);                     // low partitions
+        // fare-control fence lines across the platform: only the turnstile gaps
+        // get you through to the next stretch of station
+        for (const fx of [Math.round(w * 0.38), Math.round(w * 0.7)]) {
+          const fg1 = rint(4, h - 5), fg2 = rint(4, h - 5);
+          for (let y = 3; y < h - 3; y++) { if (y === fg1 || y === fg2) continue; map[y][fx] = 1; }
+          addObst(fx - 1, fg1 - 1, PA.turnstile, 0.5, 0.42);   // fare gates flanking (never inside) the gaps
+          addObst(fx + 1, fg2 + 1, PA.turnstile, 0.5, 0.42);
         }
-      } else if (theme === 'party') {
-        const n = Math.floor(w * h * 0.02);
-        let p = 0, gd = 0;
-        while (p < n && gd < n * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (Math.hypot(tx - px, ty - py) < 3) continue; if (p % 2 ? addObst(tx, ty, PA.balloons, 0.9, 0.62) : addObst(tx, ty, PA.partytable, 0.46, 0.74)) p++; }
+        // boarded-up kiosk block mid-platform
+        const kx = Math.round(w * 0.55), ky = (h / 2 | 0) - 3;
+        if (ky > 3) { map[ky][kx] = 1; map[ky][kx + 1] = 1; map[ky + 1][kx] = 1; map[ky + 1][kx + 1] = 1; }
+      } else if (theme === 'office') {
+        // a real cubicle-farm maze: partition rows with offset pass-gaps, pods
+        // of desks, and a manager's corner office you can get lost around
+        for (let cy = 4; cy < h - 4; cy += 3) {
+          const g1 = rint(3, w - 4), g2 = rint(3, w - 4);
+          for (let cx = 3; cx < w - 3; cx++) {
+            if (Math.abs(cx - g1) <= 1 || Math.abs(cx - g2) <= 1) continue;
+            if (Math.hypot(cx - px, cy - py) < 3) continue;
+            map[cy][cx] = 1;
+          }
+          for (let cx = 4; cx < w - 4; cx += 5) if (map[cy][cx] === 1 && map[cy + 1][cx] === 0) addObst(cx, cy + 1, PA.cubicle, 0.52, 0.71);
+        }
+        const ox = w - 8;                                    // corner office walls
+        for (let y = 2; y < 7 && y < h - 2; y++) map[y][ox] = 1;
+        for (let x = ox; x < w - 2; x++) map[6] && (map[6][x] = 1);
+        if (map[6]) map[6][w - 4] = 0;                       // its one door
+        addObst(w - 5, 3, PA.cooler, 0.62, 0.3);
       } else if (theme === 'factory') {
-        const midx = w / 2 | 0;
-        for (let y = 2; y < h - 2; y++) if (y !== (py | 0) && y !== (py | 0) + 1) map[y][midx] = 1;   // chamber divider with doorway
-        const n = Math.floor(w * h * 0.022);
+        // a chain of vat chambers: each divider's hatch is somewhere else, and
+        // vat rows inside each chamber block the straight line to the next
+        const nDiv = clamp(2 + (lvl >> 2), 2, 4);
+        for (let d = 0; d < nDiv; d++) {
+          const dx = Math.round((d + 1) * (w - 2) / (nDiv + 1));
+          const gy = rint(2, h - 3);
+          for (let y = 1; y < h - 1; y++) { if (Math.abs(y - gy) <= 1) continue; map[y][dx] = 1; }
+        }
+        const n = Math.floor(w * h * 0.03);
         let p = 0, gd = 0;
-        while (p < n && gd < n * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (tx === midx) continue; if (Math.hypot(tx - px, ty - py) < 3) continue; if (addObst(tx, ty, PA.gumvat, 0.8, 0.69)) p++; }
+        while (p < n && gd < n * 12) { gd++; const tx = rint(3, w - 4), ty = rint(3, h - 4); if (Math.hypot(tx - px, ty - py) < 3) continue; if (addObst(tx, ty, PA.gumvat, 0.8, 0.69)) p++; }
+      }
+    }
+
+    function buildParty(lvl) {                             // Level Fun =) — an actual party complex
+      const w = clamp(32 + lvl, 32, 46), h = clamp(24 + lvl, 24, 36);
+      blankMap(w, h); carveRect(1, 1, w - 2, h - 2);
+      px = 2.5; py = (h / 2 | 0) + 0.5; dir = 0;
+      const midY = h / 2 | 0;
+      // ---- entry lobby: a wall with two balloon-flanked doorways ----
+      const lx = 6;
+      for (let y = 1; y < h - 1; y++) map[y][lx] = 1;
+      const d1 = midY, d2 = rint(3, h - 4);
+      map[d1][lx] = 0; map[d2][lx] = 0;
+      addObst(lx - 1, clamp(d1 - 2, 2, h - 3), PA.balloons, 0.9, 0.62);
+      addObst(lx + 1, clamp(d2 + 2, 2, h - 3), PA.balloons, 0.9, 0.62);
+      addObst(3, 3, PA.banner, 0.9, 0.8); addObst(3, h - 4, PA.banner, 0.9, 0.8);
+      // ---- dance floor: speaker-stack ring with 4 gaps, cake in the middle ----
+      const dcx = Math.round(w * 0.42), dcy = midY, dr = 5;
+      for (let a = 0; a < 16; a++) {
+        const ang = a / 16 * Math.PI * 2;
+        const sx2 = Math.round(dcx + Math.cos(ang) * dr), sy2 = Math.round(dcy + Math.sin(ang) * dr * 0.72);
+        if (a % 4 === 0) continue;                          // 4 ways in
+        addObst(sx2, sy2, PA.speaker, 0.95, 0.6);
+      }
+      addObst(dcx, dcy, PA.cake, 1.15, 0.62);              // the towering birthday cake
+      // ---- gift maze: rows of stacked presents with offset gaps (right third) ----
+      const gx0 = Math.round(w * 0.62);
+      for (let gy = 3; gy < h - 3; gy += 2) {
+        const gap = rint(gx0 + 1, w - 4), gap2 = rint(gx0 + 1, w - 4);
+        for (let gxx = gx0; gxx < w - 2; gxx++) {
+          if (Math.abs(gxx - gap) <= 0 || gxx === gap2) continue;
+          addObst(gxx, gy, PA.presents[(gxx + gy) % PA.presents.length], 0.62, 0.62);
+        }
+      }
+      // ---- snack tables in marching rows (top-left quadrant) ----
+      for (let ty = 3; ty < midY - 3; ty += 3) for (let tx = 9; tx < gx0 - 3; tx += 4) addObst(tx, ty, PA.partytable, 0.46, 0.74);
+      // ---- streamer poles + balloon clusters break up the rest ----
+      for (let i = 0, n = Math.floor(w * h * 0.014); i < n; i++) {
+        const tx = rint(lx + 2, w - 4), ty = rint(3, h - 4);
+        if (Math.hypot(tx - px, ty - py) < 3) continue;
+        addObst(tx, ty, i % 3 === 0 ? PA.streamer : PA.balloons, i % 3 === 0 ? 1.3 : 0.9, i % 3 === 0 ? 0.3 : 0.62);
       }
     }
 
@@ -339,6 +490,7 @@
       else if (curArch === 'garage') buildGarage(lvl);
       else if (curArch === 'rooms') buildRooms(theme, lvl);
       else if (curArch === 'hall') buildHall(theme, lvl);
+      else if (curArch === 'party') buildParty(lvl);
       else buildMaze(theme, lvl);
     }
 
@@ -508,6 +660,11 @@
         return { type: type, frames: def.frames.length };
       },
       unstuck: function (x, y) { var r = pushOut(x, y, PLAYER_R); return { ok: mapAt(r[0], r[1]) === 0, x: Math.round(r[0] * 100) / 100, y: Math.round(r[1] * 100) / 100 }; },
+      clear: function () { entities = []; return true; },   // QA: remove hunters
+      tp: function (x, y, d) { px = x; py = y; if (d != null) dir = d; updateCamera(); return mapAt(x, y) === 0; },  // QA: teleport
+      map: function () { return map.map(function (row) { return row.join(''); }); },
+      scare: function (t, at) { caughtBy = t || 'clark'; triggerJumpscare(); if (at != null) jumpT = at; return jumpType; },  // QA: preview a jumpscare
+      freeze: function () { jumpT = 1e9; return true; },    // QA: hold the current jumpscare frame timer
       doorThemes: function () { return doors.map(function (d) { return d.theme; }); },
       corpseInfo: function () {
         return corpses.map(function (b) {
@@ -1013,6 +1170,12 @@
       g.beginPath();
       g.moveTo(Q(83), P(298)); g.lineTo(Q(91), P(298));
       g.lineTo(Q(pegX + 3), P(360)); g.lineTo(Q(pegX), P(420)); g.lineTo(Q(pegX - 3), P(360)); g.closePath(); g.fill();
+      // leather straps lashing the peg to the stump + wood-grain cracks
+      g.strokeStyle = '#1c1209'; g.lineWidth = Q(3.2);
+      g.beginPath(); g.moveTo(Q(80), P(306)); g.lineTo(Q(94), P(310)); g.stroke();
+      g.beginPath(); g.moveTo(Q(81), P(320)); g.lineTo(Q(93), P(324)); g.stroke();
+      g.strokeStyle = 'rgba(20,12,5,0.55)'; g.lineWidth = Q(1);
+      g.beginPath(); g.moveTo(Q(87), P(330)); g.lineTo(Q(pegX + 1), P(392)); g.stroke();
 
       // --- billowy teal pirate sleeves (arms), swing opposite the legs ---
       let ag = g.createLinearGradient(Q(16), 0, Q(60), 0);
@@ -1036,6 +1199,14 @@
         for (let i = 0; i < 4; i++) {
           g.beginPath(); g.moveTo(Q(hx + sgn * i * 2), P(hy));
           g.lineTo(Q(hx + sgn * (i * 3 + 4)), P(hy + 14 + i * 5)); g.stroke();
+        }
+      }
+      // long yellowed nails curling off every fingertip
+      g.strokeStyle = '#b8a878'; g.lineWidth = Q(1.4);
+      for (const [hx, hy, sgn] of [[28, lh, -1], [122, rh, 1]]) {
+        for (let i = 0; i < 4; i++) {
+          g.beginPath(); g.moveTo(Q(hx + sgn * (i * 3 + 4)), P(hy + 14 + i * 5));
+          g.lineTo(Q(hx + sgn * (i * 3 + 6.5)), P(hy + 20 + i * 5)); g.stroke();
         }
       }
 
@@ -1136,6 +1307,9 @@
       g.strokeStyle = 'rgba(8,5,2,0.5)'; g.lineWidth = Q(1.1);
       for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(Q(60), P(headY - 30 + i * 5)); g.quadraticCurveTo(Q(75), P(headY - 34 + i * 5), Q(90), P(headY - 30 + i * 5)); g.stroke(); }
       g.strokeStyle = 'rgba(96,12,8,0.6)'; g.lineWidth = Q(1.5); g.beginPath(); g.moveTo(Q(84), P(headY - 34)); g.lineTo(Q(93), P(headY - 20)); g.stroke();
+      // three old claw scratches raked down the cheek
+      g.strokeStyle = 'rgba(112,20,12,0.5)'; g.lineWidth = Q(1.1);
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(Q(55 + i * 4), P(headY - 6)); g.quadraticCurveTo(Q(53 + i * 4), P(headY + 6), Q(57 + i * 4), P(headY + 14)); g.stroke(); }
       // gaunt nose with deep nostril pits
       g.fillStyle = 'rgba(196,172,134,0.14)'; g.beginPath(); g.ellipse(Q(75), P(headY + 2), Q(3.4), P(15), 0, 0, 6.29); g.fill();
       shd(75, headY + 18, 7, 5, 0, 0.7);
@@ -1218,6 +1392,12 @@
       g.moveTo(Q(34), P(54)); g.quadraticCurveTo(Q(48), P(22), Q(62), P(42));
       g.quadraticCurveTo(Q(75), P(16), Q(88), P(42)); g.quadraticCurveTo(Q(102), P(22), Q(116), P(54)); g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.08)'; g.beginPath(); g.ellipse(Q(70), P(36), Q(10), P(8), -0.3, 0, 6.29); g.fill();  // sheen
+      // ragged black crow feather stuck in the band
+      g.fillStyle = '#131318';
+      g.beginPath(); g.moveTo(Q(96), P(42)); g.quadraticCurveTo(Q(112), P(12), Q(124), P(4));
+      g.quadraticCurveTo(Q(113), P(22), Q(103), P(46)); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(150,150,170,0.3)'; g.lineWidth = Q(1);
+      g.beginPath(); g.moveTo(Q(100), P(42)); g.quadraticCurveTo(Q(112), P(18), Q(122), P(6)); g.stroke();
     }
 
     // Pre-render the walk cycle once.
@@ -1346,10 +1526,20 @@
       for (const f of [[cx - 15 + sway, lh, -1], [cx + 15 - sway, rh, 1]]) {
         for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(f[0], f[1]); g.lineTo(f[0] + f[2] * (2 + i * 2), f[1] + 14 + i * 4); g.stroke(); }
       }
+      // black ichor strings dripping from the fingertips and elbows
+      for (const [dx2, dy2] of [[cx - 15 + sway, lh + 24], [cx + 15 - sway, rh + 22], [cx - 19 + sway, BH * 0.52 + 4]]) {
+        const dl = 12 + ((dx2 | 0) % 9);
+        g.strokeStyle = 'rgba(18,20,25,0.8)'; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(dx2, dy2); g.quadraticCurveTo(dx2 + 1, dy2 + dl * 0.6, dx2, dy2 + dl); g.stroke();
+        g.fillStyle = '#15171c'; g.beginPath(); g.arc(dx2, dy2 + dl + 1.5, 1.8, 0, 6.29); g.fill();
+      }
       // long thin neck + gaunt head with a FAINT emerging face (hollow eyes + mouth)
       const headY = BH * 0.15 - bob * 3;
       g.strokeStyle = '#191b1e'; g.lineWidth = BW * 0.045;
       g.beginPath(); g.moveTo(cx, headY + 15); g.lineTo(cx, BH * 0.27); g.stroke();
+      // knobbed vertebrae pressing through the neck skin
+      g.fillStyle = '#23252c';
+      for (let v = 0; v < 5; v++) { g.beginPath(); g.arc(cx, headY + 22 + v * 9, 2.2, 0, 6.29); g.fill(); }
       const hg = g.createRadialGradient(cx - 6, headY - 8, 3, cx, headY, 26);
       hg.addColorStop(0, '#34373c'); hg.addColorStop(0.55, '#191b1e'); hg.addColorStop(1, '#070809');
       g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 16, 22, 0, 0, 6.29); g.fill();
@@ -1359,6 +1549,13 @@
       g.fillStyle = 'rgba(150,156,164,0.42)'; g.beginPath(); g.arc(cx - 6, headY - 1, 0.8, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 6, headY, 0.8, 0, 6.29); g.fill();  // dim wet glint deep in the pits
       g.fillStyle = 'rgba(0,0,0,0.7)';                                  // gaping silent-scream maw (NOT a smile)
       g.beginPath(); g.ellipse(cx, headY + 12, 2.8, 5.5, 0, 0, 6.29); g.fill();
+      // skin stretched taut over the sockets — thin wet glints along the brow
+      g.strokeStyle = 'rgba(150,156,164,0.22)'; g.lineWidth = 1;
+      g.beginPath(); g.ellipse(cx - 6, headY - 6, 4.5, 3, 0.1, Math.PI, 2 * Math.PI); g.stroke();
+      g.beginPath(); g.ellipse(cx + 6, headY - 5, 4.5, 3, -0.1, Math.PI, 2 * Math.PI); g.stroke();
+      // a wet string hanging off the maw
+      g.strokeStyle = 'rgba(140,150,160,0.35)'; g.lineWidth = 0.9;
+      g.beginPath(); g.moveTo(cx, headY + 17); g.quadraticCurveTo(cx + 1.5, headY + 26, cx - 1, headY + 35); g.stroke();
       g.fillStyle = 'rgba(150,156,164,0.08)'; g.beginPath(); g.ellipse(cx - 5, headY - 4, 3.5, 9, 0.1, 0, 6.29); g.fill();   // faint cheek sheen
     }
     const BACTERIA_FRAMES = (function () {
@@ -1406,17 +1603,24 @@
         eg.addColorStop(0, 'rgba(255,255,238,0.98)'); eg.addColorStop(0.5, 'rgba(232,238,180,0.8)'); eg.addColorStop(1, 'rgba(232,238,180,0)');
         g.fillStyle = eg; g.beginPath(); g.arc(ex, ey, 16, 0, 6.29); g.fill();
         g.fillStyle = 'rgba(255,255,240,0.95)'; g.beginPath(); g.ellipse(ex, ey, 7, 9, 0, 0, 6.29); g.fill();
+        g.fillStyle = 'rgba(30,30,16,0.9)'; g.beginPath(); g.ellipse(ex, ey, 1.8, 7, 0, 0, 6.29); g.fill();   // slit pupil
       }
-      // huge wide crescent grin of teeth
+      // huge wide crescent grin — a dark gullet packed with pointed fangs
       g.save(); g.translate(cx, cy + 22); g.scale(wj, 1);
       const mw = 86, mh = 28;
       g.beginPath();
       g.moveTo(-mw, 0); g.quadraticCurveTo(0, mh * 2.5, mw, 0); g.quadraticCurveTo(0, mh * 0.5, -mw, 0); g.closePath();
       g.fillStyle = 'rgba(247,250,214,0.96)'; g.fill();
       g.save(); g.clip();
-      g.strokeStyle = 'rgba(24,18,10,0.7)'; g.lineWidth = 2.6;          // tooth seams
-      for (let i = -7; i <= 7; i++) { const x = i / 7 * mw; g.beginPath(); g.moveTo(x, -6); g.lineTo(x, mh * 2.8); g.stroke(); }
-      g.fillStyle = 'rgba(120,30,30,0.25)'; g.fillRect(-mw, mh * 1.5, mw * 2, mh); // gum shadow at back
+      const gg = g.createLinearGradient(0, 0, 0, mh * 2.4);              // throat falls away to black
+      gg.addColorStop(0, 'rgba(70,14,12,0.85)'); gg.addColorStop(1, 'rgba(0,0,0,0.96)');
+      g.fillStyle = gg; g.fillRect(-mw, mh * 0.45, mw * 2, mh * 2.2);
+      g.fillStyle = 'rgba(248,250,222,0.98)';                            // two rows of pointed fangs
+      for (let i = -7; i <= 7; i++) {
+        const x = i / 7.5 * mw;
+        g.beginPath(); g.moveTo(x - 6, -2); g.lineTo(x + 6, -2); g.lineTo(x, mh * (0.9 + (i % 2) * 0.25)); g.closePath(); g.fill();
+        g.beginPath(); g.moveTo(x - 5 + 6, mh * 2.6); g.lineTo(x + 5 + 6, mh * 2.6); g.lineTo(x + 6, mh * (1.35 - (i % 2) * 0.2)); g.closePath(); g.fill();
+      }
       g.restore();
       g.strokeStyle = 'rgba(20,14,8,0.85)'; g.lineWidth = 3;
       g.beginPath(); g.moveTo(-mw, 0); g.quadraticCurveTo(0, mh * 2.5, mw, 0); g.quadraticCurveTo(0, mh * 0.5, -mw, 0); g.stroke();
@@ -1437,15 +1641,23 @@
         eg.addColorStop(0, 'rgba(255,255,240,1)'); eg.addColorStop(0.4, 'rgba(236,240,176,0.9)'); eg.addColorStop(1, 'rgba(236,240,176,0)');
         g.fillStyle = eg; g.beginPath(); g.arc(ex, ey, 70, 0, 6.29); g.fill();
         g.fillStyle = '#fffff0'; g.beginPath(); g.ellipse(ex, ey, 26, 32, 0, 0, 6.29); g.fill();
+        g.fillStyle = 'rgba(30,30,16,0.95)'; g.beginPath(); g.ellipse(ex, ey, 7, 26, 0, 0, 6.29); g.fill();   // slit pupil
       }
-      // enormous grin
+      // enormous grin — fangs closing in around a black throat
       const mw = 220 * (1 + open * 0.25), mh = 70 + open * 50;
       g.beginPath(); g.moveTo(-mw, 0); g.quadraticCurveTo(0, mh * 2.4, mw, 0); g.quadraticCurveTo(0, mh * 0.5, -mw, 0); g.closePath();
       g.fillStyle = '#f6f9d6'; g.fill();
       g.save(); g.clip();
-      g.strokeStyle = 'rgba(24,18,10,0.7)'; g.lineWidth = 7;
-      for (let i = -8; i <= 8; i++) { const x = i / 8 * mw; g.beginPath(); g.moveTo(x, -10); g.lineTo(x, mh * 2.8); g.stroke(); }
-      g.fillStyle = 'rgba(120,20,20,0.4)'; g.fillRect(-mw, mh * 1.6, mw * 2, mh); g.restore();
+      const gg = g.createLinearGradient(0, 0, 0, mh * 2.4);
+      gg.addColorStop(0, 'rgba(80,16,14,0.9)'); gg.addColorStop(1, '#000');
+      g.fillStyle = gg; g.fillRect(-mw, mh * 0.4, mw * 2, mh * 2.3);
+      g.fillStyle = '#f8fade';
+      for (let i = -8; i <= 8; i++) {
+        const x = i / 8.5 * mw;
+        g.beginPath(); g.moveTo(x - 16, -6); g.lineTo(x + 16, -6); g.lineTo(x, mh * (0.95 + (i % 2) * 0.25)); g.closePath(); g.fill();
+        g.beginPath(); g.moveTo(x - 14 + 16, mh * 2.5); g.lineTo(x + 14 + 16, mh * 2.5); g.lineTo(x + 16, mh * (1.3 - (i % 2) * 0.2)); g.closePath(); g.fill();
+      }
+      g.restore();
       g.restore();
     }
 
@@ -1476,9 +1688,28 @@
       const hg = g.createRadialGradient(cx - 8, headY - 8, 3, cx, headY, 36);
       hg.addColorStop(0, '#26262f'); hg.addColorStop(1, '#050507');
       g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 29, 33, 0, 0, 6.29); g.fill();
-      // faint painted white smile (only feature)
+      // faint painted white smile (only feature) — and it's started to RUN
       g.strokeStyle = 'rgba(238,238,242,0.6)'; g.lineWidth = 3;
       g.beginPath(); g.arc(cx, headY + 4, 13, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+      g.strokeStyle = 'rgba(238,238,242,0.4)'; g.lineWidth = 1.6;
+      for (const dp of [[-9, 8], [0, 13], [8, 9]]) {
+        g.beginPath(); g.moveTo(cx + dp[0], headY + 14); g.lineTo(cx + dp[0] + 1, headY + 14 + dp[1]); g.stroke();
+      }
+      // sagging paper party hat, stripes long since faded
+      g.save(); g.translate(cx + 7, headY - 27); g.rotate(0.22);
+      g.fillStyle = '#3c3046'; g.beginPath(); g.moveTo(-14, 2); g.lineTo(14, 2); g.lineTo(0, -34); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(210,170,90,0.4)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(-9, -10); g.lineTo(9, -10); g.stroke();
+      g.beginPath(); g.moveTo(-5, -21); g.lineTo(5, -21); g.stroke();
+      g.fillStyle = '#7a5a8a'; g.beginPath(); g.arc(0, -35, 4, 0, 6.29); g.fill();
+      g.restore();
+      // grubby white gloves on the celebrating hands
+      g.fillStyle = '#cfcfd6';
+      g.beginPath(); g.arc(cx - 10 + clap * 9, PGH * 0.09, 6.5, 0, 6.29); g.fill();
+      g.beginPath(); g.arc(cx + 10 - clap * 9, PGH * 0.09, 6.5, 0, 6.29); g.fill();
+      // stale confetti stuck to the shoulders
+      const cc = ['#e86ba0', '#7ec8e8', '#e8d87e'];
+      for (let i = 0; i < 8; i++) { g.fillStyle = cc[i % 3]; g.fillRect(cx - 34 + (i * 9) % 68, PGH * 0.315 + (i * 7) % 12, 3, 3); }
       // cold rim light so the black silhouette reads against the dark
       g.strokeStyle = 'rgba(130,130,165,0.28)'; g.lineWidth = 2.4;
       g.beginPath(); g.ellipse(cx, headY, 29, 33, 0, 0, 6.29); g.stroke();
@@ -1531,6 +1762,19 @@
       g.strokeStyle = 'rgba(38,35,30,0.5)'; g.lineWidth = 2;
       for (let i = 0; i < 4; i++) { const x = HDW * (0.38 + i * 0.06); g.beginPath(); g.moveTo(x, bodyY - 16); g.lineTo(x, bodyY + 14); g.stroke(); }
       g.fillStyle = 'rgba(30,28,24,0.4)'; g.beginPath(); g.ellipse(HDW * 0.5, bodyY + 6, HDW * 0.14, 7, 0, 0, 6.29); g.fill();
+      // knobbed spine pressing through the hide + a jutting hip bone
+      g.fillStyle = '#6b665a';
+      for (let i = 0; i < 6; i++) { const sx2 = HDW * (0.34 + i * 0.062), sy2 = bodyY - 24 + Math.abs(i - 2.4) * 2.2; g.beginPath(); g.arc(sx2, sy2, 2.8, 0, 6.29); g.fill(); }
+      g.fillStyle = '#7d786b'; g.beginPath(); g.moveTo(HDW * 0.30, bodyY - 10); g.lineTo(HDW * 0.35, bodyY - 20); g.lineTo(HDW * 0.40, bodyY - 8); g.closePath(); g.fill();
+      // mange: raw dark patches eaten into the coat (deterministic)
+      for (let i = 0; i < 7; i++) {
+        const hh = ((i * 73) % 17) / 17;
+        g.fillStyle = 'rgba(52,30,24,' + (0.22 + hh * 0.28) + ')';
+        g.beginPath(); g.ellipse(HDW * (0.33 + ((i * 29) % 40) / 100), bodyY - 12 + ((i * 41) % 26), 6 + hh * 6, 3.5 + hh * 3, hh * 3, 0, 6.29); g.fill();
+      }
+      // whip tail tucked low
+      g.strokeStyle = '#5a564b'; g.lineWidth = 4;
+      g.beginPath(); g.moveTo(HDW * 0.29, bodyY - 2); g.quadraticCurveTo(HDW * 0.15, bodyY - 8 + legA * 5, HDW * 0.09, bodyY + 10 + legA * 9); g.stroke();
       // near legs (in front, lighter)
       g.strokeStyle = '#7d786b'; g.lineWidth = 9;
       g.beginPath(); g.moveTo(HDW * 0.42, bodyY + 14); g.lineTo(HDW * 0.38 + legA * 18, HDH * 0.98); g.stroke();
@@ -1545,11 +1789,23 @@
       // jagged teeth
       g.fillStyle = '#ece6d6';
       for (let i = 0; i < 6; i++) { const x = HDW * (0.86 + i * 0.021); g.beginPath(); g.moveTo(x, bodyY - 3); g.lineTo(x + 4, bodyY - 3); g.lineTo(x + 2, bodyY + 3); g.closePath(); g.fill(); }
-      // pale sunken eye
+      // drool strand swinging off the jaw
+      g.strokeStyle = 'rgba(200,210,200,0.4)'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(HDW * 0.93, bodyY + 4); g.quadraticCurveTo(HDW * 0.945, bodyY + 14, HDW * (0.925 + legA * 0.012), bodyY + 23); g.stroke();
+      // pale sunken eye — catching the light like an animal in headlamps
+      const eg2 = g.createRadialGradient(HDW * 0.855, bodyY - 15, 1, HDW * 0.855, bodyY - 15, 10);
+      eg2.addColorStop(0, 'rgba(215,235,195,0.55)'); eg2.addColorStop(1, 'rgba(215,235,195,0)');
+      g.fillStyle = eg2; g.beginPath(); g.arc(HDW * 0.855, bodyY - 15, 10, 0, 6.29); g.fill();
       g.fillStyle = '#cfd6c6'; g.beginPath(); g.arc(HDW * 0.855, bodyY - 15, 3.2, 0, 6.29); g.fill();
       g.fillStyle = '#15140f'; g.beginPath(); g.arc(HDW * 0.86, bodyY - 15, 1.4, 0, 6.29); g.fill();
-      // pointed ear
+      // pointed ear with a bite torn out of it
       g.fillStyle = skin; g.beginPath(); g.moveTo(HDW * 0.76, bodyY - 20); g.lineTo(HDW * 0.80, bodyY - 36); g.lineTo(HDW * 0.84, bodyY - 22); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(20,18,14,0.9)'; g.beginPath(); g.moveTo(HDW * 0.795, bodyY - 31); g.lineTo(HDW * 0.815, bodyY - 28); g.lineTo(HDW * 0.79, bodyY - 26); g.closePath(); g.fill();
+      // claws scraping the floor
+      g.fillStyle = '#d8d2c0';
+      for (const fx of [HDW * 0.38 + legA * 18, HDW * 0.66 + legB * 18]) {
+        for (let c = -1; c <= 1; c++) { g.beginPath(); g.moveTo(fx + c * 3.4, HDH * 0.965); g.lineTo(fx + c * 3.4 + 2, HDH * 0.995); g.lineTo(fx + c * 3.4 + 3.6, HDH * 0.965); g.closePath(); g.fill(); }
+      }
     }
     const HOUND_FRAMES = (function () {
       const N = 12, arr = [];
@@ -1594,26 +1850,47 @@
       g.fillStyle = '#191b1d';
       g.beginPath(); g.ellipse(cx - 15 + legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
       g.beginPath(); g.ellipse(cx + 15 - legA * 14, FCH * 0.965, 9, 5, 0, 0, 6.29); g.fill();
+      // dirt ground into the trouser knees
+      g.fillStyle = 'rgba(28,28,32,0.45)';
+      g.beginPath(); g.ellipse(cx - 13 + legA * 8, FCH * 0.80, 6, 4.5, 0.2, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 13 - legA * 8, FCH * 0.80, 6, 4.5, -0.2, 0, 6.29); g.fill();
       // shirt torso
       const tg = g.createLinearGradient(cx - 28, 0, cx + 28, 0);
       tg.addColorStop(0, '#3c4750'); tg.addColorStop(0.5, '#56606a'); tg.addColorStop(1, '#38424a');
       g.fillStyle = tg;
       g.beginPath(); g.moveTo(cx - 23, FCH * 0.29); g.lineTo(cx + 23, FCH * 0.29); g.lineTo(cx + 19, FCH * 0.62); g.lineTo(cx - 19, FCH * 0.62); g.closePath(); g.fill();
+      // sweat blooms + old stains on the office shirt
+      g.fillStyle = 'rgba(40,44,40,0.28)';
+      g.beginPath(); g.ellipse(cx - 16, FCH * 0.34, 6, 9, 0.3, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 14, FCH * 0.50, 8, 6, -0.4, 0, 6.29); g.fill();
+      // tie knocked crooked, still knotted tight
+      g.fillStyle = '#742430';
+      g.beginPath(); g.moveTo(cx - 2, FCH * 0.30); g.lineTo(cx + 6, FCH * 0.305); g.lineTo(cx + 10, FCH * 0.47); g.lineTo(cx + 2, FCH * 0.50); g.closePath(); g.fill();
+      g.fillStyle = '#8a3040'; g.fillRect(cx - 2, FCH * 0.292, 9, 6);
       // arms
       g.strokeStyle = '#48535c'; g.lineWidth = FCW * 0.09;
       g.beginPath(); g.moveTo(cx - 21, FCH * 0.32); g.lineTo(cx - 27 + armA * 5, FCH * 0.46); g.lineTo(cx - 25, FCH * 0.60); g.stroke();
       g.beginPath(); g.moveTo(cx + 21, FCH * 0.32); g.lineTo(cx + 27 - armA * 5, FCH * 0.46); g.lineTo(cx + 25, FCH * 0.60); g.stroke();
       g.fillStyle = '#b89a7e'; g.beginPath(); g.arc(cx - 25, FCH * 0.60, 5, 0, 6.29); g.fill(); g.beginPath(); g.arc(cx + 25, FCH * 0.60, 5, 0, 6.29); g.fill();
-      // neck + blank head
+      // neck + blank head — cocked a few degrees further than a neck should go
       const headY = FCH * 0.18 - bob * 3;
+      g.save();
+      g.translate(cx, headY + 26); g.rotate(0.09); g.translate(-cx, -(headY + 26));
       g.fillStyle = '#a98d72'; g.fillRect(cx - 6, headY + 20, 12, 14);
       const hg = g.createRadialGradient(cx - 8, headY - 8, 4, cx, headY, 30);
       hg.addColorStop(0, '#cab08f'); hg.addColorStop(1, '#9a8064');
       g.fillStyle = hg; g.beginPath(); g.ellipse(cx, headY, 22, 28, 0, 0, 6.29); g.fill();
       // faint hollow where a face would be — but no features at all
       g.fillStyle = 'rgba(120,98,76,0.22)'; g.beginPath(); g.ellipse(cx, headY + 4, 13, 17, 0, 0, 6.29); g.fill();
+      // skin pulled tight over sockets that aren't there — soft raised mounds
+      g.fillStyle = 'rgba(255,240,220,0.14)';
+      g.beginPath(); g.ellipse(cx - 8, headY - 2, 5, 3.4, 0.1, 0, 6.29); g.fill();
+      g.beginPath(); g.ellipse(cx + 8, headY - 2, 5, 3.4, -0.1, 0, 6.29); g.fill();
+      g.fillStyle = 'rgba(90,70,52,0.3)';        // and the shallow pit of an almost-mouth
+      g.beginPath(); g.ellipse(cx, headY + 13, 6, 2.6, 0, 0, 6.29); g.fill();
       // hair
       g.fillStyle = '#33291f'; g.beginPath(); g.ellipse(cx, headY - 14, 22, 13, 0, Math.PI, 2 * Math.PI); g.fill();
+      g.restore();
     }
     const FACELING_FRAMES = (function () {
       const N = 12, arr = [];
@@ -1926,6 +2203,71 @@
           g.strokeStyle = 'rgba(220,220,220,0.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y + 22); g.lineTo(58, 150); g.stroke();
         }
       }),
+      cake: prop(150, 240, function (g) {
+        // towering 3-tier birthday cake, dripping frosting, lit candles
+        const tiers = [[28, 150, 94, 60], [40, 96, 70, 58], [52, 46, 46, 54]];
+        for (const [tx, ty, tw2, th2] of tiers) {
+          const bg = g.createLinearGradient(tx, 0, tx + tw2, 0);
+          bg.addColorStop(0, '#a04468'); bg.addColorStop(0.5, '#e87ba4'); bg.addColorStop(1, '#8a3a58');
+          g.fillStyle = bg; g.fillRect(tx, ty, tw2, th2);
+          g.fillStyle = '#f6ecdc';                                      // frosting drips
+          g.beginPath(); g.moveTo(tx, ty);
+          for (let dx2 = 0; dx2 <= tw2; dx2 += 8) g.quadraticCurveTo(tx + dx2 - 4, ty + 12 + ((dx2 * 7) % 9), tx + dx2, ty + 4);
+          g.lineTo(tx + tw2, ty); g.closePath(); g.fill();
+          g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(tx + 4, ty + 6, 5, th2 - 10);
+        }
+        for (let c = 0; c < 5; c++) {                                   // candles on top
+          const cx2 = 58 + c * 9;
+          g.fillStyle = c % 2 ? '#7ec8e8' : '#e8d87e'; g.fillRect(cx2, 26, 4, 20);
+          const fg2 = g.createRadialGradient(cx2 + 2, 20, 1, cx2 + 2, 20, 8);
+          fg2.addColorStop(0, 'rgba(255,240,170,0.95)'); fg2.addColorStop(1, 'rgba(255,170,60,0)');
+          g.fillStyle = fg2; g.beginPath(); g.arc(cx2 + 2, 20, 8, 0, 6.29); g.fill();
+          g.fillStyle = '#ffdf8a'; g.beginPath(); g.ellipse(cx2 + 2, 20, 2, 4, 0, 0, 6.29); g.fill();
+        }
+        g.fillStyle = '#6a3448'; g.fillRect(20, 208, 110, 8);           // cake board
+      }),
+      presents: [
+        ['#c04040', '#f0d060'], ['#4060c0', '#e0e8f0'], ['#40a058', '#e86ba0']
+      ].map(function (pc) {
+        return prop(110, 110, function (g) {
+          const bg = g.createLinearGradient(12, 0, 98, 0);
+          bg.addColorStop(0, shadeC(pc[0], 0.6)); bg.addColorStop(0.45, pc[0]); bg.addColorStop(1, shadeC(pc[0], 0.5));
+          g.fillStyle = bg; g.fillRect(12, 30, 86, 72);
+          g.fillStyle = pc[1]; g.fillRect(48, 30, 14, 72); g.fillRect(12, 58, 86, 12);   // ribbon
+          g.strokeStyle = pc[1]; g.lineWidth = 7;                                        // bow
+          g.beginPath(); g.ellipse(44, 22, 14, 9, -0.5, 0, 6.29); g.stroke();
+          g.beginPath(); g.ellipse(66, 22, 14, 9, 0.5, 0, 6.29); g.stroke();
+          g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(12, 94, 86, 8);                   // ground shadow
+          g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(16, 32, 8, 62);             // sheen
+        });
+      }),
+      speaker: prop(110, 190, function (g) {
+        const bg = g.createLinearGradient(14, 0, 96, 0);
+        bg.addColorStop(0, '#0a0a10'); bg.addColorStop(0.5, '#26262e'); bg.addColorStop(1, '#08080c');
+        g.fillStyle = bg; g.fillRect(14, 10, 82, 170);
+        g.strokeStyle = '#3a3a44'; g.lineWidth = 3; g.strokeRect(16, 12, 78, 166);
+        for (const [cy2, cr] of [[60, 30], [136, 24]]) {                 // woofer cones
+          g.fillStyle = '#111116'; g.beginPath(); g.arc(55, cy2, cr, 0, 6.29); g.fill();
+          g.strokeStyle = '#4a4a56'; g.lineWidth = 2.5; g.beginPath(); g.arc(55, cy2, cr, 0, 6.29); g.stroke();
+          g.fillStyle = '#2e2e38'; g.beginPath(); g.arc(55, cy2, cr * 0.45, 0, 6.29); g.fill();
+          const gl = g.createRadialGradient(55, cy2, 1, 55, cy2, cr * 0.5);
+          gl.addColorStop(0, 'rgba(255,120,180,0.5)'); gl.addColorStop(1, 'rgba(255,120,180,0)');
+          g.fillStyle = gl; g.beginPath(); g.arc(55, cy2, cr * 0.5, 0, 6.29); g.fill();
+        }
+        g.fillStyle = '#ff78b4'; g.fillRect(20, 96, 70, 4);              // glowing trim strip
+      }),
+      streamer: prop(70, 260, function (g) {
+        g.fillStyle = '#8a8a94'; g.fillRect(31, 20, 8, 226);             // pole
+        g.fillStyle = '#6a6a74'; g.beginPath(); g.ellipse(35, 248, 20, 8, 0, 0, 6.29); g.fill();
+        const cols = ['#e86ba0', '#7ec8e8', '#e8d87e', '#9ae87e'];
+        for (let s = 0; s < 4; s++) {                                    // drooping crepe streamers
+          g.strokeStyle = cols[s]; g.lineWidth = 5;
+          g.beginPath(); g.moveTo(35, 24);
+          g.quadraticCurveTo(10 + s * 18, 90 + s * 22, 6 + s * 19, 200 + (s % 2) * 30);
+          g.stroke();
+        }
+        g.fillStyle = '#e8d87e'; g.beginPath(); g.arc(35, 20, 9, 0, 6.29); g.fill();   // topper ball
+      }),
       banner: prop(160, 80, function (g) {
         g.fillStyle = '#d24a64'; g.beginPath(); g.moveTo(6, 10); g.lineTo(154, 10); g.lineTo(150, 52); g.quadraticCurveTo(80, 70, 10, 52); g.closePath(); g.fill();
         g.fillStyle = '#fff2c8'; g.font = 'bold 30px Pacifico, cursive'; g.textAlign = 'center'; g.fillText('FUN =)', 80, 44);
@@ -2176,7 +2518,7 @@
       for (const m of marks) sprites.push({ img: markImg, x: m.x, y: m.y, sh: 0.22, sw: 0.22, bob: 0, bright: 0.9, foot: 1 });
       for (const b of corpses) {
         const d = Math.hypot(b.x - px, b.y - py);
-        sprites.push({ img: hazmatImg, x: b.x, y: b.y, sh: 0.72, sw: 0.52, bob: 0, bright: clamp(ambient * (1.25 - d * 0.05) + 0.08, 0.2, 1) });
+        sprites.push({ img: hazmatImg, x: b.x, y: b.y, sh: 0.72, sw: 0.52, bob: 0, shadow: true, bright: clamp(ambient * (1.25 - d * 0.05) + 0.08, 0.2, 1) });
       }
       // themed scenery props (z-buffer occluded, lit by distance)
       for (const p of props) {
@@ -2189,15 +2531,13 @@
         const flick2 = Math.sin(perfNow * 0.02 + gl.ph) > -0.3 ? 1 : 0.25;
         sprites.push({ img: glitchImgs[gl.kind] || glitchImgs[0], x: gl.x, y: gl.y, sh: gl.kind === 0 ? 0.62 : 0.5, sw: 0.42, bob: 0, bright: clamp(ambient + 0.1, 0.2, 1) * flick2, noOcc: true });
       }
-      let nearHunter = 99;
       for (const e of entities) {
         const d = Math.hypot(e.x - px, e.y - py);
-        if (hasLOS(e.x, e.y, px, py)) nearHunter = Math.min(nearHunter, d);
         const def = ENTITY_DEFS[e.type] || ENTITY_DEFS.clark;
         const stepMs = e.state === 'chase' ? 70 : 120;
         const fi = Math.floor(perfNow / stepMs + e.phase * 5) % def.frames.length;
         sprites.push({ img: def.frames[fi], x: e.x, y: e.y, sh: def.sh, sw: def.sw,
-          bob: Math.sin(perfNow * def.bobF + e.phase) * def.bobA,
+          bob: Math.sin(perfNow * def.bobF + e.phase) * def.bobA, shadow: e.type !== 'smiler',
           bright: clamp((ambient + def.brightK) * (1.2 - d * 0.055), def.minB, 1) });
       }
       for (const s of sprites) { const sx = s.x - px, sy = s.y - py; const invDet = 1 / (planeX * dirY - dirX * planeY);
@@ -2209,12 +2549,6 @@
       const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.22, W / 2, H / 2, H * 0.72);
       vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,' + (0.55 + darkness * 0.35) + ')');
       ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
-
-      // danger: when a hunter is close and in view, the screen pulses red
-      if (nearHunter < 3.2) {
-        const pulse = (Math.sin(perfNow * 0.012) * 0.5 + 0.5) * (1 - nearHunter / 3.2);
-        ctx.fillStyle = 'rgba(150,8,8,' + (pulse * 0.4) + ')'; ctx.fillRect(0, 0, W, H);
-      }
 
       // film grain (drifting) for a found-footage horror look
       ctx.globalAlpha = 0.05 + darkness * 0.05;
@@ -2239,6 +2573,11 @@
       const topY = bottomY - spH + s.bob;
       const startX = Math.floor(screenX - spW / 2), endX = Math.ceil(screenX + spW / 2);
       const img = s.img;
+      // grounding contact shadow so figures sit IN the space instead of floating on it
+      if (s.shadow) {
+        ctx.fillStyle = 'rgba(0,0,0,' + (0.34 * Math.min(1, (s.bright == null ? 1 : s.bright) + 0.25)) + ')';
+        ctx.beginPath(); ctx.ellipse(screenX, bottomY - lineH * 0.006, spW * 0.32, Math.max(2, lineH * 0.045), 0, 0, 6.29); ctx.fill();
+      }
       if (s.bright !== undefined) ctx.globalAlpha = s.bright;
       const xr = RW / W;   // map full-res screen column -> buffer zbuffer index
       let runStart = -1;
@@ -2326,21 +2665,174 @@
     }
     function boxesFor(p) {
       const A = PA, c = propColor(p.img);
+      const vh = ((Math.floor(p.x * 7) + Math.floor(p.y * 13)) % 96 + 96) % 96;   // stable per-spot variety
       if (p.img === A.pine) return [{ x0: -0.06, y0: -0.06, x1: 0.06, y1: 0.06, z0: 0, z1: 0.52, col: '#3a2a18' }, { x0: -0.3, y0: -0.3, x1: 0.3, y1: 0.3, z0: 0.42, z1: 0.64, col: '#274d28' }, { x0: -0.22, y0: -0.22, x1: 0.22, y1: 0.22, z0: 0.6, z1: 0.8, col: '#2f5a32' }, { x0: -0.12, y0: -0.12, x1: 0.12, y1: 0.12, z0: 0.78, z1: 0.96, col: '#356a36' }];
-      if (p.img === A.lockers) return [{ x0: -0.42, y0: -0.16, x1: 0.42, y1: 0.16, z0: 0, z1: 0.86, col: '#2f6ea0' }];
-      if (p.img === A.desk) return [{ x0: -0.3, y0: -0.04, x1: 0.3, y1: 0.2, z0: 0.26, z1: 0.34, col: '#7a5a30' }, { x0: -0.22, y0: -0.24, x1: 0.1, y1: -0.08, z0: 0, z1: 0.46, col: '#34404a' }];
-      if (p.img === A.chalkboard) return [{ x0: -0.4, y0: -0.08, x1: 0.4, y1: 0.06, z0: 0.28, z1: 0.78, col: '#2f4a36' }];
-      if (p.img === A.gurney) return [{ x0: -0.4, y0: -0.18, x1: 0.4, y1: 0.18, z0: 0.18, z1: 0.27, col: '#cfe0e6' }, { x0: -0.4, y0: -0.18, x1: -0.32, y1: 0.18, z0: 0, z1: 0.18, col: '#7a8086' }];
-      if (p.img === A.shelf) return [{ x0: -0.42, y0: -0.18, x1: 0.42, y1: 0.18, z0: 0, z1: 0.82, col: '#9aa0a4' }];
-      if (p.img === A.freezer) return [{ x0: -0.36, y0: -0.18, x1: 0.36, y1: 0.18, z0: 0, z1: 0.86, col: '#9fcfdc' }];
-      if (p.img === A.car) return [{ x0: -0.46, y0: -0.22, x1: 0.46, y1: 0.22, z0: 0.05, z1: 0.26, col: '#5a2424' }, { x0: -0.2, y0: -0.18, x1: 0.22, y1: 0.18, z0: 0.26, z1: 0.42, col: '#2a3640' }];
-      if (p.img === A.cubicle) return [{ x0: -0.42, y0: -0.08, x1: 0.42, y1: 0.06, z0: 0, z1: 0.5, col: '#b9ad8c' }, { x0: -0.3, y0: 0.04, x1: 0.3, y1: 0.24, z0: 0.26, z1: 0.34, col: '#7a6a44' }];
-      if (p.img === A.gumvat) return [{ x0: -0.26, y0: -0.26, x1: 0.26, y1: 0.26, z0: 0, z1: 0.72, col: '#c07aa0' }];
-      if (p.img === A.bench) return [{ x0: -0.3, y0: -0.12, x1: 0.3, y1: 0.12, z0: 0.16, z1: 0.24, col: '#7c5a34' }, { x0: -0.3, y0: -0.12, x1: -0.22, y1: 0.12, z0: 0, z1: 0.16, col: '#5a6068' }];
-      if (p.img === A.column) return [{ x0: -0.17, y0: -0.17, x1: 0.17, y1: 0.17, z0: 0, z1: 1.0, col: '#b0b4ba' }];
-      if (p.img === A.train || p.img === A.traindoor) return [{ x0: -0.5, y0: -0.26, x1: 0.5, y1: 0.26, z0: 0, z1: 0.92, col: '#aab0b8' }];
-      if (p.img === A.turnstile) return [{ x0: -0.1, y0: -0.1, x1: 0.1, y1: 0.1, z0: 0, z1: 0.42, col: '#2a2e33' }];
-      if (p.img === A.partytable) return [{ x0: -0.32, y0: -0.14, x1: 0.32, y1: 0.14, z0: 0.2, z1: 0.28, col: '#b03a5a' }];
+      if (p.img === A.lockers) return [
+        { x0: -0.42, y0: -0.16, x1: 0.42, y1: 0.16, z0: 0, z1: 0.045, col: '#17232c' },           // kick base
+        { x0: -0.42, y0: -0.155, x1: 0.42, y1: 0.155, z0: 0.045, z1: 0.86, col: '#2f6ea0' },      // bank of lockers
+        { x0: -0.145, y0: -0.162, x1: -0.135, y1: 0.162, z0: 0.06, z1: 0.84, col: '#1c4668' },    // door seams
+        { x0: 0.135, y0: -0.162, x1: 0.145, y1: 0.162, z0: 0.06, z1: 0.84, col: '#1c4668' },
+        { x0: -0.42, y0: -0.158, x1: 0.42, y1: 0.158, z0: 0.66, z1: 0.7, col: '#3f82b8' }];       // vent strip
+      if (p.img === A.desk) return [
+        { x0: -0.3, y0: -0.04, x1: 0.3, y1: 0.2, z0: 0.3, z1: 0.345, col: '#7a5a30' },            // desktop
+        { x0: -0.28, y0: -0.02, x1: -0.24, y1: 0.18, z0: 0, z1: 0.3, col: '#4a4e55' },            // legs
+        { x0: 0.24, y0: -0.02, x1: 0.28, y1: 0.18, z0: 0, z1: 0.3, col: '#4a4e55' },
+        { x0: -0.22, y0: -0.24, x1: 0.1, y1: -0.08, z0: 0.16, z1: 0.2, col: '#34404a' },          // chair seat
+        { x0: -0.22, y0: -0.24, x1: -0.18, y1: -0.08, z0: 0.2, z1: 0.42, col: '#2c3640' },        // chair back
+        { x0: -0.06, y0: 0.0, x1: 0.14, y1: 0.14, z0: 0.345, z1: 0.36, col: '#e8e2d0' }];         // open workbook
+      if (p.img === A.chalkboard) return [
+        { x0: -0.42, y0: -0.075, x1: 0.42, y1: 0.055, z0: 0.24, z1: 0.82, col: '#7a5a30' },       // wood frame
+        { x0: -0.37, y0: -0.083, x1: 0.37, y1: 0.063, z0: 0.3, z1: 0.76, col: '#2f4a36' },        // slate proud of frame
+        { x0: -0.37, y0: -0.095, x1: 0.37, y1: 0.075, z0: 0.24, z1: 0.275, col: '#8a6a3a' },      // chalk tray
+        { x0: -0.05, y0: -0.1, x1: 0.05, y1: 0.08, z0: 0.276, z1: 0.29, col: '#e8e2d0' }];        // chalk stick
+      if (p.img === A.gurney) return [
+        { x0: -0.4, y0: -0.18, x1: 0.4, y1: 0.18, z0: 0.24, z1: 0.3, col: '#cfe0e6' },            // mattress
+        { x0: -0.4, y0: -0.18, x1: -0.22, y1: 0.18, z0: 0.3, z1: 0.345, col: '#e2eef2' },         // pillow
+        { x0: -0.41, y0: -0.19, x1: 0.41, y1: 0.19, z0: 0.21, z1: 0.24, col: '#7a8086' },         // frame rail
+        { x0: -0.38, y0: -0.16, x1: -0.34, y1: -0.12, z0: 0, z1: 0.21, col: '#565c62' },          // legs
+        { x0: 0.34, y0: -0.16, x1: 0.38, y1: -0.12, z0: 0, z1: 0.21, col: '#565c62' },
+        { x0: -0.38, y0: 0.12, x1: -0.34, y1: 0.16, z0: 0, z1: 0.21, col: '#565c62' },
+        { x0: 0.34, y0: 0.12, x1: 0.38, y1: 0.16, z0: 0, z1: 0.21, col: '#565c62' }];
+      if (p.img === A.shelf) {
+        const G = ['#c05a4a', '#d8b04a', '#4a8ac0', '#7ac05a', '#b070c0', '#d87e3a'];
+        return [
+          { x0: -0.44, y0: -0.17, x1: 0.44, y1: 0.17, z0: 0, z1: 0.05, col: '#6a6e72' },          // plinth
+          { x0: -0.44, y0: -0.02, x1: 0.44, y1: 0.02, z0: 0, z1: 0.82, col: '#8a9094' },          // back spine
+          { x0: -0.44, y0: -0.17, x1: 0.44, y1: 0.17, z0: 0.26, z1: 0.29, col: '#9aa0a4' },       // shelf boards
+          { x0: -0.44, y0: -0.17, x1: 0.44, y1: 0.17, z0: 0.53, z1: 0.56, col: '#9aa0a4' },
+          { x0: -0.44, y0: -0.17, x1: 0.44, y1: 0.17, z0: 0.79, z1: 0.82, col: '#9aa0a4' },
+          { x0: -0.4, y0: -0.14, x1: 0.4, y1: 0.14, z0: 0.05, z1: 0.24, col: G[vh % 6] },         // stocked goods rows
+          { x0: -0.4, y0: -0.14, x1: 0.4, y1: 0.14, z0: 0.29, z1: 0.5, col: G[(vh + 2) % 6] },
+          { x0: -0.4, y0: -0.14, x1: 0.4, y1: 0.14, z0: 0.56, z1: 0.75, col: G[(vh + 4) % 6] }];
+      }
+      if (p.img === A.freezer) return [
+        { x0: -0.36, y0: -0.18, x1: 0.36, y1: 0.18, z0: 0, z1: 0.06, col: '#5a6066' },            // base
+        { x0: -0.36, y0: -0.18, x1: 0.36, y1: 0.18, z0: 0.06, z1: 0.8, col: '#dfe8ec' },          // white cabinet
+        { x0: -0.3, y0: -0.185, x1: 0.3, y1: 0.185, z0: 0.3, z1: 0.72, col: '#28404e' },          // glass doors
+        { x0: -0.36, y0: -0.185, x1: 0.36, y1: 0.185, z0: 0.8, z1: 0.86, col: '#b8c8d0' }];       // lid rim
+      if (p.img === A.car) {
+        const CC = ['#7a2a28', '#2a4a7a', '#5a5e66', '#7a6a2a', '#3a5e46'];
+        const body = CC[vh % 5];
+        return [
+          { x0: -0.4, y0: -0.2, x1: -0.28, y1: -0.13, z0: 0, z1: 0.13, col: '#101216' },          // wheels
+          { x0: 0.28, y0: -0.2, x1: 0.4, y1: -0.13, z0: 0, z1: 0.13, col: '#101216' },
+          { x0: -0.4, y0: 0.13, x1: -0.28, y1: 0.2, z0: 0, z1: 0.13, col: '#101216' },
+          { x0: 0.28, y0: 0.13, x1: 0.4, y1: 0.2, z0: 0, z1: 0.13, col: '#101216' },
+          { x0: -0.46, y0: -0.21, x1: 0.46, y1: 0.21, z0: 0.09, z1: 0.27, col: body },            // body
+          { x0: -0.47, y0: -0.215, x1: -0.44, y1: 0.215, z0: 0.12, z1: 0.2, col: '#c8ccd2' },     // bumpers
+          { x0: 0.44, y0: -0.215, x1: 0.47, y1: 0.215, z0: 0.12, z1: 0.2, col: '#c8ccd2' },
+          { x0: -0.19, y0: -0.175, x1: 0.21, y1: 0.175, z0: 0.27, z1: 0.42, col: '#1c2c38' },     // glasshouse
+          { x0: -0.16, y0: -0.17, x1: 0.18, y1: 0.17, z0: 0.42, z1: 0.445, col: shadeC(body, 0.8) }, // roof
+          { x0: 0.45, y0: -0.18, x1: 0.465, y1: -0.1, z0: 0.17, z1: 0.22, col: '#ffe9b0' },       // headlights
+          { x0: 0.45, y0: 0.1, x1: 0.465, y1: 0.18, z0: 0.17, z1: 0.22, col: '#ffe9b0' }];
+      }
+      if (p.img === A.cubicle) return [
+        { x0: -0.42, y0: -0.08, x1: 0.42, y1: 0.06, z0: 0, z1: 0.52, col: '#b9ad8c' },            // fabric partition
+        { x0: -0.42, y0: -0.085, x1: 0.42, y1: 0.065, z0: 0.52, z1: 0.545, col: '#8a8f96' },      // metal cap rail
+        { x0: -0.3, y0: 0.04, x1: 0.3, y1: 0.26, z0: 0.3, z1: 0.34, col: '#7a6a44' },             // desktop
+        { x0: -0.12, y0: 0.06, x1: 0.08, y1: 0.16, z0: 0.34, z1: 0.5, col: '#181c22' },           // monitor
+        { x0: -0.1, y0: 0.055, x1: 0.06, y1: 0.165, z0: 0.36, z1: 0.48, col: '#3a5e7a' },         // glowing screen
+        { x0: 0.14, y0: 0.08, x1: 0.26, y1: 0.2, z0: 0.34, z1: 0.37, col: '#e8e2d0' }];           // paper stack
+      if (p.img === A.gumvat) return [
+        { x0: -0.28, y0: -0.28, x1: 0.28, y1: 0.28, z0: 0, z1: 0.08, col: '#6a6e74' },            // steel base
+        { x0: -0.26, y0: -0.26, x1: 0.26, y1: 0.26, z0: 0.08, z1: 0.66, col: '#c07aa0' },         // vat body
+        { x0: -0.28, y0: -0.28, x1: 0.28, y1: 0.28, z0: 0.66, z1: 0.72, col: '#8a8f96' },         // rim
+        { x0: -0.16, y0: -0.16, x1: 0.16, y1: 0.16, z0: 0.72, z1: 0.84, col: '#e89ac0' },         // bubblegum dome
+        { x0: 0.2, y0: -0.05, x1: 0.28, y1: 0.05, z0: 0.72, z1: 1.0, col: '#565c62' }];           // feed pipe
+      if (p.img === A.bench) return [
+        { x0: -0.3, y0: -0.12, x1: 0.3, y1: -0.02, z0: 0.2, z1: 0.24, col: '#7c5a34' },           // seat slats
+        { x0: -0.3, y0: 0.0, x1: 0.3, y1: 0.1, z0: 0.2, z1: 0.24, col: '#8a6a3e' },
+        { x0: -0.3, y0: 0.1, x1: 0.3, y1: 0.13, z0: 0.24, z1: 0.5, col: '#7c5a34' },              // backrest
+        { x0: -0.28, y0: -0.1, x1: -0.24, y1: 0.12, z0: 0, z1: 0.2, col: '#3a3e44' },             // cast-iron ends
+        { x0: 0.24, y0: -0.1, x1: 0.28, y1: 0.12, z0: 0, z1: 0.2, col: '#3a3e44' }];
+      if (p.img === A.column) return [
+        { x0: -0.2, y0: -0.2, x1: 0.2, y1: 0.2, z0: 0, z1: 0.07, col: '#8a8f96' },                // plinth
+        { x0: -0.16, y0: -0.16, x1: 0.16, y1: 0.16, z0: 0.07, z1: 0.9, col: '#b0b4ba' },          // shaft
+        { x0: -0.2, y0: -0.2, x1: 0.2, y1: 0.2, z0: 0.9, z1: 1.0, col: '#c6cad0' }];              // capital
+      if (p.img === A.train || p.img === A.traindoor) {
+        const boxes = [
+          { x0: -0.5, y0: -0.26, x1: 0.5, y1: 0.26, z0: 0, z1: 0.14, col: '#2c3138' },            // under-skirt
+          { x0: -0.5, y0: -0.26, x1: 0.5, y1: 0.26, z0: 0.14, z1: 0.86, col: '#aab0b8' },         // stainless shell
+          { x0: -0.5, y0: -0.265, x1: 0.5, y1: 0.265, z0: 0.5, z1: 0.68, col: '#1a2430' },        // window band
+          { x0: -0.5, y0: -0.267, x1: 0.5, y1: 0.267, z0: 0.36, z1: 0.42, col: '#c0352f' },       // red livery stripe
+          { x0: -0.46, y0: -0.22, x1: 0.46, y1: 0.22, z0: 0.86, z1: 0.92, col: '#646a72' }];      // roof hump
+        if (p.img === A.traindoor) boxes.push({ x0: -0.14, y0: -0.27, x1: 0.14, y1: 0.27, z0: 0.14, z1: 0.72, col: '#0e1216' });  // open doorway
+        return boxes;
+      }
+      if (p.img === A.turnstile) return [
+        { x0: -0.08, y0: -0.08, x1: 0.08, y1: 0.08, z0: 0, z1: 0.4, col: '#2a2e33' },             // pedestal
+        { x0: -0.08, y0: -0.08, x1: 0.08, y1: 0.08, z0: 0.4, z1: 0.44, col: '#8a8f96' },          // steel top
+        { x0: -0.3, y0: -0.02, x1: 0.3, y1: 0.02, z0: 0.34, z1: 0.37, col: '#c8ccd2' },           // tripod arms
+        { x0: -0.02, y0: -0.3, x1: 0.02, y1: 0.3, z0: 0.34, z1: 0.37, col: '#c8ccd2' }];
+      if (p.img === A.partytable) return [
+        { x0: -0.3, y0: -0.12, x1: 0.3, y1: 0.12, z0: 0.02, z1: 0.26, col: '#d84a72' },           // cloth to the floor
+        { x0: -0.32, y0: -0.14, x1: 0.32, y1: 0.14, z0: 0.26, z1: 0.3, col: '#b03a5a' },          // tabletop
+        { x0: -0.2, y0: -0.06, x1: -0.08, y1: 0.06, z0: 0.3, z1: 0.36, col: '#e8d87e' },          // punch bowl
+        { x0: 0.06, y0: -0.05, x1: 0.24, y1: 0.07, z0: 0.3, z1: 0.34, col: '#7ec8e8' }];          // platter
+      if (p.img === A.wheelchair) return [
+        { x0: -0.16, y0: -0.14, x1: 0.12, y1: 0.14, z0: 0.22, z1: 0.27, col: '#3a5e7a' },         // seat
+        { x0: -0.2, y0: -0.14, x1: -0.14, y1: 0.14, z0: 0.27, z1: 0.55, col: '#345267' },         // backrest
+        { x0: -0.1, y0: -0.17, x1: 0.14, y1: -0.15, z0: 0.02, z1: 0.3, col: '#22262c' },          // big wheels
+        { x0: -0.1, y0: 0.15, x1: 0.14, y1: 0.17, z0: 0.02, z1: 0.3, col: '#22262c' }];
+      if (p.img === A.ivstand) return [
+        { x0: -0.09, y0: -0.09, x1: 0.09, y1: 0.09, z0: 0, z1: 0.03, col: '#565c62' },            // caster base
+        { x0: -0.015, y0: -0.015, x1: 0.015, y1: 0.015, z0: 0.03, z1: 0.78, col: '#9aa0a8' },     // pole
+        { x0: -0.06, y0: -0.03, x1: 0.02, y1: 0.03, z0: 0.6, z1: 0.72, col: '#d8e8c8' }];         // saline bag
+      if (p.img === A.cart) return [
+        { x0: -0.2, y0: -0.14, x1: 0.2, y1: 0.14, z0: 0.16, z1: 0.34, col: '#b8bec6' },           // basket
+        { x0: -0.18, y0: -0.12, x1: 0.18, y1: 0.12, z0: 0.18, z1: 0.345, col: '#8a9098' },        // basket inner
+        { x0: 0.2, y0: -0.13, x1: 0.23, y1: 0.13, z0: 0.3, z1: 0.42, col: '#c0352f' },            // handle
+        { x0: -0.17, y0: -0.12, x1: -0.11, y1: -0.08, z0: 0, z1: 0.16, col: '#22262c' },          // wheels
+        { x0: 0.11, y0: 0.08, x1: 0.17, y1: 0.12, z0: 0, z1: 0.16, col: '#22262c' }];
+      if (p.img === A.lollipop) {
+        const LC = ['#e86ba0', '#7ec8e8', '#e8d87e', '#9ae87e'];
+        return [
+          { x0: -0.025, y0: -0.025, x1: 0.025, y1: 0.025, z0: 0, z1: 0.7, col: '#e8e2d0' },       // stick
+          { x0: -0.14, y0: -0.05, x1: 0.14, y1: 0.05, z0: 0.7, z1: 0.98, col: LC[vh % 4] },       // candy disc
+          { x0: -0.1, y0: -0.055, x1: 0.1, y1: 0.055, z0: 0.76, z1: 0.92, col: '#fff6fa' }];      // swirl
+      }
+      if (p.img === A.gumballs) return [
+        { x0: -0.16, y0: -0.16, x1: 0.16, y1: 0.16, z0: 0, z1: 0.22, col: '#c0352f' },            // machine base
+        { x0: -0.13, y0: -0.13, x1: 0.13, y1: 0.13, z0: 0.22, z1: 0.44, col: '#cfe4ea' },         // glass globe
+        { x0: -0.08, y0: -0.08, x1: 0.08, y1: 0.08, z0: 0.24, z1: 0.4, col: '#e86ba0' },          // gum inside
+        { x0: -0.05, y0: -0.05, x1: 0.05, y1: 0.05, z0: 0.44, z1: 0.5, col: '#8a2420' }];         // cap
+      if (p.img === A.balloons) {
+        const BC = ['#e86ba0', '#7ec8e8', '#e8d87e'];
+        return [
+          { x0: -0.012, y0: -0.012, x1: 0.012, y1: 0.012, z0: 0, z1: 0.62, col: '#b8bec6' },      // strings
+          { x0: -0.16, y0: -0.06, x1: -0.02, y1: 0.08, z0: 0.6, z1: 0.8, col: BC[vh % 3] },       // balloon cluster
+          { x0: 0.0, y0: -0.1, x1: 0.14, y1: 0.04, z0: 0.66, z1: 0.86, col: BC[(vh + 1) % 3] },
+          { x0: -0.08, y0: 0.0, x1: 0.06, y1: 0.14, z0: 0.74, z1: 0.94, col: BC[(vh + 2) % 3] }];
+      }
+      if (p.img === A.subsign) return [
+        { x0: -0.02, y0: -0.02, x1: 0.02, y1: 0.02, z0: 0, z1: 0.66, col: '#2a2e33' },            // post
+        { x0: -0.2, y0: -0.035, x1: 0.2, y1: 0.035, z0: 0.5, z1: 0.72, col: '#0e1216' },          // sign face
+        { x0: -0.16, y0: -0.04, x1: -0.06, y1: 0.04, z0: 0.6, z1: 0.68, col: '#c0352f' }];        // route roundel
+      if (p.img === A.log) return [
+        { x0: -0.36, y0: -0.1, x1: 0.36, y1: 0.1, z0: 0, z1: 0.2, col: '#4e3620' },               // fallen trunk
+        { x0: -0.37, y0: -0.08, x1: -0.35, y1: 0.08, z0: 0.02, z1: 0.18, col: '#7a5638' },        // cut end
+        { x0: -0.3, y0: -0.09, x1: 0.3, y1: 0.09, z0: 0.2, z1: 0.225, col: '#3e5e2a' }];          // moss
+      if (p.img === A.cooler) return [
+        { x0: -0.1, y0: -0.1, x1: 0.1, y1: 0.1, z0: 0, z1: 0.42, col: '#dfe8ec' },                // cabinet
+        { x0: -0.08, y0: -0.08, x1: 0.08, y1: 0.08, z0: 0.42, z1: 0.6, col: '#7ec8e8' }];         // water jug
+      if (p.img === A.cake) return [
+        { x0: -0.3, y0: -0.3, x1: 0.3, y1: 0.3, z0: 0, z1: 0.3, col: '#c05a80' },
+        { x0: -0.22, y0: -0.22, x1: 0.22, y1: 0.22, z0: 0.3, z1: 0.55, col: '#e87ba4' },
+        { x0: -0.14, y0: -0.14, x1: 0.14, y1: 0.14, z0: 0.55, z1: 0.78, col: '#f0a0c0' },
+        { x0: -0.03, y0: -0.03, x1: 0.03, y1: 0.03, z0: 0.78, z1: 0.92, col: '#f6ecdc' }];
+      if (p.img === A.speaker) return [
+        { x0: -0.24, y0: -0.16, x1: 0.24, y1: 0.16, z0: 0, z1: 0.88, col: '#1c1c24' },            // cabinet
+        { x0: -0.14, y0: -0.165, x1: 0.14, y1: 0.165, z0: 0.55, z1: 0.8, col: '#0c0c12' },        // woofer grilles
+        { x0: -0.1, y0: -0.168, x1: 0.1, y1: 0.168, z0: 0.18, z1: 0.38, col: '#0c0c12' },
+        { x0: -0.24, y0: -0.165, x1: 0.24, y1: 0.165, z0: 0.44, z1: 0.47, col: '#ff78b4' }];      // glowing trim
+      if (A.presents.indexOf(p.img) >= 0) {
+        const pcols = ['#c04040', '#4060c0', '#40a058'];
+        return [{ x0: -0.3, y0: -0.3, x1: 0.3, y1: 0.3, z0: 0, z1: 0.5, col: pcols[A.presents.indexOf(p.img)] },
+                { x0: -0.3, y0: -0.05, x1: 0.3, y1: 0.05, z0: 0.5, z1: 0.56, col: '#e8d87e' }];
+      }
+      if (p.img === A.streamer) return [
+        { x0: -0.04, y0: -0.04, x1: 0.04, y1: 0.04, z0: 0, z1: 1.1, col: '#8a8a94' },
+        { x0: -0.1, y0: -0.1, x1: 0.1, y1: 0.1, z0: 1.1, z1: 1.2, col: '#e8d87e' }];
       const h = clamp(p.sh * 0.62, 0.18, 0.95), w = clamp(p.sw * 0.5, 0.12, 0.42);   // generic single box
       return [{ x0: -w, y0: -w, x1: w, y1: w, z0: 0, z1: h, col: c }];
     }
@@ -2359,19 +2851,39 @@
     function drawJumpscare() {
       const prog = 1 - clamp(jumpT / JUMP_LEN, 0, 1);     // 0 -> 1 over the scare
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-      // violent jitter that intensifies as he reaches you
-      const shake = (8 + prog * 30);
+      // two-phase lunge: it hangs back in the dark... then SNAPS into your face
+      const lunge = prog < 0.4 ? prog * 0.45 : 0.18 + Math.pow((prog - 0.4) / 0.6, 2.6) * 1.55;
+      // violent jitter that intensifies as it closes
+      const shake = 6 + prog * prog * 46;
       const ox = Math.sin(perfNow * 0.93) * shake + Math.sin(perfNow * 0.31) * shake * 0.6;
       const oy = Math.cos(perfNow * 1.07) * shake + Math.cos(perfNow * 0.27) * shake * 0.6;
-      // face lunges from far to filling the screen; mouth tears open
-      const S = (H / 360) * (0.5 + prog * 1.25);
-      const open = clamp(prog * 1.3, 0, 1);
+      const S = (H / 360) * (0.42 + lunge * 1.35);
+      const open = clamp(prog * 1.5 - 0.12, 0, 1);
       const faceFn = (ENTITY_DEFS[jumpType] || ENTITY_DEFS.clark).face;
+      // motion-smear ghost trailing behind the head, then the face itself
+      ctx.globalAlpha = 0.35;
+      faceFn(ctx, W / 2 + ox * 2.3, H / 2 + oy * 2.3 + H * 0.04, S * 1.05, open, perfNow);
+      ctx.globalAlpha = 1;
       faceFn(ctx, W / 2 + ox, H / 2 + oy + H * 0.04, S, open, perfNow);
-      // red strobe + brief white static flashes
-      if (Math.sin(perfNow * 0.05) > 0) { ctx.fillStyle = 'rgba(150,0,0,0.32)'; ctx.fillRect(0, 0, W, H); }
-      if (prog > 0.25 && Math.sin(perfNow * 0.11) > 0.6) {
-        ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(0, 0, W, H);
+      // the dark crushes in from the edges as it reaches you
+      const ir = ctx.createRadialGradient(W / 2, H / 2, H * Math.max(0.12, 0.62 - prog * 0.34), W / 2, H / 2, H * (0.95 - prog * 0.3));
+      ir.addColorStop(0, 'rgba(0,0,0,0)'); ir.addColorStop(1, 'rgba(0,0,0,0.96)');
+      ctx.fillStyle = ir; ctx.fillRect(0, 0, W, H);
+      // signal-loss static bursts + a horizontal screen tear
+      if (Math.sin(perfNow * 0.083) > 0.25 || prog > 0.82) {
+        ctx.globalAlpha = 0.14 + prog * 0.22;
+        const gx = -((Math.random() * 128) | 0), gy = -((Math.random() * 128) | 0);
+        for (let yy = gy; yy < H; yy += 128) for (let xx = gx; xx < W; xx += 128) ctx.drawImage(grainCanvas, xx, yy);
+        ctx.globalAlpha = 1;
+        const bh = 20 + Math.random() * 60, by = Math.random() * (H - bh);
+        ctx.drawImage(canvas, 0, by, W, bh, (Math.random() - 0.5) * 44, by, W, bh);
+      }
+      // red strobe
+      if (Math.sin(perfNow * 0.05) > 0.1) { ctx.fillStyle = 'rgba(130,0,0,0.3)'; ctx.fillRect(0, 0, W, H); }
+      // blinding white blink right at the snap
+      if (prog > 0.38 && prog < 0.47) {
+        ctx.fillStyle = 'rgba(255,255,255,' + Math.max(0, 0.55 - Math.abs(prog - 0.42) * 9) + ')';
+        ctx.fillRect(0, 0, W, H);
       }
     }
 
@@ -2492,6 +3004,25 @@
           g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.02);
           g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.85);
           o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + 0.9);
+        });
+        // sub-bass slam you feel more than hear, falling away underneath
+        const sub = ac.createOscillator(); sub.type = 'sine';
+        sub.frequency.setValueAtTime(58, t0);
+        sub.frequency.exponentialRampToValueAtTime(27, t0 + 0.95);
+        const sg = ac.createGain();
+        sg.gain.setValueAtTime(0.5, t0);
+        sg.gain.exponentialRampToValueAtTime(0.001, t0 + 1.0);
+        sub.connect(sg).connect(ac.destination); sub.start(t0); sub.stop(t0 + 1.0);
+        // a second, higher shriek arriving late — right on the snap
+        [880, 932].forEach(function (f) {
+          const o = ac.createOscillator(); o.type = 'sawtooth';
+          o.frequency.setValueAtTime(f, t0 + 0.3);
+          o.frequency.exponentialRampToValueAtTime(f * 1.7, t0 + 0.75);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0.0001, t0 + 0.3);
+          g.gain.exponentialRampToValueAtTime(0.13, t0 + 0.36);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.95);
+          o.connect(g).connect(ac.destination); o.start(t0 + 0.3); o.stop(t0 + 1.0);
         });
       } catch (e) {}
     }

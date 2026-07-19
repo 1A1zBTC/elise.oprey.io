@@ -20,7 +20,7 @@
     .chip.coins { color: #ffd23f; }
 
     .stage { max-width: 560px; aspect-ratio: 760 / 560; }
-    canvas { cursor: pointer; }
+    canvas { cursor: pointer; touch-action: none; }   /* taps are game input, never scroll/zoom */
 
     /* contextual care panel — slides up when you stand next to a pet */
     .care { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 8;
@@ -395,11 +395,17 @@
       { id: 'yarn',     em: '🧶', nm: 'Yarn Ball',     for: 'cat',    d: 'Cats can\'t resist it',      cost: 10 },
       { id: 'feather',  em: '🪶', nm: 'Feather Wand',  for: 'cat',    d: 'Swish swish — pounce!',      cost: 15 },
       { id: 'bell',     em: '🔔', nm: 'Jingle Bell',   for: 'parrot', d: 'Ring-a-ding sing-along',     cost: 10 },
+      { id: 'mirror',   em: '🪞', nm: 'Birdie Mirror', for: 'parrot', d: 'Who\'s that gorgeous bird?', cost: 14 },
       { id: 'carrot',   em: '🥕', nm: 'Carrot Chew',   for: 'bunny',  d: 'Crunchy bunny fun',          cost: 10 },
+      { id: 'tunnel',   em: '🕳️', nm: 'Play Tunnel',   for: 'bunny',  d: 'Zoom-zoom-zoomies!',         cost: 14 },
       { id: 'bubbles',  em: '🫧', nm: 'Bubble Maker',  for: 'fish',   d: 'Pop pop pop!',               cost: 12 },
+      { id: 'castle',   em: '🏰', nm: 'Tank Castle',   for: 'fish',   d: 'A castle to explore',        cost: 16 },
       { id: 'shells',   em: '🐚', nm: 'Spare Shells',  for: 'crab',   d: 'New homes to try on',        cost: 12 },
+      { id: 'coral',    em: '🪸', nm: 'Coral Playset', for: 'crab',   d: 'Climb it, hide in it',       cost: 14 },
       { id: 'socktube', em: '🧦', nm: 'Crinkle Sock',  for: 'ferret', d: 'Ferrets dive right in',      cost: 10 },
+      { id: 'rattle',   em: '🏐', nm: 'Rattle Ball',   for: 'ferret', d: 'Rattly chase-about fun',     cost: 12 },
       { id: 'mudball',  em: '⚽', nm: 'Muddy Ball',    for: 'pig',    d: 'For muddy kickabouts',       cost: 12 },
+      { id: 'pool',     em: '🛁', nm: 'Splash Pool',   for: 'pig',    d: 'Splish-splash wallowing',    cost: 16 },
       { id: 'teddy',    em: '🧸', nm: 'Cuddly Teddy',                 d: 'EVERY pet loves teddy',      cost: 20 },
       { id: 'puzzle',   em: '🧩', nm: 'Pet Puzzle',                   d: 'Smart pets play smarter',    cost: 30 }
     ];
@@ -423,6 +429,22 @@
     // per-second decay — food drains slowest (a full belly lasts ~15 min)
     const DECAY = { food: 0.11, fun: 0.42, clean: 0.22, home: 0.28, walk: 0.32 };
     const BAR_IC = { food: '🍖', fun: '🎲', clean: '🧼', home: '🏠', walk: '🚶' };
+
+    // Any uncaught error shows on screen — a silent exception otherwise freezes
+    // parts of the game and just looks like "nothing works" to a kid.
+    window.addEventListener('error', function (e) {
+      try {
+        let bar = document.getElementById('err-bar');
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.id = 'err-bar';
+          bar.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99;background:#7a1f2b;color:#fff;' +
+            'font:700 11px/1.4 monospace;padding:8px 12px;border-radius:10px;word-break:break-all;opacity:0.95';
+          document.body.appendChild(bar);
+        }
+        bar.textContent = '⚠️ ' + e.message + ' (line ' + e.lineno + ') — screenshot this for Dan!';
+      } catch (x) {}
+    });
 
     // Bind BOTH click and touchstart: with the page's touch-action:none, a plain
     // click is eaten on phones/tablets (same pattern as mob-soccer's tapBind).
@@ -1120,15 +1142,13 @@
             : { em: '🏥', txt: 'Go pay for ' + nmOf(msp) + ' at the vet clinic!' });
         } else tasks.push({ em: '🔨', txt: 'Build ' + nmOf(msp) + '\'s home at their spot' });
       }
+      // NOTE: everyday pet needs (feed/play/wash/clean/walk) are NOT listed here —
+      // the pets already show alert icons and the care panel has buttons for those.
+      // The To-Do list is for jobs that have no button anywhere.
       for (const sp of SPECIES) {
         const p = G.pets[sp.key];
         if (!p.adopted || p.vetT > 0) continue;
-        if (p.sick) { tasks.push({ em: '🚑', txt: 'Take ' + nmOf(sp) + ' to the vet' }); continue; }
-        for (const k of needsOf(sp)) {
-          if (p[k] >= NEEDY) continue;
-          const verb = { food: 'Feed', fun: 'Play with', clean: 'Wash', home: 'Clean up for', walk: 'Walk' }[k];
-          tasks.push({ em: BAR_IC[k], txt: verb + ' ' + nmOf(sp) + ' ' + sp.em });
-        }
+        if (p.sick) tasks.push({ em: '🚑', txt: 'Take ' + nmOf(sp) + ' to the vet' });
       }
       for (const st of STATIONS) {
         if (!stationReady(st) || !anyAdopted(st.key) || G[st.lvlKey] > 25) continue;
@@ -1137,11 +1157,9 @@
                (G[st.supplyKey] > 0 ? '' : ' — buy more first!') });
       }
       if (G.puddles.length) tasks.push({ em: '🧽', txt: 'Mop up ' + (G.puddles.length === 1 ? 'the puddle!' : G.puddles.length + ' puddles!') });
-      if (G.jobs.foster) {
-        const f = G.jobs.foster;
-        if ((f.food + f.fun + f.clean) / 3 < 60) tasks.push({ em: '🧺', txt: 'Look after foster ' + f.nm + ' ' + f.em });
-      }
       if (G.food < 1) tasks.push({ em: '🛍️', txt: 'Buy pet food at the store' });
+      if (!hasGear('poobags') && SPECIES.some(function (sp) { return G.pets[sp.key].adopted; }))
+        tasks.push({ em: '💩', txt: 'Buy poo bags so you can walk dogs' });
       return tasks;
     }
     function renderTodoApp(body) {
@@ -2290,10 +2308,12 @@
         const d = Math.hypot(player.x - sp.x, player.y - sp.y);
         if (d < bd) { bd = d; best = sp.key; }
       }
+      // counters beat pet spots when both are in range — otherwise the dog's bed
+      // (right beside the vet counter) silently blocks the clinic panel
       const ds = Math.hypot(player.x - SHOP_SPOT.x, player.y - SHOP_SPOT.y);
-      if (ds < bd) { bd = ds; best = 'shop'; }
+      if (ds < NEAR && ds - 30 < bd) { bd = ds - 30; best = 'shop'; }
       const dv = Math.hypot(player.x - VET_SPOT.x, player.y - VET_SPOT.y);
-      if (dv < bd) { bd = dv; best = 'vet'; }
+      if (dv < NEAR && dv - 30 < bd) { bd = dv - 30; best = 'vet'; }
       if (G.jobs.foster) {
         const df = Math.hypot(player.x - BASKET_SPOT.x, player.y - BASKET_SPOT.y);
         if (df < bd) { bd = df; best = 'foster'; }
@@ -2672,16 +2692,40 @@
     }
     function clinicClickAt(px, py) {
       if (!clinicTrip) return false;
-      if (meetAll().length > 3 && Math.hypot(px - MEET_MORE.x, py - MEET_MORE.y) < 30) {
+      // on a plain visit, everything answers so the clinic never feels dead
+      if (!clinicTrip.key) {
+        if (Math.hypot(px - CLINIC_VET.x, py - CLINIC_VET.y) < 60) {
+          const anyPen = meetAll().length > 0;
+          cpop(CLINIC_VET.x, CLINIC_VET.y - 78, anyPen ? '🧑‍⚕️ Everyone\'s healthy! Meet the pets in the pen! →' : '🧑‍⚕️ Everyone\'s healthy — see you next time!', '#7ec8ff');
+          return true;
+        }
+        for (const r of CLINIC_ROOMS) {
+          if (Math.hypot(px - r.x, py - r.y) < 55) {
+            cpop(r.x, r.y + 48, r.nm + ' is for sick pets — everyone\'s fine today! 💚', '#9be79b');
+            return true;
+          }
+        }
+      }
+      // generous touch targets — little fingers on little screens
+      if (meetAll().length > 3 && Math.hypot(px - MEET_MORE.x, py - MEET_MORE.y) < 42) {
         meetPenPage++;   // meetPets() wraps it
         return true;
       }
       const pen = meetPets();
       for (let i = 0; i < pen.length && i < MEET_PEN.length; i++) {
-        if (Math.hypot(px - MEET_PEN[i].x, py - (MEET_PEN[i].y - 6)) >= 44) continue;
+        if (Math.hypot(px - MEET_PEN[i].x, py - (MEET_PEN[i].y - 6)) >= 54) continue;
         const sp = pen[i];
         if (G.meet && G.meet.stage === 'build') {
-          if (G.meet.key !== sp.key) cpop(MEET_PEN[i].x, 420, 'Finish building ' + nmOf(spOf(G.meet.key)) + '\'s home first! 🔨', '#ffd23f');
+          if (G.meet.key === sp.key) {
+            cpop(MEET_PEN[i].x, 420, '🏠 Go home and tap ' + nmOf(sp) + '\'s spot to build!', '#7ec8ff');
+          } else {
+            // never trap a kid mid-adoption: switching refunds the paid pet
+            const old = spOf(G.meet.key);
+            G.coins += old.adopt;
+            cpop(MEET_PEN[i].x, 444, '↩️ ' + nmOf(old) + ' goes back for now (+' + old.adopt + ' 🪙)', '#ffd23f');
+            chooseMeetPet(sp);
+            renderHud(); save();
+          }
           return true;
         }
         if (!G.meet || G.meet.key !== sp.key) { chooseMeetPet(sp); return true; }
@@ -3053,13 +3097,27 @@
 
     // ---------- drawing ----------
     function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+    // Emoji are rasterized once into offscreen sprites and blitted after that —
+    // per-frame fillText of color-emoji glyphs is the #1 canvas cost on tablets
+    // (same fix as Pet Vet's character sprite cache).
+    const emCache = {};
+    let emCacheN = 0;
     function em(txt, x, y, size, flip) {
-      ctx.save();
-      ctx.font = size + 'px ' + EMOJI_FONT;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      if (flip) { ctx.translate(x, y); ctx.scale(-1, 1); ctx.fillText(txt, 0, 0); }
-      else ctx.fillText(txt, x, y);
-      ctx.restore();
+      const key = txt + '|' + size + (flip ? '|f' : '');
+      let c = emCache[key];
+      if (!c) {
+        if (emCacheN > 400) { for (const k in emCache) delete emCache[k]; emCacheN = 0; }
+        c = document.createElement('canvas');
+        const pad = Math.ceil(size * 0.4);
+        c.width = c.height = size + pad * 2;
+        const cx = c.getContext('2d');
+        cx.font = size + 'px ' + EMOJI_FONT;
+        cx.textAlign = 'center'; cx.textBaseline = 'middle';
+        if (flip) { cx.translate(c.width / 2, c.height / 2); cx.scale(-1, 1); cx.fillText(txt, 0, 0); }
+        else cx.fillText(txt, c.width / 2, c.height / 2);
+        emCache[key] = c; emCacheN++;
+      }
+      ctx.drawImage(c, x - c.width / 2, y - c.height / 2);
     }
 
     function drawHouse(ts) {
@@ -3325,12 +3383,14 @@
       if (clinicTrip) {
         drawClinic(ts);
         drawPlayer(ts);
-        const csp = spOf(clinicTrip.key), cp = G.pets[clinicTrip.key];
-        const cbob = Math.sin(ts * 0.004) * 3;
-        if (clinicTrip.stage === 'treat') em(csp.em, clinicTrip.need.x, clinicTrip.need.y - 44 + cbob, 30);
-        else {
-          em(csp.em, player.x - 32, player.y + 4 + cbob, 28);
-          if (cp.sick) em('🤒', player.x - 32, player.y - 24 + cbob, 16);
+        if (clinicTrip.key) {   // plain visits (meet the pets) bring no patient along
+          const csp = spOf(clinicTrip.key), cp = G.pets[clinicTrip.key];
+          const cbob = Math.sin(ts * 0.004) * 3;
+          if (clinicTrip.stage === 'treat') em(csp.em, clinicTrip.need.x, clinicTrip.need.y - 44 + cbob, 30);
+          else {
+            em(csp.em, player.x - 32, player.y + 4 + cbob, 28);
+            if (cp.sick) em('🤒', player.x - 32, player.y - 24 + cbob, 16);
+          }
         }
         drawPops(secs);
         return;
@@ -3357,6 +3417,14 @@
     });
 
     function loop(ts) {
+      // one bad frame must never kill the game: report it and keep looping
+      try { loopBody(ts); }
+      catch (e) {
+        try { window.dispatchEvent(new ErrorEvent('error', { message: String(e && e.message || e), lineno: 0 })); } catch (x) {}
+      }
+      requestAnimationFrame(loop);
+    }
+    function loopBody(ts) {
       if (lastTs === 0) lastTs = ts;
       const secs = clamp((ts - lastTs) / 1000, 0, 0.25);
       lastTs = ts;
@@ -3370,8 +3438,16 @@
       uiT += secs; if (uiT > 0.25) { uiT = 0; renderHud(); updateCare(); updateVet(); updateShop(); }
       updatePhone();
       saveT += secs; if (saveT > 5) { saveT = 0; if (document.getElementById('setup').hidden) save(); }
-      draw(ts, secs);
-      requestAnimationFrame(loop);
+      // don't repaint the canvas under a full-screen overlay — the overlays are
+      // blurred (backdrop-filter), and re-blurring an animating canvas every
+      // frame is what makes tablets lag during minigames and walks
+      // only the five known full-screen overlays may pause canvas painting — a
+      // stray/stuck element must never freeze the game (frozen screen reads as
+      // "nothing works"), and trips always keep painting
+      const overlayUp = ['setup', 'shop', 'vet', 'mini', 'walk'].some(function (id) {
+        const el = document.getElementById(id); return el && !el.hidden;
+      });
+      if (!overlayUp || clinicTrip || storeTrip) draw(ts, secs);
     }
 
     // migrate the old single-slot save into the named-slots map (one-time; not in test mode,
@@ -3465,6 +3541,17 @@
       stepMini: stepMini,
       fosterTime: function (s) { if (G.jobs.foster) G.jobs.foster.stay = s; },
       coins: function (n) { G.coins += n; renderHud(); refreshCare(); },
+      debug: function () {
+        const ov = {};
+        ['setup', 'shop', 'vet', 'mini', 'walk', 'namer', 'saveModal', 'phone'].forEach(function (id) {
+          const el = document.getElementById(id); ov[id] = el ? !el.hidden : 'missing';
+        });
+        return { overlaysVisible: ov, clinicTrip: clinicTrip ? JSON.parse(JSON.stringify(clinicTrip)) : null,
+                 storeTrip: !!storeTrip, meet: G.meet ? JSON.parse(JSON.stringify(G.meet)) : null,
+                 walkRun: !!walkRun, mini: !!mini, fight: !!fight, near: nearKey,
+                 player: { x: Math.round(player.x), y: Math.round(player.y) },
+                 saveName: currentName, coins: G.coins };
+      },
       fight: {
         state: function () { return fight ? { a: fight.a, b: fight.b, t: Math.round(fight.t * 10) / 10, x: fight.x, y: fight.y } : null; },
         start: startFight, tick: tickFight, pairs: fightPairs,
