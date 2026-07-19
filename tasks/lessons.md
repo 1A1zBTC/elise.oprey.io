@@ -105,3 +105,15 @@
 - QA caveat: the service worker serves precached pages cache-first, so after editing a file the
   browser may show a STALE copy. QA on a fresh port (new origin) or with a `?v=N` cache-bust
   query, or unregister the SW + clear caches first.
+
+
+## Chase odd states seen during verification — don't explain them away
+- 2026-07-18: While verifying Street Fighter art changes, a screenshot showed a fighter in
+  state 'down' and I wrote it off as "mid hit-flash, not a bug". The 'down' state was actually
+  a pre-existing permanent freeze (no code path ever left it), which the user then hit as
+  "1P can't move or attack". The clue was in my own verification output and I moved past it.
+- Rule: when a verification probe surfaces a state you didn't expect (a fighter 'down' while
+  the scene looks idle, a counter that isn't what the code implies), trace the state machine
+  transition OUT of that state before declaring it fine. For games: verify the HUMAN input
+  path by actually playing a few seconds (move + attack + get knocked down + recover), not
+  just CPU-vs-CPU sims and special-case hooks.

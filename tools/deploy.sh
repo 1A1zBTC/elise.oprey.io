@@ -23,6 +23,7 @@ echo "==> Syncing to $BUCKET"
 aws s3 sync . "$BUCKET" \
   --exclude ".git/*" \
   --exclude ".gstack/*" \
+  --exclude ".claude/*" \
   --exclude "tasks/*" \
   --exclude "tools/*" \
   --exclude ".gitignore"

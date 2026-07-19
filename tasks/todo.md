@@ -274,3 +274,304 @@ doesn't serve in tests" mystery, not a game bug).
 
 ### Not committed
 Other instance has in-flight uncommitted work in the same file.
+
+## Street Fighter: graphics + stutter + full Warhammer roster (2026-07-18)
+
+### Plan
+- [x] Roster: add all Warhammer 40k factions (20 new fighters, 24 total)
+- [x] Art system: faction helmets, backpacks, chest decor, emblems; richer shading
+- [x] Fix select-card portraits (heads were clipped off the top of the canvas)
+- [x] Stutter: cache static arena + vignette to offscreen canvases (~700 fillRects + ~30 gradient allocs per frame -> GC hitches)
+- [x] Stutter: cache limb/joint gradients (local-space rendering)
+- [x] Stutter: cut hit-freeze (hitstop) from up to 9 frames to 2-4
+- [x] Fixed 60Hz timestep so high-refresh displays don't fast-forward the game
+- [x] Select screen: 4-column grid (3 on phones) to fit 24 fighters
+- [x] sw.js cache bump v64 -> v65
+- [x] Verify: syntax check + headless browser screenshots
+
+### Review
+- Roster: 22 Warhammer 40k factions (Imperium 7, Chaos 7, Xenos 8) + Predator/Xenomorph = 24
+  fighters. Each CHARS entry now carries an `art` block (helm/back/decor/emblem/crest/horns/
+  tall/beard/pauldron) consumed by drawFighter/drawHead/bodyDecor — adding a fighter is data
+  + at most one new helm case.
+- Stutter root cause: per-frame allocation churn (arena redraw ~700 fillRects + ~30 gradient
+  objects/frame -> periodic GC pauses), compounded by design hitstop up to 9 frames (150ms)
+  on heavy hits. Fixed: arena + vignette baked to offscreen canvases (rebuilt on dpr change),
+  limbs render in local space with memoized gradients keyed color|size, memoized
+  lighten/darken, hitstop now 2 (light/shot/block) or 4 (heavy). Also moved to a fixed 60Hz
+  accumulator loop — 120/144Hz screens no longer fast-forward the game, and each display
+  frame renders at most once per sim step.
+- Pre-existing bug fixed: select cards / HUD portraits drew fighters with heads above the
+  canvas (feet at y=108 of 120 but fighters are ~160 units tall). Portraits now scale 0.58.
+- Verified headless (file://, browse daemon): 24 chars boot, select screen renders full
+  bodies, marine-vs-ork / daemon-vs-knight / aeldari-vs-tyranid screenshots look right,
+  finisher super fires with FINISHER! banner, 2 simulated minutes of CPU fight with round
+  transitions and draw/win bookkeeping, zero JS errors, avg step+render 1.22ms (software).
+  Mobile 375px select layout fits after switching picks to 3 columns + min-width:0.
+- NOT deployed, NOT committed (per convention: Dan commits; deploy = aws s3 sync +
+  CloudFront invalidation EDR208IJW4SS7 + the sw.js v65 bump is already in).
+
+### Follow-up (same day): "1P can't move or attack" bug
+- Root cause (PRE-EXISTING): nothing ever exited the 'down' state — stepFighter early-returned
+  on state==='down' forever, so any knockdown (CPU sweep = 28% of its attack rolls, super,
+  8-hit combo cap) froze that fighter for the whole round, drawn in a normal STANDING pose
+  (hence "I'm still and can't attack"). Downed fighters are also invulnerable, which is why
+  stuck rounds ended in timeout draws.
+- Fix: on ground with stun expired, 'down' -> 'idle' (get back up). Plus: down/KO fighters now
+  visibly lie flat (rotate about the feet) so the state reads on screen.
+- Also: 1-player mode now accepts EITHER keyset (WASD/QER or Arrows/1-2-4) for the human,
+  since kids pressing the "other" side's keys also experienced "nothing works". 2P keeps the
+  keysets separate (verified: arrows move only P2 in 2P).
+- Verified headless: forced knockdown -> lying pose screenshot -> recovers to idle; arrows
+  moved P1 95px in 1P; Digit1 punch landed for 5 dmg; 2P isolation intact; no JS errors.
+
+
+## Fruit Merge: round progression rework (2026-07-18)
+- [x] Target fruit grows per round: round 1 clears at 🍎, then 🍐 🍑 🍍 🍈, 🍉 from round 6 on
+- [x] Jar shrinks 20px on even rounds (328 → floor 268 wide), announced on the clear screen
+- [x] Spawn pool + gravity retuned to the new target curve; side ladder highlights the target
+- [x] window.__t test hook; verified headless via browse daemon
+- [x] Sleep physics: settled fruit locks in place (infinite mass), can't be shoved by new
+      drops; fruit-fruit contacts now kill into-contact velocity (fixes Verlet phantom
+      velocity in stacks); any merge wakes the pile so unsupported fruit falls
+
+## Mob Soccer: FIFA-style possession & passing (2026-07-18)
+- [x] Lead passes with designated receiver + pulsing FIFA-style receiver indicator
+- [x] Control auto-switches to the receiver; assisted run to meet the pass
+- [x] Possession change animated: first-touch ball settle + team-color flash ring, INTERCEPTED! pop
+- [x] Animated switch marker (arrow flies from old to new active player)
+- [x] CPU passes in build-up play; possession dot on scoreboard
+- [x] window.__t hook + headless verify
+
+### Follow-up 2 (same day): army-unit roster + signature wargear
+- Every faction fighter renamed to its iconic troop unit: Intercessor, Battle Sister,
+  Custodian Guard, Grey Knight, Skitarii Ranger, Cadian Trooper, Armiger, Chaos Legionary,
+  Khorne Berzerker, Plague Marine, Rubric Marine, Noise Marine, Bloodletter, War Dog,
+  Guardian Defender, Kabalite Warrior, Ork Boy, Termagant, Neophyte Hybrid, Hearthkyn
+  Warrior, Pathfinder, Necron Warrior. Descs updated to name unit + faction.
+- New drawWeapon() renderer + art.weapon data: each unit holds signature wargear in
+  idle/walk/jump poses (7 kinds: rifle w/ optional glow strip — gauss flayer green tube,
+  pulse carbine, lasgun, shuriken catapult, splinter rifle...; halberd — guardian spear /
+  nemesis force halberd; chain-axe; ork choppa; hellblade sword; organic fleshborer;
+  arm cannon for Armiger/War Dog). Mirrors via scale(-1,1) for left-facing.
+- Verified in browser tab 3 (browse daemon tab 2 was in use by another instance — used a
+  dedicated tab): select screen shows all units armed, Custodian spear + Necron gauss
+  flayer + Berzerker chain-axe + Ork choppa all render in-fight both directions; no JS
+  errors; node --check clean. sw.js already at v65 pending deploy.
+
+## Mr Grizzles: cans, ramps, super grizzly, graphics pass (2026-07-18)
+- [x] Coins → spinning cans of Bud Light (blue body, white band, silver rim; HUD can icon; copy updated)
+- [x] Ramp carts (always warning-orange w/ chevron wedge): run up onto roofs, ride, jump cart-to-cart;
+      any train roof is landable; 5 new roof-run chunks (tier 1-3); jump now launches from current
+      surface (jumpBase) with fall physics off edges
+- [x] Hit while fresh → stumble → SUPER GRIZZLY 15s: bigger dark-grizzly bear, orange aura, hackles,
+      countdown ring + HUD meter, smashes bars/signs/whole trains (+15 ea, particles, screen shake).
+      After super: 10s worn-out (sweat drop) — a hit there is the only knockout. Then re-arms.
+- [x] Graphics pass: steel rails + wooden sleepers, brick retaining walls w/ amber tunnel lamps +
+      graffiti, twinkling stars + moon glow, depth haze, train side windows/rivets/roof ribs/
+      headlight glow, blinking barrier lights, film grain + vignette
+- [x] Verified headless in browse tab: ramp climb (y→2.1), roof can pickup, hit→super→smash(45pts)→
+      tired→knockout→re-arm, gap jump stays at roof height, 50s unattended run ends properly;
+      node tools/test.mjs all green (31 pages); screenshots reviewed. sw.js bumped to v69 (pending deploy)
+### Review
+- Death path changed by design: only a hit during the 10s worn-out window ends the run (super is
+  fully invincible per request, so an always-rearming super would otherwise make the game unlosable).
+- Concurrent-instance note: browse daemon smoke test reuses tabs — game QA tabs were re-opened after
+  tools/test.mjs ran. Not committed/deployed (working tree has other instances' pending changes).
+
+## Pet Lovers: new game (2026-07-18)
+- [x] pet-lovers/index.html — DOM pet-care sim, 8 species (dog cat parrot bunny fish crab ferret pig)
+- [x] Needs: feed / play / groom / clean cage-tank / walk (dog) + sickness → vet trips
+- [x] Shop: food, treats, permanent toys; hearts → coins; adopt pets for progression
+- [x] Walk minigame (tap bones for coins); localStorage save with capped offline decay
+- [x] Register in index.html launcher + sw.js PAGES (+ cache bump)
+- [x] window.__t hook + headless verify
+- [x] v2: rebuilt as a walk-around house — player character (WASD/tap-to-move), rooms
+      (living room, tank shelf, cages, garden with hutch + pen, shop counter), walk up to a
+      pet for its care panel, walk over hearts to collect, shop opens at the counter
+- [x] v3: earn money — neighbours ring the front door for paid dog walks (10-16🪙, rotating
+      dogs), foster pets visit the basket for a 150s stay and pay out 12-38🪙 scaled by how
+      happy they leave (⭐ perfect-care bonus)
+- [x] v4: phone system — jobs now arrive as phone calls (walk requests from named neighbours,
+      foster requests from the shelter). Phone rings 10s (shake + ringtone + badge countdown),
+      P or tap answers, then 5s to Accept/Decline; missed / hung-up / declined all handled.
+      Doorbell flow removed; door stays as decor.
+- [x] fix: phone Accept dead when panel was already open at ring time (ring phase now shows
+      an Answer button); all stage buttons converted to tap() (click+touchstart) since plain
+      click is eaten on touch devices; P no longer closes the phone mid-decision
+- [x] v5: coins only from other people's pets — hearts now give ❤ Love (HUD chip, saved),
+      own dog walk pays nothing and spawns no bones (bones/pay only on phone-job walks);
+      foster + neighbour-walk pay unchanged
+- [x] v6: Pet Lovers — removed per-pet Vet button from the care panel; added a VET CLINIC
+      counter (purple awning, below the pet shop) that opens a Vet Clinic overlay like the
+      shop: lists all sick pets with Treat · 15 🪙 buttons, shows healing countdowns, and
+      "All your pets are healthy! 🎉" when nothing needs treatment. Verified headless via
+      window.__t (care panel has no vet act; treat deducts coins; heal completes; close
+      steps player back so it doesn't re-open).
+- [x] v7: Pet Lovers — chore minigames now need the right gear: added GEAR shop items
+      (🧼 Pet Soap 8🪙 → wash, 🧹 Broom & Scoop 8🪙 → clean home, 🦮 Dog Leash 12🪙 → own-dog
+      walk; play already needed a toy). Missing gear disables the button with a "Need soap!"
+      style label; gear is one-time purchase (Owned ✓ in shop), saved in G.gear, applies to
+      foster wash too; neighbour dog-walk jobs unaffected. Verified headless: blocked before
+      buying, shop purchase, unlock after, persistence across reload.
+- [x] v6: care minigames — every chore is a game and the score (0-1) scales the stat gain
+      (gain = base × (0.3 + 0.7×score)). Feed = catch-the-food themed per species (motion +
+      item per animal); Play = per-animal: dog fetch-timing, pig puddle-hop, cat laser-chase,
+      bunny burrow-peek, ferret tube-dash, fish bubble-pop, parrot song-mimic (simon), crab
+      shell game; Wash = scrub dirt spots (drag or tap); Clean = tap-the-mess themed per home.
+      Own-dog walk: bones tapped fill the walk meter (55 + 12/bone). Fosters map to nearest
+      species' games. Treat/vet/adopt stay instant. NOTE: merged live alongside another
+      instance's vet-clinic counter + gear (soap/broom/leash) work — combined flows verified.
+- [x] v8: Pet Lovers — Pet Vet-style named save slots: Saves button in topbar opens a modal
+      (name input + Save, + New Game, per-slot Load/Delete, current slot highlighted, sub line
+      shows coins/pets/love/date). Slots live in petlovers.saves + petlovers.current; actions
+      and a 5s tick autosave into the active slot ("Autosave" until named, shown as a 📂 HUD
+      chip); autosave paused while the intro overlay is up so + New Game can't clobber a slot;
+      boot auto-resumes the most recent slot and migrates the old single petlovers.save into
+      an "Autosave" slot; loads reset transient state (minigame/walk/phone/overlays); typing
+      in the name field no longer moves the player or toggles the phone. Verified headless.
+- [x] balance: food decay 0.34 -> 0.11/s (full belly ~15 min instead of ~5) — "pets need food too often"
+- [x] v9: Pet Lovers — every pet's chore minigame is now a different game. Added 4 new
+      mechanics (whack = tap before they vanish, sort = tap good/avoid bad, order = tap in
+      1→5 number order, meter = stop the marker in the green) alongside catch/chase/timing/
+      sequence/shells/mess/scrub. No two species share a mechanic within a task:
+      FEED dog catch·cat whack·parrot sort·bunny order·fish meter·crab chase·ferret shells
+      (egg under bowls)·pig mess; PLAY dog timing·cat chase·parrot sequence·bunny whack·
+      fish catch·crab shells·ferret order·pig meter; WASH dog scrub·cat chase·parrot meter·
+      bunny mess·ferret whack·pig sort; CLEAN parrot mess·bunny scrub(hutch)·fish sort·
+      crab whack·ferret order·pig meter. Kept the kid-friendly timing tunings; foster pets
+      inherit via FOSTER_AS. Verified all 28 combos headless + interaction tests.
+- [x] food: shop item is now "Bag of Pet Food 🛍️ — one bag feeds 5 pets" (same 5🪙 / 5 servings);
+      out of food = Feed button shows "Need food!" (live-updating) and the minigame can't start
+- [x] v10: Pet Lovers — needs director replaces constant decay: pets no longer drain
+      stats passively; a need event fires every ~20-32s (first at ~10s) and hard caps
+      apply — max 3 pets needing care at once, two with ONE need + one with TWO (≤4 total).
+      Need = stat dropped to ~24-34 with a "X needs food 🍖!" popup; canvas alert icon now
+      shows for any stat < 55. Sick/at-vet/being-walked pets are skipped. normalizeNeeds()
+      settles old decayed saves down to the caps on load. Foster-pet decay unchanged (it's
+      the paid job). Verified headless: 30 forced events hold 1+1+2; no passive decay over
+      2 min; caring frees a slot; fully-drained save normalizes to 1+1+2.
+- [x] v11: Pet Lovers — after caring for a pet it now rests 40-70s (p.restT, saved with the
+      pet) before the needs director may pick it again, for both its first need and a
+      second one. Stamped on every care completion: feed minigame, treat, play, wash,
+      clean-home, own-dog walk, and vet cure. Verified headless: fed pet gained zero new
+      needs across 30 forced director events while resting; eligible again after rest expiry.
+- [x] v12: Pet Lovers — "can't buy more food" rescue: when broke (coins < 5) with 0 food,
+      the next phone call is pulled forward to 4-8s and is always a dog-WALK job (pays
+      instantly, unlike fosters which pay after 150s). Normal call cadence untouched
+      otherwise. (Feed/treat buttons already show "Need food!" when the pantry is empty.)
+      Verified headless: 2 coins + 0 food → walk call ringing within 9s.
+- [x] shop UX: broke-player fix — "not enough coins" hint in the shop pointing at phone jobs,
+      and buy buttons + hint now live-update while the shop is open (a payout re-enables them)
+- [x] shop: toys are stackable (buy multiples, ×N count shown in shop, play bonus caps at 6
+      toys); gear (soap/broom/leash) stays one-time Owned ✓; consumables unchanged
+- [x] v13: Pet Lovers — phone rework: incoming calls are now ONLY dog-walk jobs (foster
+      calls removed; broke-rescue still forces a walk). Fostering moved to a Foster app:
+      pressing P opens the phone home screen (note + 🧺 Foster app icon); the app lists 3
+      random shelter pets (emoji, name, kind) with Foster buttons — player CHOOSES who to
+      take in. While fostering, the app shows the pet + live pickup countdown; when the
+      foster leaves, the list refreshes. Back button returns to home; phone always opens on
+      home. __t.fosterApp {open, choices, pick} added. Verified headless: 12 forced rings
+      all walk-type; app shows 3 choices; picking starts the foster; payout on completion;
+      list refresh + Back both work. Screenshot confirmed.
+- [x] fix "can't buy food": root cause was test contamination — automated tests shared the
+      real localStorage save and had forced coins to 2. Restored coins in the live session;
+      added ?test=1 isolated save slots (testsaves/testcurrent, migration skipped) so tests
+      can never touch real progress; added shelter pity-drop (+3 food after 20s when food=0
+      and coins<5) so being broke never blocks feeding
+- [x] overlays un-clipped: removed position:absolute-in-stage from all 5 overlays (they now
+      use the shared fixed full-viewport .overlay), panel margin:auto so tall panels scroll
+      from the top, touch-action pan-y for touch scrolling, and shop/vet lists lay out fully
+      (no inner scrollbox) so every item is visible in one scroll
+- [x] v14: Pet Lovers — dogs poo on walks (own-dog AND job walks): up to 3 💩 drop near the
+      dog's feet (plop animation), tap to scoop (🧻✨). Poo left at walk's end is "missed":
+      job pay -3🪙 each (min 4) with a "you left 💩!" message; own-dog walk meter -10 each
+      (min 40) with "Oops — you forgot to scoop!". Walk subtitles now say to scoop. Fixed
+      acceptCall's walkRun missing the poo fields. Verified headless: job walk with missed
+      poo paid 9 instead of 12; fully-scooped own walk had no penalty. Screenshot confirmed.
+- [x] v15: Pet Lovers — Pet Store is now a walkable scene like the vet clinic: walking to
+      the shop counter enters HAPPY PAWS PET STORE. Two aisles of 12 shelves (Pet Food,
+      Treats, Poo Bags, Soap, Brooms, Leashes, Toys, Pet Beds, Litter & Box, Big Cages,
+      Tanks & Water [sand/salt/fresh], Mud & Dirt), an ADOPT A FRIEND pen (up to 3
+      unadopted pets), and a REGISTER. Walk near a shelf → item into basket (basket +
+      total drawn at top); register auto-puts-back items you can't afford then charges the
+      rest; 🏠 Home exits (unpaid basket discarded). New items: 💩 Poo Bags (+1🪙 per poo
+      scooped on walks); comfort supplies (beds→dog/bunny, litter→cat, cage→parrot/ferret,
+      tank→fish/crab, mud→pig) double that pet's rest between needs via restFor(). World +
+      needs pause during the trip. Old shop overlay no longer opens (kept for __t.buy).
+      __t.storeTrip {start,home,step,checkout,state,shelves,reg,pen}. Verified headless:
+      full shop→checkout, adoption via pen (dog now costs 20 — other instance rebalanced),
+      put-back at 15 coins, dupe-block, home discard, beds doubling rest (133s). Screenshot.
+- [x] v16: Pet Lovers — store is now tap-to-buy: canvas pointerdown in the store hit-tests
+      shelves / adoption-pen pets / register and buys on tap (checkout on register tap);
+      taps elsewhere still walk the player. Removed the walk-near auto-add (stepStore is a
+      no-op). Hints + intro updated to "tap what you want to buy". __t.storeTrip.click(x,y).
+      Verified headless: shelf/pen/register taps all work from anywhere, walking near a
+      shelf adds nothing, empty-floor tap falls through to walking.
+
+## Burgle Cats: gem bundles (2026-07-18, session "street fighter/burgle")
+
+- Gacha now has 4 purchase options built from a BUNDLES table: Pull 1💎 (1 cat, as before),
+  Triple Pull 3💎 (3 cats, ★★★ Rare+ guaranteed), Epic Bundle 6💎 (4 cats, ★★★★ Epic+
+  guaranteed), Royal Bundle 12💎 (5 cats, ★★★★★ Legendary+ guaranteed — gold-highlighted).
+  Saving gems = more cats per gem-ish AND a rarity floor.
+- Guarantee mechanic: roll normally; if no pull meets the bundle's floor, the last slot is
+  re-rolled via rollCatMin(minR) (weighted roll over the >=minR pool, lazily cached per floor).
+- Multi-reveal: best cat of the haul gets the big portrait; whole haul renders as a mini
+  canvas strip with rarity-colored borders + ✨ for new cats. Single pull unchanged.
+- Old #pull-btn removed (listener too); buttons are generated from BUNDLES with data-cost,
+  disabled when gems < cost. __bc.gacha grew bundles/bundle/rollMin for testing.
+- Verified (browse tab 17, then closed + test localStorage keys cleared): 200 sims per bundle
+  type — zero guarantee misses; insufficient gems no-op; single deducts 1; at 2💎 only Pull
+  enabled; Royal pull screenshot shows 12💎 deducted, 5-cat strip, Legendary big reveal.
+  node --check clean, no new console errors (only the pre-existing file:// manifest pair).
+- NOT committed/deployed; sw.js already at v65 pending Dan's deploy.
+- [x] v17: Pet Lovers — poo emergency on walks: when the dog poos you get 10s (countdown in
+      the walk subtitle) to press B (or tap the shaking "🛍️ Grab a poo bag!" button — touch
+      support) and then DRAG the pointer over the glowing 💩 to pick it up (tap-with-bag
+      also works; tapping without the bag does nothing). Miss the 10s → you step in it →
+      voidWalk(): walk ends instantly with NO pay / no walk-meter fill ("Ew, you stepped in
+      it!"). One poo at a time (max 3/walk); the walk can't finish while a poo is pending.
+      Meshes with other instance's new gate (poo bags gear required to accept walk jobs).
+      __t: walkPoo/bag/scoop. Verified headless: happy path (bag→glow→scoop→paid+tips) and
+      void path (held past walk end, voided at deadline, 0 pay).
+- [x] v18: Pet Lovers — hygiene stations: LITTER BOX (cat, needs the store's Litter & Box;
+      that shelf then sells Litter ×3 refills 6🪙) and PEE PAD (dog, PEE PADS ×3 6🪙 new
+      shelf, first-aisle regridded to 7 shelves). Station level drains (~3.5 min per fill);
+      stand next to it to top up from supply (🧴/🧻 HUD chips). Empty station → accident
+      timer 25-40s (60-90s if you never bought the gear) → pet pees: puddle drawn on the
+      floor (max 4, saved), that pet drops no hearts while its puddle sits; walk over a
+      puddle to mop (🧽). Accidents pause during store/clinic trips and vet stays. Buying
+      the box includes 3 starter litter. __t: hygiene/pee/dryStation. Verified headless:
+      slow-vs-fast arming, forced pees, mopping, store purchase both modes, refill/lay,
+      no accidents while stocked. (Other instance added pet-naming dialog + house restyle
+      mid-test — coexists fine.)
+- [x] v19: Pet Lovers — SAND & DIRT is now hermit-crab tank substrate: the MUD & DIRT shelf
+      became SAND & DIRT ×3 (6🪙 consumable, 🏖️ HUD chip); third hygiene station TANK SAND
+      by the crab's tank — stand next to it to pour sand (level drains like the others).
+      No sand → Sheldon hides in his shell (drawn as 🐚), drops no hearts, and sulk
+      reminders pop every ~30s (no puddles from the crab). Pig's comfort-supply mapping
+      removed (mud item gone). Verified headless: reminder arming, no-puddle sulk, store
+      purchase, pour-from-supply, timer clears when filled.
+- [x] shop: Aquarium Rocks 🪨 (10🪙, one-time gear) — drawn in the fish tank (+🌿) once
+      owned; when the needs system rolls a "bored fish", 50% of the time the fish plays in
+      the rocks instead ("playing in the rocks!" pop) and gets a rest breather
+- [x] minigame variety (Elise voice feedback: "too much tapping") — two continuous-motion
+      mechanics added: 'bowl' steer-to-catch (dog feed: slide bowl under falling bones,
+      pointer/finger steering, no taps) and 'bin' drag-and-drop (pig feed: apples → trough;
+      parrot clean: feathers → bucket). Verbs now: steer, drag-drop, rub, hold-release,
+      stop-the-meter, memory, sort, order, tap.
+- [x] v20 (verified, built by concurrent instance): pet-necessity supplies + adoption kits —
+      new bottom shelf row (FOOD BOWLS, WATER KIT, CLIMBING SET, HABITAT DIRT, ROCKS &
+      PLANTS), per-species SUPPLIES kits (e.g. crab: tank+dirt+sand+bowls+water+climb;
+      fish: tank+rocks+water+bowls), and a "meet a pet" adoption flow: choose a pet →
+      supply checklist → buy everything at the store → build/place each item at home →
+      pet comes home. Fish with rocks sometimes entertains itself. This instance verified
+      the full flow headless (choose dog → 5 supplies → checkout ticks checklist → buy →
+      5 place steps → adopted, no console errors) and made NO edits to avoid conflicts.
+- [x] v21: Pet Lovers — "can't accept walk calls" fix: cause was the (concurrent-instance)
+      poo-bags-required-for-walk-jobs gate failing silently — Accept looked dead, reason
+      only in a phone note. Now (1) saves with any adopted pet are grandfathered a free
+      poobags (walk jobs pre-dated the rule; don't cut off an existing family's income),
+      and (2) when you still lack bags the call screen says so: bubble hint + Accept
+      replaced by a disabled "💩 Need poo bags!" button. Verified headless both ways.

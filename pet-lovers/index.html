@@ -1,0 +1,3174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Pet Lovers</title>
+  <link rel="stylesheet" href="../fonts/fonts.css">
+  <link rel="stylesheet" href="../shared/game.css">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="../icons/favicon.png">
+  <script src="../pwa.js" defer></script>
+  <style>
+    .hud { width: 100%; max-width: 560px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .chip { background: var(--bg-2); border: 2px solid var(--border); border-radius: 12px; padding: 5px 10px; color: var(--fg); font-weight: 800; font-size: 0.8rem; }
+    .chip.coins { color: #ffd23f; }
+
+    .stage { max-width: 560px; aspect-ratio: 760 / 560; }
+    canvas { cursor: pointer; }
+
+    /* contextual care panel — slides up when you stand next to a pet */
+    .care { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 8;
+      background: rgba(15,24,48,0.94); border: 2px solid var(--border); border-radius: 16px;
+      padding: 8px 10px; transform: translateY(130%); transition: transform 0.22s ease; }
+    .care.show { transform: translateY(0); }
+    .care-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .care-head .em { font-size: 1.5rem; }
+    .care-head .n { color: var(--fg); font-weight: 800; font-size: 0.92rem; }
+    .care-head .s { color: var(--muted); font-size: 0.68rem; font-weight: 800; }
+    .care-head .mood { margin-left: auto; font-size: 1.3rem; }
+    .care-bars { display: flex; gap: 8px; margin-bottom: 7px; flex-wrap: wrap; }
+    .cb { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 70px; }
+    .cb .ic { font-size: 0.8rem; }
+    .cb .bar { flex: 1; height: 8px; background: rgba(0,0,0,0.45); border-radius: 4px; overflow: hidden; }
+    .cb .bar i { display: block; height: 100%; border-radius: 4px; background: #5ad15a; transition: width 0.3s ease, background 0.3s ease; }
+    .care-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .act { flex: 1; min-width: 62px; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.64rem; color: #cfd6ea; background: var(--bg-1); border: 2px solid var(--border); border-radius: 11px; padding: 5px 2px; cursor: pointer; transition: transform 0.08s ease; }
+    .act .em { display: block; font-size: 0.95rem; line-height: 1.2; }
+    .act:active { transform: scale(0.94); }
+    .act:disabled { opacity: 0.35; cursor: default; transform: none; }
+    .act.adopt { border-color: #46a05a; color: #9be79b; }
+
+    /* overlays escape the stage: full-viewport (shared .overlay is position:fixed),
+       scrollable on touch, and tall panels scroll from the top instead of clipping */
+    .overlay { touch-action: pan-y; }
+    .overlay .panel { margin: auto; }
+
+    /* phone */
+    .phone-btn { position: absolute; top: 10px; right: 10px; z-index: 30; width: 52px; height: 52px;
+      font-size: 1.6rem; background: var(--bg-2); border: 2px solid var(--border); border-radius: 16px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .phone-btn .badge { position: absolute; top: -7px; right: -7px; background: #e94560; color: #fff;
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.72rem; border-radius: 10px;
+      padding: 2px 7px; display: none; }
+    .phone-btn.ringing { animation: ringshake 0.5s ease infinite; border-color: #ffd23f; box-shadow: 0 0 18px rgba(255,210,63,0.6); }
+    .phone-btn.ringing .badge { display: block; }
+    @keyframes ringshake { 0%,100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-9deg); } 80% { transform: rotate(6deg); } }
+    .phone { position: absolute; top: 70px; right: 10px; z-index: 31; width: 236px;
+      background: #10182e; border: 3px solid #2a3a5e; border-radius: 22px; padding: 12px 10px 10px; box-shadow: 0 14px 40px rgba(0,0,0,0.6); }
+    .phone[hidden] { display: none; }
+    .ph-notch { width: 70px; height: 6px; background: #2a3a5e; border-radius: 3px; margin: 0 auto 8px; }
+    .ph-title { color: var(--muted); font-weight: 800; font-size: 0.7rem; text-align: center; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .ph-caller { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .ph-caller .em { font-size: 1.5rem; }
+    .ph-caller .n { color: var(--fg); font-weight: 800; font-size: 0.85rem; }
+    .ph-bubble { background: #1c2a4a; border-radius: 14px 14px 14px 4px; padding: 9px 11px; color: #dfe6f5; font-size: 0.78rem; font-weight: 700; line-height: 1.35; margin-bottom: 9px; }
+    .ph-timer { height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; margin-bottom: 9px; }
+    .ph-timer i { display: block; height: 100%; background: #ffd23f; border-radius: 4px; transition: width 0.2s linear; }
+    .ph-btns { display: flex; gap: 8px; }
+    .ph-accept, .ph-decline { flex: 1; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.85rem; border: none; border-radius: 12px; padding: 10px 4px; cursor: pointer; color: #fff; }
+    .ph-accept { background: #46c46a; box-shadow: 0 4px 0 #2c6e3a; }
+    .ph-decline { background: #e94560; box-shadow: 0 4px 0 #b22a44; }
+    .ph-accept:active, .ph-decline:active { transform: translateY(3px); box-shadow: none; }
+    .ph-idle { color: var(--muted); font-size: 0.78rem; font-weight: 700; text-align: center; padding: 10px 4px; line-height: 1.5; }
+    .ph-app { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: inherit; font-weight: 800; font-size: 0.9rem; color: #fff;
+      background: #1c2a4a; border: 2px solid #2a3a5e; border-radius: 14px; padding: 10px; cursor: pointer; }
+    .ph-app .em { font-size: 1.4rem; }
+    .ph-app:active { transform: scale(0.96); }
+    .ph-frow { display: flex; align-items: center; gap: 8px; background: #1c2a4a; border-radius: 12px; padding: 7px 9px; margin-bottom: 7px; }
+    .ph-frow .em { font-size: 1.6rem; }
+    .ph-frow .fi { flex: 1; min-width: 0; }
+    .ph-frow .n { color: #fff; font-weight: 800; font-size: 0.82rem; }
+    .ph-frow .d { color: var(--muted); font-size: 0.68rem; font-weight: 700; }
+    .ph-foster-btn { font-family: inherit; font-weight: 800; font-size: 0.78rem; color: #fff;
+      background: #46c46a; border: none; border-radius: 10px; padding: 7px 12px; cursor: pointer; }
+    .ph-foster-btn:active { transform: scale(0.95); }
+    .ph-back { width: 100%; font-family: inherit; font-weight: 800; font-size: 0.8rem; color: #cfd6ea;
+      background: none; border: 2px solid #2a3a5e; border-radius: 12px; padding: 8px; cursor: pointer; margin-top: 4px; }
+
+    /* shop */
+    /* no inner scroll: the whole list lays out and the overlay itself scrolls */
+    .shop-list { text-align: left; }
+    .shop-row { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border: 2px solid var(--border); border-radius: 14px; padding: 10px; margin-bottom: 8px; }
+    .shop-row .em { font-size: 1.7rem; }
+    .shop-info { flex: 1; min-width: 0; }
+    .shop-info .n { color: var(--fg); font-weight: 800; font-size: 0.9rem; }
+    .shop-info .d { color: var(--muted); font-size: 0.72rem; }
+    .buy-btn { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.82rem; color: #fff; background: #46c46a; border: none; border-radius: 10px; padding: 8px 14px; cursor: pointer; white-space: nowrap; }
+    .buy-btn:active { transform: scale(0.95); }
+    .buy-btn:disabled { background: #3a4358; color: #6f7799; cursor: default; transform: none; }
+    .buy-btn.owned { background: transparent; border: 2px solid #46c46a; color: #7be39a; }
+
+    /* care minigames */
+    .mini-arena { position: relative; width: 100%; max-width: 420px; height: 260px; border-radius: 18px; overflow: hidden;
+      border: 2px solid var(--border); background: #1c2a4a; touch-action: none; }
+    .mini-pet { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); font-size: 6rem; opacity: 0.9; pointer-events: none; }
+    .mini-target { position: absolute; transform: translate(-50%, -50%); font-size: 1.9rem; background: transparent; border: none;
+      cursor: pointer; padding: 6px; line-height: 1; z-index: 3; transition: opacity 0.15s ease; }
+    .mini-target:active { transform: translate(-50%, -50%) scale(1.25); }
+    .mini-note-btn { font-size: 1.7rem; background: var(--bg-2); border: 2px solid var(--border); border-radius: 14px; padding: 10px 18px; cursor: pointer; }
+    .mini-note-btn:active { transform: scale(0.92); }
+    .mini-notes { position: absolute; bottom: 10px; left: 0; right: 0; display: flex; gap: 10px; justify-content: center; z-index: 4; }
+    .mini-big { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); font-size: 4rem; z-index: 4; pointer-events: none; }
+    .mini-result { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(10,14,28,0.75); z-index: 6; font-size: 2.6rem; }
+    .mini-result .r-txt { color: var(--gold); font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; margin-top: 6px; }
+    .mini-result[hidden] { display: none; }
+    .mini-bar { height: 10px; background: rgba(0,0,0,0.4); border-radius: 5px; overflow: hidden; margin-top: 12px; }
+    .mini-bar i { display: block; height: 100%; background: #7ec8ff; border-radius: 5px; }
+    .mini-num { position: absolute; top: -4px; left: -4px; background: #ffd23f; color: #1a1a2e;
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.62rem; border-radius: 8px; padding: 1px 5px; }
+    .mini-wrong { outline: 3px solid #e94560; border-radius: 12px; }
+    .mini-meter { position: absolute; left: 10%; right: 10%; top: 52%; height: 18px;
+      background: rgba(0,0,0,0.45); border-radius: 9px; z-index: 3; }
+    .mini-meter .mm-zone { position: absolute; left: 35%; width: 30%; top: 0; bottom: 0; background: #46c46a; border-radius: 9px; }
+    .mini-meter .mm-mark { position: absolute; top: -6px; width: 6px; height: 30px; background: #fff; border-radius: 3px; left: 8%; }
+    .mini-go { position: absolute; left: 50%; transform: translateX(-50%); bottom: 9%; z-index: 4;
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1rem; color: #0b2018;
+      background: #ffd23f; border: none; border-radius: 14px; padding: 12px 28px; cursor: pointer; box-shadow: 0 4px 0 #b8951f; }
+    .mini-go:active { transform: translateX(-50%) translateY(3px); box-shadow: none; }
+
+    /* walk minigame */
+    .walk-scene { position: relative; width: 100%; max-width: 420px; height: 240px; border-radius: 18px; overflow: hidden; border: 2px solid var(--border); background: linear-gradient(#7ec8ff 0%, #a8dcff 55%, #63b04f 55%, #4f9440 100%); }
+    .walk-sun { position: absolute; top: 12px; right: 18px; font-size: 2rem; }
+    .walk-trees { position: absolute; top: 34%; left: 0; white-space: nowrap; font-size: 2.1rem; will-change: transform; }
+    .walk-dog { position: absolute; bottom: 34px; left: 34px; font-size: 3rem; transform: scaleX(-1); animation: trot 0.5s ease-in-out infinite; }
+    .walk-kid { position: absolute; bottom: 30px; left: 88px; font-size: 3rem; transform: scaleX(-1); animation: trot 0.55s ease-in-out infinite; }
+    @keyframes trot { 0%,100% { transform: scaleX(-1) translateY(0) rotate(0); } 50% { transform: scaleX(-1) translateY(-6px) rotate(-4deg); } }
+    @keyframes floaty { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-9px) scale(1.12); } }
+    .walk-bone { position: absolute; font-size: 1.7rem; cursor: pointer; z-index: 3; animation: floaty 1.6s ease-in-out infinite; border: none; background: transparent; padding: 4px; }
+    .walk-poo { position: absolute; font-size: 1.6rem; cursor: pointer; z-index: 4; border: none; background: transparent; padding: 4px; animation: plop 0.3s ease; }
+    .walk-poo.baggable { filter: drop-shadow(0 0 8px #ffd23f); animation: floaty 0.8s ease-in-out infinite; }
+    @keyframes plop { 0% { transform: scale(0.2); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
+    .bag-btn { margin-top: 10px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1rem;
+      color: #1a1a2e; background: #ffd23f; border: none; border-radius: 14px; padding: 12px; cursor: pointer;
+      box-shadow: 0 4px 0 #b8951f; animation: ringshake 0.6s ease infinite; }
+    .bag-btn:active { transform: translateY(3px); box-shadow: none; }
+    .bag-btn[hidden] { display: none; }
+    .walk-bar { height: 10px; background: rgba(0,0,0,0.4); border-radius: 5px; overflow: hidden; margin-top: 12px; }
+    .walk-bar i { display: block; height: 100%; background: #ffd23f; border-radius: 5px; }
+
+    /* home button — only visible while visiting the vet clinic */
+    .home-btn { position: absolute; top: 10px; left: 10px; z-index: 30; height: 52px; padding: 0 16px;
+      border-radius: 14px; border: 3px solid #2c3a58; background: #16213e; color: #ffe8b0;
+      font-family: inherit; font-weight: 800; font-size: 1.05rem; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    .home-btn:hover { border-color: #ffd23f; }
+    .home-btn[hidden] { display: none; }
+
+    /* saves button + save/load modal (same pattern as Pet Vet) */
+    .savesbtn { font-family: inherit; font-weight: 800; font-size: 0.85rem; color: #fff;
+      background: rgba(10,14,28,0.4); border: none; border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+    .savesbtn:hover { background: rgba(10,14,28,0.65); }
+    .modal-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center;
+      justify-content: center; background: rgba(4,8,20,0.65); }
+    .modal-backdrop[hidden] { display: none; }
+    .modal { width: min(440px, 92vw); max-height: 82vh; display: flex; flex-direction: column;
+      background: var(--bg-1); border: 2px solid var(--border); border-radius: 18px; padding: 14px; }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .modal-title { color: #fff; font-weight: 800; font-size: 1.1rem; }
+    .modal-x { background: none; border: none; color: #a0a8c0; font-size: 1.2rem; cursor: pointer; padding: 2px 6px; }
+    .modal-x:hover { color: #fff; }
+    .modal-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .modal-input { flex: 1; min-width: 0; font-family: inherit; font-size: 0.95rem; font-weight: 700;
+      color: #fff; background: rgba(0,0,0,0.35); border: 2px solid var(--border); border-radius: 12px; padding: 8px 10px; }
+    .modal-input::placeholder { color: #8e9ab8; font-weight: 600; }
+    .modal-input:focus { outline: none; border-color: #46c46a; }
+    .modal-save { font-family: inherit; font-weight: 800; font-size: 0.9rem; color: #0b2018;
+      background: #46c46a; border: none; border-radius: 12px; padding: 8px 16px; cursor: pointer; }
+    .modal-new { font-family: inherit; font-weight: 800; font-size: 0.85rem; color: #cfe0ff;
+      background: none; border: 2px dashed var(--border); border-radius: 12px; padding: 8px; cursor: pointer; margin-bottom: 10px; }
+    .modal-new:hover { background: rgba(70,196,106,0.12); }
+    .modal-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .save-row { display: flex; align-items: center; gap: 10px; background: var(--bg-2);
+      border: 2px solid var(--border); border-radius: 14px; padding: 9px 10px; }
+    .save-row.current { border-color: #46c46a; }
+    .save-meta { flex: 1; min-width: 0; text-align: left; }
+    .save-meta .nm { color: #fff; font-weight: 800; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .save-meta .sub { color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+    .save-load, .save-del { font-family: inherit; font-weight: 800; font-size: 0.78rem; border: none;
+      border-radius: 10px; padding: 7px 11px; cursor: pointer; color: #fff; }
+    .save-load { background: #46c46a; }
+    .save-del { background: #e94560; }
+    .modal-empty { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 14px 6px; }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Pet Lovers</span>
+    <button class="savesbtn" id="savesBtn">Saves</button>
+  </div>
+
+  <div class="hud">
+    <span class="chip" id="save-chip" hidden>📂 <span id="save-name"></span></span>
+    <span class="chip coins">🪙 <span id="hud-coins">0</span></span>
+    <span class="chip" style="color:#ff7d9d">❤ <span id="hud-love">0</span></span>
+    <span class="chip">🥫 <span id="hud-food">0</span></span>
+    <span class="chip">🍪 <span id="hud-treats">0</span></span>
+    <span class="chip">🧸 <span id="hud-toys">0</span></span>
+    <span class="chip">🧴 <span id="hud-litter">0</span></span>
+    <span class="chip">🧻 <span id="hud-pads">0</span></span>
+    <span class="chip">🏖️ <span id="hud-sand">0</span></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <button class="phone-btn" id="phone-btn">📱<span class="badge" id="phone-badge">!</span></button>
+    <button class="home-btn" id="home-btn" hidden>🏠 Home</button>
+    <div class="phone" id="phone" hidden>
+      <div class="ph-notch"></div>
+      <div class="ph-title" id="ph-title">Phone</div>
+      <div id="ph-body"></div>
+    </div>
+
+    <div class="care" id="care">
+      <div class="care-head">
+        <span class="em" id="care-em">🐕</span>
+        <div><div class="n" id="care-n">Pet</div><div class="s" id="care-s">Species</div></div>
+        <span class="mood" id="care-mood">🙂</span>
+      </div>
+      <div class="care-bars" id="care-bars"></div>
+      <div class="care-acts" id="care-acts"></div>
+    </div>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Pet Lovers</h2>
+        <div class="sub" style="text-align:left">
+          You start with one surprise pet — care for them, earn coins and adopt more! 💕<br><br>
+          🚶 <b>Walk</b> with the arrows / WASD, or tap where to go<br>
+          🐾 Stand <b>next to a pet</b> to feed, play, wash &amp; clean<br>
+          🎮 Every chore is a <b>mini game</b> — and <b>every pet plays differently</b>! Do well and it helps your pet <b>lots more</b>!<br>
+          🛒 Walk to the <b>shop counter</b> to visit the <b>PET STORE</b> — <b>tap what you want to buy</b>: food, treats, gear, beds &amp; more, then <b>tap the register</b> to check out! Chores need the right gear: a <b>toy</b> to play, <b>🧼 soap</b> to wash, a <b>🧹 broom</b> to clean and a <b>🦮 leash</b> to walk!<br>
+          🏥 Want a <b>new pet</b>? Visit the <b>vet clinic</b> and <b>meet the pets</b>! Pick your favourite, <b>buy everything on their supply list</b> at the store, then come back to <b>buy your pet</b> — and <b>build their home</b> piece by piece at their spot!<br>
+          🧴 Keep the <b>litter box</b> filled and 🧻 <b>pee pads</b> fresh — or your cat &amp; dog will <b>pee on the floor</b> and you'll have puddles to mop! And put 🏖️ <b>sand &amp; dirt</b> in the <b>hermit crab's tank</b> or Sheldon hides in his shell!<br>
+          🐕 Take the dog for <b>walks</b> — tap the bones!<br>
+          🚑 Sick pet? Visit the <b>vet clinic counter</b>, pick your pet and press <b>Go to the vet</b>!<br>
+          📱 Your <b>phone rings</b> when a neighbour wants a <b>dog walk</b> — press <b>P</b> to answer! You have <b>10s</b> to pick up and <b>5s</b> to say yes or no<br>
+          🧺 Open the phone's <b>Foster app</b> (press <b>P</b>) to <b>choose a pet to foster</b> — happy fosters pay more!<br><br>
+          Happy pets drop <b>hearts</b> — walk over them to grow your <b style="color:#ff7d9d">❤ Love</b>! Use your job money for supplies and <b>new pets</b>! 🐷
+        </div>
+        <button class="start-btn" id="start-btn">Let's go! 🐾</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="shop" hidden>
+      <div class="panel" style="max-width:440px">
+        <h2>Pet Shop</h2>
+        <div class="sub">Coins: <b style="color:#ffd23f">🪙 <span id="shop-coins">0</span></b></div>
+        <div class="sub" id="shop-hint" hidden style="color:#ffe8b0">💡 Not enough coins! Answer the 📱 phone — walking dogs and fostering pets earns money!</div>
+        <div class="shop-list" id="shop-list"></div>
+        <button class="start-btn" id="shop-close">Done shopping</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="vet" hidden>
+      <div class="panel" style="max-width:440px">
+        <h2>Vet Clinic</h2>
+        <div class="sub">Coins: <b style="color:#ffd23f">🪙 <span id="vet-coins">0</span></b></div>
+        <div class="shop-list" id="vet-list"></div>
+        <button class="start-btn" id="vet-close">Done</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="mini" hidden>
+      <div class="panel" style="max-width:460px">
+        <h2 id="mini-title">Feed!</h2>
+        <div class="sub" id="mini-sub">Catch the food!</div>
+        <div class="mini-arena" id="mini-arena">
+          <div class="mini-result" id="mini-result" hidden></div>
+        </div>
+        <div class="mini-bar"><i id="mini-fill" style="width:100%"></i></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="walk" hidden>
+      <div class="panel" style="max-width:460px">
+        <h2 id="walk-title">Walkies!</h2>
+        <div class="sub" id="walk-sub">Tap the bones for bonus coins! 🦴</div>
+        <div class="walk-scene" id="walk-scene">
+          <span class="walk-sun">🌞</span>
+          <div class="walk-trees" id="walk-trees"></div>
+          <span class="walk-dog" id="walk-dog">🐕</span>
+          <span class="walk-kid">🧒</span>
+        </div>
+        <div class="walk-bar"><i id="walk-fill" style="width:0%"></i></div>
+        <button class="bag-btn" id="bag-btn" hidden>🛍️ Grab a poo bag! (B)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="namer" hidden>
+    <div class="modal" style="width:min(340px,92vw)">
+      <div class="modal-title" id="namer-title">Name your pet!</div>
+      <div class="modal-row" style="margin-top:10px">
+        <input class="modal-input" id="namer-input" maxlength="14" placeholder="Pet name" autocomplete="off">
+        <button class="modal-save" id="namer-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="saveModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <span class="modal-title">Your Saves</span>
+        <button class="modal-x" id="saveClose" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-row">
+        <input id="saveName" class="modal-input" type="text" maxlength="40" placeholder="Name your save…" />
+        <button class="modal-save" id="saveBtn">Save</button>
+      </div>
+      <button class="modal-new" id="newGameBtn">+ New Game</button>
+      <div class="modal-list" id="saveList"></div>
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>Move:</b> WASD / arrows, or tap the floor &nbsp;·&nbsp; stand <b>next to a pet</b> to care for it &nbsp;·&nbsp; <b>P</b> = 📱 phone (answer calls for paid jobs!) &nbsp;·&nbsp; visit the <b>🛒 counter</b> to shop &nbsp;·&nbsp; collect <b>❤ hearts</b> from happy pets
+  </p>
+
+  <script src="../shared/game.js"></script>
+  <script>
+  (function () {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;   // 760 x 560
+    const clamp = EL.clamp, rnd = EL.rnd;
+    const EMOJI_FONT = "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
+
+    const SPECIES = [
+      { key: 'dog',    nm: 'Biscuit',  em: '🐕', kind: 'Dog',         adopt: 20,  walk: true,  groom: true,  home: null,    x: 150, y: 385, wander: 46 },
+      { key: 'cat',    nm: 'Whiskers', em: '🐈', kind: 'Cat',         adopt: 20,  walk: false, groom: true,  home: null,    x: 305, y: 205, wander: 34 },
+      { key: 'parrot', nm: 'Mango',    em: '🦜', kind: 'Parrot',      adopt: 30,  walk: false, groom: true,  home: 'cage',  x: 452, y: 158, wander: 0 },
+      { key: 'bunny',  nm: 'Clover',   em: '🐰', kind: 'Bunny',       adopt: 50,  walk: false, groom: true,  home: 'hutch', x: 448, y: 484, wander: 0 },
+      { key: 'fish',   nm: 'Bubbles',  em: '🐠', kind: 'Fish',        adopt: 80,  walk: false, groom: false, home: 'tank',  x: 584, y: 158, wander: 0 },
+      { key: 'crab',   nm: 'Sheldon',  em: '🦀', kind: 'Hermit Crab', adopt: 110, walk: false, groom: false, home: 'tank',  x: 700, y: 158, wander: 0 },
+      { key: 'ferret', nm: 'Noodle',   em: '🦦', kind: 'Ferret',      adopt: 150, walk: false, groom: true,  home: 'cage',  x: 688, y: 330, wander: 0 },
+      { key: 'pig',    nm: 'Truffle',  em: '🐷', kind: 'Pig',         adopt: 200, walk: false, groom: true,  home: 'pen',   x: 636, y: 484, wander: 18 },
+      // twin slots — a second pet of each species, hidden until the first is adopted
+      { key: 'dog2',    base: 'dog',    nm: 'Peanut',  em: '🐕', kind: 'Dog',         adopt: 20,  walk: true,  groom: true,  home: null,    x: 240, y: 318, wander: 46 },
+      { key: 'cat2',    base: 'cat',    nm: 'Socks',   em: '🐈', kind: 'Cat',         adopt: 20,  walk: false, groom: true,  home: null,    x: 585, y: 408, wander: 34 },
+      { key: 'parrot2', base: 'parrot', nm: 'Kiwi',    em: '🦜', kind: 'Parrot',      adopt: 30,  walk: false, groom: true,  home: 'cage',  x: 452, y: 330, wander: 0 },
+      { key: 'bunny2',  base: 'bunny',  nm: 'Thumper', em: '🐰', kind: 'Bunny',       adopt: 50,  walk: false, groom: true,  home: 'hutch', x: 345, y: 468, wander: 0 },
+      { key: 'fish2',   base: 'fish',   nm: 'Finn',    em: '🐠', kind: 'Fish',        adopt: 80,  walk: false, groom: false, home: 'tank',  x: 200, y: 158, wander: 0 },
+      { key: 'crab2',   base: 'crab',   nm: 'Pinchy',  em: '🦀', kind: 'Hermit Crab', adopt: 110, walk: false, groom: false, home: 'tank',  x: 560, y: 255, wander: 0 },
+      { key: 'ferret2', base: 'ferret', nm: 'Slinky',  em: '🦦', kind: 'Ferret',      adopt: 150, walk: false, groom: true,  home: 'cage',  x: 165, y: 255, wander: 0 },
+      { key: 'pig2',    base: 'pig',    nm: 'Waddles', em: '🐷', kind: 'Pig',         adopt: 200, walk: false, groom: true,  home: 'pen',   x: 542, y: 484, wander: 18 }
+    ];
+    const SHOP_SPOT = { x: 84, y: 175 };
+    const VET_SPOT = { x: 84, y: 330 };       // vet clinic counter — treat all sick pets here
+    const DOOR_SPOT = { x: 54, y: 480 };      // front door — neighbours ring for dog walks
+    const BASKET_SPOT = { x: 262, y: 472 };   // foster basket on the rug's edge
+    const NEIGHBOR_DOGS = [
+      { nm: 'Rex',  em: '🐩', pay: 12, owner: 'Mr. Lee',       ownerEm: '👴' },
+      { nm: 'Max',  em: '🦮', pay: 14, owner: 'Grandma Rosa',  ownerEm: '👵' },
+      { nm: 'Luna', em: '🐕‍🦺', pay: 16, owner: 'Coach Dana',    ownerEm: '🧢' },
+      { nm: 'Coco', em: '🐶', pay: 10, owner: 'Ms. Patel',     ownerEm: '👩' }
+    ];
+    const RING_TIME = 10, DECIDE_TIME = 5;
+    const FOSTERS = [
+      { nm: 'Pip',      em: '🐹', kind: 'Hamster' },
+      { nm: 'Shelly Jr', em: '🐢', kind: 'Turtle' },
+      { nm: 'Prickles', em: '🦔', kind: 'Hedgehog' },
+      { nm: 'Cheep',    em: '🐣', kind: 'Chick' },
+      { nm: 'Mittens',  em: '🐱', kind: 'Kitten' }
+    ];
+    const FOSTER_STAY = 150;   // seconds a foster pet stays
+    const TOYS = [
+      { id: 'ball',   em: '🎾', nm: 'Bouncy Ball',  d: 'Everyone loves fetch',    cost: 10 },
+      { id: 'rope',   em: '🪢', nm: 'Tug Rope',     d: 'Great for tug-of-war',    cost: 15 },
+      { id: 'teddy',  em: '🧸', nm: 'Cuddly Teddy', d: 'For snuggly playtime',    cost: 20 },
+      { id: 'puzzle', em: '🧩', nm: 'Pet Puzzle',   d: 'Smart pets play smarter', cost: 30 }
+    ];
+    // gear you must own before the matching chore minigame unlocks
+    const GEAR = [
+      { id: 'soap',  em: '🧼', nm: 'Pet Soap',      d: 'Needed to wash pets',       cost: 8 },
+      { id: 'broom', em: '🧹', nm: 'Broom & Scoop', d: 'Needed to clean pet homes', cost: 8 },
+      { id: 'leash', em: '🦮', nm: 'Dog Leash',     d: 'Needed to walk your dog',   cost: 12 },
+      { id: 'rocks', em: '🪨', nm: 'Aquarium Rocks', d: 'Fish love exploring them — half the time the fish entertains itself!', cost: 10 }
+    ];
+    const VET_COST = 15, VET_TIME = 8, WALK_TIME = 10;
+    const NEAR = 78;             // how close you must stand to care for a pet
+    // per-second decay — food drains slowest (a full belly lasts ~15 min)
+    const DECAY = { food: 0.11, fun: 0.42, clean: 0.22, home: 0.28, walk: 0.32 };
+    const BAR_IC = { food: '🍖', fun: '🎲', clean: '🧼', home: '🏠', walk: '🚶' };
+
+    // Bind BOTH click and touchstart: with the page's touch-action:none, a plain
+    // click is eaten on phones/tablets (same pattern as mob-soccer's tapBind).
+    function tap(el, fn) {
+      el.addEventListener('click', fn);
+      el.addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); fn(); }, { passive: false });
+    }
+
+    let G = null;
+    let player = { x: 340, y: 330, tx: 340, ty: 330, face: 1, step: 0 };
+    let keys = { l: false, r: false, u: false, d: false };
+    let hearts = [];             // { key, dx, dy, t }
+    let cpops = [];              // canvas floating text { x, y, txt, color, t }
+    let walkRun = null;
+    let nearKey = null;          // pet key (or 'shop') the player stands next to
+    let shopWasNear = false;
+    let vetWasNear = false;
+    let lastTs = 0, saveT = 0, uiT = 0;
+
+    function freshPet(sp) {
+      return { adopted: false, nm: '', food: 80, fun: 80, clean: 80, home: 80, walk: 80,
+               sick: false, vetT: 0, heartT: 0, sickT: rnd(12, 20), restT: 0 };
+    }
+    function freshGame() {
+      const pets = {};
+      SPECIES.forEach(function (sp) { pets[sp.key] = freshPet(sp); });
+      // every new game starts with one random pet already at home
+      const starters = SPECIES.filter(function (sp) { return !sp.base; });
+      const starter = starters[Math.floor(Math.random() * starters.length)];
+      pets[starter.key].adopted = true;
+      return { coins: 20, food: 5, treats: 2, toys: [], gear: [], love: 0, pets: pets,
+               litter: 0, litterLvl: 0, pads: 0, padLvl: 0, sand: 0, sandLvl: 0, puddles: [],
+               jobs: { nextCall: 30, foster: null }, sickCd: 120, meet: null,
+               savedAt: Date.now() };
+    }
+    // ---------- saves: named slots, same pattern as Pet Vet ----------
+    // ?test=1 uses separate slots so automated testing never touches real progress
+    const TEST_MODE = location.search.indexOf('test') >= 0;
+    const LS_SAVES = TEST_MODE ? 'petlovers.testsaves' : 'petlovers.saves';
+    const LS_CURRENT = TEST_MODE ? 'petlovers.testcurrent' : 'petlovers.current';
+    const AUTOSAVE_NAME = 'Autosave';
+    let currentName = (function () { try { return localStorage.getItem(LS_CURRENT) || ''; } catch (e) { return ''; } })();
+    let saveStamp = 0;   // savedAt of the save we last wrote or loaded
+
+    function lsAvailable() {
+      try { const k = '__pl__'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; }
+      catch (e) { return false; }
+    }
+    function readAll() { try { return JSON.parse(localStorage.getItem(LS_SAVES) || '{}') || {}; } catch (e) { return {}; } }
+    function writeAll(m) { try { localStorage.setItem(LS_SAVES, JSON.stringify(m)); return true; } catch (e) { return false; } }
+    function listSaves() {
+      const m = readAll(), out = [];
+      for (const n in m) if (m.hasOwnProperty(n)) out.push(m[n]);
+      out.sort(function (a, b) { return (b.savedAt || 0) - (a.savedAt || 0); });
+      return out;
+    }
+    function readSave(name) { return readAll()[name] || null; }
+    function deleteSave(name) { const m = readAll(); delete m[name]; writeAll(m); }
+    function writeSave(name) {
+      const m = readAll();
+      G.savedAt = Date.now(); saveStamp = G.savedAt;
+      const d = JSON.parse(JSON.stringify(G));
+      d.v = 1; d.name = name;
+      m[name] = d;
+      if (!writeAll(m)) return false;
+      currentName = name;
+      try { localStorage.setItem(LS_CURRENT, name); } catch (e) {}
+      updateSaveChip();
+      return true;
+    }
+    // every action / periodic tick saves into the active slot ("Autosave" until named)
+    function save() {
+      if (!lsAvailable()) return;
+      const name = currentName || AUTOSAVE_NAME;
+      // another open tab wrote a newer save to this slot — adopt it instead of clobbering it
+      const cur = readSave(name);
+      if (cur && cur.savedAt && cur.savedAt > saveStamp + 1500) { applySave(cur); return; }
+      writeSave(name);
+    }
+    function parseSave(s) {
+      try {
+        if (!s || !s.pets) return null;
+        const g = freshGame();
+        g.coins = s.coins || 0; g.food = s.food || 0; g.treats = s.treats || 0;
+        g.toys = Array.isArray(s.toys) ? s.toys : []; g.love = s.love || 0;
+        g.gear = Array.isArray(s.gear) ? s.gear : [];
+        g.litter = s.litter || 0; g.litterLvl = s.litterLvl || 0;
+        g.pads = s.pads || 0; g.padLvl = s.padLvl || 0;
+        g.sand = s.sand || 0; g.sandLvl = s.sandLvl || 0;
+        g.puddles = Array.isArray(s.puddles) ? s.puddles : [];
+        if (s.jobs) for (const k in g.jobs) if (k in s.jobs) g.jobs[k] = s.jobs[k];
+        if (typeof s.sickCd === 'number') g.sickCd = s.sickCd;
+        g.sickCd = Math.max(g.sickCd, 90);   // no sickness in the first moments of a session
+        SPECIES.forEach(function (sp) {
+          const p = s.pets[sp.key]; if (!p) return;
+          const t = g.pets[sp.key];
+          for (const k in t) if (k in p) t[k] = p[k];
+        });
+        // saves from before the poo-bags rule could always take walk jobs —
+        // don't lock an existing family out of their income
+        if (SPECIES.some(function (sp) { return g.pets[sp.key].adopted; }) && g.gear.indexOf('poobags') < 0) {
+          g.gear.push('poobags');
+        }
+        normalizeNeeds(g);   // old saves may exceed the 3-pets / 2+1-needs caps
+        // adoption-in-progress: keep it only if it still makes sense
+        if (s.meet && s.meet.key && spOf(s.meet.key) && !g.pets[s.meet.key].adopted) {
+          const list = suppliesFor(spOf(s.meet.key));
+          g.meet = { key: s.meet.key, stage: s.meet.stage === 'build' ? 'build' : 'shop',
+                     have: {}, placed: clamp(s.meet.placed | 0, 0, list.length) };
+          list.forEach(function (id) { g.meet.have[id] = !!(s.meet.have && s.meet.have[id]); });
+        }
+        return g;
+      } catch (e) { return null; }
+    }
+    // wipe in-flight state (open minigame, walk, phone call, overlays) so a load starts clean
+    function resetTransient() {
+      hearts.length = 0; cpops.length = 0;
+      walkRun = null; walkEl.hidden = true;
+      document.querySelectorAll('.walk-bone').forEach(function (b) { b.remove(); });
+      mini = null; miniEl.hidden = true; miniArena.innerHTML = '';
+      phone.call = null; phone.open = false; phone.note = 'No new messages 💤'; renderPhone();
+      shopEl.hidden = true; vetEl.hidden = true;
+      clinicTrip = null; storeTrip = null;   // a loaded save always starts at home
+      document.getElementById('home-btn').hidden = true;
+      shopWasNear = vetWasNear = false; nearKey = null;
+      player.x = player.tx = 340; player.y = player.ty = 330;
+      refreshCare();
+    }
+    function applySave(data) {
+      const g = parseSave(data);
+      if (!g) return false;
+      G = g;
+      saveStamp = data.savedAt || 0;
+      currentName = data.name || '';
+      try { localStorage.setItem(LS_CURRENT, currentName); } catch (e) {}
+      resetTransient(); renderHud(); updateSaveChip();
+      return true;
+    }
+    function newGame() {
+      // stamp now: the old Autosave is older than this moment, so the multi-tab
+      // guard in save() won't resurrect it over the fresh game
+      G = freshGame(); saveStamp = Date.now(); currentName = '';
+      try { localStorage.removeItem(LS_CURRENT); } catch (e) {}
+      resetTransient(); renderHud(); updateSaveChip();
+      document.getElementById('setup').hidden = false;   // fresh start → show the intro again
+    }
+
+    function spOf(key) { return SPECIES.find(function (s) { return s.key === key; }); }
+    // twins: sp.base is the species identity ('dog2' plays/eats/pees like a 'dog')
+    function baseOf(sp) { return sp.base || sp.key; }
+    // twins stay hidden until their base sibling is adopted
+    function visible(sp) { return !sp.base || G.pets[sp.base].adopted || G.pets[sp.key].adopted; }
+    function anyAdopted(baseKey) {
+      return SPECIES.some(function (sp) { return baseOf(sp) === baseKey && G.pets[sp.key].adopted; });
+    }
+    // a pet's display name: the name the player gave it, or the species default
+    function nmOf(sp) { const p = G.pets[sp.key]; return (p && p.nm) || sp.nm; }
+
+    // ---------- pet naming dialog (queued — store checkouts can adopt several pets) ----------
+    const namerEl = document.getElementById('namer');
+    const namerInput = document.getElementById('namer-input');
+    let namerQueue = [], namerCb = null;
+    function askName(title, def, cb) {
+      namerQueue.push({ title: title, def: def, cb: cb });
+      if (!namerCb) nextNamer();
+    }
+    function nextNamer() {
+      const job = namerQueue.shift();
+      if (!job) { namerCb = null; namerEl.hidden = true; return; }
+      namerCb = job.cb;
+      document.getElementById('namer-title').textContent = job.title;
+      namerInput.value = job.def;
+      namerEl.hidden = false;
+      setTimeout(function () { namerInput.focus(); namerInput.select(); }, 50);
+    }
+    function confirmNamer() {
+      const cb = namerCb; namerCb = null;
+      const v = namerInput.value.trim().slice(0, 14);
+      if (cb) cb(v);
+      nextNamer();
+    }
+    tap(document.getElementById('namer-ok'), confirmNamer);
+    namerInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') confirmNamer(); });
+    // tap a pet's name in the care panel to rename it
+    tap(document.getElementById('care-n'), function () {
+      const sp = spOf(nearKey); if (!sp) return;
+      const p = G.pets[nearKey]; if (!p.adopted) return;
+      askName('Rename your ' + sp.kind.toLowerCase() + ' ' + sp.em, nmOf(sp), function (v) {
+        if (v) { p.nm = v; save(); refreshCare(); }
+      });
+    });
+    function needsOf(sp) {
+      const n = ['food', 'fun'];
+      if (sp.groom) n.push('clean');
+      if (sp.home) n.push('home');
+      if (sp.walk) n.push('walk');
+      return n;
+    }
+    function mood(sp, p) {
+      const n = needsOf(sp); let s = 0;
+      for (const k of n) s += p[k];
+      return s / n.length;
+    }
+    function moodEmoji(sp, p) {
+      if (p.sick) return '🤒';
+      const m = mood(sp, p);
+      return m > 78 ? '😍' : (m > 55 ? '🙂' : (m > 30 ? '😕' : '😢'));
+    }
+    // ---------- needs director ----------
+    // Pets don't constantly decay. Instead a need pops up every so often, and
+    // at most 3 pets want care at once: two with ONE need, one with TWO.
+    const NEEDY = 55;   // a stat below this counts as "needs care"
+    const NEED_LABEL = { food: 'food 🍖', fun: 'playtime 🎲', clean: 'a wash 🧼', home: 'a clean home 🧹', walk: 'a walk 🚶' };
+    // comfort supplies from the pet store: the right bed/litter/cage/tank/mud
+    // means that pet rests TWICE as long between needs
+    const SUPPLY_FOR = { dog: 'beds', bunny: 'beds', cat: 'litter', parrot: 'cage', ferret: 'cage', fish: 'tank', crab: 'tank' };
+    function restFor(key) { const sp = spOf(key); return rnd(40, 70) * (hasGear(SUPPLY_FOR[sp ? baseOf(sp) : key]) ? 2 : 1); }
+    // everything a new pet needs before you can bring them home (order = build order,
+    // enclosure first). Shelf ids from STORE_SHELVES; keyed by base species.
+    const SUPPLIES = {
+      dog:    ['beds', 'bowls', 'leash', 'poobags', 'peepads'],
+      cat:    ['litter', 'beds', 'bowls', 'water'],
+      parrot: ['cage', 'bowls', 'water', 'climb'],
+      bunny:  ['beds', 'bowls', 'water', 'broom'],
+      fish:   ['tank', 'rocks', 'water', 'bowls'],
+      crab:   ['tank', 'dirt', 'sand', 'bowls', 'water', 'climb'],
+      ferret: ['cage', 'beds', 'bowls', 'water'],
+      pig:    ['beds', 'bowls', 'water', 'broom']
+    };
+    function suppliesFor(sp) { return SUPPLIES[baseOf(sp)]; }
+    let needT = rnd(8, 14);   // first need arrives shortly after play starts
+
+    function needyStats(sp, p) {
+      const out = [];
+      for (const k of needsOf(sp)) if (p[k] < NEEDY) out.push(k);
+      return out;
+    }
+    function tickNeeds(secs) {
+      if (clinicTrip || storeTrip) return;   // no new needs while you're out on a trip
+      needT -= secs;
+      if (needT > 0) return;
+      needT = rnd(20, 32);
+      const info = [];
+      for (const sp of SPECIES) {
+        const p = G.pets[sp.key];
+        if (!p.adopted || p.sick || p.vetT > 0 || (walkRun && walkRun.key === sp.key) ||
+            (clinicTrip && clinicTrip.key === sp.key)) continue;
+        info.push({ sp: sp, p: p, n: needyStats(sp, p).length });
+      }
+      const needy = info.filter(function (i) { return i.n > 0; });
+      const hasTwo = needy.some(function (i) { return i.n >= 2; });
+      // recently-cared-for pets (restT) get a breather before their next need
+      const fresh = info.filter(function (i) { return i.n === 0 && i.p.restT <= 0; });
+      const oneNeed = needy.filter(function (i) { return i.n === 1 && i.p.restT <= 0; });
+      // which moves stay inside the caps?
+      const moves = [];
+      if (needy.length < 3 && fresh.length) moves.push('new');
+      if (!hasTwo && oneNeed.length) moves.push('second');
+      if (!moves.length) return;
+      const mv = moves[Math.floor(Math.random() * moves.length)];
+      const pool = mv === 'new' ? fresh : oneNeed;
+      const target = pool[Math.floor(Math.random() * pool.length)];
+      const stats = needsOf(target.sp).filter(function (k) { return target.p[k] >= NEEDY; });
+      if (!stats.length) return;
+      const k = stats[Math.floor(Math.random() * stats.length)];
+      // aquarium rocks: half the time the fish plays in the rocks instead of getting bored
+      if (baseOf(target.sp) === 'fish' && k === 'fun' && hasGear('rocks') && Math.random() < 0.5) {
+        cpop(target.sp.x, target.sp.y - 44, nmOf(target.sp) + ' is playing in the rocks! 🪨', '#7ec8ff');
+        target.p.restT = 12;
+        return;
+      }
+      target.p[k] = rnd(24, 34);
+      cpop(target.sp.x, target.sp.y - 44, nmOf(target.sp) + ' needs ' + NEED_LABEL[k] + '!', '#ffd23f');
+    }
+    // Old saves (or heavy away-decay) can exceed the caps — settle the extras.
+    function normalizeNeeds(g) {
+      let petsLeft = 3, twoLeft = 1;
+      for (const sp of SPECIES) {
+        const p = g.pets[sp.key];
+        if (!p.adopted) continue;
+        const needs = needsOf(sp).filter(function (k) { return p[k] < NEEDY; })
+          .sort(function (a, b) { return p[a] - p[b]; });   // keep the worst ones
+        if (!needs.length) continue;
+        let keep = 0;
+        if (petsLeft > 0) { petsLeft--; keep = (needs.length >= 2 && twoLeft > 0) ? (twoLeft--, 2) : 1; }
+        for (let i = keep; i < needs.length; i++) p[needs[i]] = 75;
+      }
+    }
+
+    // ---------- hygiene stations: litter box (cat) + pee pad (dog) ----------
+    // Keep them stocked or there'll be puddles on the floor to mop up.
+    const STATIONS = [
+      { key: 'cat', gear: 'litter', supplyKey: 'litter', lvlKey: 'litterLvl', x: 245, y: 258, pourEm: '🧴', grain: '#e8d9b8',
+        nm: 'LITTER BOX', fill: '#e8d9b8',
+        refillMsg: '🧴 Refilled the litter box!', emptyMsg: '🧴 The litter box is empty! Refill it!',
+        peeMsg: ' peed in the house! 😿', hintMsg: ' Get a litter box at the pet store!',
+        buyMsg: '🧴 No litter left — get more at the pet store!' },
+      { key: 'dog', gear: null, supplyKey: 'pads', lvlKey: 'padLvl', x: 160, y: 470,
+        nm: 'PEE PAD', fill: '#cfe4ff',
+        refillMsg: '🧻 Laid out a fresh pee pad!', emptyMsg: '🧻 The pee pad is all used up!',
+        peeMsg: ' peed on the floor! 🙈', hintMsg: ' Get pee pads at the pet store!',
+        buyMsg: '🧻 No pee pads left — get more at the pet store!' },
+      // no puddles from the crab — with no sand to dig in, it hides in its shell instead
+      { key: 'crab', gear: null, supplyKey: 'sand', lvlKey: 'sandLvl', x: 700, y: 212, pourEm: '🏖️', grain: '#e8d089',
+        nm: 'TANK SAND', fill: '#e8d089', sad: true,
+        refillMsg: '🏖️ Fresh sand & dirt in the tank!', emptyMsg: '🏖️ The tank needs new sand & dirt!',
+        peeMsg: ' is hiding in their shell — the tank needs sand & dirt! 🐚', hintMsg: '',
+        buyMsg: '🏖️ No sand left — get more at the pet store!' }
+    ];
+    const STATION_DRAIN = 0.5;      // level per second (a full station lasts ~3.5 min)
+    // pouring: litter & sand aren't instant — hold on the station and pour it in
+    let pour = null;   // { st, heldT, opened, poured }
+    function startPour(st) { pour = { st: st, heldT: 0, opened: false, poured: 0 }; }
+    function endPour() {
+      if (!pour) return;
+      const st = pour.st;
+      if (pour.opened) {
+        G[st.supplyKey] = Math.max(0, G[st.supplyKey] - 1);   // the opened bag is used up
+        cpop(st.x, st.y - 40, G[st.lvlKey] >= 100 ? st.refillMsg : '🫗 Poured some in!', '#9be79b');
+        renderHud(); save();
+      }
+      pour = null;
+    }
+    function stepPour(secs) {
+      if (!pour) return;
+      const st = pour.st;
+      if (Math.hypot(player.x - st.x, player.y - st.y) > 62) { endPour(); return; }   // walked away
+      pour.heldT += secs;
+      if (!pour.opened) {
+        if (pour.heldT >= 0.15) pour.opened = true;   // a real hold opens the bag
+        return;
+      }
+      const add = 75 * secs;
+      pour.poured += add;
+      G[st.lvlKey] = Math.min(100, G[st.lvlKey] + add);
+      if (G[st.lvlKey] >= 100) endPour();   // full — all done!
+    }
+    let peeT = { cat: 0, dog: 0, crab: 0 };  // countdown to the next accident/reminder (transient)
+    let stationHintCd = 0;
+
+    function stationReady(st) { return !st.gear || hasGear(st.gear); }
+    function tickStations(secs) {
+      stationHintCd = Math.max(0, stationHintCd - secs);
+      if (clinicTrip || storeTrip) return;   // accidents wait while you're out
+      for (const st of STATIONS) {
+        // one station serves every pet of its species (both cats share the litter box)
+        const eligible = SPECIES.filter(function (sp) {
+          const p = G.pets[sp.key];
+          return baseOf(sp) === st.key && p.adopted && p.vetT <= 0;
+        });
+        if (!eligible.length) { peeT[st.key] = 0; continue; }
+        if (stationReady(st) && G[st.lvlKey] > 0) {
+          G[st.lvlKey] = Math.max(0, G[st.lvlKey] - STATION_DRAIN * secs);
+          if (G[st.lvlKey] <= 0) cpop(st.x, st.y - 44, st.emptyMsg, '#ffd23f');
+          peeT[st.key] = 0;
+        } else {
+          if (!peeT[st.key]) peeT[st.key] = stationReady(st) ? rnd(25, 40) : rnd(60, 90);
+          else {
+            peeT[st.key] -= secs;
+            if (peeT[st.key] <= 0) {
+              peeT[st.key] = 0;
+              const sp = eligible[Math.floor(Math.random() * eligible.length)];   // the culprit
+              if (st.sad) {   // the crab just sulks — a reminder, not a puddle
+                cpop(sp.x, sp.y - 44, nmOf(sp) + st.peeMsg, '#ffd23f');
+              } else if (G.puddles.length < 4) {
+                G.puddles.push({ who: sp.key,
+                  x: clamp(sp.x + rnd(-90, 90), 110, 650), y: clamp(sp.y + rnd(-30, 70), 240, 510) });
+                cpop(sp.x, sp.y - 44, nmOf(sp) + st.peeMsg + (stationReady(st) ? '' : st.hintMsg), '#ffd23f');
+                save();
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ---------- tick ----------
+    function tick(secs) {
+      tickNeeds(secs);
+      tickStations(secs);
+      G.sickCd = Math.max(0, (G.sickCd || 0) - secs);
+      const anySick = SPECIES.some(function (sp) { return G.pets[sp.key].sick; });
+      for (const sp of SPECIES) {
+        const p = G.pets[sp.key];
+        if (!p.adopted) continue;
+        if (p.vetT > 0) {
+          p.vetT -= secs;
+          if (p.vetT <= 0) { p.vetT = 0; p.sick = false;
+            for (const k of needsOf(sp)) p[k] = clamp(p[k] + 25, 0, 100);
+            cpop(sp.x, sp.y - 44, nmOf(sp) + ' is all better! 💚', '#7be39a');
+            p.restT = restFor(sp.key);                       // freshly cured pets rest a while
+            p.sickT = rnd(60, 120);                          // the cured pet isn't next in line
+            G.sickCd = Math.max(G.sickCd, rnd(220, 320));   // a good rest after a cure
+          }
+          continue;
+        }
+        if (walkRun && walkRun.key === sp.key) continue;
+        if (clinicTrip && clinicTrip.key === sp.key) continue;   // this pet is with you at the clinic
+        p.restT = Math.max(0, (p.restT || 0) - secs);
+        if (!p.sick && !anySick && G.sickCd <= 0) {   // one sick pet at a time, with a rest between
+          p.sickT -= secs;
+          if (p.sickT <= 0) {
+            p.sickT = rnd(12, 20);
+            const m = mood(sp, p);
+            if (Math.random() < 0.003 + 0.025 * (1 - m / 100) * (m < 45 ? 1 : 0.25)) {
+              p.sick = true;
+              G.sickCd = rnd(220, 360);
+              cpop(sp.x, sp.y - 44, nmOf(sp) + ' feels sick! 🤒', '#b06bff');
+            }
+          }
+        }
+        const hasPuddle = G.puddles.some(function (pu) { return pu.who === sp.key; }) ||
+          (baseOf(sp) === 'crab' && G.sandLvl <= 0);   // a sulking crab drops no hearts
+        if (!p.sick && !hasPuddle && mood(sp, p) > 68) {
+          p.heartT += secs;
+          const mine = hearts.filter(function (h) { return h.key === sp.key; }).length;
+          if (p.heartT > 11 && mine < 3) {
+            p.heartT = 0;
+            hearts.push({ key: sp.key, dx: rnd(-38, 38), dy: rnd(-64, -34), t: rnd(0, 6) });
+          }
+        }
+      }
+      tickJobs(secs);
+    }
+
+    // ---------- the phone: calls asking you to walk or foster ----------
+    const phone = { open: false, call: null, view: 'home', choices: null, note: 'No new messages 💤' };
+    let ringBeepT = 0;
+
+    function tickJobs(secs) {
+      if (!document.getElementById('setup').hidden) return;   // not started yet
+      if (clinicTrip || storeTrip) return;   // the world waits while you're out on a trip
+      // never a dead-end: out of food AND too broke to buy more → the shelter
+      // drops off some free food after a little while
+      if (G.food <= 0 && G.coins < 5) {
+        G.pityT = (G.pityT || 0) + secs;
+        if (G.pityT > 20) {
+          G.pityT = 0; G.food += 3;
+          cpop(SHOP_SPOT.x, SHOP_SPOT.y - 54, '🛍️ The shelter dropped off free food!', '#9be79b');
+          renderHud(); save();
+        }
+      } else G.pityT = 0;
+      const J = G.jobs;
+      if (phone.call) {
+        const c = phone.call;
+        c.t -= secs;
+        if (c.phase === 'ring') {
+          ringBeepT -= secs;
+          if (ringBeepT <= 0) { ringBeepT = 1.3; ringTone(); }
+          if (c.t <= 0) {
+            phone.call = null; phone.note = '📵 Missed call from ' + c.callerNm + '…';
+            cpop(player.x, player.y - 54, '📵 Missed the call!', '#a0a8c0');
+            J.nextCall = rnd(70, 120);
+            renderPhone();
+          }
+        } else if (c.t <= 0) {   // took too long to decide
+          phone.call = null; phone.note = '😮 ' + c.callerNm + ' hung up!';
+          cpop(player.x, player.y - 54, '😮 They hung up!', '#a0a8c0');
+          J.nextCall = rnd(70, 120);
+          renderPhone();
+        }
+      } else {
+        // broke and out of food? a neighbour rings quickly with a paid dog walk
+        const broke = G.coins < 5 && G.food < 1;
+        if (broke && !walkRun && J.nextCall > 8) J.nextCall = rnd(4, 8);
+        J.nextCall -= secs;
+        if (J.nextCall <= 0) {
+          // the phone only RINGS for dog walks — fostering lives in the Foster app
+          if (walkRun) { J.nextCall = 20; }
+          else {
+            const d = NEIGHBOR_DOGS[Math.floor(Math.random() * NEIGHBOR_DOGS.length)];
+            const call = { type: 'walk', dog: d, callerNm: d.owner, callerEm: d.ownerEm,
+                          msg: 'Hi! Can you walk ' + d.nm + ' ' + d.em + ' for me? I\'ll pay you ' + d.pay + ' 🪙!' };
+            call.phase = 'ring'; call.t = RING_TIME;
+            phone.call = call; ringBeepT = 0;
+            cpop(player.x, player.y - 54, '📳 Ring ring! Press P!', '#7ec8ff');
+            renderPhone();
+          }
+        }
+      }
+      if (J.foster) {
+        const f = J.foster;
+        f.food = clamp(f.food - DECAY.food * secs, 0, 100);
+        f.fun = clamp(f.fun - DECAY.fun * secs, 0, 100);
+        f.clean = clamp(f.clean - DECAY.clean * secs, 0, 100);
+        f.stay -= secs;
+        if (f.stay <= 0) {
+          const avg = (f.food + f.fun + f.clean) / 3;
+          let pay = 12 + Math.round(avg / 100 * 18);
+          const perfect = avg >= 80;
+          if (perfect) pay += 8;
+          G.coins += pay;
+          cpop(BASKET_SPOT.x, BASKET_SPOT.y - 60, f.nm + ' found a family! +' + pay + ' 🪙' + (perfect ? ' ⭐ perfect care!' : ''), '#9be79b');
+          J.foster = null;
+          phone.choices = null;   // fresh shelter list next time the app opens
+          if (phone.open && !phone.call) renderPhone();
+          if (nearKey === 'foster') { nearKey = null; refreshCare(); }
+          renderHud(); save();
+        }
+      }
+    }
+
+    // ---------- phone UI ----------
+    const phoneEl = document.getElementById('phone');
+    const phoneBtn = document.getElementById('phone-btn');
+    function answerCall() {
+      const c = phone.call;
+      if (c && c.phase === 'ring') { c.phase = 'decide'; c.t = DECIDE_TIME; }
+      phone.open = true;
+      renderPhone();
+    }
+    function togglePhone() {
+      if (phone.call && phone.call.phase === 'ring') { answerCall(); return; }
+      if (phone.call && phone.call.phase === 'decide' && phone.open) return;   // decide first!
+      phone.open = !phone.open;
+      if (phone.open) phone.view = 'home';   // always open on the home screen
+      renderPhone();
+    }
+
+    // ---------- the Foster app: choose who to take in ----------
+    function pickFosterChoices() {
+      const pool = FOSTERS.slice();
+      const out = [];
+      while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      return out;
+    }
+    function startFoster(f) {
+      if (G.jobs.foster || !f) return false;
+      G.jobs.foster = { nm: f.nm, em: f.em, kind: f.kind, food: 65, fun: 65, clean: 65, stay: FOSTER_STAY };
+      phone.note = '✅ Fostering ' + f.nm + ' the ' + f.kind.toLowerCase() + '!';
+      phone.choices = null;
+      cpop(BASKET_SPOT.x, BASKET_SPOT.y - 60, '🧺 Foster ' + f.kind.toLowerCase() + ' ' + f.nm + ' arrived!', '#7ec8ff');
+      renderPhone(); save();
+      return true;
+    }
+    function renderFosterApp(body) {
+      document.getElementById('ph-title').textContent = '🧺 Foster';
+      const f = G.jobs.foster;
+      let html = '';
+      if (f) {
+        html += '<div class="ph-idle">' + f.em + ' <b>' + f.nm + '</b> is staying with you!<br>' +
+                'Pickup in <b><span id="ph-foster-stay">' + Math.ceil(f.stay) + '</span>s</b> — happy fosters pay more! 🧺</div>';
+      } else {
+        if (!phone.choices) phone.choices = pickFosterChoices();
+        html += '<div class="ph-idle">These pets need a foster home — pick one!</div>';
+        phone.choices.forEach(function (c, i) {
+          html += '<div class="ph-frow"><span class="em">' + c.em + '</span>' +
+                  '<div class="fi"><div class="n">' + c.nm + '</div><div class="d">' + c.kind + '</div></div>' +
+                  '<button class="ph-foster-btn" data-fi="' + i + '">Foster</button></div>';
+        });
+      }
+      html += '<button class="ph-back" id="ph-back">‹ Back</button>';
+      body.innerHTML = html;
+      body.querySelectorAll('.ph-foster-btn').forEach(function (b) {
+        tap(b, function () { startFoster(phone.choices[Number(b.dataset.fi)]); });
+      });
+      tap(document.getElementById('ph-back'), function () { phone.view = 'home'; renderPhone(); });
+    }
+    function acceptCall() {
+      const c = phone.call;
+      if (!c || c.phase !== 'decide') return false;
+      if (clinicTrip) { phone.note = '🏥 Finish up at the vet first!'; renderPhone(); return false; }
+      if (!hasGear('poobags')) { phone.note = '💩 You need poo bags to walk dogs — get some at the pet store!'; renderPhone(); return false; }
+      phone.call = null; phone.open = false;
+      G.jobs.nextCall = rnd(90, 160);
+      phone.note = '✅ You walked ' + c.dog.nm + ' for ' + c.callerNm;
+      renderPhone();
+      walkRun = { jobDog: c.dog, t: 0, nextBone: rnd(1.2, 2.4), nextPoo: rnd(2, 3.5), poos: 0, scooped: 0 };
+      document.getElementById('walk-title').textContent = 'Walking ' + c.dog.nm + '!';
+      document.getElementById('walk-sub').textContent = 'Tap the bones for coins — and scoop the 💩!';
+      document.getElementById('walk-dog').textContent = c.dog.em;
+      document.getElementById('walk-trees').textContent = '🌳 🌲 🌳 🏠 🌳 🌲 🌷 🌳 🌲 🌳 🏠 🌳 🌲 🌷 🌳 🌲 🌳 '.repeat(3);
+      document.getElementById('walk-fill').style.width = '0%';
+      walkEl.hidden = false;
+      save();
+      return true;
+    }
+    function declineCall() {
+      const c = phone.call;
+      if (!c || c.phase !== 'decide') return false;
+      phone.call = null; phone.open = false;
+      phone.note = '❌ You said no to ' + c.callerNm;
+      G.jobs.nextCall = rnd(70, 120);
+      renderPhone();
+      return true;
+    }
+    function renderPhone() {
+      phoneBtn.classList.toggle('ringing', !!(phone.call && phone.call.phase === 'ring'));
+      phoneEl.hidden = !phone.open;
+      if (!phone.open) return;
+      const body = document.getElementById('ph-body');
+      const c = phone.call;
+      if (!c) {
+        if (phone.view === 'foster') { renderFosterApp(body); return; }
+        // home screen: the note + the Foster app
+        document.getElementById('ph-title').textContent = 'Phone';
+        body.innerHTML =
+          '<div class="ph-idle">' + phone.note + '</div>' +
+          '<button class="ph-app" id="ph-app-foster"><span class="em">🧺</span><span>Foster</span></button>' +
+          '<div class="ph-idle" style="padding-top:4px">📱 Press <b>P</b> to close</div>';
+        tap(document.getElementById('ph-app-foster'), function () { phone.view = 'foster'; renderPhone(); });
+        return;
+      }
+      document.getElementById('ph-title').textContent = 'Incoming call';
+      if (c.phase === 'ring') {
+        // phone was already open when the call arrived — show an Answer button
+        body.innerHTML =
+          '<div class="ph-caller"><span class="em">' + c.callerEm + '</span><span class="n">' + c.callerNm + '</span></div>' +
+          '<div class="ph-bubble">📳 Ring ring…</div>' +
+          '<div class="ph-timer"><i id="ph-timer-fill" style="width:100%"></i></div>' +
+          '<div class="ph-btns"><button class="ph-accept" id="ph-answer">📞 Answer</button></div>';
+        tap(document.getElementById('ph-answer'), answerCall);
+        return;
+      }
+      // no poo bags → say WHY you can't accept, right on the button
+      const canAccept = hasGear('poobags');
+      body.innerHTML =
+        '<div class="ph-caller"><span class="em">' + c.callerEm + '</span><span class="n">' + c.callerNm + '</span></div>' +
+        '<div class="ph-bubble">' + c.msg + (canAccept ? '' : '<br><b>💩 You need poo bags first — pet store!</b>') + '</div>' +
+        '<div class="ph-timer"><i id="ph-timer-fill" style="width:100%"></i></div>' +
+        '<div class="ph-btns"><button class="ph-accept" id="ph-accept"' + (canAccept ? '' : ' disabled style="opacity:0.5"') + '>' +
+          (canAccept ? '✅ Accept' : '💩 Need poo bags!') + '</button><button class="ph-decline" id="ph-decline">❌ No thanks</button></div>';
+      tap(document.getElementById('ph-accept'), acceptCall);
+      tap(document.getElementById('ph-decline'), declineCall);
+    }
+    function updatePhone() {
+      const c = phone.call;
+      const badge = document.getElementById('phone-badge');
+      if (c && c.phase === 'ring') badge.textContent = Math.ceil(c.t) + 's';
+      if (phone.open && c) {
+        const fill = document.getElementById('ph-timer-fill');
+        if (fill) fill.style.width = clamp(c.t / (c.phase === 'ring' ? RING_TIME : DECIDE_TIME) * 100, 0, 100) + '%';
+      }
+      // live pickup countdown inside the Foster app
+      if (phone.open && phone.view === 'foster' && G.jobs.foster) {
+        const stay = document.getElementById('ph-foster-stay');
+        if (stay) stay.textContent = Math.ceil(G.jobs.foster.stay);
+      }
+    }
+    tap(phoneBtn, togglePhone);
+    window.addEventListener('keydown', function (e) {
+      if (e.target && e.target.tagName === 'INPUT') return;   // typing a name, not playing
+      if (e.code === 'KeyP') { e.preventDefault(); togglePhone(); }
+    });
+
+    // little two-tone ringtone (safe no-op if audio is blocked)
+    let audioCtx = null;
+    function ringTone() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        [[880, 0], [660, 0.18]].forEach(function (n) {
+          const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+          o.type = 'square'; o.frequency.value = n[0];
+          g.gain.setValueAtTime(0.06, audioCtx.currentTime + n[1]);
+          g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + n[1] + 0.15);
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(audioCtx.currentTime + n[1]); o.stop(audioCtx.currentTime + n[1] + 0.16);
+        });
+      } catch (e) {}
+    }
+
+    // caring for the foster pet (payout depends on how happy they leave) —
+    // same minigames, themed after the closest species (FOSTER_AS)
+    function fosterFeed(treat) {
+      const f = G.jobs.foster; if (!f || miniActive()) return false;
+      if (treat) {
+        if (G.treats < 1) return false;
+        G.treats--; f.food = clamp(f.food + 14, 0, 100); f.fun = clamp(f.fun + 14, 0, 100);
+        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '🍪 Yum!', '#ffd23f');
+        afterAction(); return true;
+      }
+      if (G.food < 1) return false;
+      G.food--; renderHud();
+      openMini('feed', FOSTER_AS[f.kind] || 'cat', f.em, f.nm, function (s) {
+        if (G.jobs.foster === f) f.food = clamp(f.food + scaled(45, s), 0, 100);
+        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '🍽 Nom nom!', '#ffd23f');
+        afterAction();
+      });
+      return true;
+    }
+    function fosterPlay() {
+      const f = G.jobs.foster; if (!f || G.toys.length === 0 || miniActive()) return false;
+      if (f.fun >= 95) {
+        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '😊 ' + f.nm + ' is done playing for now!', '#7ec8ff');
+        return false;
+      }
+      openMini('play', FOSTER_AS[f.kind] || 'cat', f.em, f.nm, function (s) {
+        if (G.jobs.foster === f) f.fun = clamp(f.fun + scaled(26 + 6 * Math.min(G.toys.length, 6), s), 0, 100);
+        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, f.fun >= 95 ? '🎉 ' + f.nm + ' is done playing — so happy!' : '🎾 So fun!', '#7ec8ff');
+        afterAction();
+      });
+      return true;
+    }
+    function fosterGroom() {
+      const f = G.jobs.foster; if (!f || !hasGear('soap') || miniActive()) return false;
+      openMini('wash', FOSTER_AS[f.kind] || 'cat', f.em, f.nm, function (s) {
+        if (G.jobs.foster === f) f.clean = clamp(f.clean + scaled(55, s), 0, 100);
+        cpop(BASKET_SPOT.x, BASKET_SPOT.y - 44, '🫧 Squeaky clean!', '#7ec8ff');
+        afterAction();
+      });
+      return true;
+    }
+
+    // ---------- care minigames ----------
+    // Every care task is a little game; how well you do (score 0..1) scales the
+    // stat gain — do badly at feeding and the pet is "not that fed".
+    const miniEl = document.getElementById('mini');
+    const miniArena = document.getElementById('mini-arena');
+    let mini = null;
+
+    function scaled(base, s) { return Math.round(base * (0.3 + 0.7 * s)); }
+    function miniActive() { return !miniEl.hidden; }
+    function hasGear(id) { return G.gear.indexOf(id) >= 0; }
+
+    // Every chore is a DIFFERENT game per animal — no two pets share a mechanic
+    // within the same task. Mechanics: catch (tap moving items), whack (tap
+    // before they vanish), sort (tap good, avoid bad), order (tap in number
+    // order), meter (stop the marker in the green), chase (tap the runaway),
+    // shells (follow the hidden one), mess (tap everything), scrub (rub off),
+    // timing (tap mid-air), sequence (sing it back).
+    const WATER_BG = 'linear-gradient(#1c3a6a, #16305a)';
+    const FEED_CFG = {
+      dog:    { mech: 'bowl',   item: '🦴', speed: 26, sub: 'Slide the bowl — catch the falling bones!' },
+      cat:    { mech: 'whack',  item: '🐟', sub: 'Tap the fishy snacks before they vanish!' },
+      parrot: { mech: 'sort',   item: '🌻', bad: '🪨', sub: 'Peck the seeds — not the pebbles!' },
+      bunny:  { mech: 'order',  item: '🥕', sub: 'Munch the carrots in number order!' },
+      fish:   { mech: 'meter',  item: '🍥', sub: 'Stop in the green to sprinkle the flakes!', bg: WATER_BG },
+      crab:   { mech: 'chase',  item: '🦐', sub: 'Catch the scuttling shrimp!', bg: WATER_BG },
+      ferret: { mech: 'shells', item: '🥚', shell: '🥣', pickSub: 'Where is the egg? Tap a bowl!', sub: 'Follow the egg under the bowls!' },
+      pig:    { mech: 'bin',    item: '🍎', bin: '🥣', sub: 'Drag the apples into the trough!' }
+    };
+    const CLEAN_CFG = {
+      parrot: { mech: 'bin',   item: '🪶', bin: '🪣', sub: 'Drag the feathers into the bucket!' },
+      bunny:  { mech: 'scrub', dirt: '🌾', center: '🛖', sub: 'Rub the hay off the hutch!' },
+      fish:   { mech: 'sort',  item: '🌿', bad: '🐠', sub: 'Pick the algae — don\'t poke the fish!', bg: WATER_BG },
+      crab:   { mech: 'whack', item: '🌿', sub: 'Grab the drifting seaweed, quick!', bg: WATER_BG },
+      ferret: { mech: 'order', item: '💩', sub: 'Scoop the mess in number order!' },
+      pig:    { mech: 'meter', item: '💦', sub: 'Stop in the green to power-wash the pen!' }
+    };
+    const PLAY_CFG = {
+      cat:    { mech: 'pounce',   sub: 'Hold to charge… release to pounce on the mouse!' },
+      bunny:  { mech: 'whack',    item: '🐰', holes: true, sub: 'Tap the bunny peeking from a burrow!' },
+      ferret: { mech: 'order',    item: '🦦', sub: 'Follow Noodle through the tubes — in order!' },
+      dog:    { mech: 'tug',      sub: 'Tap fast — tug the rope away from Biscuit!' },
+      pig:    { mech: 'meter',    item: '💦', sub: 'Stop in the green for the biggest puddle splash!' },
+      fish:   { mech: 'catch',    item: '🫧', motion: 'rise', speed: 15, sub: 'Pop the bubbles!', bg: WATER_BG },
+      parrot: { mech: 'sequence', sub: 'Watch the song, then sing it back!' },
+      crab:   { mech: 'shells',   sub: 'Follow the crab under the shells!' }
+    };
+    const WASH_CFG = {
+      dog:    { mech: 'scrub', dirt: '🟤', sub: 'Rub the dirt away! 🧼' },
+      cat:    { mech: 'chase', item: '🐈', sub: 'Whiskers keeps dodging — tap to soap her up!' },
+      parrot: { mech: 'meter', item: '💦', sub: 'Stop in the green for a perfect misting!' },
+      bunny:  { mech: 'mess',  item: '🟤', sub: 'Dab away every muddy spot!' },
+      ferret: { mech: 'whack', item: '🟤', sub: 'Tap the dirt before it settles in!' },
+      pig:    { mech: 'sort',  item: '💩', bad: '🫧', sub: 'Wash off the mud — keep the bubbles!' }
+    };
+    // Foster pets borrow the closest species' games
+    const FOSTER_AS = { Hamster: 'ferret', Turtle: 'crab', Hedgehog: 'bunny', Chick: 'parrot', Kitten: 'cat' };
+    const NOTES = ['🎵', '🎶', '🎺'];
+
+    function miniTarget(txt, x, y) {
+      const b = document.createElement('button');
+      b.className = 'mini-target'; b.textContent = txt;
+      b.style.left = x + '%'; b.style.top = y + '%';
+      miniArena.appendChild(b);
+      return b;
+    }
+
+    function openMini(task, spKey, petEm, petNm, onDone) {
+      const skSp = spOf(spKey);
+      if (skSp && skSp.base) spKey = skSp.base;   // twins play their species' games
+      let cfg, title;
+      if (task === 'feed') { cfg = FEED_CFG[spKey] || FEED_CFG.dog; title = 'Feed ' + petNm + '!'; }
+      else if (task === 'clean') { cfg = CLEAN_CFG[spKey] || { mech: 'mess', item: '💩', sub: 'Clean it all up!' }; title = 'Clean up for ' + petNm + '!'; }
+      else if (task === 'wash') { cfg = WASH_CFG[spKey] || { mech: 'scrub', dirt: '🟤', sub: 'Rub the dirt away! 🧼' }; title = 'Wash ' + petNm + '!'; }
+      else { cfg = PLAY_CFG[spKey] || PLAY_CFG.cat; title = 'Play with ' + petNm + '!'; }
+      const mech = cfg.mech;
+      miniArena.innerHTML = '';
+      miniArena.style.background = cfg.bg || '#1c2a4a';
+      mini = { task: task, mech: mech, cfg: cfg, onDone: onDone, petEm: petEm,
+               t: 0, dur: 14, hit: 0, total: 8, spawned: 0, spawnT: 0.4, targets: [], phase: 'run', pdown: false };
+      const m = mini;
+      if (mech === 'bowl') {
+        // steer, don't tap: slide the bowl under the falling food
+        m.total = 8; m.dur = 14; m.bowlX = 50;
+        m.bowlEl = document.createElement('div');
+        m.bowlEl.className = 'mini-target'; m.bowlEl.textContent = '🥣';
+        m.bowlEl.style.left = '50%'; m.bowlEl.style.top = '88%';
+        m.bowlEl.style.fontSize = '2.6rem'; m.bowlEl.style.pointerEvents = 'none';
+        miniArena.appendChild(m.bowlEl);
+      } else if (mech === 'bin') {
+        // drag & drop: carry each item to the bucket/trough
+        m.total = 6; m.dur = 16; m.drag = null;
+        m.binEl = document.createElement('div');
+        m.binEl.className = 'mini-target'; m.binEl.textContent = cfg.bin || '🪣';
+        m.binEl.style.left = '85%'; m.binEl.style.top = '82%';
+        m.binEl.style.fontSize = '2.6rem'; m.binEl.style.pointerEvents = 'none';
+        miniArena.appendChild(m.binEl);
+        for (let i = 0; i < m.total; i++) {
+          const el = document.createElement('div');
+          el.className = 'mini-target'; el.textContent = cfg.item;
+          el.style.pointerEvents = 'none';
+          const it = { el: el, x: rnd(10, 66), y: rnd(14, 68) };
+          el.style.left = it.x + '%'; el.style.top = it.y + '%';
+          miniArena.appendChild(el);
+          m.targets.push(it);
+        }
+      } else if (mech === 'mess') {
+        m.total = 7; m.dur = 14;
+        for (let i = 0; i < m.total; i++) {
+          const b = miniTarget(cfg.item, rnd(10, 90), rnd(12, 88));
+          tap(b, function () { if (b.dead) return; b.dead = true; m.hit++; b.remove(); });
+        }
+      } else if (mech === 'chase') {
+        m.total = 6; m.dur = 15; m.relocT = 1.8;
+        m.holes = cfg.holes ? [[18, 26], [78, 22], [26, 74], [72, 70]] : null;
+        if (m.holes) for (const h of m.holes) {
+          const d = document.createElement('div');
+          d.className = 'mini-target'; d.textContent = '🕳️';
+          d.style.left = h[0] + '%'; d.style.top = (h[1] + 6) + '%';
+          d.style.pointerEvents = 'none'; d.style.opacity = '0.7';
+          miniArena.appendChild(d);
+        }
+        m.chaseEl = miniTarget(cfg.item, 50, 50);
+        tap(m.chaseEl, function () { m.hit++; relocateChase(); });
+        relocateChase();
+      } else if (mech === 'timing') {
+        m.total = 3; m.dur = 20; m.pass = 0;
+        m.timing = { el: miniTarget(cfg.item, -5, 78), p: 0, waiting: true, wait: 0.5 };
+        m.timing.el.hidden = true;
+        tap(m.timing.el, function () {
+          if (m.timing.waiting) return;
+          m.hit++; m.pass++;
+          m.timing.waiting = true; m.timing.wait = 0.6; m.timing.el.hidden = true;
+        });
+      } else if (mech === 'sequence') {
+        m.total = 4; m.dur = 25; m.inIdx = 0; m.showIdx = -1; m.showT = 0; m.stage = 'show';
+        m.seq = []; for (let i = 0; i < 4; i++) m.seq.push(NOTES[Math.floor(Math.random() * NOTES.length)]);
+        m.big = document.createElement('div'); m.big.className = 'mini-big'; miniArena.appendChild(m.big);
+        const row = document.createElement('div'); row.className = 'mini-notes'; miniArena.appendChild(row);
+        m.noteBtns = NOTES.map(function (n) {
+          const b = document.createElement('button');
+          b.className = 'mini-note-btn'; b.textContent = n; b.disabled = true;
+          tap(b, function () {
+            if (m.stage !== 'input' || m.inIdx >= 4) return;
+            if (n === m.seq[m.inIdx]) { m.hit++; m.big.textContent = '✅ ' + n; }
+            else m.big.textContent = '❌ ' + n;
+            m.inIdx++;
+            if (m.inIdx >= 4) endMini(m.hit / m.total);
+          });
+          row.appendChild(b); return b;
+        });
+      } else if (mech === 'shells') {
+        m.total = 2; m.dur = 60; m.round = 0;
+        m.slots = [22, 50, 78];
+        setupShellRound();
+      } else if (mech === 'tug') {
+        // tap-mash tug of war: out-pull the dog before the timer runs out
+        m.total = 1; m.dur = 30; m.k = 50; m.pull = 4.5; m.kidJerkT = 0; m.dogJerkT = 0; m.stage = 'tug';
+        m.ropeEl = document.createElement('div');
+        m.ropeEl.style.cssText = 'position:absolute;left:12%;top:55%;height:4px;background:#c9a441;border-radius:2px;transform:translateY(-50%);pointer-events:none;';
+        miniArena.appendChild(m.ropeEl);
+        m.kidEl = document.createElement('div');
+        m.kidEl.className = 'mini-target'; m.kidEl.textContent = '🧒';
+        m.kidEl.style.left = '10%'; m.kidEl.style.top = '55%';
+        m.kidEl.style.fontSize = '2.6rem'; m.kidEl.style.pointerEvents = 'none';
+        m.kidEl.style.transform = 'translate(-50%,-50%) scaleX(-1)';   // face the rope
+        miniArena.appendChild(m.kidEl);
+        m.sockEl = miniTarget('🪢', 50, 55);
+        m.sockEl.style.pointerEvents = 'none';
+        m.dogEl = document.createElement('div');
+        m.dogEl.className = 'mini-target'; m.dogEl.textContent = petEm;
+        m.dogEl.style.left = '68%'; m.dogEl.style.top = '55%';
+        m.dogEl.style.fontSize = '2.6rem'; m.dogEl.style.pointerEvents = 'none';
+        miniArena.appendChild(m.dogEl);
+        const surface = document.createElement('div');
+        surface.style.cssText = 'position:absolute;inset:0;z-index:2;';
+        tap(surface, function () {
+          if (m.phase !== 'run') return;
+          m.hit++; m.k = Math.max(10, m.k - 2.6);
+          m.kidJerkT = 0.15; m.dogJerkT = 0.15;
+          // win the moment you yank the rope past your line
+          if (m.k <= 15) endMini(clamp(0.6 + 0.4 * (1 - m.t / m.dur), 0, 1));
+        });
+        miniArena.appendChild(surface);
+      } else if (mech === 'pounce') {
+        // hold to charge, release to pounce — land the cat on the mouse
+        m.total = 6; m.dur = 30; m.stage = 'aim'; m.charge = 0; m.flyT = 0; m.landT = 0;
+        const ground = document.createElement('div');
+        ground.style.cssText = 'position:absolute;left:0;right:0;top:76%;height:3px;background:rgba(255,255,255,0.12);pointer-events:none;';
+        miniArena.appendChild(ground);
+        m.catEl = document.createElement('div');
+        m.catEl.className = 'mini-target';
+        m.catEl.textContent = petEm;
+        m.catEl.style.left = '14%'; m.catEl.style.top = '68%';
+        m.catEl.style.fontSize = '2.6rem'; m.catEl.style.pointerEvents = 'none';
+        m.catEl.style.transform = 'translate(-50%,-50%) scaleX(-1)';   // face the mouse
+        miniArena.appendChild(m.catEl);
+        m.mouseX = rnd(40, 88);
+        m.mouseEl = miniTarget('🐭', m.mouseX, 68);
+        m.mouseEl.style.pointerEvents = 'none';
+        const track = document.createElement('div');
+        track.style.cssText = 'position:absolute;left:10px;bottom:10px;width:92px;height:10px;background:rgba(0,0,0,0.4);border-radius:5px;overflow:hidden;pointer-events:none;z-index:5;';
+        m.chargeEl = document.createElement('i');
+        m.chargeEl.style.cssText = 'display:block;height:100%;width:0%;background:#ffd23f;border-radius:5px;';
+        track.appendChild(m.chargeEl);
+        miniArena.appendChild(track);
+      } else if (mech === 'scrub') {
+        m.total = cfg.spots || 5; m.dur = 16; m.cleaned = 0;
+        const pet = document.createElement('div');
+        pet.className = 'mini-pet'; pet.textContent = cfg.center || petEm;
+        miniArena.appendChild(pet);
+        for (let i = 0; i < m.total; i++) {
+          const b = miniTarget(cfg.dirt, rnd(26, 74), rnd(24, 80));
+          const spot = { el: b, hp: 2, lastHit: -1 };
+          tap(b, function () { hitSpot(spot); });
+          m.targets.push(spot);
+        }
+      } else if (mech === 'whack') {
+        // targets pop up and vanish — tap them before they disappear
+        m.total = 7; m.dur = 14; m.life = 1.7; m.spawnT = 0.5;
+        m.spots = cfg.holes ? [[18, 26], [78, 22], [26, 74], [72, 70], [50, 48]] : null;
+        if (m.spots) for (const h of m.spots) {
+          const d = document.createElement('div');
+          d.className = 'mini-target'; d.textContent = '🕳️';
+          d.style.left = h[0] + '%'; d.style.top = (h[1] + 6) + '%';
+          d.style.pointerEvents = 'none'; d.style.opacity = '0.7';
+          miniArena.appendChild(d);
+        }
+      } else if (mech === 'sort') {
+        // tap the good items, leave the bad ones alone
+        m.total = 6; m.dur = 14; m.oops = 0;
+        for (let i = 0; i < m.total + 3; i++) {
+          const good = i < m.total;
+          const b = miniTarget(good ? cfg.item : cfg.bad, rnd(10, 88), rnd(14, 86));
+          if (good) tap(b, function () { if (b.dead) return; b.dead = true; m.hit++; b.remove(); });
+          else tap(b, function () {
+            if (b.dead) return;
+            m.oops++; b.classList.add('mini-wrong');
+            setTimeout(function () { b.classList.remove('mini-wrong'); }, 300);
+          });
+        }
+      } else if (mech === 'order') {
+        // tap the numbered targets in 1→5 order
+        m.total = 5; m.dur = 16; m.next = 1;
+        for (let i = 1; i <= m.total; i++) {
+          (function (n) {
+            const b = miniTarget('', 14 + rnd(0, 72), 18 + rnd(0, 66));
+            b.innerHTML = '<span class="mini-num">' + n + '</span>' + cfg.item;
+            tap(b, function () {
+              if (b.dead) return;
+              if (n === m.next) { b.dead = true; m.hit++; m.next++; b.remove(); }
+              else { b.classList.add('mini-wrong'); setTimeout(function () { b.classList.remove('mini-wrong'); }, 300); }
+            });
+          })(i);
+        }
+      } else if (mech === 'meter') {
+        // stop the sliding marker inside the green zone — 3 rounds, faster each time
+        m.total = 3; m.dur = 22; m.round = 0; m.p = 0; m.dirn = 1; m.speed = 0.9; m.waitT = 0;
+        const wrap = document.createElement('div');
+        wrap.className = 'mini-meter';
+        wrap.innerHTML = '<div class="mm-zone"></div><div class="mm-mark"></div>';
+        miniArena.appendChild(wrap);
+        m.markEl = wrap.querySelector('.mm-mark');
+        m.big = document.createElement('div');
+        m.big.className = 'mini-big'; m.big.textContent = cfg.item || '💦'; m.big.style.top = '24%';
+        miniArena.appendChild(m.big);
+        const go = document.createElement('button');
+        go.className = 'mini-go'; go.textContent = 'STOP!';
+        miniArena.appendChild(go);
+        tap(go, function () {
+          if (m.waitT > 0 || m.round >= m.total) return;
+          const inZone = m.p >= 0.35 && m.p <= 0.65;
+          if (inZone) { m.hit++; m.speed += 0.35; }
+          m.big.textContent = inZone ? '🌟' : '💨';
+          m.round++; m.waitT = 0.7;
+        });
+      }
+      document.getElementById('mini-title').textContent = title;
+      document.getElementById('mini-sub').textContent = cfg.sub || '';
+      document.getElementById('mini-fill').style.width = '100%';
+      miniEl.hidden = false;
+    }
+
+    function relocateChase() {
+      const m = mini; if (!m || m.mech !== 'chase') return;
+      m.relocT = 1.8;
+      if (m.holes) { const h = m.holes[Math.floor(Math.random() * m.holes.length)]; m.chaseEl.style.left = h[0] + '%'; m.chaseEl.style.top = h[1] + '%'; }
+      else { m.chaseEl.style.left = rnd(10, 90) + '%'; m.chaseEl.style.top = rnd(12, 85) + '%'; }
+    }
+
+    function setupShellRound() {
+      const m = mini;
+      for (const s of (m.shells || [])) s.el.remove();
+      if (m.crabEl) m.crabEl.remove();
+      const shellEm = m.cfg.shell || '🐚', hideEm = m.cfg.item || '🦀';
+      m.shells = m.slots.map(function (x, i) {
+        const b = miniTarget(shellEm, x, 58);
+        b.style.fontSize = '2.6rem';
+        const shell = { el: b, slot: i };
+        tap(b, function () {
+          if (m.stage !== 'pick') return;
+          m.stage = 'reveal'; m.pt = 0;
+          m.crabEl.style.left = m.slots[m.shells[m.crabShell].slot] + '%';
+          m.crabEl.hidden = false;
+          if (shell === m.shells[m.crabShell]) { m.hit++; m.crabEl.textContent = hideEm + '🎉'; }
+          else m.crabEl.textContent = hideEm;
+        });
+        return shell;
+      });
+      m.crabShell = Math.floor(Math.random() * 3);
+      m.crabEl = document.createElement('div');
+      m.crabEl.className = 'mini-big'; m.crabEl.textContent = hideEm;
+      m.crabEl.style.top = '26%'; m.crabEl.style.left = m.slots[m.crabShell] + '%';
+      miniArena.appendChild(m.crabEl);
+      m.stage = 'peek'; m.pt = 0; m.swapsLeft = 3; m.swap = null;
+    }
+
+    function hitSpot(spot) {
+      const m = mini; if (!m || m.mech !== 'scrub' || spot.hp <= 0) return;
+      if (m.t - spot.lastHit < 0.12) return;
+      spot.lastHit = m.t; spot.hp--;
+      spot.el.style.opacity = String(0.3 + spot.hp * 0.23);
+      if (spot.hp <= 0) {
+        spot.el.remove();
+        m.targets.splice(m.targets.indexOf(spot), 1);
+        m.cleaned++;
+      }
+    }
+    function scrubAt(e) {
+      const m = mini; if (!m || m.mech !== 'scrub' || !m.pdown) return;
+      for (const spot of m.targets.slice()) {
+        const r = spot.el.getBoundingClientRect();
+        if (e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) hitSpot(spot);
+      }
+    }
+    function arenaPct(e) {
+      const r = miniArena.getBoundingClientRect();
+      return { x: clamp((e.clientX - r.left) / r.width * 100, 0, 100), y: clamp((e.clientY - r.top) / r.height * 100, 0, 100) };
+    }
+    function bowlAt(e) {
+      const m = mini; if (!m || m.mech !== 'bowl') return;
+      m.bowlX = clamp(arenaPct(e).x, 8, 92);
+      m.bowlEl.style.left = m.bowlX + '%';
+    }
+    function binGrab(e) {
+      const m = mini; if (!m || m.mech !== 'bin') return;
+      const p = arenaPct(e);
+      let best = null, bd = 13;
+      for (const t of m.targets) { const d = Math.hypot(t.x - p.x, t.y - p.y); if (d < bd) { bd = d; best = t; } }
+      m.drag = best;
+      if (best) best.el.style.fontSize = '2.5rem';
+    }
+    function binMove(e) {
+      const m = mini; if (!m || m.mech !== 'bin' || !m.drag) return;
+      const p = arenaPct(e);
+      m.drag.x = p.x; m.drag.y = p.y;
+      m.drag.el.style.left = p.x + '%'; m.drag.el.style.top = p.y + '%';
+    }
+    function binDrop() {
+      const m = mini; if (!m || m.mech !== 'bin' || !m.drag) return;
+      const t = m.drag; m.drag = null;
+      t.el.style.fontSize = '';
+      if (Math.hypot(t.x - 85, t.y - 82) < 16) {
+        m.hit++; t.el.remove();
+        m.targets.splice(m.targets.indexOf(t), 1);
+        m.binEl.style.transform = 'translate(-50%,-50%) scale(1.3)';
+        setTimeout(function () { if (mini === m && m.binEl) m.binEl.style.transform = 'translate(-50%,-50%)'; }, 140);
+      }
+    }
+    miniArena.addEventListener('pointerdown', function (e) { if (mini) { mini.pdown = true; scrubAt(e); bowlAt(e); binGrab(e); } });
+    miniArena.addEventListener('pointermove', function (e) { scrubAt(e); bowlAt(e); if (mini && mini.pdown) binMove(e); });
+    window.addEventListener('pointerup', function () { if (mini) { mini.pdown = false; binDrop(); } });
+
+    function spawnCatch() {
+      const m = mini, c = m.cfg, motion = c.motion;
+      let x = rnd(10, 90), y = -6, vx = 0, vy = c.speed;
+      if (motion === 'rise') { y = 106; vy = -c.speed; }
+      else if (motion === 'side') { const dir = Math.random() < 0.5 ? 1 : -1; x = dir > 0 ? -6 : 106; y = rnd(15, 80); vx = c.speed * dir; vy = 0; }
+      else if (motion === 'drift' || motion === 'roll') vx = rnd(-13, 13);
+      const t = { el: miniTarget(c.item, x, y), x: x, y: y, x0: x, vx: vx, vy: vy, age: rnd(0, 6) };
+      tap(t.el, function () {
+        if (t.dead) return; t.dead = true;
+        m.hit++; t.el.remove();
+        const i = m.targets.indexOf(t); if (i >= 0) m.targets.splice(i, 1);
+      });
+      m.targets.push(t); m.spawned++;
+    }
+
+    function spawnBowlItem() {
+      const m = mini, c = m.cfg;
+      const t = { el: document.createElement('div'), x: rnd(10, 90), y: -6, vx: rnd(-6, 6), vy: c.speed || 24 };
+      t.el.className = 'mini-target'; t.el.textContent = c.item;
+      t.el.style.pointerEvents = 'none';
+      t.el.style.left = t.x + '%'; t.el.style.top = t.y + '%';
+      miniArena.appendChild(t.el);
+      m.targets.push(t); m.spawned++;
+    }
+
+    function spawnWhack() {
+      const m = mini, c = m.cfg;
+      let x, y;
+      if (m.spots) { const h = m.spots[Math.floor(Math.random() * m.spots.length)]; x = h[0]; y = h[1] - 3; }
+      else { x = rnd(12, 88); y = rnd(15, 85); }
+      const t = { el: miniTarget(c.item, x, y), age: 0 };
+      tap(t.el, function () {
+        if (t.dead) return; t.dead = true;
+        m.hit++; t.el.remove();
+        const i = m.targets.indexOf(t); if (i >= 0) m.targets.splice(i, 1);
+      });
+      m.targets.push(t); m.spawned++;
+    }
+
+    function stepMini(secs) {
+      const m = mini;
+      if (!m || m.phase !== 'run') return;
+      m.t += secs;
+      document.getElementById('mini-fill').style.width = clamp(100 - m.t / m.dur * 100, 0, 100) + '%';
+      if (m.mech === 'bowl') {
+        if (m.spawned < m.total) { m.spawnT -= secs; if (m.spawnT <= 0) { m.spawnT = 1.25; spawnBowlItem(); } }
+        for (let i = m.targets.length - 1; i >= 0; i--) {
+          const t = m.targets[i];
+          t.x += t.vx * secs; t.y += t.vy * secs;
+          t.el.style.left = t.x + '%'; t.el.style.top = t.y + '%';
+          if (t.y >= 76 && t.y <= 98 && Math.abs(t.x - m.bowlX) < 11) {   // caught!
+            m.hit++; t.el.remove(); m.targets.splice(i, 1);
+            m.bowlEl.style.transform = 'translate(-50%,-50%) scale(1.28)';
+            setTimeout(function () { if (mini === m && m.bowlEl) m.bowlEl.style.transform = 'translate(-50%,-50%)'; }, 130);
+          } else if (t.y > 104) { t.el.remove(); m.targets.splice(i, 1); }
+        }
+        if ((m.spawned >= m.total && m.targets.length === 0) || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'bin') {
+        if (m.hit >= m.total || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'catch') {
+        if (m.spawned < m.total) { m.spawnT -= secs; if (m.spawnT <= 0) { m.spawnT = 1.1; spawnCatch(); } }
+        for (let i = m.targets.length - 1; i >= 0; i--) {
+          const t = m.targets[i];
+          t.age += secs; t.x += t.vx * secs; t.y += t.vy * secs;
+          if (m.cfg.motion === 'sway') t.x = t.x0 + Math.sin(t.age * 3) * 9;
+          if (m.cfg.motion === 'bounce') t.x = t.x0 + Math.sin(t.age * 5) * 6;
+          t.el.style.left = t.x + '%'; t.el.style.top = t.y + '%';
+          if (t.y > 108 || t.y < -9 || t.x < -9 || t.x > 109) { t.el.remove(); m.targets.splice(i, 1); }
+        }
+        if ((m.spawned >= m.total && m.targets.length === 0) || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'mess') {
+        if (m.hit >= m.total || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'chase') {
+        m.relocT -= secs;
+        if (m.relocT <= 0) relocateChase();
+        if (m.hit >= m.total || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'timing') {
+        const tg = m.timing;
+        if (tg.waiting) {
+          tg.wait -= secs;
+          if (tg.wait <= 0 && m.pass < m.total) { tg.waiting = false; tg.p = 0; tg.el.hidden = false; }
+        } else {
+          tg.p += secs / 2.6;
+          const x = -5 + tg.p * 110, y = 80 - Math.sin(Math.min(tg.p, 1) * Math.PI) * 58;
+          tg.el.style.left = x + '%'; tg.el.style.top = y + '%';
+          if (tg.p >= 1) { m.pass++; tg.waiting = true; tg.wait = 0.6; tg.el.hidden = true; }
+        }
+        if (m.pass >= m.total || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'sequence') {
+        if (m.stage === 'show') {
+          m.showT -= secs;
+          if (m.showT <= 0) {
+            m.showIdx++;
+            if (m.showIdx >= 4) {
+              m.stage = 'input'; m.big.textContent = '🎤';
+              document.getElementById('mini-sub').textContent = 'Your turn — sing it back!';
+              m.noteBtns.forEach(function (b) { b.disabled = false; });
+            } else { m.big.textContent = m.seq[m.showIdx]; m.showT = 1.0; }
+          }
+        }
+        if (m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'shells') {
+        m.pt += secs;
+        if (m.stage === 'peek' && m.pt > 1.6) { m.stage = 'shuffle'; m.crabEl.hidden = true; m.pt = 0; }
+        else if (m.stage === 'shuffle') {
+          if (!m.swap) {
+            if (m.swapsLeft <= 0) { m.stage = 'pick'; document.getElementById('mini-sub').textContent = m.cfg.pickSub || 'Where is the crab? Tap a shell!'; }
+            else {
+              const a = Math.floor(Math.random() * 3); let b = Math.floor(Math.random() * 3);
+              if (b === a) b = (b + 1) % 3;
+              m.swap = { a: m.shells[a], b: m.shells[b], fa: m.shells[a].slot, fb: m.shells[b].slot, t: 0 };
+              m.swapsLeft--;
+            }
+          } else {
+            m.swap.t += secs / 0.6;
+            const k = Math.min(m.swap.t, 1);
+            m.swap.a.el.style.left = (m.slots[m.swap.fa] + (m.slots[m.swap.fb] - m.slots[m.swap.fa]) * k) + '%';
+            m.swap.b.el.style.left = (m.slots[m.swap.fb] + (m.slots[m.swap.fa] - m.slots[m.swap.fb]) * k) + '%';
+            if (k >= 1) { m.swap.a.slot = m.swap.fb; m.swap.b.slot = m.swap.fa; m.swap = null; }
+          }
+        } else if (m.stage === 'reveal' && m.pt > 1.1) {
+          m.round++;
+          if (m.round >= m.total) endMini(m.hit / m.total);
+          else setupShellRound();
+        }
+        if (m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'tug') {
+        m.pull = Math.min(7.5, 4.5 + m.t * 0.09);
+        m.k = Math.min(85, m.k + m.pull * secs);
+        m.kidJerkT = Math.max(0, m.kidJerkT - secs);
+        m.dogJerkT = Math.max(0, m.dogJerkT - secs);
+        m.sockEl.style.left = m.k + '%';
+        m.dogEl.style.left = (m.k + 18) + '%';
+        m.ropeEl.style.width = (m.k + 6) + '%';
+        m.kidEl.style.transform = 'translate(-50%,-50%) scaleX(-1) rotate(' +
+          (m.kidJerkT > 0 ? 14 : Math.sin(m.t * 5) * 3) + 'deg)';
+        m.dogEl.style.transform = 'translate(-50%,-50%) rotate(' +
+          (Math.sin(m.t * 9) * 6 + (m.dogJerkT > 0 ? 10 : 0)) + 'deg)';
+        m.sockEl.style.transform = 'translate(-50%,-50%) rotate(' + (m.kidJerkT > 0 ? -20 : 0) + 'deg)';
+        if (m.k <= 15) endMini(clamp(0.6 + 0.4 * (1 - m.t / m.dur), 0, 1));
+        else if (m.k >= 85) endMini(0.3);
+        else if (m.t >= m.dur) endMini(clamp((85 - m.k) / 70 * 0.6, 0.1, 0.6));
+      } else if (m.mech === 'pounce') {
+        if (m.stage === 'aim') {
+          if (m.pdown) {
+            m.charge = Math.min(1, m.charge + secs / 1.3);
+            // squat down into the ground + butt-wiggle, harder as the charge builds
+            m.catEl.style.transform = 'translate(-50%,-50%) translateY(' + (7 * m.charge) + 'px) rotate(' +
+              (Math.sin(m.t * (8 + 10 * m.charge)) * (3 + 6 * m.charge)) + 'deg) scaleX(' +
+              (-(1 + 0.14 * m.charge)) + ') scaleY(' + (1 - 0.35 * m.charge) + ')';
+          } else if (m.charge > 0.08) {
+            m.stage = 'fly'; m.flyT = 0; m.fromX = 14; m.toX = 14 + m.charge * 80;
+            m.catEl.style.transform = 'translate(-50%,-50%) scaleX(-1)';
+          } else {
+            m.charge = 0; m.catEl.style.transform = 'translate(-50%,-50%) scaleX(-1)';
+          }
+          m.chargeEl.style.width = (m.charge * 100) + '%';
+        } else if (m.stage === 'fly') {
+          m.flyT += secs / 0.6;
+          const p = Math.min(m.flyT, 1);
+          m.catEl.style.left = (m.fromX + (m.toX - m.fromX) * p) + '%';
+          m.catEl.style.top = (68 - Math.sin(p * Math.PI) * (18 + 26 * m.charge)) + '%';
+          if (p >= 1) {
+            if (Math.abs(m.toX - m.mouseX) < 8) { m.hit++; m.mouseEl.textContent = '💥'; m.stage = 'land'; m.landT = 0.45; }
+            else { m.mouseEl.textContent = '❗'; m.stage = 'dart'; m.landT = 0.3; }
+          }
+        } else if (m.stage === 'land' || m.stage === 'dart') {
+          m.landT -= secs;
+          if (m.landT <= 0) {
+            if (m.stage === 'land' && m.hit >= m.total) { endMini(1); return; }
+            m.mouseX = rnd(40, 88);
+            m.mouseEl.textContent = '🐭';
+            m.mouseEl.style.left = m.mouseX + '%';
+            m.catEl.style.left = '14%'; m.catEl.style.top = '68%';
+            m.charge = 0; m.chargeEl.style.width = '0%';
+            m.stage = 'aim';
+          }
+        }
+        if (m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'scrub') {
+        if (m.cleaned >= m.total || m.t >= m.dur) endMini(m.cleaned / m.total);
+      } else if (m.mech === 'whack') {
+        if (m.spawned < m.total) { m.spawnT -= secs; if (m.spawnT <= 0) { m.spawnT = rnd(0.7, 1.1); spawnWhack(); } }
+        for (let i = m.targets.length - 1; i >= 0; i--) {
+          const t = m.targets[i];
+          t.age += secs;
+          if (t.age > m.life - 0.4) t.el.style.opacity = '0.45';
+          if (t.age > m.life) { t.el.remove(); m.targets.splice(i, 1); }
+        }
+        if ((m.spawned >= m.total && m.targets.length === 0) || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'sort') {
+        if (m.hit >= m.total || m.t >= m.dur) endMini((m.hit - m.oops * 0.5) / m.total);
+      } else if (m.mech === 'order') {
+        if (m.hit >= m.total || m.t >= m.dur) endMini(m.hit / m.total);
+      } else if (m.mech === 'meter') {
+        if (m.waitT > 0) {
+          m.waitT -= secs;
+          if (m.waitT <= 0 && m.round < m.total) m.big.textContent = m.cfg.item || '💦';
+        } else if (m.round < m.total) {
+          m.p += m.dirn * m.speed * secs;
+          if (m.p > 1) { m.p = 1; m.dirn = -1; }
+          if (m.p < 0) { m.p = 0; m.dirn = 1; }
+        }
+        m.markEl.style.left = (8 + m.p * 84) + '%';
+        if ((m.round >= m.total && m.waitT <= 0) || m.t >= m.dur) endMini(m.hit / m.total);
+      }
+    }
+
+    function endMini(score) {
+      const m = mini;
+      if (!m || m.phase === 'done') return;
+      m.phase = 'done';
+      score = clamp(score, 0, 1);
+      const r = document.createElement('div');
+      r.className = 'mini-result';
+      r.innerHTML = '<div>' + (score >= 0.85 ? '⭐⭐⭐' : (score >= 0.5 ? '⭐⭐' : (score > 0.15 ? '⭐' : '💨'))) + '</div>' +
+        '<div class="r-txt">' + (score >= 0.85 ? 'Amazing!' : (score >= 0.5 ? 'Great job!' : (score > 0.15 ? 'Not bad!' : 'Oops…'))) + '</div>';
+      miniArena.appendChild(r);
+      setTimeout(function () {
+        miniEl.hidden = true; miniArena.innerHTML = '';
+        const cb = m.onDone; mini = null;
+        cb(score);
+      }, 1000);
+    }
+
+    // ---------- actions ----------
+    function busy(p) { return p.vetT > 0 || (walkRun && G.pets[walkRun.key] === p); }
+    function feed(key, treat) {
+      const p = G.pets[key], sp = spOf(key);
+      if (!p.adopted || busy(p) || miniActive()) return false;
+      if (treat) {
+        if (G.treats < 1) return false;
+        G.treats--; p.food = clamp(p.food + 14, 0, 100); p.fun = clamp(p.fun + 14, 0, 100);
+        p.restT = restFor(key);
+        cpop(sp.x, sp.y - 40, '🍪 Yum!', '#ffd23f');
+        afterAction(); return true;
+      }
+      if (G.food < 1) return false;
+      G.food--; renderHud();   // the food is used — the game decides how much gets eaten
+      openMini('feed', sp.key, sp.em, nmOf(sp), function (s) {
+        p.food = clamp(p.food + scaled(45, s), 0, 100);
+        p.restT = restFor(key);   // just cared for — no new needs for a while
+        cpop(sp.x, sp.y - 40, s >= 0.8 ? '🍽 So yummy!' : (s >= 0.4 ? '🍽 Nom nom!' : '🍽 Still a bit hungry…'), '#ffd23f');
+        afterAction();
+      });
+      return true;
+    }
+    function play(key) {
+      const p = G.pets[key], sp = spOf(key);
+      if (!p.adopted || busy(p) || G.toys.length === 0 || miniActive()) return false;
+      if (p.fun >= 95) {   // already all played out — don't waste a play session
+        cpop(sp.x, sp.y - 40, '😊 ' + nmOf(sp) + ' is done playing for now!', '#7ec8ff');
+        return false;
+      }
+      openMini('play', sp.key, sp.em, nmOf(sp), function (s) {
+        p.fun = clamp(p.fun + scaled(26 + 6 * Math.min(G.toys.length, 6), s), 0, 100);   // toy bonus caps at 6 toys
+        p.food = clamp(p.food - 4, 0, 100);
+        p.restT = restFor(key);
+        cpop(sp.x, sp.y - 40, p.fun >= 95 ? '🎉 ' + nmOf(sp) + ' is done playing — so happy!'
+          : s >= 0.8 ? '🎉 Best playtime ever!' : (s >= 0.4 ? '🎾 So fun!' : '🎾 That was quick…'), '#7ec8ff');
+        afterAction();
+      });
+      return true;
+    }
+    function groom(key) {
+      const p = G.pets[key], sp = spOf(key);
+      if (!p.adopted || busy(p) || !sp.groom || !hasGear('soap') || miniActive()) return false;
+      openMini('wash', sp.key, sp.em, nmOf(sp), function (s) {
+        p.clean = clamp(p.clean + scaled(55, s), 0, 100);
+        p.restT = restFor(key);
+        cpop(sp.x, sp.y - 40, s >= 0.8 ? '🫧 Squeaky clean!' : (s >= 0.4 ? '🫧 Nice and fresh!' : '🫧 Still a bit grubby…'), '#7ec8ff');
+        afterAction();
+      });
+      return true;
+    }
+    function cleanHome(key) {
+      const p = G.pets[key], sp = spOf(key);
+      if (!p.adopted || busy(p) || !sp.home || !hasGear('broom') || miniActive()) return false;
+      openMini('clean', sp.key, sp.em, nmOf(sp), function (s) {
+        p.home = Math.max(p.home, 40 + Math.round(60 * s));
+        p.restT = restFor(key);
+        cpop(sp.x, sp.y - 40, s >= 0.8 ? '✨ Sparkling ' + sp.home + '!' : (s >= 0.4 ? '🧹 Much better!' : '🧹 Still a bit messy…'), '#ffe8b0');
+        afterAction();
+      });
+      return true;
+    }
+    function vet(key) {
+      const p = G.pets[key];
+      if (!p.adopted || !p.sick || p.vetT > 0 || G.coins < VET_COST) return false;
+      G.coins -= VET_COST; p.vetT = VET_TIME;
+      afterAction(); return true;
+    }
+    // the pet was already paid for at the vet clinic — this just moves them in
+    function adoptFinalize(key) {
+      const sp = spOf(key), p = G.pets[key];
+      if (p.adopted) return false;
+      G.pets[key] = freshPet(sp); G.pets[key].adopted = true;
+      if (G.meet && G.meet.key === key) G.meet = null;
+      cpop(sp.x, sp.y - 44, '🎉 Welcome home, ' + nmOf(sp) + '!', '#9be79b');
+      askName('What will you name your ' + sp.kind.toLowerCase() + ' ' + sp.em + '?', sp.nm, function (v) {
+        if (v) G.pets[key].nm = v;
+        save(); refreshCare();
+      });
+      nearKey = null;   // rebuild the care panel with the unlocked actions
+      afterAction(); return true;
+    }
+    // one tap at the build site = one component placed; the last one finishes the home
+    function placeNext() {
+      const m = G.meet; if (!m || m.stage !== 'build') return false;
+      const sp = spOf(m.key), list = suppliesFor(sp);
+      if (m.placed < list.length) {
+        m.placed++;
+        cpop(sp.x, sp.y - 54, '🔨 ' + shelfEm(list[m.placed - 1]) + ' placed!', '#9be79b');
+        save();
+      }
+      if (m.placed >= list.length) adoptFinalize(m.key);
+      return true;
+    }
+    function buyItem(id) {
+      if (id === 'food')   { if (G.coins < 5) return false; G.coins -= 5; G.food += 5; }
+      else if (id === 'treats') { if (G.coins < 6) return false; G.coins -= 6; G.treats += 3; }
+      else if (GEAR.some(function (g) { return g.id === id; })) {
+        const g = GEAR.find(function (x) { return x.id === id; });
+        if (hasGear(id) || G.coins < g.cost) return false;
+        G.coins -= g.cost; G.gear.push(id);
+      }
+      else {
+        const t = TOYS.find(function (x) { return x.id === id; });
+        if (!t || G.coins < t.cost) return false;   // toys stack — buy as many as you like
+        G.toys.push(id);
+      }
+      renderShop(); afterAction(); return true;
+    }
+    function afterAction() { save(); renderHud(); refreshCare(); }
+
+    // ---------- walk minigame ----------
+    const walkEl = document.getElementById('walk');
+    function startWalk(key) {
+      const sp = spOf(key), p = G.pets[key];
+      if (!sp.walk || !p.adopted || busy(p) || walkRun || !hasGear('leash')) return false;
+      if (!hasGear('poobags')) { cpop(sp.x, sp.y - 44, '💩 You need poo bags to walk ' + nmOf(sp) + '!', '#ffd23f'); return false; }
+      walkRun = { key: key, t: 0, nextBone: rnd(1.2, 2.4), bones: 0, nextPoo: rnd(2, 3.5), poos: 0, scooped: 0 };
+      document.getElementById('walk-title').textContent = 'Walkies, ' + nmOf(sp) + '!';
+      document.getElementById('walk-sub').textContent = 'Tap the bones — and scoop the 💩!';
+      document.getElementById('walk-dog').textContent = sp.em;
+      const trees = document.getElementById('walk-trees');
+      trees.textContent = '🌳 🌲 🌳 🏠 🌳 🌲 🌷 🌳 🌲 🌳 🏠 🌳 🌲 🌷 🌳 🌲 🌳 '.repeat(3);
+      document.getElementById('walk-fill').style.width = '0%';
+      walkEl.hidden = false;
+      return true;
+    }
+    function stepWalk(secs) {
+      if (!walkRun) return;
+      walkRun.t += secs;
+      const f = clamp(walkRun.t / WALK_TIME, 0, 1);
+      document.getElementById('walk-fill').style.width = (f * 100) + '%';
+      document.getElementById('walk-trees').style.transform = 'translateX(' + (-walkRun.t * 90) + 'px)';
+      walkRun.nextBone -= secs;
+      // bones pay coins on job walks; on your own dog's walk they fill the walk meter
+      if (walkRun.nextBone <= 0) { walkRun.nextBone = rnd(1.6, 3); spawnBone(); }
+      // the dog poos! you get POO_TIME seconds: press B for a bag, drag it over
+      // the poo — or you step in it and the walk is over (one poo at a time, max 3)
+      if (walkRun.poo) {
+        walkRun.poo.t -= secs;
+        document.getElementById('walk-sub').textContent = walkRun.poo.bagged
+          ? '🛍️ Drag the bag over the 💩 to pick it up!'
+          : '💩 Quick! Press B for a poo bag! ' + Math.ceil(Math.max(0, walkRun.poo.t)) + 's…';
+        if (walkRun.poo.t <= 0) { voidWalk(); return; }
+      } else {
+        walkRun.nextPoo -= secs;
+        if (walkRun.nextPoo <= 0 && walkRun.poos < 3 && walkRun.t < WALK_TIME - 2) {
+          walkRun.nextPoo = rnd(2.5, 4); walkRun.poos++; spawnPoo();
+        }
+      }
+      // the walk can't end while a poo is waiting — deal with it first!
+      if (walkRun.t >= WALK_TIME && !walkRun.poo) finishWalk();
+    }
+    function spawnBone() {
+      const scene = document.getElementById('walk-scene');
+      const b = document.createElement('button');
+      b.className = 'walk-bone'; b.textContent = '🦴';
+      b.style.left = rnd(15, 85) + '%'; b.style.top = rnd(20, 70) + '%';
+      tap(b, function () {
+        b.remove();
+        if (!walkRun) return;
+        if (walkRun.jobDog) { G.coins += 1; renderHud(); }
+        else walkRun.bones++;
+      });
+      scene.appendChild(b);
+      setTimeout(function () { b.remove(); }, 2600);
+    }
+    // the dog drops a 💩 near its feet — press B for a bag, then drag it over the poo
+    const POO_TIME = 10;
+    function spawnPoo() {
+      const scene = document.getElementById('walk-scene');
+      const b = document.createElement('button');
+      b.className = 'walk-poo'; b.textContent = '💩';
+      b.style.left = rnd(12, 30) + '%'; b.style.bottom = rnd(6, 16) + 'px';
+      tap(b, function () { scoopPoo(b); });   // tapping also works — but only WITH the bag
+      scene.appendChild(b);
+      walkRun.poo = { el: b, t: POO_TIME, bagged: false };
+      updateBagBtn();
+    }
+    function grabBag() {
+      const poo = walkRun && walkRun.poo;
+      if (!poo || poo.bagged) return;
+      poo.bagged = true;
+      poo.el.classList.add('baggable');
+      updateBagBtn();
+    }
+    function scoopPoo(el) {
+      const poo = walkRun && walkRun.poo;
+      if (!poo || !poo.bagged || (el && el !== poo.el)) return;
+      walkRun.scooped++;
+      // poo bags from the store: neat scooping earns a tip
+      if (hasGear('poobags')) { G.coins += 1; renderHud(); }
+      poo.el.textContent = hasGear('poobags') ? '🧻 +1🪙' : '🧻✨';
+      poo.el.style.pointerEvents = 'none';
+      poo.el.classList.remove('walk-poo', 'baggable');
+      const done = poo.el; setTimeout(function () { done.remove(); }, 350);
+      walkRun.poo = null;
+      updateBagBtn();
+      document.getElementById('walk-sub').textContent = '🧻 Scooped — good job! Keep walking!';
+    }
+    // you stepped in it… walk over, no reward
+    function voidWalk() {
+      const job = walkRun.jobDog, key = walkRun.key;
+      walkRun = null;
+      walkEl.hidden = true;
+      document.querySelectorAll('.walk-bone, .walk-poo').forEach(function (b) { b.remove(); });
+      updateBagBtn();
+      if (job) {
+        G.jobs.nextCall = rnd(40, 80);
+        cpop(DOOR_SPOT.x, DOOR_SPOT.y - 60, '💩 Ew, you stepped in it! ' + job.nm + ' went home — no pay…', '#e94560');
+      } else {
+        const sp = spOf(key);
+        cpop(sp.x, sp.y - 44, '💩 Ew, you stepped in it! Walk cut short…', '#e94560');
+      }
+      afterAction();
+    }
+    function updateBagBtn() {
+      const btn = document.getElementById('bag-btn');
+      btn.hidden = !(walkRun && walkRun.poo && !walkRun.poo.bagged);
+    }
+    tap(document.getElementById('bag-btn'), grabBag);
+    window.addEventListener('keydown', function (e) {
+      if (e.target && e.target.tagName === 'INPUT') return;
+      if (e.code === 'KeyB') { e.preventDefault(); grabBag(); }
+    });
+    // with the bag in hand, dragging (or just sweeping) the pointer over the poo picks it up
+    document.getElementById('walk-scene').addEventListener('pointermove', function (e) {
+      const poo = walkRun && walkRun.poo;
+      if (!poo || !poo.bagged) return;
+      const r = poo.el.getBoundingClientRect();
+      if (e.clientX >= r.left - 10 && e.clientX <= r.right + 10 && e.clientY >= r.top - 10 && e.clientY <= r.bottom + 10) scoopPoo();
+    });
+    function finishWalk() {
+      const job = walkRun.jobDog, key = walkRun.key, bones = walkRun.bones || 0;
+      const missed = document.querySelectorAll('.walk-poo').length;   // poo left behind!
+      walkRun = null;
+      walkEl.hidden = true;
+      document.querySelectorAll('.walk-bone, .walk-poo').forEach(function (b) { b.remove(); });
+      if (job) {
+        const pay = Math.max(4, job.pay - 3 * missed);
+        G.coins += pay;
+        cpop(DOOR_SPOT.x, DOOR_SPOT.y - 60,
+          missed ? job.nm + ' had fun, but you left 💩! +' + pay + ' 🪙'
+                 : job.nm + ' had a great walk! +' + pay + ' 🪙',
+          missed ? '#ffd23f' : '#9be79b');
+      } else {
+        const p = G.pets[key], sp = spOf(key);
+        // bones make the walk better; missed poo makes it worse
+        p.walk = clamp(55 + 12 * bones - 10 * missed, 40, 100);
+        p.fun = clamp(p.fun + 15, 0, 100); p.food = clamp(p.food - 6, 0, 100);
+        p.restT = restFor(key);
+        cpop(sp.x, sp.y - 44,
+          missed ? '💩 Oops — you forgot to scoop!' : (bones >= 3 ? '🚶 Best walk ever!' : '🚶 Great walk!'),
+          missed ? '#ffd23f' : '#7ec8ff');
+      }
+      afterAction();
+    }
+
+    // ---------- player movement ----------
+    window.addEventListener('keydown', function (e) {
+      if (e.target && e.target.tagName === 'INPUT') return;   // typing in a text field
+      switch (e.code) {
+        case 'KeyW': case 'ArrowUp': keys.u = true; e.preventDefault(); break;
+        case 'KeyS': case 'ArrowDown': keys.d = true; e.preventDefault(); break;
+        case 'KeyA': case 'ArrowLeft': keys.l = true; e.preventDefault(); break;
+        case 'KeyD': case 'ArrowRight': keys.r = true; e.preventDefault(); break;
+      }
+    });
+    window.addEventListener('keyup', function (e) {
+      switch (e.code) {
+        case 'KeyW': case 'ArrowUp': keys.u = false; break;
+        case 'KeyS': case 'ArrowDown': keys.d = false; break;
+        case 'KeyA': case 'ArrowLeft': keys.l = false; break;
+        case 'KeyD': case 'ArrowRight': keys.r = false; break;
+      }
+    });
+    let dragging = false;
+    function aimAt(e) {
+      const p = EL.canvasPos(canvas, e, W, H);
+      player.tx = clamp(p.x, 30, W - 30); player.ty = clamp(p.y, 90, H - 26);
+    }
+    canvas.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (storeTrip) {   // tapping a shelf/register buys — anywhere else walks
+        const p = EL.canvasPos(canvas, e, W, H);
+        if (storeClickAt(p.x, p.y)) return;
+      }
+      if (clinicTrip) {  // tapping a pet in the meet pen chooses/buys them
+        const p = EL.canvasPos(canvas, e, W, H);
+        if (clinicClickAt(p.x, p.y)) return;
+      }
+      if (!storeTrip && !clinicTrip && G.meet && G.meet.stage === 'build') {
+        const p = EL.canvasPos(canvas, e, W, H), bsp = spOf(G.meet.key);
+        if (Math.hypot(p.x - bsp.x, p.y - bsp.y) < 52 &&
+            Math.hypot(player.x - bsp.x, player.y - bsp.y) < NEAR) { placeNext(); return; }
+      }
+      if (!storeTrip && !clinicTrip) {
+        // hold on the litter box / tank sand to pour a bag in
+        const p = EL.canvasPos(canvas, e, W, H);
+        for (const st of STATIONS) {
+          if (!st.pourEm || !stationReady(st) || !anyAdopted(st.key)) continue;
+          if (Math.hypot(p.x - st.x, p.y - st.y) >= 42 || Math.hypot(player.x - st.x, player.y - st.y) >= 62) continue;
+          if (G[st.supplyKey] <= 0) { cpop(st.x, st.y - 40, st.buyMsg, '#ffd23f'); return; }
+          if (G[st.lvlKey] >= 95) { cpop(st.x, st.y - 40, 'Still nice and full! ✅', '#9be79b'); return; }
+          startPour(st);
+          return;   // pouring, not walking
+        }
+      }
+      dragging = true; aimAt(e);
+    });
+    canvas.addEventListener('pointermove', function (e) { if (dragging) aimAt(e); });
+    window.addEventListener('pointerup', function () { dragging = false; endPour(); });
+
+    function movePlayer(secs) {
+      const spd = 210 * secs;   // px per second
+      let ax = (keys.r ? 1 : 0) - (keys.l ? 1 : 0);
+      let ay = (keys.d ? 1 : 0) - (keys.u ? 1 : 0);
+      if (ax !== 0 || ay !== 0) {
+        const l = Math.hypot(ax, ay);
+        player.x += ax / l * spd; player.y += ay / l * spd;
+        player.tx = player.x; player.ty = player.y;
+        player.step += secs * 10;
+        if (ax !== 0) player.face = ax;
+      } else {
+        const dx = player.tx - player.x, dy = player.ty - player.y, d = Math.hypot(dx, dy);
+        if (d > 4) {
+          const m = Math.min(spd, d);
+          player.x += dx / d * m; player.y += dy / d * m;
+          player.step += secs * 10;
+          if (Math.abs(dx) > 2) player.face = dx > 0 ? 1 : -1;
+        } else player.step = 0;
+      }
+      player.x = clamp(player.x, 30, W - 30);
+      player.y = clamp(player.y, 90, H - 26);
+      if (clinicTrip || storeTrip) return;   // on a trip — proximity handled by stepClinic/stepStore
+      // who are we standing next to?
+      let best = null, bd = NEAR;
+      for (const sp of SPECIES) {
+        if (!visible(sp)) continue;
+        const d = Math.hypot(player.x - sp.x, player.y - sp.y);
+        if (d < bd) { bd = d; best = sp.key; }
+      }
+      const ds = Math.hypot(player.x - SHOP_SPOT.x, player.y - SHOP_SPOT.y);
+      if (ds < bd) { bd = ds; best = 'shop'; }
+      const dv = Math.hypot(player.x - VET_SPOT.x, player.y - VET_SPOT.y);
+      if (dv < bd) { bd = dv; best = 'vet'; }
+      if (G.jobs.foster) {
+        const df = Math.hypot(player.x - BASKET_SPOT.x, player.y - BASKET_SPOT.y);
+        if (df < bd) { bd = df; best = 'foster'; }
+      }
+      if (best !== nearKey) { nearKey = best; refreshCare(); }
+      // walk up to the counter → off to the pet store (and re-arms when you step away)
+      if (nearKey === 'shop' && !shopWasNear) { shopWasNear = true; startStoreTrip(); }
+      if (nearKey !== 'shop') shopWasNear = false;
+      // same for the vet clinic counter
+      if (nearKey === 'vet' && !vetWasNear) { vetWasNear = true; renderVet(); vetEl.hidden = false; }
+      if (nearKey !== 'vet') vetWasNear = false;
+      // hygiene stations: pee pads refill on approach; litter & sand must be POURED
+      for (const st of STATIONS) {
+        if (!stationReady(st) || !anyAdopted(st.key)) continue;
+        if (Math.hypot(player.x - st.x, player.y - st.y) >= 48 || G[st.lvlKey] >= 50) continue;
+        if (st.pourEm) {
+          // just a nudge — the actual pouring is a press-and-hold on the station
+          if (G[st.supplyKey] > 0 && !pour && stationHintCd <= 0) {
+            stationHintCd = 4;
+            cpop(st.x, st.y - 40, '🫗 Hold the ' + st.nm.toLowerCase() + ' to pour ' + st.pourEm + '!', '#7ec8ff');
+          } else if (G[st.supplyKey] <= 0 && stationHintCd <= 0) {
+            stationHintCd = 3;
+            cpop(st.x, st.y - 40, st.buyMsg, '#ffd23f');
+          }
+          continue;
+        }
+        if (G[st.supplyKey] > 0) {
+          G[st.supplyKey]--; G[st.lvlKey] = 100;
+          cpop(st.x, st.y - 40, st.refillMsg, '#9be79b');
+          renderHud(); save();
+        } else if (stationHintCd <= 0) {
+          stationHintCd = 3;
+          cpop(st.x, st.y - 40, st.buyMsg, '#ffd23f');
+        }
+      }
+      // mop up any puddles you walk over
+      for (let i = G.puddles.length - 1; i >= 0; i--) {
+        const pu = G.puddles[i];
+        if (Math.hypot(player.x - pu.x, player.y - pu.y) < 42) {
+          G.puddles.splice(i, 1);
+          cpop(pu.x, pu.y - 20, '🧽 All clean!', '#7ec8ff');
+          save();
+        }
+      }
+      // hearts collect as you walk past their pet's spot — love, not money
+      for (let i = hearts.length - 1; i >= 0; i--) {
+        const h = hearts[i], sp = spOf(h.key);
+        if (Math.hypot(player.x - (sp.x + h.dx), player.y - (sp.y + h.dy)) < 40) {
+          hearts.splice(i, 1); G.love += 1;
+          cpop(sp.x + h.dx, sp.y + h.dy, '+1 ❤', '#ff7d9d');
+          renderHud(); save();
+        }
+      }
+    }
+
+    // ---------- care panel ----------
+    const careEl = document.getElementById('care');
+    function refreshCare() {
+      if (!nearKey || nearKey === 'shop' || nearKey === 'vet') { careEl.classList.remove('show'); return; }
+      const barsEl0 = document.getElementById('care-bars');
+      const actsEl0 = document.getElementById('care-acts');
+      if (nearKey === 'foster') {
+        const f = G.jobs.foster;
+        if (!f) { careEl.classList.remove('show'); return; }
+        document.getElementById('care-em').textContent = f.em;
+        document.getElementById('care-n').textContent = f.nm;
+        document.getElementById('care-s').textContent = 'Foster ' + f.kind.toLowerCase();
+        barsEl0.innerHTML = ''; actsEl0.innerHTML = '';
+        ['food', 'fun', 'clean'].forEach(function (k) {
+          const cb = document.createElement('div');
+          cb.className = 'cb';
+          cb.innerHTML = '<span class="ic">' + BAR_IC[k] + '</span><span class="bar"><i data-bar="' + k + '"></i></span>';
+          barsEl0.appendChild(cb);
+        });
+        const mk = function (act, em, lbl) {
+          const b = document.createElement('button');
+          b.className = 'act'; b.dataset.act = act;
+          b.innerHTML = '<span class="em">' + em + '</span>' + lbl;
+          actsEl0.appendChild(b); return b;
+        };
+        tap(mk('feed', '🍽', G.food > 0 ? 'Feed' : 'Need food!'), function () { fosterFeed(false); });
+        tap(mk('treat', '🍪', 'Treat'), function () { fosterFeed(true); });
+        tap(mk('play', '🎾', G.toys.length ? 'Play' : 'Need a toy!'), fosterPlay);
+        tap(mk('groom', '🧼', hasGear('soap') ? 'Wash' : 'Need soap!'), fosterGroom);
+        updateCare();
+        careEl.classList.add('show');
+        return;
+      }
+      const sp = spOf(nearKey), p = G.pets[nearKey];
+      document.getElementById('care-em').textContent = sp.em;
+      document.getElementById('care-n').textContent = p.adopted ? nmOf(sp) + ' ✏️' : '???';
+      document.getElementById('care-s').textContent = sp.kind;
+      document.getElementById('care-mood').textContent = p.adopted ? moodEmoji(sp, p) : '💤';
+      const barsEl = document.getElementById('care-bars');
+      const actsEl = document.getElementById('care-acts');
+      barsEl.innerHTML = ''; actsEl.innerHTML = '';
+      if (!p.adopted) {
+        // unadopted pets are met at the vet clinic now — no panel here
+        careEl.classList.remove('show');
+        return;
+      } else {
+        for (const k of needsOf(sp)) {
+          const ic = k === 'home' ? '🏠' : BAR_IC[k];
+          const cb = document.createElement('div');
+          cb.className = 'cb';
+          cb.innerHTML = '<span class="ic">' + ic + '</span><span class="bar"><i data-bar="' + k + '"></i></span>';
+          barsEl.appendChild(cb);
+        }
+        const mk = function (act, em, lbl, cls) {
+          const b = document.createElement('button');
+          b.className = 'act' + (cls ? ' ' + cls : ''); b.dataset.act = act;
+          b.innerHTML = '<span class="em">' + em + '</span>' + lbl;
+          actsEl.appendChild(b); return b;
+        };
+        tap(mk('feed', '🍽', G.food > 0 ? 'Feed' : 'Need food!'), function () { feed(nearKey, false); });
+        tap(mk('treat', '🍪', 'Treat'), function () { feed(nearKey, true); });
+        tap(mk('play', '🎾', G.toys.length ? 'Play' : 'Need a toy!'), function () { play(nearKey); });
+        if (sp.groom) tap(mk('groom', '🧼', hasGear('soap') ? 'Wash' : 'Need soap!'), function () { groom(nearKey); });
+        if (sp.home) tap(mk('home', '🧹', hasGear('broom') ? 'Clean' : 'Need a broom!'), function () { cleanHome(nearKey); });
+        if (sp.walk) tap(mk('walk', '🚶', !hasGear('leash') ? 'Need a leash!' : (!hasGear('poobags') ? 'Need poo bags!' : 'Walk')), function () { startWalk(nearKey); });
+      }
+      updateCare();
+      careEl.classList.add('show');
+    }
+    function updateCare() {
+      if (!nearKey || nearKey === 'shop' || nearKey === 'vet' || nearKey === 'door') return;
+      if (nearKey === 'foster') {
+        const f = G.jobs.foster; if (!f) return;
+        const avg = (f.food + f.fun + f.clean) / 3;
+        document.getElementById('care-mood').textContent =
+          (avg > 78 ? '😍' : (avg > 55 ? '🙂' : (avg > 30 ? '😕' : '😢'))) + ' ' + Math.ceil(f.stay) + 's';
+        careEl.querySelectorAll('[data-bar]').forEach(function (el) {
+          const v = f[el.dataset.bar];
+          el.style.width = v + '%';
+          el.style.background = v > 55 ? '#5ad15a' : (v > 25 ? '#ffd23f' : '#e94560');
+        });
+        careEl.querySelectorAll('.act').forEach(function (b) {
+          const a = b.dataset.act;
+          if (a === 'feed') {
+            b.disabled = G.food < 1;
+            const fl = '<span class="em">🍽</span>' + (G.food > 0 ? 'Feed' : 'Need food!');
+            if (b.innerHTML !== fl) b.innerHTML = fl;
+          }
+          else if (a === 'treat') b.disabled = G.treats < 1;
+          else if (a === 'play') b.disabled = G.toys.length === 0;
+          else if (a === 'groom') b.disabled = !hasGear('soap');
+        });
+        return;
+      }
+      const sp = spOf(nearKey), p = G.pets[nearKey];
+      if (!p.adopted) return;
+      document.getElementById('care-mood').textContent = moodEmoji(sp, p);
+      careEl.querySelectorAll('[data-bar]').forEach(function (el) {
+        const v = p[el.dataset.bar];
+        el.style.width = v + '%';
+        el.style.background = v > 55 ? '#5ad15a' : (v > 25 ? '#ffd23f' : '#e94560');
+      });
+      const isBusy = p.vetT > 0;
+      careEl.querySelectorAll('.act').forEach(function (b) {
+        const a = b.dataset.act;
+        if (a === 'feed') {
+          b.disabled = isBusy || G.food < 1;
+          const fl = '<span class="em">🍽</span>' + (G.food > 0 ? 'Feed' : 'Need food!');
+          if (b.innerHTML !== fl) b.innerHTML = fl;
+        }
+        else if (a === 'treat') b.disabled = isBusy || G.treats < 1;
+        else if (a === 'play') b.disabled = isBusy || G.toys.length === 0;
+        else if (a === 'walk') b.disabled = isBusy || !!walkRun || !hasGear('leash') || !hasGear('poobags');
+        else if (a === 'groom') b.disabled = isBusy || !hasGear('soap');
+        else if (a === 'home') b.disabled = isBusy || !hasGear('broom');
+        else b.disabled = isBusy;
+      });
+    }
+
+    // ---------- shop ----------
+    const shopEl = document.getElementById('shop');
+    function renderShop() {
+      const list = document.getElementById('shop-list');
+      list.innerHTML = '';
+      const rows = [
+        { id: 'food',   em: '🛍️', nm: 'Bag of Pet Food', d: 'One bag feeds 5 pets!', cost: 5 },
+        { id: 'treats', em: '🍪', nm: 'Treats ×3',   d: 'A little food + a little fun', cost: 6 }
+      ].concat(GEAR.map(function (g) { return { id: g.id, em: g.em, nm: g.nm, d: g.d, cost: g.cost, gear: true }; }))
+       .concat(TOYS.map(function (t) { return { id: t.id, em: t.em, nm: t.nm, d: t.d + ' · toys make playtime better', cost: t.cost, toy: true }; }));
+      rows.forEach(function (r) {
+        const owned = r.gear && hasGear(r.id);   // only gear is one-time; toys + consumables stack
+        const count = r.toy ? G.toys.filter(function (x) { return x === r.id; }).length : 0;
+        const row = document.createElement('div');
+        row.className = 'shop-row';
+        row.innerHTML = '<span class="em">' + r.em + '</span>' +
+          '<div class="shop-info"><div class="n">' + r.nm + (count > 0 ? ' <span style="color:#7be39a">×' + count + '</span>' : '') + '</div><div class="d">' + r.d + '</div></div>' +
+          '<button class="buy-btn' + (owned ? ' owned' : '') + '"' + (owned ? ' disabled' : '') + '>' + (owned ? 'Owned ✓' : r.cost + ' 🪙') + '</button>';
+        const btn = row.querySelector('.buy-btn');
+        if (!owned) {
+          btn.disabled = G.coins < r.cost;
+          btn.dataset.cost = r.cost;
+          tap(btn, function () { buyItem(r.id); });
+        }
+        list.appendChild(row);
+      });
+      document.getElementById('shop-coins').textContent = G.coins;
+      updateShop();
+    }
+    // keep affordability live while the shop is open (a phone job can pay out meanwhile)
+    function updateShop() {
+      if (shopEl.hidden) return;
+      document.getElementById('shop-coins').textContent = G.coins;
+      let cheapest = Infinity;
+      shopEl.querySelectorAll('.buy-btn[data-cost]').forEach(function (b) {
+        const c = parseInt(b.dataset.cost, 10);
+        b.disabled = G.coins < c;
+        if (c < cheapest) cheapest = c;
+      });
+      document.getElementById('shop-hint').hidden = !(cheapest !== Infinity && G.coins < cheapest);
+    }
+    tap(document.getElementById('shop-close'), function () {
+      shopEl.hidden = true;
+      // step back from the counter so it doesn't instantly re-open
+      player.tx = player.x = SHOP_SPOT.x + 120; player.ty = player.y = SHOP_SPOT.y + 40;
+    });
+
+    // ---------- vet clinic ----------
+    const vetEl = document.getElementById('vet');
+    function renderVet() {
+      const list = document.getElementById('vet-list');
+      list.innerHTML = '';
+      // adoption pipeline status + door into the clinic
+      const visitRow = document.createElement('div');
+      visitRow.className = 'shop-row';
+      let statusHtml;
+      if (!G.meet) statusHtml = '<div class="n">Meet the pets!</div><div class="d">Come in and pick a new friend 🐾</div>';
+      else {
+        const msp = spOf(G.meet.key), total = suppliesFor(msp).length, got = total - meetMissing().length;
+        statusHtml = G.meet.stage === 'build'
+          ? '<div class="n">' + nmOf(msp) + ' ' + msp.em + '</div><div class="d">🔨 Build their home at their spot! (' + G.meet.placed + '/' + total + ')</div>'
+          : (got >= total
+            ? '<div class="n">' + nmOf(msp) + ' ' + msp.em + '</div><div class="d">✅ Supplies ready — come pay ' + msp.adopt + ' 🪙!</div>'
+            : '<div class="n">' + nmOf(msp) + ' ' + msp.em + '</div><div class="d">🛒 Supplies: ' + got + '/' + total + ' — keep shopping!</div>');
+      }
+      visitRow.innerHTML = '<span class="em">🏥</span><div class="shop-info">' + statusHtml + '</div>' +
+        '<button class="buy-btn" data-vet-act="visit">Visit</button>';
+      tap(visitRow.querySelector('.buy-btn'), function () { startVetTrip(null); });
+      list.appendChild(visitRow);
+      let any = false;
+      SPECIES.forEach(function (sp) {
+        const p = G.pets[sp.key];
+        if (!p.adopted) return;
+        any = true;
+        const row = document.createElement('div');
+        row.className = 'shop-row';
+        if (p.vetT > 0) {
+          row.innerHTML = '<span class="em">' + sp.em + '</span>' +
+            '<div class="shop-info"><div class="n">' + nmOf(sp) + '</div><div class="d">💚 Getting better… <span data-vet-t="' + sp.key + '">' + Math.ceil(p.vetT) + '</span>s</div></div>';
+        } else if (p.sick) {
+          row.innerHTML = '<span class="em">' + sp.em + '</span>' +
+            '<div class="shop-info"><div class="n">' + nmOf(sp) + ' 🤒</div><div class="d">' + sp.kind + ' · feeling sick</div></div>' +
+            '<button class="buy-btn" data-vet-act="treat">Go to the vet · ' + VET_COST + ' 🪙</button>';
+          const btn = row.querySelector('.buy-btn');
+          btn.disabled = G.coins < VET_COST;
+          tap(btn, function () { if (!p.sick || G.coins < VET_COST) return; startVetTrip(sp.key); });
+        } else {
+          row.innerHTML = '<span class="em">' + sp.em + '</span>' +
+            '<div class="shop-info"><div class="n">' + nmOf(sp) + '</div><div class="d">' + sp.kind + ' · feeling fine</div></div>' +
+            '<button class="buy-btn" data-vet-act="check">Go to the vet</button>';
+          const btn = row.querySelector('.buy-btn');
+          const info = row.querySelector('.d');
+          tap(btn, function () {
+            if (p.sick || p.vetT > 0) { renderVet(); return; }   // got sick while the panel was open
+            info.textContent = '🩺 Checkup done — ' + nmOf(sp) + ' is perfectly healthy!';
+            btn.disabled = true; btn.textContent = 'Healthy ✓';
+          });
+        }
+        list.appendChild(row);
+      });
+      document.getElementById('vet-coins').textContent = G.coins;
+    }
+    function updateVet() {
+      if (vetEl.hidden) return;
+      let stale = false;
+      vetEl.querySelectorAll('[data-vet-t]').forEach(function (el) {
+        const p = G.pets[el.dataset.vetT];
+        if (p.vetT <= 0) stale = true; else el.textContent = Math.ceil(p.vetT);
+      });
+      if (stale) renderVet();
+      else vetEl.querySelectorAll('[data-vet-act="treat"]').forEach(function (b) { b.disabled = G.coins < VET_COST; });
+    }
+    tap(document.getElementById('vet-close'), function () {
+      vetEl.hidden = true;
+      // step back from the counter so it doesn't instantly re-open
+      player.tx = player.x = VET_SPOT.x + 120; player.ty = player.y = VET_SPOT.y + 40;
+    });
+
+    // ---------- the vet clinic visit: a separate scene with treatment rooms ----------
+    // The vet tells you what your pet needs; find the matching room, then press Home.
+    const CLINIC_ROOMS = [
+      { id: 'xray',    em: '🩻', nm: 'X-RAY',    what: 'an X-ray',       x: 200, y: 158 },
+      { id: 'meds',    em: '💊', nm: 'MEDICINE', what: 'some medicine',  x: 360, y: 158 },
+      { id: 'shot',    em: '💉', nm: 'SHOTS',    what: 'a little shot',  x: 520, y: 158 },
+      { id: 'bandage', em: '🩹', nm: 'BANDAGES', what: 'a snug bandage', x: 680, y: 158 }
+    ];
+    const CLINIC_VET = { x: 96, y: 330 };
+    const TREAT_DUR = 3.5;
+    let clinicTrip = null;   // { key, need, stage: 'find'|'treat'|'done', treatT, wrongCd }
+
+    function startVetTrip(key) {
+      // key = a sick pet to treat, or null for a plain visit (meet the pets!)
+      clinicTrip = key
+        ? { key: key, need: CLINIC_ROOMS[Math.floor(Math.random() * CLINIC_ROOMS.length)],
+            stage: 'find', treatT: 0, wrongCd: 0 }
+        : { key: null, need: null, stage: 'visit', treatT: 0, wrongCd: 0 };
+      vetEl.hidden = true; vetWasNear = false;
+      nearKey = null; careEl.classList.remove('show');
+      player.x = player.tx = 380; player.y = player.ty = 490;
+      document.getElementById('home-btn').hidden = false;
+    }
+    function endVetTrip() {
+      if (!clinicTrip) return;
+      const sp = clinicTrip.key ? spOf(clinicTrip.key) : null;
+      const cured = clinicTrip.stage === 'done';
+      clinicTrip = null;
+      document.getElementById('home-btn').hidden = true;
+      player.x = player.tx = VET_SPOT.x + 120; player.y = player.ty = VET_SPOT.y + 40;
+      cpop(player.x, player.y - 50,
+        !sp ? '🏠 Home again!'
+            : cured ? '🏠 Home again — ' + nmOf(sp) + ' is all better!' : '🏠 Home again — ' + nmOf(sp) + ' still feels sick…',
+        cured ? '#7be39a' : '#b06bff');
+      renderHud(); save();
+    }
+    tap(document.getElementById('home-btn'), function () { endVetTrip(); endStoreTrip(); });
+
+    // ---------- meet the pets: the adoption pipeline starts at the clinic ----------
+    // Choose a pet → buy its supply list at the store → come back and pay →
+    // build its home piece by piece at its spot in the house.
+    const MEET_PEN = [{ x: 520, y: 470 }, { x: 620, y: 470 }, { x: 720, y: 470 }];
+    const MEET_MORE = { x: 435, y: 464 };   // arrow that shows the next three pets
+    let meetPenPage = 0;                    // transient — resets each session
+    function meetAll() {
+      return SPECIES.filter(function (sp) {
+        return !G.pets[sp.key].adopted && visible(sp) &&
+               !(G.meet && G.meet.stage === 'build' && G.meet.key === sp.key);
+      });
+    }
+    function meetPets() {
+      const all = meetAll();
+      if (meetPenPage * 3 >= all.length) meetPenPage = 0;
+      return all.slice(meetPenPage * 3, meetPenPage * 3 + 3);
+    }
+    function meetMissing() {
+      if (!G.meet) return [];
+      return suppliesFor(spOf(G.meet.key)).filter(function (id) { return !G.meet.have[id]; });
+    }
+    function shelfEm(id) {
+      const s = STORE_SHELVES.find(function (x) { return x.id === id; });
+      return s ? s.em : '❓';
+    }
+    function chooseMeetPet(sp) {
+      const list = suppliesFor(sp), have = {};
+      list.forEach(function (id) {
+        // things you already own count as bought (consumables count if stocked)
+        have[id] = hasGear(id) || (id === 'sand' && G.sand > 0) || (id === 'peepads' && G.pads > 0);
+      });
+      G.meet = { key: sp.key, stage: 'shop', have: have, placed: 0 };
+      cpop(MEET_PEN[0].x - 60, 420, 'I want the ' + sp.kind.toLowerCase() + '! ' + sp.em, '#9be79b');
+      save();
+    }
+    function buyMeetPet() {
+      const m = G.meet; if (!m || m.stage !== 'shop') return false;
+      const sp = spOf(m.key);
+      if (meetMissing().length) return false;
+      if (G.coins < sp.adopt) return false;
+      G.coins -= sp.adopt;
+      m.stage = 'build'; m.placed = 0;
+      cpop(MEET_PEN[0].x - 60, 420, '🎉 ' + nmOf(sp) + ' is yours! Go home and build their home!', '#9be79b');
+      renderHud(); save();
+      return true;
+    }
+    function clinicClickAt(px, py) {
+      if (!clinicTrip) return false;
+      if (meetAll().length > 3 && Math.hypot(px - MEET_MORE.x, py - MEET_MORE.y) < 30) {
+        meetPenPage++;   // meetPets() wraps it
+        return true;
+      }
+      const pen = meetPets();
+      for (let i = 0; i < pen.length && i < MEET_PEN.length; i++) {
+        if (Math.hypot(px - MEET_PEN[i].x, py - (MEET_PEN[i].y - 6)) >= 44) continue;
+        const sp = pen[i];
+        if (G.meet && G.meet.stage === 'build') {
+          if (G.meet.key !== sp.key) cpop(MEET_PEN[i].x, 420, 'Finish building ' + nmOf(spOf(G.meet.key)) + '\'s home first! 🔨', '#ffd23f');
+          return true;
+        }
+        if (!G.meet || G.meet.key !== sp.key) { chooseMeetPet(sp); return true; }
+        const missing = meetMissing();
+        if (missing.length) {
+          cpop(MEET_PEN[i].x, 420, 'Still need: ' + missing.map(shelfEm).join(' ') + ' — get them at the store!', '#ffd23f');
+          return true;
+        }
+        if (G.coins < sp.adopt) {
+          cpop(MEET_PEN[i].x, 420, 'Need ' + (sp.adopt - G.coins) + ' more 🪙 for ' + nmOf(sp) + '!', '#ffd23f');
+          return true;
+        }
+        buyMeetPet();
+        return true;
+      }
+      return false;
+    }
+
+    function stepClinic(secs) {
+      const t = clinicTrip; if (!t || !t.key) return;   // plain visits have no treatment to run
+      t.wrongCd = Math.max(0, t.wrongCd - secs);
+      const sp = spOf(t.key), p = G.pets[t.key];
+      if (t.stage === 'find') {
+        for (const r of CLINIC_ROOMS) {
+          if (Math.hypot(player.x - r.x, player.y - r.y) >= 62) continue;
+          if (r === t.need) { t.stage = 'treat'; t.treatT = 0; }
+          else if (t.wrongCd <= 0) {
+            t.wrongCd = 2.2;
+            cpop(r.x, r.y + 44, 'Not this room! Find ' + t.need.em + ' ' + t.need.nm + '!', '#ffd23f');
+          }
+        }
+      } else if (t.stage === 'treat') {
+        t.treatT += secs;
+        if (t.treatT >= TREAT_DUR) {
+          t.stage = 'done';
+          p.sick = false; p.sickT = rnd(60, 120); p.restT = restFor(t.key);
+          for (const k of needsOf(sp)) p[k] = clamp(p[k] + 25, 0, 100);
+          G.coins = Math.max(0, G.coins - VET_COST);
+          G.sickCd = Math.max(G.sickCd, rnd(220, 320));   // a good rest after the visit
+          cpop(t.need.x, t.need.y + 60, '💚 ' + nmOf(sp) + ' is all better!', '#7be39a');
+          renderHud(); save();
+        }
+      }
+    }
+
+    function drawClinic(ts) {
+      // walls + checkered floor
+      ctx.fillStyle = '#3f6b7d'; ctx.fillRect(0, 0, W, 96);
+      ctx.fillStyle = '#dfe9f2'; ctx.fillRect(0, 96, W, H - 96);
+      ctx.fillStyle = 'rgba(110,160,200,0.16)';
+      for (let yy = 0; yy < 6; yy++) for (let xx = 0; xx < 10; xx++)
+        if ((xx + yy) % 2 === 0) ctx.fillRect(xx * 76, 96 + yy * 78, 76, 78);
+      ctx.fillStyle = '#2c4a58'; ctx.fillRect(0, 88, W, 8);
+      em('➕', 56, 46, 34);
+      ctx.fillStyle = '#fff'; ctx.font = "800 20px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('HAPPY PAWS VET CLINIC', 400, 52);
+      // treatment rooms along the back
+      for (const r of CLINIC_ROOMS) {
+        const active = clinicTrip && clinicTrip.stage === 'find' && clinicTrip.need === r;
+        ctx.fillStyle = '#4a7a8c'; roundRect(r.x - 46, r.y - 72, 92, 104, 10); ctx.fill();
+        ctx.fillStyle = active && Math.sin(ts * 0.006) > 0 ? '#bfe9ff' : '#cfe0ea';
+        roundRect(r.x - 38, r.y - 64, 76, 88, 8); ctx.fill();
+        em(r.em, r.x, r.y - 24, 32);
+        ctx.fillStyle = '#1c3a4a'; ctx.font = "800 12px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText(r.nm, r.x, r.y + 14);
+      }
+      // the vet at their desk
+      ctx.fillStyle = '#6b8a9c'; roundRect(CLINIC_VET.x - 50, CLINIC_VET.y - 26, 100, 50, 10); ctx.fill();
+      ctx.fillStyle = '#fff'; roundRect(CLINIC_VET.x - 50, CLINIC_VET.y - 38, 100, 16, 6); ctx.fill();
+      em('🧑‍⚕️', CLINIC_VET.x, CLINIC_VET.y - 56, 42);
+      ctx.fillStyle = '#1c3a4a'; ctx.font = "800 11px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('DR. PAWS', CLINIC_VET.x, CLINIC_VET.y + 40);
+      em('🪴', 56, 460, 34);
+      // the meet-the-pets pen (bottom right)
+      const pen = meetPets();
+      if (pen.length) {
+        ctx.fillStyle = '#7a9aa8';
+        for (let i = 0; i < 5; i++) { roundRect(468 + i * 68, MEET_PEN[0].y - 34, 7, 60, 3); ctx.fill(); }
+        roundRect(468, MEET_PEN[0].y - 24, 289, 6, 3); ctx.fill();
+        roundRect(468, MEET_PEN[0].y + 8, 289, 6, 3); ctx.fill();
+        ctx.fillStyle = '#3a6a7c'; ctx.font = "800 11px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText('MEET THE PETS', 612, MEET_PEN[0].y + 46);
+        if (meetAll().length > 3) {
+          em('➡️', MEET_MORE.x, MEET_MORE.y, 26);
+          ctx.fillStyle = '#3a6a7c'; ctx.font = "800 10px 'Nunito', sans-serif";
+          ctx.fillText('MORE', MEET_MORE.x, MEET_MORE.y + 24);
+        }
+        pen.forEach(function (sp2, i) {
+          const bob = Math.sin(ts * 0.004 + i) * 3;
+          const chosen = G.meet && G.meet.key === sp2.key;
+          em(sp2.em, MEET_PEN[i].x, MEET_PEN[i].y - 6 + bob, 30);
+          if (chosen) em('⭐', MEET_PEN[i].x + 20, MEET_PEN[i].y - 28 + bob, 15);
+          ctx.fillStyle = '#1c3a4a'; ctx.font = "800 10px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+          ctx.fillText((chosen ? (meetMissing().length ? '⭐ ' : '✅ ') : '') + nmOf(sp2) + ' · ' + sp2.adopt + ' 🪙', MEET_PEN[i].x, MEET_PEN[i].y + 28);
+        });
+      }
+      const t = clinicTrip;
+      if (!t) return;
+      const sp = t.key ? spOf(t.key) : null;
+      // what the vet says
+      let l1, l2;
+      if (t.stage === 'find') { l1 = 'Hmm… ' + nmOf(sp) + ' needs ' + t.need.what + ' ' + t.need.em + '!'; l2 = 'Find the ' + t.need.nm + ' room!'; }
+      else if (t.stage === 'treat') { l1 = nmOf(sp) + ' is getting ' + t.need.what + ' ' + t.need.em + '…'; l2 = 'Hold still, almost done!'; }
+      else if (t.stage === 'done') { l1 = 'All done! ' + nmOf(sp) + ' is healthy again! 💚'; l2 = 'Press the 🏠 Home button to go home!'; }
+      else if (!G.meet) { l1 = 'Welcome! Come meet the pets looking for a home! 🐾'; l2 = 'Tap the pet you like in the pen!'; }
+      else {
+        const msp = spOf(G.meet.key), missing = meetMissing();
+        if (G.meet.stage === 'build') { l1 = nmOf(msp) + ' is so excited! ' + msp.em; l2 = 'Go home and build their home — tap their spot!'; }
+        else if (missing.length) { l1 = nmOf(msp) + ' needs supplies first! ' + msp.em; l2 = 'Buy at the store: ' + missing.map(shelfEm).join(' '); }
+        else { l1 = 'You have everything ' + nmOf(msp) + ' needs! ' + msp.em; l2 = 'Tap them in the pen to pay ' + msp.adopt + ' 🪙!'; }
+      }
+      ctx.fillStyle = '#fff'; roundRect(180, 238, 420, 64, 14); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(210, 296); ctx.lineTo(152, 316); ctx.lineTo(238, 300); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1c2a3a'; ctx.font = "800 15px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText(l1, 390, 264); ctx.fillText(l2, 390, 288);
+      // treatment progress
+      if (t.stage === 'treat') {
+        const f = clamp(t.treatT / TREAT_DUR, 0, 1);
+        ctx.fillStyle = 'rgba(0,0,0,0.25)'; roundRect(t.need.x - 34, t.need.y + 24, 68, 10, 5); ctx.fill();
+        if (f > 0.05) { ctx.fillStyle = '#7be39a'; roundRect(t.need.x - 34, t.need.y + 24, 68 * f, 10, 5); ctx.fill(); }
+        em('✨', t.need.x + Math.sin(ts * 0.01) * 30, t.need.y - 64, 18);
+      }
+    }
+
+    // ---------- the pet store: walk the aisles, fill your basket, check out ----------
+    // Same pattern as the vet clinic trip: a separate walkable scene. Walk near a
+    // shelf to put the item in your basket, then go to the REGISTER to pay.
+    const STORE_SHELVES = [
+      { id: 'peepads', em: '🧻', nm: 'PEE PADS ×3',  cost: 6,  multi: true, x: 92,  y: 190 },
+      { id: 'food',    em: '🛍️', nm: 'PET FOOD',     cost: 5,  multi: true, x: 196, y: 190 },
+      { id: 'treats',  em: '🍪', nm: 'TREATS',       cost: 6,  multi: true, x: 300, y: 190 },
+      { id: 'poobags', em: '💩', nm: 'POO BAGS',     cost: 8,  x: 404, y: 190 },
+      { id: 'soap',    em: '🧼', nm: 'SOAP',         cost: 8,  x: 508, y: 190 },
+      { id: 'broom',   em: '🧹', nm: 'BROOMS',       cost: 8,  x: 612, y: 190 },
+      { id: 'leash',   em: '🦮', nm: 'LEASHES',      cost: 12, x: 716, y: 190 },
+      { id: 'toys',    em: '🎾', nm: 'TOYS',                   x: 150, y: 350 },
+      { id: 'beds',    em: '🛏️', nm: 'PET BEDS',     cost: 14, x: 255, y: 350 },
+      { id: 'litter',  em: '🧴', nm: 'LITTER & BOX', cost: 12, x: 360, y: 350 },
+      { id: 'cage',    em: '🏡', nm: 'BIG CAGES',    cost: 14, x: 465, y: 350 },
+      { id: 'tank',    em: '🐠', nm: 'TANKS & WATER', cost: 16, x: 570, y: 350 },
+      { id: 'sand',    em: '🏖️', nm: 'SAND & DIRT ×3', cost: 6, multi: true, x: 675, y: 350 },
+      // habitat supplies for new-pet adoptions (bottom row, where the pen used to be)
+      { id: 'bowls',   em: '🥣', nm: 'FOOD BOWLS',   cost: 6,  x: 260, y: 490 },
+      { id: 'water',   em: '💧', nm: 'WATER KIT',    cost: 5,  x: 360, y: 490 },
+      { id: 'climb',   em: '🪜', nm: 'CLIMBING SET', cost: 10, x: 460, y: 490 },
+      { id: 'dirt',    em: '🟫', nm: 'HABITAT DIRT', cost: 6,  x: 560, y: 490 },
+      { id: 'rocks',   em: '🪨', nm: 'ROCKS & PLANTS', cost: 10, x: 660, y: 490 }
+    ];
+    const STORE_REG = { x: 96, y: 470 };
+    let storeTrip = null;   // { basket: [{id?, adopt?, em, nm, cost}] }
+
+    function basketTotal() {
+      return storeTrip ? storeTrip.basket.reduce(function (a, b) { return a + b.cost; }, 0) : 0;
+    }
+    function startStoreTrip() {
+      storeTrip = { basket: [] };
+      nearKey = null; careEl.classList.remove('show');
+      player.x = player.tx = 380; player.y = player.ty = 490;
+      document.getElementById('home-btn').hidden = false;
+    }
+    function endStoreTrip() {
+      if (!storeTrip) return;
+      const left = storeTrip.basket.length;
+      storeTrip = null;
+      document.getElementById('home-btn').hidden = true;
+      player.x = player.tx = SHOP_SPOT.x + 120; player.ty = player.y = SHOP_SPOT.y + 40;
+      cpop(player.x, player.y - 50, left ? '🏠 Home — you left your basket at the store!' : '🏠 Home again!', '#7ec8ff');
+      renderHud(); save();
+    }
+
+    function inBasket(id) {
+      return storeTrip.basket.some(function (b) { return b.id === id; });
+    }
+    function addShelfItem(s) {
+      const t = storeTrip;
+      if (s.id === 'litter' && hasGear('litter')) {
+        // you own the box — this shelf now sells litter refills
+        t.basket.push({ id: 'litterbags', em: '🧴', nm: 'Litter ×3', cost: 6 });
+        cpop(s.x, s.y + 48, '🧺 + 🧴 Litter ×3 · 6 🪙', '#9be79b');
+        return;
+      }
+      if (s.id === 'toys') {
+        const next = TOYS.find(function (toy) { return G.toys.indexOf(toy.id) < 0 && !inBasket('toy:' + toy.id); });
+        if (!next) { cpop(s.x, s.y + 48, 'You have all the toys! 🎉', '#ffd23f'); return; }
+        t.basket.push({ id: 'toy:' + next.id, em: next.em, nm: next.nm, cost: next.cost });
+        cpop(s.x, s.y + 48, '🧺 + ' + next.em + ' ' + next.nm + ' · ' + next.cost + ' 🪙', '#9be79b');
+        return;
+      }
+      if (s.multi) {
+        t.basket.push({ id: s.id, em: s.em, nm: s.nm, cost: s.cost });
+        cpop(s.x, s.y + 48, '🧺 + ' + s.em + ' ' + s.nm + ' · ' + s.cost + ' 🪙', '#9be79b');
+        return;
+      }
+      if (hasGear(s.id)) { cpop(s.x, s.y + 48, 'You already have that! ✅', '#ffd23f'); return; }
+      if (inBasket(s.id)) { cpop(s.x, s.y + 48, 'Already in your basket! 🧺', '#ffd23f'); return; }
+      t.basket.push({ id: s.id, em: s.em, nm: s.nm, cost: s.cost });
+      cpop(s.x, s.y + 48, '🧺 + ' + s.em + ' ' + s.nm + ' · ' + s.cost + ' 🪙', '#9be79b');
+    }
+    function applyPurchase(it) {
+      if (it.id === 'food') G.food += 5;
+      else if (it.id === 'treats') G.treats += 3;
+      else if (it.id === 'litterbags') G.litter += 3;
+      else if (it.id === 'peepads') G.pads += 3;
+      else if (it.id === 'sand') G.sand += 3;
+      else if (it.id.indexOf('toy:') === 0) G.toys.push(it.id.slice(4));
+      else {
+        G.gear.push(it.id);
+        if (it.id === 'litter') G.litter += 3;   // the box comes with starter litter
+      }
+      // tick off the new pet's shopping list
+      if (G.meet && G.meet.stage === 'shop' && it.id in G.meet.have) G.meet.have[it.id] = true;
+    }
+    function checkout() {
+      const t = storeTrip;
+      if (!t.basket.length) { cpop(STORE_REG.x + 60, STORE_REG.y - 50, 'Your basket is empty!', '#ffd23f'); return; }
+      let total = basketTotal(), putBack = 0;
+      while (total > G.coins && t.basket.length) { total -= t.basket.pop().cost; putBack++; }
+      if (putBack) cpop(STORE_REG.x + 90, STORE_REG.y - 70, 'Not enough coins — put ' + putBack + ' back!', '#ffd23f');
+      if (!t.basket.length) return;
+      G.coins -= total;
+      t.basket.forEach(applyPurchase);
+      t.basket = [];
+      cpop(STORE_REG.x + 70, STORE_REG.y - 50, '🧾 Paid ' + total + ' 🪙 — thank you!', '#9be79b');
+      renderHud(); save();
+    }
+    // in the store you TAP what you want to buy (walking is just for fun)
+    function stepStore() {}
+    function storeClickAt(px, py) {
+      if (!storeTrip) return false;
+      for (const s of STORE_SHELVES) {
+        if (px > s.x - 46 && px < s.x + 46 && py > s.y - 72 && py < s.y + 32) { addShelfItem(s); return true; }
+      }
+      if (px > STORE_REG.x - 50 && px < STORE_REG.x + 50 && py > STORE_REG.y - 70 && py < STORE_REG.y + 40) { checkout(); return true; }
+      return false;
+    }
+
+    function drawStore(ts) {
+      // walls + tiled floor
+      ctx.fillStyle = '#6b4a7d'; ctx.fillRect(0, 0, W, 96);
+      ctx.fillStyle = '#f2e9df'; ctx.fillRect(0, 96, W, H - 96);
+      ctx.fillStyle = 'rgba(170,130,90,0.16)';
+      for (let yy = 0; yy < 6; yy++) for (let xx = 0; xx < 10; xx++)
+        if ((xx + yy) % 2 === 0) ctx.fillRect(xx * 76, 96 + yy * 78, 76, 78);
+      ctx.fillStyle = '#523862'; ctx.fillRect(0, 88, W, 8);
+      em('🛒', 56, 46, 34);
+      ctx.fillStyle = '#fff'; ctx.font = "800 20px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('HAPPY PAWS PET STORE', 400, 52);
+      // shelves
+      const meetList = G.meet && G.meet.stage === 'shop' ? suppliesFor(spOf(G.meet.key)) : null;
+      for (const s of STORE_SHELVES) {
+        const wanted = meetList && meetList.indexOf(s.id) >= 0 && !G.meet.have[s.id] && !inBasket(s.id);
+        ctx.fillStyle = '#8a6642'; roundRect(s.x - 46, s.y - 72, 92, 104, 10); ctx.fill();
+        ctx.fillStyle = wanted && Math.sin(ts * 0.006) > 0 ? '#fff3c0' : '#f5e7cf';
+        roundRect(s.x - 38, s.y - 64, 76, 88, 8); ctx.fill();
+        em(s.em, s.x, s.y - 24, 30);
+        ctx.fillStyle = '#4a2c1a'; ctx.font = "800 10px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText(s.nm, s.x, s.y + 10);
+        ctx.fillStyle = '#8a5a2a'; ctx.font = "800 11px 'Nunito', sans-serif";
+        ctx.fillText(s.id === 'toys' ? 'from 10 🪙' : (s.id === 'litter' && hasGear('litter') ? 'refills 6 🪙' : s.cost + ' 🪙'), s.x, s.y + 26);
+      }
+      // register
+      ctx.fillStyle = '#6b4a2c'; roundRect(STORE_REG.x - 50, STORE_REG.y - 26, 100, 50, 10); ctx.fill();
+      ctx.fillStyle = '#ffd23f'; roundRect(STORE_REG.x - 50, STORE_REG.y - 38, 100, 16, 6); ctx.fill();
+      em('🧾', STORE_REG.x, STORE_REG.y - 56, 36);
+      ctx.fillStyle = '#4a2c1a'; ctx.font = "800 11px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('REGISTER', STORE_REG.x, STORE_REG.y + 40);
+      // basket readout
+      const t = storeTrip;
+      if (t) {
+        const ems = t.basket.map(function (b) { return b.em; }).slice(0, 10).join(' ');
+        ctx.fillStyle = 'rgba(255,255,255,0.9)'; roundRect(150, 108, 500, 34, 12); ctx.fill();
+        ctx.fillStyle = '#4a2c1a'; ctx.font = "800 14px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText(t.basket.length ? '🧺 ' + ems + '  ·  total ' + basketTotal() + ' 🪙  (you have ' + G.coins + ')' :
+          '🧺 Basket empty — tap what you want to buy! (🪙 ' + G.coins + ')', 400, 130);
+        // shopping list for the pet you're adopting
+        if (meetList) {
+          const msp = spOf(G.meet.key);
+          const bits = meetList.map(function (id) {
+            return (G.meet.have[id] || inBasket(id) ? '✅' : '⬜') + shelfEm(id);
+          }).join('  ');
+          ctx.fillStyle = 'rgba(255,240,200,0.95)'; roundRect(170, 146, 460, 28, 10); ctx.fill();
+          ctx.fillStyle = '#4a2c1a'; ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+          ctx.fillText(msp.em + ' ' + nmOf(msp) + '\'s list:  ' + bits, 400, 165);
+        }
+      }
+    }
+
+    // ---------- save / load UI (same pattern as Pet Vet) ----------
+    const saveModal = document.getElementById('saveModal');
+    const saveListEl = document.getElementById('saveList');
+    const saveNameEl = document.getElementById('saveName');
+    function updateSaveChip() {
+      document.getElementById('save-chip').hidden = !currentName;
+      document.getElementById('save-name').textContent = currentName;
+    }
+    function openSaveModal() {
+      keys.l = keys.r = keys.u = keys.d = false;   // no stuck movement while typing
+      saveNameEl.value = currentName || '';
+      renderSaveList();
+      saveModal.hidden = false;
+      try { saveNameEl.focus(); } catch (e) {}
+    }
+    function closeSaveModal() { saveModal.hidden = true; }
+    function renderSaveList() {
+      saveListEl.innerHTML = '';
+      if (!lsAvailable()) { saveListEl.innerHTML = '<div class="modal-empty">Saving is unavailable (storage blocked).</div>'; return; }
+      const saves = listSaves();
+      if (!saves.length) { saveListEl.innerHTML = '<div class="modal-empty">No saved games yet.</div>'; return; }
+      saves.forEach(function (s) {
+        let adopted = 0;
+        for (const k in (s.pets || {})) if (s.pets[k].adopted) adopted++;
+        let when = '';
+        try { when = new Date(s.savedAt || 0).toLocaleDateString(); } catch (e) {}
+        const row = document.createElement('div');
+        row.className = 'save-row' + (s.name === currentName ? ' current' : '');
+        row.innerHTML = '<div class="save-meta"><div class="nm"></div><div class="sub">🪙 ' + (s.coins || 0) + ' · 🐾 ' + adopted + (adopted === 1 ? ' pet' : ' pets') + ' · ❤ ' + (s.love || 0) + ' · ' + when + '</div></div>' +
+                        '<button class="save-load">Load</button><button class="save-del">Delete</button>';
+        row.querySelector('.nm').textContent = s.name;
+        tap(row.querySelector('.save-load'), function () {
+          if (applySave(readSave(s.name))) { document.getElementById('setup').hidden = true; closeSaveModal(); }
+        });
+        tap(row.querySelector('.save-del'), function () {
+          if (confirm('Delete "' + s.name + '"? This cannot be undone.')) { deleteSave(s.name); renderSaveList(); }
+        });
+        saveListEl.appendChild(row);
+      });
+    }
+    tap(document.getElementById('savesBtn'), openSaveModal);
+    tap(document.getElementById('saveClose'), closeSaveModal);
+    saveModal.addEventListener('click', function (e) { if (e.target === saveModal) closeSaveModal(); });
+    tap(document.getElementById('saveBtn'), function () {
+      const name = (saveNameEl.value || '').trim();
+      if (!name) { try { saveNameEl.focus(); } catch (e) {} return; }
+      if (!lsAvailable() || !writeSave(name)) { alert('Could not save — storage is full or blocked.'); return; }
+      renderSaveList();
+    });
+    // typing a save name must not move the player or toggle the phone
+    saveNameEl.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Enter') document.getElementById('saveBtn').click();
+    });
+    tap(document.getElementById('newGameBtn'), function () { newGame(); closeSaveModal(); });
+
+    function renderHud() {
+      document.getElementById('hud-coins').textContent = G.coins;
+      document.getElementById('hud-love').textContent = G.love;
+      document.getElementById('hud-food').textContent = G.food;
+      document.getElementById('hud-treats').textContent = G.treats;
+      document.getElementById('hud-toys').textContent = G.toys.length;
+      document.getElementById('hud-litter').textContent = G.litter;
+      document.getElementById('hud-pads').textContent = G.pads;
+      document.getElementById('hud-sand').textContent = G.sand;
+      document.getElementById('shop-coins').textContent = G.coins;
+      document.getElementById('vet-coins').textContent = G.coins;
+    }
+
+    function cpop(x, y, txt, color) { cpops.push({ x: clamp(x, 90, W - 90), y: y, txt: txt, color: color || '#fff', t: 0 }); }
+
+    // ---------- drawing ----------
+    function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+    function em(txt, x, y, size, flip) {
+      ctx.save();
+      ctx.font = size + 'px ' + EMOJI_FONT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (flip) { ctx.translate(x, y); ctx.scale(-1, 1); ctx.fillText(txt, 0, 0); }
+      else ctx.fillText(txt, x, y);
+      ctx.restore();
+    }
+
+    function drawHouse(ts) {
+      // walls + floor
+      ctx.fillStyle = '#3b4a6b'; ctx.fillRect(0, 0, W, 96);                       // back wall
+      ctx.fillStyle = '#8a6642'; ctx.fillRect(0, 96, W, H - 96);                  // wood floor
+      ctx.fillStyle = 'rgba(0,0,0,0.07)';
+      for (let i = 0; i < 10; i++) ctx.fillRect(i * 76, 96, 38, H - 96);          // floor planks
+      ctx.fillStyle = '#2c3a58'; ctx.fillRect(0, 88, W, 8);                       // skirting
+      em('🪟', 250, 46, 44); em('🖼️', 360, 46, 36); em('🕰️', 620, 42, 34);
+      // garden strip along the bottom
+      ctx.fillStyle = '#5aa24a'; ctx.fillRect(380, 430, W - 380, H - 430);
+      ctx.fillStyle = '#4f9440';
+      for (let i = 0; i < 6; i++) ctx.fillRect(380 + i * 66, 430, 33, H - 430);
+      ctx.fillStyle = '#fff';
+      for (let x = 384; x < W; x += 26) { roundRect(x, 424, 8, 26, 3); ctx.fill(); }   // picket fence
+      em('🌼', 410, 530, 20); em('🌷', 730, 456, 20); em('🦋', 560 + Math.sin(ts * 0.001) * 30, 452 + Math.cos(ts * 0.0013) * 8, 18);
+      // rug
+      ctx.fillStyle = 'rgba(233,69,96,0.25)';
+      ctx.beginPath(); ctx.ellipse(240, 320, 110, 56, 0, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 3; ctx.stroke();
+      // furniture
+      em('🛋️', 320, 168, 62); em('🪴', 390, 250, 34); em('🪴', 40, 260, 34);
+      // shop counter
+      ctx.fillStyle = '#6b4a2c'; roundRect(SHOP_SPOT.x - 52, SHOP_SPOT.y - 30, 104, 54, 10); ctx.fill();
+      ctx.fillStyle = '#ffd23f'; roundRect(SHOP_SPOT.x - 52, SHOP_SPOT.y - 42, 104, 16, 6); ctx.fill();
+      ctx.fillStyle = '#e94560';
+      for (let i = 0; i < 4; i++) ctx.fillRect(SHOP_SPOT.x - 48 + i * 26, SHOP_SPOT.y - 42, 13, 16);
+      em('🛒', SHOP_SPOT.x, SHOP_SPOT.y - 2, 30);
+      ctx.fillStyle = '#ffe8b0'; ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('PET SHOP', SHOP_SPOT.x, SHOP_SPOT.y + 40);
+      // vet clinic counter
+      ctx.fillStyle = '#4a3a6b'; roundRect(VET_SPOT.x - 52, VET_SPOT.y - 30, 104, 54, 10); ctx.fill();
+      ctx.fillStyle = '#b06bff'; roundRect(VET_SPOT.x - 52, VET_SPOT.y - 42, 104, 16, 6); ctx.fill();
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < 4; i++) ctx.fillRect(VET_SPOT.x - 48 + i * 26, VET_SPOT.y - 42, 13, 16);
+      em('🚑', VET_SPOT.x, VET_SPOT.y - 2, 30);
+      ctx.fillStyle = '#e2ccff'; ctx.font = "800 13px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('VET CLINIC', VET_SPOT.x, VET_SPOT.y + 40);
+      // dog bed
+      ctx.fillStyle = '#5a4632'; ctx.beginPath(); ctx.ellipse(150, 400, 62, 26, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = '#e8d9b8'; ctx.beginPath(); ctx.ellipse(150, 396, 50, 19, 0, 0, 6.283); ctx.fill();
+      // front door (dog-walking jobs)
+      ctx.fillStyle = '#4a3320'; roundRect(DOOR_SPOT.x - 34, DOOR_SPOT.y - 76, 68, 96, 8); ctx.fill();
+      ctx.fillStyle = '#6b4a2c'; roundRect(DOOR_SPOT.x - 28, DOOR_SPOT.y - 70, 56, 84, 6); ctx.fill();
+      ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(DOOR_SPOT.x + 18, DOOR_SPOT.y - 26, 4, 0, 6.283); ctx.fill();
+      ctx.fillStyle = '#8b6a48'; ctx.beginPath(); ctx.ellipse(DOOR_SPOT.x, DOOR_SPOT.y + 30, 34, 10, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = '#ffe8b0'; ctx.font = "800 11px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('FRONT DOOR', DOOR_SPOT.x, DOOR_SPOT.y + 52);
+      // foster basket
+      em('🧺', BASKET_SPOT.x, BASKET_SPOT.y, 42);
+      ctx.fillStyle = '#7ec8ff'; ctx.font = "800 11px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+      ctx.fillText('FOSTER BASKET', BASKET_SPOT.x, BASKET_SPOT.y + 38);
+      // hygiene stations: litter box + pee pad (with fill level)
+      for (const st of STATIONS) {
+        if (!stationReady(st) || !anyAdopted(st.key)) continue;
+        const lvl = clamp(G[st.lvlKey], 0, 100) / 100;
+        ctx.fillStyle = '#5a4632'; roundRect(st.x - 24, st.y - 12, 48, 22, 6); ctx.fill();
+        ctx.fillStyle = lvl > 0 ? st.fill : '#8a8a8a';
+        roundRect(st.x - 20, st.y - 8, 40, 14, 4); ctx.fill();
+        // level bar
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; roundRect(st.x - 20, st.y - 22, 40, 6, 3); ctx.fill();
+        if (lvl > 0.04) { ctx.fillStyle = lvl > 0.35 ? '#5ad15a' : '#ffd23f'; roundRect(st.x - 20, st.y - 22, 40 * lvl, 6, 3); ctx.fill(); }
+        ctx.fillStyle = '#ffe8b0'; ctx.font = "800 9px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText(st.nm, st.x, st.y + 22);
+        if (lvl <= 0 && Math.sin(ts * 0.008) > 0) em('❗', st.x + 26, st.y - 16, 16);
+        // pouring: tilted bag + falling grains
+        if (pour && pour.st === st && pour.opened) {
+          ctx.save();
+          ctx.translate(st.x - 20, st.y - 40);
+          ctx.rotate(2.2 + Math.sin(ts * 0.02) * 0.08);
+          ctx.font = '26px ' + EMOJI_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(st.pourEm, 0, 0);
+          ctx.restore();
+          ctx.fillStyle = st.grain;
+          for (let g = 0; g < 4; g++) {
+            const gy = st.y - 34 + ((ts * 0.14 + g * 17) % 26);
+            ctx.beginPath(); ctx.arc(st.x - 14 + Math.sin(ts * 0.01 + g * 2) * 4, gy, 2, 0, 6.283); ctx.fill();
+          }
+        }
+      }
+      // uh-oh — puddles to mop up
+      for (const pu of G.puddles) {
+        ctx.fillStyle = 'rgba(255,224,80,0.55)';
+        ctx.beginPath(); ctx.ellipse(pu.x, pu.y, 24, 11, 0, 0, 6.283); ctx.fill();
+        ctx.strokeStyle = 'rgba(230,190,40,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+        em('💦', pu.x + 12, pu.y - 12, 14);
+      }
+    }
+
+    function drawJobs(ts) {
+      const J = G.jobs;
+      if (phone.call && phone.call.phase === 'ring') {
+        const bob = Math.sin(ts * 0.012) * 5;
+        em('📳', player.x + 30, player.y - 44 + bob, 22);
+      }
+      if (J.foster) {
+        const f = J.foster;
+        em(f.em, BASKET_SPOT.x, BASKET_SPOT.y - 16 + Math.sin(ts * 0.004) * 3, 26);
+        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 11px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText(f.nm + ' · ' + Math.ceil(f.stay) + 's', BASKET_SPOT.x, BASKET_SPOT.y - 40);
+      }
+    }
+
+    function drawEnclosure(sp) {
+      if (sp.home === 'tank') {
+        ctx.fillStyle = '#5a4632'; roundRect(sp.x - 46, sp.y + 26, 92, 14, 4); ctx.fill();    // table
+        const g = ctx.createLinearGradient(0, sp.y - 40, 0, sp.y + 26);
+        g.addColorStop(0, 'rgba(110,200,255,0.5)'); g.addColorStop(1, 'rgba(46,130,220,0.6)');
+        ctx.fillStyle = g; roundRect(sp.x - 42, sp.y - 38, 84, 62, 8); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 3; roundRect(sp.x - 42, sp.y - 38, 84, 62, 8); ctx.stroke();
+        em('🫧', sp.x + 24, sp.y - 22, 13);
+        if (baseOf(sp) === 'fish' && hasGear('rocks')) { em('🪨', sp.x - 22, sp.y + 13, 15); em('🪨', sp.x - 6, sp.y + 16, 11); em('🌿', sp.x + 26, sp.y + 12, 13); }
+      } else if (sp.home === 'cage') {
+        ctx.fillStyle = 'rgba(20,28,50,0.35)'; roundRect(sp.x - 40, sp.y - 46, 80, 84, 12); ctx.fill();
+        ctx.strokeStyle = '#c9a441'; ctx.lineWidth = 3; roundRect(sp.x - 40, sp.y - 46, 80, 84, 12); ctx.stroke();
+        ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(201,164,65,0.8)';
+        for (let i = 1; i < 5; i++) { ctx.beginPath(); ctx.moveTo(sp.x - 40 + i * 16, sp.y - 44); ctx.lineTo(sp.x - 40 + i * 16, sp.y + 36); ctx.stroke(); }
+        ctx.fillStyle = '#c9a441'; ctx.beginPath(); ctx.arc(sp.x, sp.y - 50, 5, 0, 6.283); ctx.fill();
+      } else if (sp.home === 'hutch') {
+        em('🛖', sp.x, sp.y - 34, 44);
+      } else if (sp.home === 'pen') {
+        ctx.fillStyle = '#7a5a3a';
+        for (let i = 0; i < 4; i++) { roundRect(sp.x - 54 + i * 34, sp.y - 20, 7, 44, 3); ctx.fill(); }
+        roundRect(sp.x - 56, sp.y - 12, 112, 6, 3); ctx.fill();
+        roundRect(sp.x - 56, sp.y + 8, 112, 6, 3); ctx.fill();
+        ctx.fillStyle = 'rgba(90,62,40,0.55)'; ctx.beginPath(); ctx.ellipse(sp.x, sp.y + 26, 44, 12, 0, 0, 6.283); ctx.fill();
+      }
+    }
+
+    function drawPet(sp, ts) {
+      const p = G.pets[sp.key];
+      const building = !p.adopted && G.meet && G.meet.stage === 'build' && G.meet.key === sp.key;
+      if (!p.adopted && !building) return;   // pets are met at the vet clinic now
+      if (building) {
+        // the build site: place each bought component to make this pet's home
+        const list = suppliesFor(sp);
+        ctx.save();
+        ctx.setLineDash([7, 6]);
+        ctx.strokeStyle = 'rgba(255,210,63,0.8)'; ctx.lineWidth = 3;
+        roundRect(sp.x - 52, sp.y - 52, 104, 104, 14); ctx.stroke();
+        ctx.restore();
+        if (G.meet.placed >= 1) drawEnclosure(sp);   // the first piece is the home itself
+        for (let i = 1; i < G.meet.placed; i++) {
+          const a = i * 2.1;
+          em(shelfEm(list[i]), sp.x + Math.cos(a) * 30, sp.y + Math.sin(a) * 22 + 8, 16);
+        }
+        em('🚧', sp.x, sp.y - 40 + Math.sin(ts * 0.005) * 3, 22);
+        ctx.fillStyle = '#ffd23f'; ctx.font = "800 12px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText('Tap to build! ' + G.meet.placed + '/' + list.length, sp.x, sp.y + 66);
+        return;
+      }
+      drawEnclosure(sp);
+      let px = sp.x, py = sp.y;
+      if (sp.wander > 0 && p.vetT <= 0) {
+        px += Math.sin(ts * 0.0006 + sp.x) * sp.wander;
+        py += Math.cos(ts * 0.0004 + sp.y) * sp.wander * 0.3;
+      }
+      const bob = Math.sin(ts * 0.004 + sp.x) * 3;
+      // no sand in the tank → the hermit crab hides in its shell
+      const hiding = baseOf(sp) === 'crab' && G.sandLvl <= 0;
+      em(hiding ? '🐚' : sp.em, px, py + bob, 36, px < player.x && sp.wander > 0);
+      if (p.vetT > 0) {
+        em('🏥', sp.x, sp.y - 40, 26);
+        ctx.fillStyle = '#e2ccff'; ctx.font = "800 12px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText('at the vet… ' + Math.ceil(p.vetT) + 's', sp.x, sp.y + 42);
+        return;
+      }
+      // mood + alert
+      em(moodEmoji(sp, p), px + 22, py - 26 + bob, 16);
+      if (p.sick) { em('🤒', px, py - 44 + bob, 20); }
+      else {
+        let worst = null, wv = NEEDY;
+        for (const k of needsOf(sp)) if (p[k] < wv) { wv = p[k]; worst = k; }
+        if (worst && Math.sin(ts * 0.008) > -0.2) em(BAR_IC[worst] === undefined ? '❗' : BAR_IC[worst], px - 22, py - 30 + bob, 15);
+      }
+    }
+
+    function drawHearts(ts) {
+      for (const h of hearts) {
+        const sp = spOf(h.key);
+        h.t += 0.016;
+        em('❤️', sp.x + h.dx, sp.y + h.dy + Math.sin(ts * 0.003 + h.t) * 5, 20);
+      }
+    }
+
+    function drawPlayer(ts) {
+      const bounce = player.step > 0 ? Math.abs(Math.sin(player.step * 2)) * 6 : 0;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath(); ctx.ellipse(player.x, player.y + 24, 19, 8, 0, 0, 6.283); ctx.fill();
+      em('🧒', player.x, player.y - bounce, 48, player.face < 0);
+    }
+
+    function drawPops(secs) {
+      ctx.textAlign = 'center';
+      for (let i = cpops.length - 1; i >= 0; i--) {
+        const p = cpops[i]; p.t += secs;
+        if (p.t > 1.4) { cpops.splice(i, 1); continue; }
+        ctx.globalAlpha = Math.max(0, 1 - p.t / 1.4);
+        ctx.font = "800 16px 'Nunito', sans-serif";
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillText(p.txt, p.x + 1, p.y - p.t * 26 + 1);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.txt, p.x, p.y - p.t * 26);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function draw(ts, secs) {
+      ctx.clearRect(0, 0, W, H);
+      if (storeTrip) {
+        drawStore(ts);
+        drawPlayer(ts);
+        drawPops(secs);
+        return;
+      }
+      if (clinicTrip) {
+        drawClinic(ts);
+        drawPlayer(ts);
+        const csp = spOf(clinicTrip.key), cp = G.pets[clinicTrip.key];
+        const cbob = Math.sin(ts * 0.004) * 3;
+        if (clinicTrip.stage === 'treat') em(csp.em, clinicTrip.need.x, clinicTrip.need.y - 44 + cbob, 30);
+        else {
+          em(csp.em, player.x - 32, player.y + 4 + cbob, 28);
+          if (cp.sick) em('🤒', player.x - 32, player.y - 24 + cbob, 16);
+        }
+        drawPops(secs);
+        return;
+      }
+      drawHouse(ts);
+      // draw pets top-to-bottom so lower ones overlap correctly
+      const sorted = SPECIES.filter(visible).sort(function (a, b) { return a.y - b.y; });
+      let playerDrawn = false;
+      for (const sp of sorted) {
+        if (!playerDrawn && player.y < sp.y - 18) { drawPlayer(ts); playerDrawn = true; }
+        drawPet(sp, ts);
+      }
+      if (!playerDrawn) drawPlayer(ts);
+      drawJobs(ts);
+      drawHearts(ts);
+      drawPops(secs);
+    }
+
+    // ---------- boot / loop ----------
+    tap(document.getElementById('start-btn'), function () {
+      document.getElementById('setup').hidden = true;
+      save();
+    });
+
+    function loop(ts) {
+      if (lastTs === 0) lastTs = ts;
+      const secs = clamp((ts - lastTs) / 1000, 0, 0.25);
+      lastTs = ts;
+      tick(secs);
+      stepWalk(secs);
+      stepMini(secs);
+      stepClinic(secs);
+      stepPour(secs);
+      stepStore(secs);
+      if (!walkRun && shopEl.hidden && vetEl.hidden && miniEl.hidden && saveModal.hidden && namerEl.hidden) movePlayer(secs);
+      uiT += secs; if (uiT > 0.25) { uiT = 0; renderHud(); updateCare(); updateVet(); updateShop(); }
+      updatePhone();
+      saveT += secs; if (saveT > 5) { saveT = 0; if (document.getElementById('setup').hidden) save(); }
+      draw(ts, secs);
+      requestAnimationFrame(loop);
+    }
+
+    // migrate the old single-slot save into the named-slots map (one-time; not in test mode,
+    // which must never read or delete real progress)
+    try {
+      const legacy = TEST_MODE ? null : JSON.parse(localStorage.getItem('petlovers.save') || 'null');
+      if (legacy && legacy.pets && !listSaves().length) {
+        legacy.v = 1; legacy.name = AUTOSAVE_NAME;
+        const m = readAll(); m[AUTOSAVE_NAME] = legacy; writeAll(m);
+        try { localStorage.setItem(LS_CURRENT, AUTOSAVE_NAME); } catch (e) {}
+        currentName = AUTOSAVE_NAME;
+      }
+      if (!TEST_MODE) localStorage.removeItem('petlovers.save');
+    } catch (e) {}
+    // auto-resume the most recent save (prefer the last active slot)
+    G = freshGame();
+    let bootData = currentName ? readSave(currentName) : null;
+    if (!bootData) { const all = listSaves(); if (all.length) bootData = all[0]; }
+    const returning = !!bootData && applySave(bootData);
+    if (!returning) { currentName = ''; renderHud(); updateSaveChip(); }
+    else document.getElementById('setup').hidden = true;
+    requestAnimationFrame(loop);
+
+    // headless test hook
+    window.__t = {
+      state: function () {
+        const pets = {};
+        for (const sp of SPECIES) { const p = G.pets[sp.key]; pets[sp.key] = { adopted: p.adopted, nm: nmOf(sp), food: Math.round(p.food), fun: Math.round(p.fun), clean: Math.round(p.clean), home: Math.round(p.home), walk: Math.round(p.walk), sick: p.sick, vetT: Math.round(p.vetT * 10) / 10, restT: Math.round(p.restT || 0), mood: Math.round(mood(sp, p)) }; }
+        return { coins: G.coins, love: G.love, food: G.food, treats: G.treats, toys: G.toys.slice(), gear: G.gear.slice(),
+                 walking: walkRun ? (walkRun.jobDog ? 'job:' + walkRun.jobDog.nm : walkRun.key) : null, near: nearKey,
+                 player: { x: Math.round(player.x), y: Math.round(player.y) },
+                 phone: { open: phone.open, note: phone.note,
+                          call: phone.call ? { type: phone.call.type, phase: phone.call.phase, t: Math.round(phone.call.t * 10) / 10, from: phone.call.callerNm } : null },
+                 foster: G.jobs.foster ? { nm: G.jobs.foster.nm, kind: G.jobs.foster.kind, stay: Math.round(G.jobs.foster.stay), food: Math.round(G.jobs.foster.food), fun: Math.round(G.jobs.foster.fun), clean: Math.round(G.jobs.foster.clean) } : null,
+                 hearts: hearts.length, pets: pets, saveName: currentName };
+      },
+      meet: {
+        state: function () { return G.meet ? { key: G.meet.key, stage: G.meet.stage, placed: G.meet.placed, have: JSON.parse(JSON.stringify(G.meet.have)) } : null; },
+        pets: function () { return meetPets().map(function (sp) { return sp.key; }); },
+        pen: function () { return MEET_PEN; },
+        choose: function (key) { chooseMeetPet(spOf(key)); },
+        buy: buyMeetPet, place: placeNext,
+        missing: meetMissing,
+        list: function (key) { return suppliesFor(spOf(key)).slice(); },
+        click: clinicClickAt
+      },
+      clinic: {
+        start: startVetTrip, home: endVetTrip, step: stepClinic,
+        state: function () { return clinicTrip ? { key: clinicTrip.key, need: clinicTrip.need ? clinicTrip.need.id : null, stage: clinicTrip.stage, treatT: Math.round(clinicTrip.treatT * 10) / 10 } : null; },
+        rooms: function () { return CLINIC_ROOMS.map(function (r) { return { id: r.id, x: r.x, y: r.y }; }); }
+      },
+      tick: tick, feed: feed, play: play, groom: groom, cleanHome: cleanHome,
+      walk: startWalk, walkStep: stepWalk, vet: vet, adopt: adoptFinalize, buy: buyItem,
+      walkPoo: function () { return walkRun && walkRun.poo ? { t: Math.round(walkRun.poo.t * 10) / 10, bagged: walkRun.poo.bagged } : null; },
+      hygiene: function () { return { litter: G.litter, litterLvl: Math.round(G.litterLvl), pads: G.pads, padLvl: Math.round(G.padLvl), sand: G.sand, sandLvl: Math.round(G.sandLvl), puddles: G.puddles.slice(), peeT: { cat: Math.round(peeT.cat * 10) / 10, dog: Math.round(peeT.dog * 10) / 10, crab: Math.round(peeT.crab * 10) / 10 } }; },
+      pee: function (key) { peeT[key] = 0.01; },
+      dryStation: function (key) { G[key === 'cat' ? 'litterLvl' : (key === 'crab' ? 'sandLvl' : 'padLvl')] = 0; },
+      bag: grabBag, scoop: function () { scoopPoo(); },
+      goto: function (key) {
+        const s = key === 'shop' ? SHOP_SPOT : (key === 'vet' ? VET_SPOT : (key === 'door' ? DOOR_SPOT : (key === 'foster' ? BASKET_SPOT : spOf(key))));
+        player.x = player.tx = s.x + 30; player.y = player.ty = s.y + 20;
+        movePlayer(0);
+      },
+      move: function (x, y) { player.x = player.tx = x; player.y = player.ty = y; movePlayer(0); },
+      step: movePlayer,
+      sicken: function (key) { G.pets[key].sick = true; },
+      pour: {
+        start: function (key) { const st = STATIONS.find(function (s) { return s.key === key; }); if (st) startPour(st); },
+        step: stepPour, end: endPour,
+        state: function () { return pour ? { key: pour.st.key, opened: pour.opened, poured: Math.round(pour.poured) } : null; }
+      },
+      setName: function (key, v) { G.pets[key].nm = String(v || '').trim().slice(0, 14); save(); refreshCare(); },
+      namer: function () { return { open: !namerEl.hidden, title: document.getElementById('namer-title').textContent, value: namerInput.value, queued: namerQueue.length }; },
+      nameOk: function (v) { if (v != null) namerInput.value = v; confirmNamer(); },
+      needNow: function () { needT = 0.001; tickNeeds(0.01); },
+      ring: function () { G.jobs.nextCall = 0; tickJobs(0.01); },
+      answer: answerCall, accept: acceptCall, decline: declineCall, togglePhone: togglePhone,
+      storeTrip: { start: startStoreTrip, home: endStoreTrip, step: stepStore, checkout: checkout, click: storeClickAt,
+        state: function () { return storeTrip ? { basket: storeTrip.basket.map(function (b) { return b.id || 'adopt:' + b.adopt; }), total: basketTotal() } : null; },
+        shelves: function () { return STORE_SHELVES.map(function (s) { return { id: s.id, x: s.x, y: s.y }; }); },
+        reg: function () { return STORE_REG; } },
+      fosterApp: { open: function () { phone.open = true; phone.view = 'foster'; renderPhone(); },
+                   choices: function () { return (phone.choices || []).map(function (c) { return c.nm; }); },
+                   pick: function (i) { return startFoster((phone.choices || [])[i || 0]); } },
+      callTick: function (s) { if (phone.call) { phone.call.t -= s; tickJobs(0.001); } },
+      fosterCare: { feed: fosterFeed, play: fosterPlay, groom: fosterGroom },
+      mini: function () { return mini ? { task: mini.task, mech: mini.mech, t: Math.round(mini.t * 10) / 10, hit: mini.hit, cleaned: mini.cleaned || 0, total: mini.total, targets: mini.targets.length, phase: mini.phase, stage: mini.stage || null, charge: mini.charge != null ? Math.round(mini.charge * 100) / 100 : null, mouseX: mini.mouseX != null ? Math.round(mini.mouseX) : null, k: mini.k != null ? Math.round(mini.k) : null } : null; },
+      finishMini: function (s) { endMini(s); },
+      stepMini: stepMini,
+      fosterTime: function (s) { if (G.jobs.foster) G.jobs.foster.stay = s; },
+      coins: function (n) { G.coins += n; renderHud(); refreshCare(); },
+      heart: function (key) { hearts.push({ key: key, dx: 0, dy: -40, t: 0 }); },
+      saves: { list: listSaves, write: writeSave, read: readSave, del: deleteSave,
+               load: function (name) { return applySave(readSave(name)); },
+               current: function () { return currentName; }, newGame: newGame, open: openSaveModal },
+      reset: function () { localStorage.removeItem(LS_SAVES); localStorage.removeItem(LS_CURRENT); localStorage.removeItem('petlovers.save'); }
+    };
+  })();
+  </script>
+
+  <script>
+    if (window.self !== window.top) { var b = document.querySelector('.back'); if (b) b.style.visibility = 'hidden'; }
+  </script>
+</body>
+</html>

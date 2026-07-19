@@ -106,6 +106,20 @@
     .reveal-stars { font-weight: 800; font-size: 0.85rem; letter-spacing: 1px; min-height: 1em; }
     .start-btn:disabled { opacity: 0.45; cursor: default; box-shadow: 0 6px 0 var(--accent-shadow); }
 
+    /* ---- gem bundles ---- */
+    .reveal-strip { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; min-height: 0; }
+    .reveal-strip .mini { position: relative; width: 52px; height: 52px; background: #141d2e; border: 2px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .reveal-strip .mini canvas { width: 100%; height: 100%; }
+    .reveal-strip .mini .nw { position: absolute; top: 0; right: 1px; font-size: 0.6rem; }
+    .bundles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+    .bundle-btn { font-family: 'Nunito', sans-serif; color: #fff; background: #19223e; border: 2px solid var(--border); border-radius: 14px; padding: 8px 6px; cursor: pointer; box-shadow: 0 4px 0 #0b1326; transition: transform 0.08s ease, box-shadow 0.08s ease; }
+    .bundle-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #0b1326; }
+    .bundle-btn:disabled { opacity: 0.4; cursor: default; transform: none; box-shadow: 0 4px 0 #0b1326; }
+    .bundle-btn .b-name { font-weight: 900; font-size: 0.88rem; }
+    .bundle-btn .b-cost { font-weight: 800; font-size: 0.78rem; color: var(--gold); }
+    .bundle-btn .b-note { font-weight: 700; font-size: 0.62rem; color: var(--muted); margin-top: 2px; line-height: 1.25; }
+    .bundle-btn.best { border-color: var(--gold); box-shadow: 0 4px 0 #0b1326, inset 0 0 12px rgba(226,169,59,0.25); }
+
     .coll-panel { max-height: 84vh; overflow-y: auto; }
     .coll-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
     .coll-grid .cell { position: relative; aspect-ratio: 1; background: #141d2e; border: 2px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 2px; }
@@ -172,14 +186,15 @@
       <div class="panel gacha-panel">
         <button class="x" id="gacha-close">✕</button>
         <h2>Cat Gacha</h2>
-        <div class="sub">Adopt new cats! Each pull costs <b>1 💎</b> — win a heist to earn one.</div>
+        <div class="sub">Adopt new cats! Win heists to earn 💎 — <b>save up for bundles</b> with guaranteed rare cats!</div>
         <div class="gem-line">You have <b id="gacha-gems">0</b> 💎</div>
         <div class="reveal" id="gacha-reveal">
           <canvas id="gacha-canvas" width="240" height="240"></canvas>
           <div class="reveal-name" id="reveal-name">Tap Pull to adopt a cat!</div>
           <div class="reveal-stars" id="reveal-stars"></div>
+          <div class="reveal-strip" id="reveal-strip"></div>
         </div>
-        <button class="start-btn" id="pull-btn">Pull 🎁 &nbsp;(1 💎)</button>
+        <div class="bundles" id="bundle-btns"></div>
       </div>
     </div>
 
@@ -1375,6 +1390,26 @@
     var CATS = [], CUM = [], TOT = 0;
     (function () { for (var i = 0; i < GACHA_N; i++) { CATS.push(buildCat(i)); TOT += RARITY[CATS[i].rarity].w; CUM.push(TOT); } })();
     function rollCat() { var r = Math.random() * TOT, lo = 0, hi = CUM.length - 1; while (lo < hi) { var m = (lo + hi) >> 1; if (CUM[m] < r) lo = m + 1; else hi = m; } return lo; }
+    // weighted roll restricted to cats of rarity >= minR (for bundle guarantees)
+    var MIN_POOLS = {};
+    function rollCatMin(minR) {
+      var pool = MIN_POOLS[minR];
+      if (!pool) {
+        pool = { idxs: [], cum: [], tot: 0 };
+        for (var i = 0; i < GACHA_N; i++) if (CATS[i].rarity >= minR) { pool.tot += RARITY[CATS[i].rarity].w; pool.idxs.push(i); pool.cum.push(pool.tot); }
+        MIN_POOLS[minR] = pool;
+      }
+      var r = Math.random() * pool.tot, lo = 0, hi = pool.cum.length - 1;
+      while (lo < hi) { var m = (lo + hi) >> 1; if (pool.cum[m] < r) lo = m + 1; else hi = m; }
+      return pool.idxs[lo];
+    }
+    // Gem bundles — saving up buys more cats AND a guaranteed-rarity floor.
+    var BUNDLES = [
+      { id: 'single', name: 'Pull',          cost: 1,  pulls: 1, minR: 0, note: '1 cat' },
+      { id: 'triple', name: 'Triple Pull',   cost: 3,  pulls: 3, minR: 3, note: '3 cats · a ★★★ Rare or better guaranteed' },
+      { id: 'epic',   name: 'Epic Bundle',   cost: 6,  pulls: 4, minR: 4, note: '4 cats · a ★★★★ Epic or better guaranteed' },
+      { id: 'royal',  name: 'Royal Bundle',  cost: 12, pulls: 5, minR: 5, note: '5 cats · a ★★★★★ Legendary or better guaranteed' }
+    ];
 
     function gGems() { try { return parseInt(localStorage.getItem('burgle-cats.gems') || '0', 10) || 0; } catch (e) { return 0; } }
     function gSetGems(v) { try { localStorage.setItem('burgle-cats.gems', String(v)); } catch (e) {} }
@@ -1512,7 +1547,7 @@
     function refreshGemDisplays() {
       var g = gGems();
       ['menu-gems', 'gacha-gems', 'over-gems'].forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = g; });
-      var pb = document.getElementById('pull-btn'); if (pb) pb.disabled = g < 1;
+      Array.prototype.forEach.call(document.querySelectorAll('.bundle-btn'), function (b) { b.disabled = g < +b.dataset.cost; });
     }
     function showReveal(idx, isNew) {
       var coat = CATS[idx], rar = RARITY[coat.rarity];
@@ -1528,13 +1563,48 @@
       st.textContent = (coat.rarity === 6 ? 'SECRET · ' : '') + starStr(coat.rarity) + ' ' + rar.name; st.style.color = rar.col;
       var rv = document.getElementById('gacha-reveal'); rv.classList.remove('pop'); void rv.offsetWidth; rv.classList.add('pop');
     }
-    function doPull() {
-      var g = gGems(); if (g < 1) return;
-      gSetGems(g - 1);
-      var idx = rollCat(), owned = gOwned(), isNew = owned[idx] === 0;
-      owned[idx]++; gSetOwned(owned);
-      refreshGemDisplays(); showReveal(idx, isNew);
+    // bundle reveal: best cat gets the big portrait, the whole haul shows as minis
+    function showRevealMulti(results, news) {
+      var best = 0;
+      for (var i = 1; i < results.length; i++) if (CATS[results[i]].rarity > CATS[results[best]].rarity) best = i;
+      showReveal(results[best], news[best]);
+      var strip = document.getElementById('reveal-strip'); strip.innerHTML = '';
+      if (results.length > 1) {
+        results.forEach(function (idx, i) {
+          var coat = CATS[idx], rar = RARITY[coat.rarity];
+          var cell = document.createElement('div'); cell.className = 'mini'; cell.style.borderColor = rar.col;
+          var cv = document.createElement('canvas'); cv.width = 60; cv.height = 60;
+          drawCatPortrait(cv.getContext('2d'), 30, 34, 66, coat); cell.appendChild(cv);
+          if (news[i]) { var n = document.createElement('div'); n.className = 'nw'; n.textContent = '✨'; cell.appendChild(n); }
+          strip.appendChild(cell);
+        });
+      }
     }
+    function doBundle(b) {
+      var g = gGems(); if (g < b.cost) return;
+      gSetGems(g - b.cost);
+      var results = [], news = [], owned = gOwned();
+      for (var i = 0; i < b.pulls; i++) results.push(rollCat());
+      // guarantee: if no pull hit the bundle's rarity floor, upgrade the last one
+      if (b.minR && !results.some(function (ix) { return CATS[ix].rarity >= b.minR; }))
+        results[results.length - 1] = rollCatMin(b.minR);
+      results.forEach(function (ix) { news.push(owned[ix] === 0); owned[ix]++; });
+      gSetOwned(owned);
+      refreshGemDisplays(); showRevealMulti(results, news);
+      return results;
+    }
+    function doPull() { return doBundle(BUNDLES[0]); }
+    function buildBundleBtns() {
+      var wrap = document.getElementById('bundle-btns');
+      BUNDLES.forEach(function (b) {
+        var btn = document.createElement('button');
+        btn.className = 'bundle-btn' + (b.id === 'royal' ? ' best' : ''); btn.dataset.cost = b.cost;
+        btn.innerHTML = '<div class="b-name">' + b.name + ' 🎁</div><div class="b-cost">' + b.cost + ' 💎</div><div class="b-note">' + b.note + '</div>';
+        btn.addEventListener('click', function () { doBundle(b); });
+        wrap.appendChild(btn);
+      });
+    }
+    buildBundleBtns();
     function openGacha() { refreshGemDisplays(); document.getElementById('gacha').hidden = false; }
     function updateTeamLine() {
       var t = gTeam();
@@ -1590,7 +1660,6 @@
     document.getElementById('open-collection').addEventListener('click', openCollection);
     document.getElementById('gacha-close').addEventListener('click', function () { document.getElementById('gacha').hidden = true; });
     document.getElementById('coll-close').addEventListener('click', function () { document.getElementById('collection').hidden = true; document.getElementById('coll-grid').innerHTML = ''; });
-    document.getElementById('pull-btn').addEventListener('click', doPull);
     refreshGemDisplays();
 
     // ---------- test hook (mirrors the project's __t convention) ----------
@@ -1599,7 +1668,8 @@
       tap: function (x, y) { tapRoom(x, y); syncHUD(); },
       open: function () { var r = room(S.cat.x, S.cat.y); if (r.vault && !r.vault.opened) { openVault(r); syncHUD(); } },
       start: startLevel,
-      gacha: { gems: gGems, setGems: gSetGems, pull: doPull, owned: gOwned, setOwned: gSetOwned, cats: CATS, roll: rollCat, specials: SPECIALS.length },
+      gacha: { gems: gGems, setGems: gSetGems, pull: doPull, owned: gOwned, setOwned: gSetOwned, cats: CATS, roll: rollCat, specials: SPECIALS.length,
+               bundles: BUNDLES, bundle: doBundle, rollMin: rollCatMin },
       team: { get: gTeam, set: gSetTeam, info: teamInfo, catInfo: catInfo, active: function () { return activeCat(); } }
     };
   })();

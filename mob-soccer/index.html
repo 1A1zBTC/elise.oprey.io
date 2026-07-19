@@ -416,7 +416,7 @@
       const s = stats || MOBS[key];
       const p = { side: side, key: stats ? null : key, slot: slot, role: slot == null ? null : FORMATION[slot].role,
         x: 0, y: 0, vx: 0, vy: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
-        accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, kick: s.kick, stamina: 100, benched: slot == null, aiShootCD: 0, sprint: false };
+        accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, kick: s.kick, stamina: 100, benched: slot == null, aiShootCD: 0, aiPassCD: 0, flash: 0, sprint: false };
       if (stats) { p.emoji = stats.emoji; p.cardName = stats.name; p.rt = stats.rt; }
       return p;
     }
@@ -443,7 +443,7 @@
     }
 
     function placeKickoff(towards) {
-      ball = { x: WORLD_W / 2, y: WORLD_H / 2, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 14, owner: null, freeCD: 0, lastSide: towards === 0 ? 1 : 0, trail: [] };
+      ball = { x: WORLD_W / 2, y: WORLD_H / 2, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, r: 14, owner: null, freeCD: 0, lastSide: towards === 0 ? 1 : 0, trail: [], passTo: null, settle: 0 };
       ballHold = 0; possCD = 0;
       for (const t of teams) for (const p of t.onPitch) { const h = homePos(t.side, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.benched = false; }
       if (towards === 0) ball.vx = -2.5; else if (towards === 1) ball.vx = 2.5;
@@ -519,7 +519,7 @@
       if (state !== 'playing' && state !== 'goal') return;
       const t = teams[side]; let best = -1, bd = Infinity;
       for (let i = 0; i < t.onPitch.length; i++) { if (i === t.active) continue; const p = t.onPitch[i]; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < bd) { bd = d; best = i; } }
-      if (best >= 0) t.active = best;
+      if (best >= 0) setActive(t, best);
     }
     function subPlayer(t, idx) {
       if (t.subCD > 0) return;
@@ -536,33 +536,62 @@
     function doSub(side) { if (state === 'playing' || state === 'goal') subPlayer(teams[side], teams[side].active); }
 
     // ---------- possession: pass & shoot ----------
+    // Animated control switch: remember where the marker was so it can fly to the new player.
+    function setActive(t, idx) {
+      if (idx < 0 || t.active === idx) return;
+      const prev = t.onPitch[t.active];
+      t.swFx = { fx: prev.x, fy: prev.y - prev.r * 0.75 - 25, t: 0 };
+      t.active = idx;
+    }
     function setOwner(p) {
+      const intercepted = ball.passTo && ball.passTo.side !== p.side;
       ball.owner = p; ball.lastSide = p.side; ball.vx = p.vx; ball.vy = p.vy; ball.z = 0; ball.vz = 0; ball.freeCD = 0; possCD = 10;
-      if (isHumanTeam(p.side)) { const t = teams[p.side]; const idx = t.onPitch.indexOf(p); if (idx >= 0) t.active = idx; }
+      ball.passTo = null;
+      ball.settle = 10;    // first touch: the ball eases to the player's feet
+      p.flash = 18;        // possession-gained ring pulse
+      if (intercepted) pops.push({ x: p.x, y: p.y - p.r - 22, txt: 'INTERCEPTED!', color: p.side ? '#ff7d7d' : '#6fa8ff', t: 0 });
+      if (isHumanTeam(p.side)) { const t = teams[p.side]; const idx = t.onPitch.indexOf(p); if (idx >= 0) setActive(t, idx); }
     }
     function kickBall(o, vx, vy, vz, freeFrames) {
       ball.owner = null; ball.lastSide = o.side; ball.vx = vx; ball.vy = vy; ball.vz = vz || 0; ball.freeCD = freeFrames; possCD = 0;
       ball.x = clamp(o.x + o.fx * (o.r + ball.r + 2), M + ball.r, WORLD_W - M - ball.r);
       ball.y = clamp(o.y + o.fy * (o.r + ball.r + 2), M + ball.r, WORLD_H - M - ball.r);
     }
+    // FIFA-style pass: pick the best receiver, lead them so the ball arrives where
+    // they're running, tag them (ball.passTo) for the on-pitch indicator + assisted
+    // run, and hand control to the receiver so play flows like FIFA.
+    function passFrom(side, o, forcedTgt) {
+      const t = teams[side];
+      const gdx = side === 0 ? 1 : -1;
+      let tgt = forcedTgt || null, bestSc = -Infinity;
+      if (!tgt) {
+        for (let i = 0; i < t.onPitch.length; i++) {
+          const m = t.onPitch[i]; if (m === o || m.role === 'gk') continue;
+          const dx = m.x - o.x, dy = m.y - o.y, dl = Math.hypot(dx, dy) || 1;
+          if (dl > 1200) continue;
+          const sc = (dx * gdx) / dl * 2 - dl / 1400;
+          if (sc > bestSc) { bestSc = sc; tgt = m; }
+        }
+      }
+      let dx, dy;
+      if (tgt) {
+        // lead the receiver: aim where they'll be when the ball gets there
+        const d0 = Math.hypot(tgt.x - o.x, tgt.y - o.y) || 1;
+        const flight = d0 / clamp(d0 * 0.05, 9, 16);
+        dx = tgt.x + tgt.vx * flight * 0.7 - o.x;
+        dy = tgt.y + tgt.vy * flight * 0.7 - o.y;
+      } else { dx = o.fx; dy = o.fy; }
+      const dl = Math.hypot(dx, dy) || 1, speed = clamp(dl * 0.05, 9, 16);
+      kickBall(o, dx / dl * speed, dy / dl * speed, 0, 9);
+      ball.passTo = tgt;
+      if (tgt && isHumanTeam(side)) setActive(t, t.onPitch.indexOf(tgt));
+      pops.push({ x: o.x, y: o.y - o.r - 18, txt: 'PASS', color: side ? '#ff7d7d' : '#6fa8ff', t: 0 });
+    }
     function passBall(side) {
       if (state !== 'playing') return;
       const t = teams[side], o = activePlayer(t);
       if (ball.owner !== o) return;
-      const gdx = side === 0 ? 1 : -1;
-      let tgt = null, bestSc = -Infinity;
-      for (let i = 0; i < t.onPitch.length; i++) {
-        if (i === t.active) continue; const m = t.onPitch[i]; if (m.role === 'gk') continue;
-        const dx = m.x - o.x, dy = m.y - o.y, dl = Math.hypot(dx, dy) || 1;
-        if (dl > 1200) continue;
-        const sc = (dx * gdx) / dl * 2 - dl / 1400;
-        if (sc > bestSc) { bestSc = sc; tgt = m; }
-      }
-      let dx, dy;
-      if (tgt) { dx = tgt.x - o.x; dy = tgt.y - o.y; } else { dx = o.fx; dy = o.fy; }
-      const dl = Math.hypot(dx, dy) || 1, speed = clamp(dl * 0.05, 9, 16);
-      kickBall(o, dx / dl * speed, dy / dl * speed, 0, 9);
-      pops.push({ x: o.x, y: o.y - o.r - 18, txt: 'PASS', color: side ? '#ff7d7d' : '#6fa8ff', t: 0 });
+      passFrom(side, o);
     }
     function shootBall(side, charge) {
       const t = teams[side], o = activePlayer(t);
@@ -595,7 +624,7 @@
       let fx = p.fx, fy = p.fy; const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
       const charge = 0.6;   // a header is a fixed-strength shot in the heading direction
       const speed = (13 + charge * 22) * (0.86 + p.kick * 0.16), loft = charge * 20;
-      ball.owner = null; ball.lastSide = p.side; ball.vx = fx * speed; ball.vy = fy * speed; ball.vz = loft; ball.freeCD = 12; possCD = 0;
+      ball.owner = null; ball.lastSide = p.side; ball.vx = fx * speed; ball.vy = fy * speed; ball.vz = loft; ball.freeCD = 12; possCD = 0; ball.passTo = null;
       pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'HEADER!', color: '#ffe066', t: 0 });
       return true;
     }
@@ -766,6 +795,8 @@
       let ax = (k.r ? 1 : 0) - (k.l ? 1 : 0);
       let ay = (k.d ? 1 : 0) - (k.u ? 1 : 0);
       if (ax === 0 && ay === 0 && joy[side].active) { const dx = joy[side].tx - joy[side].bx, dy = joy[side].ty - joy[side].by, dl = Math.hypot(dx, dy); if (dl > 6) { ax = dx / dl; ay = dy / dl; } }
+      // assisted receiving: with no input, the receiver drifts to meet the incoming pass
+      if (ax === 0 && ay === 0 && !ball.owner && ball.passTo === m) { steer(m, ball.x + ball.vx * 8, ball.y + ball.vy * 8, 0.8); return; }
       const l = Math.hypot(ax, ay) || 1, f = staminaFactor(m), boost = m.sprint ? 1.55 : 1;
       m.vx += (ax / l) * m.accel * 2.4 * boost * f * dtf;
       m.vy += (ay / l) * m.accel * 2.4 * boost * f * dtf;
@@ -788,7 +819,19 @@
       const gx = side === 0 ? WORLD_W - M : M, gy = WORLD_H / 2;
       steer(p, gx, gy, 0.85);
       const dist = Math.abs(gx - p.x);
-      p.aiShootCD -= dtf;
+      p.aiShootCD -= dtf; p.aiPassCD -= dtf;
+      // FIFA-style build-up: outside shooting range, look for a teammate further upfield
+      if (dist > 820 && p.aiPassCD <= 0) {
+        const t = teams[side]; let tgt = null, bs = 0.35;
+        for (const m of t.onPitch) {
+          if (m === p || m.role === 'gk') continue;
+          const ahead = side === 0 ? m.x - p.x : p.x - m.x;
+          const d = Math.hypot(m.x - p.x, m.y - p.y);
+          if (ahead > 120 && d > 160 && d < 1100 && ahead / d > bs) { bs = ahead / d; tgt = m; }
+        }
+        if (tgt) { passFrom(side, p, tgt); p.aiPassCD = 150; return; }
+        p.aiPassCD = 55;
+      }
       if (dist < 760 && Math.abs(p.y - gy) < GOAL_H / 2 + 160 && p.aiShootCD <= 0) {
         const aimY = gy + rnd(-1, 1) * (GOAL_H * 0.4);
         let dx = (gx + (side === 0 ? 30 : -30)) - p.x, dy = aimY - p.y, dl = Math.hypot(dx, dy) || 1;
@@ -831,6 +874,7 @@
       ball.x = clamp(x, M + ball.r, WORLD_W - M - ball.r);
       ball.y = clamp(y, M + ball.r, WORLD_H - M - ball.r);
       ball.vx = ball.vy = ball.vz = ball.z = ball.spin = 0;
+      ball.passTo = null; ball.settle = 0;
       const t = teams[takerSide];
       let taker = null;
       if (kind === 'goalkick') taker = t.onPitch.find(function (p) { return p.role === 'gk'; });
@@ -888,8 +932,15 @@
       if (ball.owner) {
         const o = ball.owner;
         let fx = o.fx, fy = o.fy; const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
-        ball.x = clamp(o.x + fx * (o.r + ball.r + 3), M + ball.r, WORLD_W - M - ball.r);
-        ball.y = clamp(o.y + fy * (o.r + ball.r + 3), M + ball.r, WORLD_H - M - ball.r);
+        const tx = clamp(o.x + fx * (o.r + ball.r + 3), M + ball.r, WORLD_W - M - ball.r);
+        const ty = clamp(o.y + fy * (o.r + ball.r + 3), M + ball.r, WORLD_H - M - ball.r);
+        if (ball.settle > 0) {
+          // first touch: ease the ball to the feet instead of snapping
+          ball.settle -= dtf;
+          const k = 1 - Math.pow(0.7, dtf);
+          ball.x += (tx - ball.x) * k; ball.y += (ty - ball.y) * k;
+          if (Math.hypot(tx - ball.x, ty - ball.y) < 2) ball.settle = 0;
+        } else { ball.x = tx; ball.y = ty; }
         ball.vx = o.vx; ball.vy = o.vy; ball.z = 0; ball.vz = 0; ball.spin += 0.12 * dtf;
         if (ball.trail.length) ball.trail.shift();   // dribbling: let any flight trail fade out
         if (possCD > 0) possCD -= dtf;
@@ -947,6 +998,7 @@
           p.sprint = (human && i === t.active && sprintHeld[s] && p.stamina > 4);
           if (human && i === t.active) driveHuman(p, s);
           else if (ball.owner === p) { if (p.role === 'gk') driveGKClear(p, s); else driveAIOwner(p, s); }
+          else if (!ball.owner && ball.passTo === p) steer(p, ball.x + ball.vx * 8, ball.y + ball.vy * 8, 0.95);   // run to meet the pass
           else if (p.role === 'gk') driveGK(p, s);
           else if (weOwn) driveHold(p, s);
           else if (i === chaser) driveChase(p);
@@ -957,6 +1009,8 @@
       const pitch = teams[0].onPitch.concat(teams[1].onPitch);
       for (const m of pitch) moveMob(m);
       for (let i = 0; i < pitch.length; i++) for (let j = i + 1; j < pitch.length; j++) mobCollide(pitch[i], pitch[j]);
+      for (const m of pitch) if (m.flash > 0) m.flash -= dtf;
+      for (const t of teams) if (t.swFx && t.swFx.t < 1) t.swFx.t += dtf / 9;
       updateStamina();
       for (const t of teams) { const human = isHumanTeam(t.side); for (let i = 0; i < t.onPitch.length; i++) { if (human && i === t.active) continue; if (ball.owner === t.onPitch[i]) continue; if (t.onPitch[i].stamina < 14) { subPlayer(t, i); break; } } }
 
@@ -1072,6 +1126,43 @@
       ctx.restore();
     }
 
+    // Expanding team-colour ring when a player wins the ball (possession-change flash).
+    function drawFlash(p) {
+      const f = p.flash / 18, grow = 1 - f;
+      ctx.save();
+      ctx.strokeStyle = p.side === 0 ? '#6fa8ff' : '#ff7d7d';
+      ctx.globalAlpha = f * 0.85; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + p.r * 0.7, p.r * (1.2 + grow * 1.5), p.r * (0.55 + grow * 0.7), 0, 0, 6.28); ctx.stroke();
+      ctx.restore();
+    }
+
+    // FIFA-style receiver indicator while a pass is in flight: pulsing ground ring
+    // + bouncing chevron over the player the ball is travelling to.
+    function drawPassTarget() {
+      if (!ball || ball.owner || !ball.passTo) return;
+      const m = ball.passTo, col = m.side === 0 ? '#6fa8ff' : '#ff7d7d';
+      const pulse = 1 + Math.sin(lastTs * 0.015) * 0.12;
+      ctx.save();
+      ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.ellipse(m.x, m.y + m.r * 0.78, m.r * 1.5 * pulse, m.r * 0.62 * pulse, 0, 0, 6.28); ctx.stroke();
+      ctx.globalAlpha = 0.4; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(m.x, m.y + m.r * 0.78, m.r * 1.95 * pulse, m.r * 0.82 * pulse, 0, 0, 6.28); ctx.stroke();
+      const cy = m.y - m.r * 1.6 - 16 + Math.sin(lastTs * 0.02) * 4;
+      ctx.globalAlpha = 1; ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(m.x, cy + 11); ctx.lineTo(m.x - 9, cy - 4); ctx.lineTo(m.x + 9, cy - 4); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    // The control marker flying from the old active player to the new one.
+    function drawSwitchMarker(t) {
+      const p = t.onPitch[t.active];
+      const k = 1 - Math.pow(1 - Math.min(t.swFx.t, 1), 2);   // ease-out
+      const dx = t.swFx.fx + (p.x - t.swFx.fx) * k;
+      const dy = t.swFx.fy + ((p.y - p.r * 0.75 - 25) - t.swFx.fy) * k;
+      ctx.fillStyle = t.side === 0 ? '#6fa8ff' : '#ff7d7d';
+      ctx.beginPath(); ctx.moveTo(dx, dy + 12); ctx.lineTo(dx - 8, dy); ctx.lineTo(dx + 8, dy); ctx.closePath(); ctx.fill();
+    }
+
     function drawChargeBar(p, side) {
       const c = chargeT[side] / SHOOT_MAX, w = 50, x = p.x - w / 2, y = p.y - p.r * 1.5 - 26;
       ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(x, y, w, 7, 3); ctx.fill();
@@ -1133,6 +1224,12 @@
       ctx.fillStyle = '#6fa8ff'; ctx.textAlign = 'right'; ctx.fillText(sideEmoji(0) + ' ' + score[0], VW / 2 - 12, 35);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('–', VW / 2, 35);
       ctx.fillStyle = '#ff7d7d'; ctx.textAlign = 'left'; ctx.fillText(score[1] + ' ' + sideEmoji(1), VW / 2 + 12, 35);
+      // possession dot next to the team on the ball, like a TV scoreboard
+      if (ball && ball.owner) {
+        const px = ball.owner.side === 0 ? VW / 2 - 104 : VW / 2 + 104;
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, 27, 6, 0, 6.28); ctx.fill(); ctx.stroke();
+      }
       ctx.textAlign = 'left';
       drawTeamHUD(0, 12);
       if (numPlayers === 2) drawTeamHUD(1, VW - 12 - (teams[1].onPitch.length * 31 - 3));
@@ -1156,7 +1253,10 @@
       drawPitch(); drawBall();
       // aim guides sit on the turf, under the players
       for (let s = 0; s < 2; s++) { const ap = activePlayer(teams[s]); if (shootHeld[s] && ball.owner === ap) drawAimGuide(ap, s); }
-      for (let s = 0; s < 2; s++) { const t = teams[s], human = isHumanTeam(s); for (let i = 0; i < t.onPitch.length; i++) { const pl = t.onPitch[i]; (pl.emoji ? drawCardPlayer : drawPlayer)(pl, human && i === t.active); } }
+      for (let s = 0; s < 2; s++) for (const pl of teams[s].onPitch) if (pl.flash > 0) drawFlash(pl);
+      for (let s = 0; s < 2; s++) { const t = teams[s], human = isHumanTeam(s); for (let i = 0; i < t.onPitch.length; i++) { const pl = t.onPitch[i]; (pl.emoji ? drawCardPlayer : drawPlayer)(pl, human && i === t.active && !(t.swFx && t.swFx.t < 1)); } }
+      drawPassTarget();
+      for (let s = 0; s < 2; s++) { const t = teams[s]; if (isHumanTeam(s) && t.swFx && t.swFx.t < 1) drawSwitchMarker(t); }
       for (let s = 0; s < 2; s++) { if (shootHeld[s] && ball.owner === activePlayer(teams[s])) drawChargeBar(activePlayer(teams[s]), s); }
       ctx.textAlign = 'center';
       for (const p of pops) { ctx.globalAlpha = Math.max(0, 1 - p.t / (p.big ? 80 : 45)); ctx.fillStyle = p.color; ctx.font = (p.big ? "800 90px 'Pacifico', cursive" : "800 34px 'Nunito', sans-serif"); ctx.fillText(p.txt, p.x, p.y); }
@@ -1174,6 +1274,23 @@
       update(); draw();
       requestAnimationFrame(loop);
     }
+
+    // headless test hook
+    window.__t = {
+      begin: beginGame,
+      give: function (side, idx) { setOwner(teams[side].onPitch[idx]); },
+      pass: passBall, sw: switchPlayer,
+      state: function () {
+        return { state: state, score: score.slice(),
+          owner: ball && ball.owner ? { side: ball.owner.side, role: ball.owner.role } : null,
+          passTo: ball && ball.passTo ? { side: ball.passTo.side, role: ball.passTo.role } : null,
+          settle: ball ? ball.settle : 0,
+          active: [teams[0].active, teams[1].active],
+          swFx: teams.map(function (t) { return t.swFx ? Math.round(t.swFx.t * 100) / 100 : null; }) };
+      },
+      ball: function () { return { x: Math.round(ball.x), y: Math.round(ball.y), vx: Math.round(ball.vx * 10) / 10, vy: Math.round(ball.vy * 10) / 10, owner: !!ball.owner }; },
+      player: function (side, idx) { const p = teams[side].onPitch[idx]; return { x: Math.round(p.x), y: Math.round(p.y), role: p.role, flash: Math.round(p.flash) }; }
+    };
 
     teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
     placeKickoff(-1);

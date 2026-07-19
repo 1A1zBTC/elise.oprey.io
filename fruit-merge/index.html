@@ -52,7 +52,7 @@
         <h2>Fruit Merge</h2>
         <div class="sub">Drop fruit into the jar. Two of the <b>same</b> fruit touch and they <b>merge</b> into the next one up! 🍒+🍒 = 🍓 … all the way to the giant 🍉.</div>
         <div class="chain">🍒<span class="arrow"> ‹ </span>🍓<span class="arrow"> ‹ </span>🍇<span class="arrow"> ‹ </span>🍊<span class="arrow"> ‹ </span>🍎<span class="arrow"> ‹ </span>…<span class="arrow"> ‹ </span>🍉</div>
-        <div class="sub" style="margin-top:8px">Make a <b>🍉 watermelon</b> to clear the round — then a <b>faster, bigger</b> round begins! Move with your finger / mouse (or <b>← →</b>), release to drop. Don't let the fruit pile over the top line.</div>
+        <div class="sub" style="margin-top:8px">Merge up to the <b>🎯 target fruit</b> to clear the round. Each round the target gets <b>bigger</b> — and the jar keeps getting <b>smaller</b>! Move with your finger / mouse (or <b>← →</b>), release to drop. Don't let the fruit pile over the top line.</div>
         <button class="start-btn" id="start-btn">Start Game</button>
       </div>
     </div>
@@ -69,7 +69,7 @@
   </div>
 
   <p class="hint">
-    <b>Drag</b> to aim &nbsp;·&nbsp; <b>release</b> (or Space) to drop &nbsp;·&nbsp; merge matching fruit into bigger ones &nbsp;·&nbsp; make a <b>watermelon</b> 🍉
+    <b>Drag</b> to aim &nbsp;·&nbsp; <b>release</b> (or Space) to drop &nbsp;·&nbsp; merge matching fruit into bigger ones &nbsp;·&nbsp; reach the <b>🎯 target fruit</b> each round
   </p>
 
   <script src="../shared/game.js"></script>
@@ -97,13 +97,18 @@
       { e: '🍈', r: 89,  c: '#80b918' },
       { e: '🍉', r: 101, c: '#2d6a4f' }
     ];
-    const MAX_T = FRUITS.length - 1;   // 🍉 watermelon — reaching it clears the round
-    const SPAWN_BASE = 4;       // round 1 drops only the smallest 5 fruits
+    const MAX_T = FRUITS.length - 1;   // 🍉 watermelon — the final round target
 
     // ---- jar geometry ----
-    const JL = 216, JR = 544, JB = 532, JT = 96;   // inner walls / floor / top
+    const JAR_CX = 380, JB = 532, JT = 96;         // jar center / floor / top
+    const JAR_W_BASE = 328, JAR_W_MIN = 268;       // jar width: round 1 → floor
+    let JL = JAR_CX - JAR_W_BASE / 2, JR = JAR_CX + JAR_W_BASE / 2;
     const HOVER_Y = 52;                            // where the next fruit waits
     const WALL = 9;                                // wall thickness (visual)
+
+    // jar shrinks 20px on every even round, down to the floor (🍉 d=202 must still fit)
+    function jarWidthFor(r) { return Math.max(JAR_W_BASE - Math.floor(r / 2) * 20, JAR_W_MIN); }
+    function targetFor(r) { return Math.min(3 + r, MAX_T); }   // round 1 → 🍎 … round 6+ → 🍉
 
     // ---- physics ----
     const GRAV_BASE = 0.62;    // per fixed step (round 1)
@@ -116,9 +121,10 @@
     let fruits = [];
     let pops = [];
     let score = 0, best = 0;
-    let round = 1;             // each 🍉 made bumps this; higher = faster + bigger fruit
+    let round = 1;             // each target made bumps this; higher = faster + smaller jar
     let GRAV = GRAV_BASE;      // recomputed per round
-    let spawnMax = SPAWN_BASE; // recomputed per round
+    let TARGET = 4;            // fruit index that clears the round — recomputed per round
+    let spawnMax = 2;          // recomputed per round
     let currentType = 0, nextType = 0;
     let curX = (JL + JR) / 2, targetX = curX;
     let cooldown = 0, canDrop = true;
@@ -132,15 +138,20 @@
     const overEl = document.getElementById('over');
 
     function randType() { return Math.floor(Math.random() * (spawnMax + 1)); }
-    // round 1 is gentle; gravity ramps and bigger fruit start dropping as rounds climb
+    // round 1 is gentle; each round the target fruit grows, gravity ramps,
+    // and on even rounds the jar walls close in
     function applyRound() {
-      GRAV = GRAV_BASE * (1 + (round - 1) * 0.16);
-      spawnMax = Math.min(SPAWN_BASE + Math.floor((round - 1) / 2), MAX_T - 3);
+      GRAV = GRAV_BASE * (1 + (round - 1) * 0.12);
+      TARGET = targetFor(round);
+      // always at least two merge steps between the biggest drop and the target
+      spawnMax = Math.min(2 + Math.floor((round - 1) / 2), TARGET - 2, MAX_T - 3);
+      const w = jarWidthFor(round);
+      JL = JAR_CX - w / 2; JR = JAR_CX + w / 2;
     }
 
     function makeFruit(t, x, y) {
       const r = FRUITS[t].r;
-      return { t: t, r: r, x: x, y: y, ox: x, oy: y, age: 0, merged: false, pop: 0 };
+      return { t: t, r: r, x: x, y: y, ox: x, oy: y, age: 0, merged: false, pop: 0, still: 0, asleep: false };
     }
 
     function begin() {
@@ -154,7 +165,7 @@
       state = 'playing';
     }
 
-    // 🍉 made → freeze, celebrate, clear the jar, then start the next (harder) round
+    // target made → freeze, celebrate, clear the jar, then start the next (harder) round
     function startRoundClear() {
       state = 'roundclear';
       clearT = 2.0;
@@ -165,6 +176,7 @@
       round++; applyRound();
       fruits = []; overflow = 0;
       currentType = randType(); nextType = randType();
+      curX = targetX = (JL + JR) / 2;   // walls may have moved in — re-center the dropper
       cooldown = 0; canDrop = true; dragging = false;
       state = 'playing';
     }
@@ -226,10 +238,11 @@
 
     // ---------- physics step (fixed timestep Verlet) ----------
     function step() {
-      // integrate
+      // integrate (asleep fruit are locked in place — no gravity, no rolling)
       for (const f of fruits) {
         f.age += 1 / 60;
         if (f.pop > 0) f.pop -= 1 / 60;
+        if (f.asleep) { f.ox = f.x; f.oy = f.y; continue; }
         let vx = (f.x - f.ox) * FRICTION;
         let vy = (f.y - f.oy) * FRICTION;
         f.ox = f.x; f.oy = f.y;
@@ -243,27 +256,50 @@
           if (f.x + f.r > JR) { f.x = JR - f.r; f.ox = f.x + (f.x - f.ox) * REST; }
           if (f.y + f.r > JB) { f.y = JB - f.r; f.oy = f.y + (f.y - f.oy) * REST; }
         }
-        // fruit-fruit separation
+        // fruit-fruit separation — asleep fruit act as infinite mass and never move
         for (let i = 0; i < fruits.length; i++) {
           const a = fruits[i];
           for (let j = i + 1; j < fruits.length; j++) {
             const b = fruits[j];
+            if (a.asleep && b.asleep) continue;
             let dx = b.x - a.x, dy = b.y - a.y;
             let d2 = dx * dx + dy * dy;
             const min = a.r + b.r;
             if (d2 < min * min && d2 > 0.0001) {
               const d = Math.sqrt(d2);
-              const overlap = (min - d) / d * 0.5;
-              const cx = dx * overlap, cy = dy * overlap;
-              a.x -= cx; a.y -= cy; b.x += cx; b.y += cy;
+              const nx = dx / d, ny = dy / d;
+              const push = min - d;
+              const wa = a.asleep ? 0 : (b.asleep ? 1 : 0.5);   // awake fruit absorbs
+              const wb = b.asleep ? 0 : (a.asleep ? 1 : 0.5);   // the full correction
+              a.x -= nx * push * wa; a.y -= ny * push * wa;
+              b.x += nx * push * wb; b.y += ny * push * wb;
               // shift the previous positions by the same amount so the separation
               // adds no velocity — contacts are fully inelastic (no bounce/pop)
-              a.ox -= cx; a.oy -= cy; b.ox += cx; b.oy += cy;
+              a.ox -= nx * push * wa; a.oy -= ny * push * wa;
+              b.ox += nx * push * wb; b.oy += ny * push * wb;
+              // kill the into-contact velocity component (like the floor does),
+              // otherwise gravity pumps phantom velocity into resting stacks
+              if (!a.asleep) {
+                const van = (a.x - a.ox) * nx + (a.y - a.oy) * ny;
+                if (van > 0) { a.ox += nx * van; a.oy += ny * van; }
+              }
+              if (!b.asleep) {
+                const vbn = (b.x - b.ox) * nx + (b.y - b.oy) * ny;
+                if (vbn < 0) { b.ox += nx * vbn; b.oy += ny * vbn; }
+              }
             }
           }
         }
       }
-      // merges (may flip state to 'roundclear' when a 🍉 is made)
+      // a fruit that has barely moved for ~0.4s locks in place until a merge wakes it
+      for (const f of fruits) {
+        if (f.asleep) continue;
+        const sx = f.x - f.ox, sy = f.y - f.oy;
+        if (f.age > 0.5 && sx * sx + sy * sy < 0.01) {
+          if (++f.still >= 25) { f.asleep = true; f.ox = f.x; f.oy = f.y; }
+        } else f.still = 0;
+      }
+      // merges (may flip state to 'roundclear' when the target is made)
       doMerges();
       if (state !== 'playing') return;
       // overflow check (fruit resting above the top line)
@@ -297,8 +333,8 @@
               nf.ox = mx; nf.oy = my;
               nf.pop = 0.18; nf.age = 0.71;
               fruits.push(nf);
-              if (nt === MAX_T) {
-                // 🍉! round complete — big bonus, then a harder round begins
+              if (nt === TARGET) {
+                // 🎯 target made! round complete — big bonus, then a harder round begins
                 score += 200 + round * 50;
                 spawnPops(mx, my, '#ff5a6e', 28);
                 fruits = fruits.filter(function (f) { return !f.merged; });
@@ -312,7 +348,11 @@
           }
         }
       }
-      if (fruits.some(function (f) { return f.merged; })) fruits = fruits.filter(function (f) { return !f.merged; });
+      if (fruits.some(function (f) { return f.merged; })) {
+        fruits = fruits.filter(function (f) { return !f.merged; });
+        // a merge can remove support from the pile — wake everything so it resettles
+        for (const f of fruits) { f.asleep = false; f.still = 0; }
+      }
     }
 
     function spawnPops(x, y, color, n) {
@@ -459,7 +499,7 @@
       ctx.fillText(String(round), JL / 2, 262);
       // goal reminder
       ctx.font = "22px 'Segoe UI Emoji', sans-serif"; ctx.textBaseline = 'middle';
-      ctx.fillText('🎯 ' + FRUITS[MAX_T].e, JL / 2, 296);
+      ctx.fillText('🎯 ' + FRUITS[TARGET].e, JL / 2, 296);
       ctx.textBaseline = 'alphabetic';
 
       // next fruit (right)
@@ -469,13 +509,18 @@
       const nr = Math.min(34, FRUITS[nextType].r);
       drawFruit({ t: nextType, r: nr, x: rcx, y: 158, pop: 0 });
 
-      // mini fruit ladder down the right side
+      // mini fruit ladder down the right side — target ringed, beyond-target dimmed
       ctx.font = "20px 'Segoe UI Emoji', sans-serif"; ctx.textBaseline = 'middle';
       for (let i = 0; i < FRUITS.length; i++) {
         const yy = 232 + i * 27;
         if (yy > JB) break;
-        ctx.globalAlpha = 0.85;
+        ctx.globalAlpha = i > TARGET ? 0.22 : 0.85;
         ctx.fillText(FRUITS[i].e, rcx, yy);
+        if (i === TARGET) {
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = '#ffe8b0'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(rcx, yy, 15, 0, 6.2832); ctx.stroke();
+        }
       }
       ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic';
     }
@@ -519,15 +564,17 @@
       const cx = (JL + JR) / 2, cy = (JT + JB) / 2;
       ctx.fillStyle = 'rgba(8,14,28,0.62)';
       roundRectPath(JL, JT, JR - JL, JB - JT, 18); ctx.fill();
-      // pulsing watermelon
+      // pulsing target fruit that was just made
       const s = 1 + Math.sin(_t * 0.006) * 0.06;
       ctx.font = (90 * s) + "px 'Segoe UI Emoji', sans-serif";
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🍉', cx, cy - 56);
+      ctx.fillText(FRUITS[TARGET].e, cx, cy - 56);
       ctx.fillStyle = '#fff'; ctx.font = "800 34px 'Nunito', sans-serif";
       ctx.fillText('Round ' + round + ' clear!', cx, cy + 14);
+      const shrinks = jarWidthFor(round + 1) < jarWidthFor(round);
+      const nextT = targetFor(round + 1);
       ctx.fillStyle = '#ffe8b0'; ctx.font = "800 18px 'Nunito', sans-serif";
-      ctx.fillText('Round ' + (round + 1) + ' — faster & bigger!', cx, cy + 46);
+      ctx.fillText('Next target: ' + FRUITS[nextT].e + (shrinks ? '  —  the jar shrinks!' : ''), cx, cy + 46);
       ctx.fillStyle = '#7fa6c8'; ctx.font = "800 14px 'Nunito', sans-serif";
       ctx.fillText('+' + (200 + round * 50) + ' bonus', cx, cy + 74);
       ctx.textBaseline = 'alphabetic';
@@ -541,6 +588,14 @@
       update(); draw();
       requestAnimationFrame(loop);
     }
+
+    // headless test hook
+    window.__t = {
+      begin: begin, drop: drop, nextRound: nextRound, aim: aim,
+      spawn: function (t, x, y) { fruits.push(makeFruit(t, x, y)); },
+      fruits: function () { return fruits.map(function (f) { return { t: f.t, x: Math.round(f.x), y: Math.round(f.y), asleep: f.asleep }; }); },
+      state: function () { return { state: state, round: round, target: TARGET, spawnMax: spawnMax, jarW: JR - JL, score: score, fruits: fruits.length, asleep: fruits.filter(function (f) { return f.asleep; }).length, grav: GRAV }; }
+    };
 
     best = loadBest();
     requestAnimationFrame(loop);

@@ -59,7 +59,7 @@
     <div class="overlay" id="setup">
       <div class="panel">
         <h2>Mr Grizzles</h2>
-        <div class="sub">Run through the subway, leap the barriers, roll under the signs and grab every coin! 🧸</div>
+        <div class="sub">Run through the subway, ramp onto the train roofs, and grab every can of Bud Light! 🧸🍺 Get hit and Mr Grizzles goes SUPER GRIZZLY!</div>
         <div class="group-label">Players</div>
         <div class="choices" id="count-choices">
           <button class="choice" data-players="1"><span class="big">1</span><span class="small">solo · WASD or ◄►</span></button>
@@ -84,7 +84,8 @@
 
   <p class="hint">
     <b>P1: A/D</b> change lane, <b>W</b> jump, <b>S</b> roll &nbsp;·&nbsp; <b>P2: ◄ ►</b> change lane, <b>▲</b> jump, <b>▼</b> roll
-    &nbsp;·&nbsp; jump the barriers 🚧 roll under signs, and never argue with a train 🚆
+    &nbsp;·&nbsp; run up the orange ramp carts to the rooftops 🛤️ grab the Bud Light 🍺 and go SUPER GRIZZLY when you stumble 🐻 —
+    but watch out when he's worn out afterwards!
   </p>
 
   <script src="../shared/game.js"></script>
@@ -108,13 +109,20 @@
     // ---------- gameplay constants ----------
     const JUMP_FRAMES = 34, JUMP_H = 1.5;
     const ROLL_FRAMES = 30;
-    const STUMBLE_FRAMES = 160;  // grace window after a first hit (~2.7s)
+    const STAGGER_FRAMES = 36;   // brief wobble animation right after a hit
     const TUMBLE_FRAMES = 55;    // knocked-out crash animation length
     const BAR_H = 0.85;          // must be above this to clear a barrier
     const SIGN_BOT = 0.9;        // overhead boards hang down to here — roll under
     const HIT_DEPTH = 0.9;       // z half-window for solid collisions
-    const COIN_PTS = 10;
+    const COIN_PTS = 10;         // points per can of Bud Light
+    const SMASH_PTS = 15;        // bonus per obstacle smashed while Super Grizzly
     const LANE_TOL = 0.4;        // mid-tween bears can squeak past adjacent-lane obstacles
+    const TRAIN_H = 2.1;         // roof height in world units — runnable after a ramp
+    const RAMP_LEN = 5;          // ramp carts slope up over their first 5 units
+    const CLIMB = 0.55;          // max per-frame rise while running up a ramp
+    const FALL = 0.14;           // fall speed off a roof edge
+    const SUPER_FRAMES = 900;    // Super Grizzly rampage: 15s untouchable
+    const TIRED_FRAMES = 600;    // worn-out window after Super ends — a hit here knocks out
 
     const best = EL.best('grizzles.best');
     const clamp = EL.clamp, pick = EL.pick;
@@ -127,8 +135,8 @@
     ];
 
     function makeBear(lane) {
-      return { lane: lane, laneF: lane, y: 0, jumpT: 0, rollT: 0, stumbleT: 0,
-               out: false, tumbleT: 0, outBy: '', coins: 0, score: 0 };
+      return { lane: lane, laneF: lane, y: 0, jumpT: 0, jumpBase: 0, rollT: 0, stumbleT: 0,
+               superT: 0, tiredT: 0, out: false, tumbleT: 0, outBy: '', coins: 0, bonus: 0, score: 0 };
     }
 
     // ---------- state ----------
@@ -161,15 +169,25 @@
     function bar(lane, dz)        { return { kind: 'bar',   lane: lane, dz: dz, len: 1.5 }; }
     function sign(lane, dz)       { return { kind: 'sign',  lane: lane, dz: dz, len: 1.5 }; }
     function train(lane, dz, len) { return { kind: 'train', lane: lane, dz: dz, len: len }; }
+    function trainR(lane, dz, len) { return { kind: 'train', lane: lane, dz: dz, len: len, ramp: true }; }
     function coin(lane, dz, y)    { return { kind: 'coin',  lane: lane, dz: dz, len: 0, y: y == null ? 0.3 : y }; }
     function row(lane, dz, n) {
       const out = [];
       for (let i = 0; i < n; i++) out.push(coin(lane, dz + i * 2.5));
       return out;
     }
-    function arc(lane, dzBar) {   // coin arc tracing the jump over a barrier at dzBar
+    function roofRow(lane, dz, n) {   // cans along a train roof
+      const out = [];
+      for (let i = 0; i < n; i++) out.push(coin(lane, dz + i * 2.5, TRAIN_H + 0.3));
+      return out;
+    }
+    function arc(lane, dzBar) {   // can arc tracing the jump over a barrier at dzBar
       const ys = [0.25, 0.8, 1.15, 0.8, 0.25];
       return ys.map(function (y, i) { return coin(lane, dzBar + (i - 2) * 1.6, y); });
+    }
+    function gapArc(lane, dzMid) {   // can arc over the gap between two carts
+      const ys = [2.5, 3.0, 3.3, 3.0, 2.5];
+      return ys.map(function (y, i) { return coin(lane, dzMid + (i - 2) * 1.6, y); });
     }
 
     const CHUNKS = [
@@ -190,7 +208,13 @@
       { tier: 3, depth: 36, items: [train(-1, 2, 20), train(0, 2, 20), sign(1, 28)].concat(row(1, 3, 7)) },
       { tier: 3, depth: 52, items: [bar(-1, 4), bar(0, 20), bar(1, 36)].concat(arc(-1, 4), arc(0, 20), arc(1, 36)) },
       { tier: 3, depth: 36, items: [sign(-1, 4), sign(0, 4), sign(1, 4), bar(-1, 20), bar(0, 20), bar(1, 20)].concat(arc(0, 20), row(0, 8, 4)) },
-      { tier: 3, depth: 30, items: [train(1, 2, 24), sign(0, 6), sign(0, 22)].concat(row(-1, 4, 8)) }
+      { tier: 3, depth: 30, items: [train(1, 2, 24), sign(0, 6), sign(0, 22)].concat(row(-1, 4, 8)) },
+      // --- ramp carts: run up the back, ride the roof, jump the gaps ---
+      { tier: 1, depth: 28, items: [trainR(0, 3, 16)].concat(roofRow(0, 9, 4), row(-1, 4, 4)) },
+      { tier: 2, depth: 46, items: [trainR(1, 2, 16), trainR(1, 26, 14)].concat(roofRow(1, 8, 4), gapArc(1, 22), roofRow(1, 29, 4), row(-1, 6, 6)) },
+      { tier: 2, depth: 40, items: [trainR(-1, 2, 26), bar(0, 8), sign(1, 8)].concat(roofRow(-1, 8, 6), arc(0, 8), row(1, 14, 4)) },
+      { tier: 3, depth: 48, items: [trainR(-1, 2, 30), train(0, 8, 24)].concat(roofRow(-1, 8, 5), roofRow(0, 14, 5), row(1, 4, 6)) },
+      { tier: 3, depth: 52, items: [trainR(0, 2, 14), trainR(0, 24, 12), bar(-1, 10), bar(1, 30)].concat(roofRow(0, 8, 3), gapArc(0, 19), roofRow(0, 27, 3), arc(-1, 10)) }
     ];
 
     // Dev sanity check: no z-slice of any chunk may have trains across all 3 lanes.
@@ -222,13 +246,15 @@
       const c = CHUNKS[idx];
       c.items.forEach(function (it) {
         ents.push({ kind: it.kind, lane: it.lane, z: nextSpawnZ + it.dz, len: it.len,
-                    y: it.y || 0, color: it.kind === 'train' ? pick(TRAIN_COLORS) : null,
+                    y: it.y || 0, ramp: !!it.ramp,
+                    color: it.kind === 'train' ? (it.ramp ? RAMP_COLOR : pick(TRAIN_COLORS)) : null,
                     hit: [false, false], taken: [false, false] });
       });
       nextSpawnZ += c.depth + 6 + speed * 8;       // breathing room grows with speed
     }
 
     const TRAIN_COLORS = ['#d23b3b', '#4a6cd4', '#e8a13c'];
+    const RAMP_COLOR = '#c8862c';   // ramp carts are always warning-orange so kids can spot them
 
     // ---------- input ----------
     function move(pi, dir) {
@@ -240,12 +266,12 @@
     function jump(pi) {
       const pl = players[pi];
       if (state !== 'playing' || !pl || pl.out || pl.jumpT > 0 || pl.rollT > 0) return;
-      pl.jumpT = JUMP_FRAMES; sfxJump();
+      pl.jumpT = JUMP_FRAMES; pl.jumpBase = pl.y; sfxJump();
     }
     function roll(pi) {
       const pl = players[pi];
       if (state !== 'playing' || !pl || pl.out || pl.rollT > 0) return;
-      if (pl.jumpT > 0) { pl.jumpT = 0; pl.y = 0; }   // slam-cancel a jump into a roll
+      if (pl.jumpT > 0) { pl.jumpT = 0; pl.jumpBase = 0; }   // slam-cancel a jump into a roll (fast-fall)
       pl.rollT = ROLL_FRAMES; sfxRoll();
     }
 
@@ -344,13 +370,72 @@
     // ---------- update ----------
     function onHit(pl, ent) {
       ent.hit[players.indexOf(pl)] = true;      // this piece is spent for this bear (no train re-hits)
-      if (pl.stumbleT > 0) {
+      if (pl.tiredT > 0) {
         pl.out = true; pl.tumbleT = 0.001; pl.outBy = ent.kind;
         sfxCrash();
       } else {
-        pl.stumbleT = STUMBLE_FRAMES; pl.outBy = ent.kind;
-        sfxStumble();
+        // first hit while fresh: stumble, then go SUPER GRIZZLY
+        pl.stumbleT = STAGGER_FRAMES; pl.superT = SUPER_FRAMES; pl.outBy = ent.kind;
+        sfxStumble(); sfxRoar();
       }
+    }
+
+    // Super Grizzly plows straight through obstacles
+    function smash(pl, en) {
+      en.dead = true;
+      pl.bonus += SMASH_PTS;
+      const p = project(en.lane, Math.max(en.z, 0), en.kind === 'train' ? 1 : 0.6);
+      const colors = en.kind === 'bar' ? ['#f2f2f2', '#e94560', '#5a6070']
+                   : en.kind === 'sign' ? ['#2f6ad9', '#ffffff', '#5a6070']
+                   : [en.color || '#d23b3b', '#ffd23f', '#8b93b0'];
+      burst(p.x, p.y, colors, en.kind === 'train' ? 26 : 14, en.kind === 'train' ? 9 : 6);
+      shakeT = Math.max(shakeT, en.kind === 'train' ? 14 : 7);
+      sfxSmash();
+    }
+
+    // ---------- particles & screen shake ----------
+    let parts = [], shakeT = 0;
+    function burst(x, y, colors, n, pow) {
+      for (let i = 0; i < n; i++) {
+        parts.push({ x: x, y: y, vx: (Math.random() - 0.5) * pow, vy: -Math.random() * pow,
+                     sz: 3 + Math.random() * 5, life: 26 + Math.random() * 18, max: 44,
+                     color: pick(colors) });
+      }
+    }
+    function updateParts() {
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const p = parts[i];
+        p.x += p.vx * dtf; p.vy += 0.35 * dtf; p.y += p.vy * dtf; p.life -= dtf;
+        if (p.life <= 0) parts.splice(i, 1);
+      }
+      if (shakeT > 0) { shakeT -= dtf; if (shakeT < 0) shakeT = 0; }
+    }
+    function drawParts() {
+      for (const p of parts) {
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life / 20));
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.sz / 2, p.y - p.sz / 2, p.sz, p.sz);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // roof/ramp height under a bear (z=0). Any train roof is runnable; ramps are the way up.
+    function trainSurfAt(en) {
+      if (!en.ramp) return TRAIN_H;
+      return TRAIN_H * Math.min(1, Math.max(0, -en.z) / RAMP_LEN);
+    }
+    function surfaceUnder(pl) {
+      let g = 0;
+      for (let e = 0; e < ents.length; e++) {
+        const en = ents[e];
+        if (en.kind !== 'train' || en.dead) continue;
+        if (Math.abs(pl.laneF - en.lane) >= 0.6) continue;
+        const rel = -en.z;
+        if (rel < 0 || rel > en.len) continue;
+        const s = trainSurfAt(en);
+        if (s > g) g = s;
+      }
+      return g;
     }
 
     function update() {
@@ -365,8 +450,9 @@
       // stream entities toward the camera
       for (let e = ents.length - 1; e >= 0; e--) {
         ents[e].z -= speed * dtf;
-        if (ents[e].z + ents[e].len < Z_KILL) ents.splice(e, 1);
+        if (ents[e].dead || ents[e].z + ents[e].len < Z_KILL) ents.splice(e, 1);
       }
+      updateParts();
 
       let allOut = true;
       for (let i = 0; i < players.length; i++) {
@@ -375,18 +461,34 @@
         allOut = false;
 
         pl.laneF += (pl.lane - pl.laneF) * 0.28 * dtf;
+
+        // vertical: jump parabola from the surface you left, else follow ramps / fall off roofs
+        const g = surfaceUnder(pl);
         if (pl.jumpT > 0) {
           pl.jumpT -= dtf;
           const t = 1 - Math.max(pl.jumpT, 0) / JUMP_FRAMES;
-          pl.y = JUMP_H * 4 * t * (1 - t);
-          if (pl.jumpT <= 0) { pl.jumpT = 0; pl.y = 0; }
+          pl.y = pl.jumpBase + JUMP_H * 4 * t * (1 - t);
+          if (t > 0.55 && pl.y <= g) { pl.jumpT = 0; pl.jumpBase = 0; pl.y = g; }   // landed (roof or ground)
+          else if (pl.jumpT <= 0) { pl.jumpT = 0; pl.jumpBase = 0; }
+        } else {
+          const rise = g - pl.y;
+          if (rise > 0 && rise <= CLIMB * dtf) pl.y = g;                            // running up a ramp
+          else if (rise < 0) pl.y = Math.max(g, pl.y - (pl.rollT > 0 ? 0.4 : FALL) * dtf);  // off an edge
         }
+
         if (pl.rollT > 0) { pl.rollT -= dtf; if (pl.rollT < 0) pl.rollT = 0; }
         if (pl.stumbleT > 0) { pl.stumbleT -= dtf; if (pl.stumbleT < 0) pl.stumbleT = 0; }
+        if (pl.superT > 0) {
+          pl.superT -= dtf;
+          if (pl.superT <= 0) { pl.superT = 0; pl.tiredT = TIRED_FRAMES; }   // rampage over — worn out
+        } else if (pl.tiredT > 0) {
+          pl.tiredT -= dtf; if (pl.tiredT < 0) pl.tiredT = 0;
+        }
 
         const hitTop = pl.y + (pl.rollT > 0 ? 0.7 : 1.6);
         for (let e = 0; e < ents.length; e++) {
           const en = ents[e];
+          if (en.dead) continue;
           if (Math.abs(pl.laneF - en.lane) >= LANE_TOL) continue;
           if (en.kind === 'coin') {
             if (!en.taken[i] && Math.abs(en.z) < 1.2 && Math.abs(pl.y - en.y) < 0.6) {
@@ -396,12 +498,14 @@
           }
           if (en.hit[i]) continue;
           if (en.z >= HIT_DEPTH || en.z + en.len <= -HIT_DEPTH) continue;
+          if (en.kind === 'train' && pl.y >= trainSurfAt(en) - 0.35) continue;  // riding the ramp/roof
           if (en.kind === 'bar' && pl.y >= BAR_H) continue;      // cleared it
           if (en.kind === 'sign' && hitTop <= SIGN_BOT) continue; // rolled under
+          if (pl.superT > 0) { smash(pl, en); continue; }         // Super Grizzly smashes through
           onHit(pl, en);
           if (pl.out) break;
         }
-        if (!pl.out) pl.score = Math.floor(dist) + pl.coins * COIN_PTS;
+        if (!pl.out) pl.score = Math.floor(dist) + pl.coins * COIN_PTS + pl.bonus;
       }
 
       // cull coins every active bear has taken
@@ -441,6 +545,8 @@
     function sfxMove()    { beep(500, 0.05, 'sine', 0.03, 560); }
     function sfxStumble() { beep(180, 0.18, 'square', 0.06, 120); }
     function sfxCrash()   { beep(240, 0.35, 'sawtooth', 0.07, 60); }
+    function sfxRoar()    { beep(90, 0.5, 'sawtooth', 0.08, 220); setTimeout(function () { beep(70, 0.4, 'sawtooth', 0.07, 160); }, 120); }
+    function sfxSmash()   { beep(160, 0.12, 'square', 0.06, 60); setTimeout(function () { beep(420, 0.08, 'square', 0.04, 200); }, 30); }
 
     // ---------- drawing helpers ----------
     function rr(x, y, w, h, r) {
@@ -462,16 +568,36 @@
 
     // ---------- draw: background ----------
     const SKYLINE = [38, 62, 30, 84, 46, 70, 26, 92, 40, 58, 74, 34, 66, 28, 80, 44];   // building heights
+    const STARS = (function () {
+      const out = [];
+      for (let i = 0; i < 48; i++) {
+        out.push({ x: Math.random() * W, y: Math.random() * (HORIZON_Y - 40),
+                   r: 0.6 + Math.random() * 1.1, tw: Math.random() * Math.PI * 2 });
+      }
+      return out;
+    })();
 
     function drawBackground() {
       // dusk sky
       const sky = ctx.createLinearGradient(0, 0, 0, HORIZON_Y + 40);
-      sky.addColorStop(0, '#1a1a2e');
-      sky.addColorStop(0.7, '#2a3560');
+      sky.addColorStop(0, '#12122a');
+      sky.addColorStop(0.55, '#2a3560');
       sky.addColorStop(1, '#4a3d6b');
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, HORIZON_Y + 40);
-      // moon
+      // twinkling stars
+      ctx.fillStyle = '#e8ecff';
+      for (const st of STARS) {
+        ctx.globalAlpha = 0.35 + 0.5 * Math.abs(Math.sin(scroll * 0.03 + st.tw));
+        ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // moon with glow
+      const mg = ctx.createRadialGradient(640, 62, 8, 640, 62, 58);
+      mg.addColorStop(0, 'rgba(255,232,176,0.5)');
+      mg.addColorStop(1, 'rgba(255,232,176,0)');
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(640, 62, 58, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#ffe8b0';
       ctx.beginPath(); ctx.arc(640, 62, 20, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#2a3560';
@@ -482,7 +608,10 @@
       drawSkyline(scroll * 2.2, 1, '#161d38', 0);
 
       // ground either side of the track
-      ctx.fillStyle = '#141a2c';
+      const gnd = ctx.createLinearGradient(0, HORIZON_Y, 0, H);
+      gnd.addColorStop(0, '#1a2138');
+      gnd.addColorStop(1, '#0e1322');
+      ctx.fillStyle = gnd;
       ctx.fillRect(0, HORIZON_Y, W, H - HORIZON_Y);
     }
 
@@ -518,14 +647,22 @@
     }
 
     function drawTrack() {
-      // asphalt bed
-      trackQuad(-1.55, 1.55, Z_NEAR, Z_SPAWN, '#353b4c');
-      // cross ties streaming toward the camera (the speed illusion)
-      const TIE = 8;
+      // gravel ballast bed
+      trackQuad(-1.55, 1.55, Z_NEAR, Z_SPAWN, '#333048');
+      // wooden sleepers streaming toward the camera (the speed illusion)
+      const TIE = 4;
       for (let k = 0; k < Z_SPAWN / TIE + 1; k++) {
         const z0 = k * TIE - (scroll % TIE) - 1;
-        if (z0 + 0.8 < Z_NEAR || z0 > Z_SPAWN) continue;
-        trackQuad(-1.55, 1.55, Math.max(z0, Z_NEAR), z0 + 0.8, 'rgba(255,255,255,0.045)');
+        if (z0 + 0.7 < Z_NEAR || z0 > Z_SPAWN) continue;
+        trackQuad(-1.45, 1.45, Math.max(z0, Z_NEAR), z0 + 0.7, '#4c3a28');
+        trackQuad(-1.45, 1.45, Math.max(z0, Z_NEAR), z0 + 0.22, 'rgba(0,0,0,0.3)');   // tie shadow edge
+      }
+      // steel rails: a pair per lane, dark base + bright running surface
+      for (const lane of [-1, 0, 1]) {
+        for (const o of [-0.27, 0.27]) {
+          trackQuad(lane + o - 0.035, lane + o + 0.035, Z_NEAR, Z_SPAWN, '#23283a');
+          trackQuad(lane + o - 0.013, lane + o + 0.013, Z_NEAR, Z_SPAWN, '#9aa2b8');
+        }
       }
       // dashed lane dividers at the lane boundaries
       const GAP = 4;
@@ -533,12 +670,82 @@
         for (let k = 0; k < Z_SPAWN / GAP + 1; k++) {
           const z0 = k * GAP - (scroll % GAP) - 1;
           if (z0 + 1.8 < Z_NEAR || z0 > Z_SPAWN) continue;
-          trackQuad(lb - 0.018, lb + 0.018, Math.max(z0, Z_NEAR), z0 + 1.8, 'rgba(255,255,255,0.35)');
+          trackQuad(lb - 0.014, lb + 0.014, Math.max(z0, Z_NEAR), z0 + 1.8, 'rgba(255,255,255,0.22)');
         }
       }
       // solid edge lines
       trackQuad(-1.57, -1.51, Z_NEAR, Z_SPAWN, '#ffd23f');
       trackQuad(1.51, 1.57, Z_NEAR, Z_SPAWN, '#ffd23f');
+      drawWalls();
+      // depth haze so the far track melts into the dark
+      const fog = ctx.createLinearGradient(0, HORIZON_Y - 6, 0, HORIZON_Y + 110);
+      fog.addColorStop(0, 'rgba(22,26,48,0.95)');
+      fog.addColorStop(1, 'rgba(22,26,48,0)');
+      ctx.fillStyle = fog;
+      ctx.fillRect(0, HORIZON_Y - 6, W, 116);
+    }
+
+    // low brick retaining walls with tunnel lamps either side of the track
+    const GRAFFITI = ['#3ec8be', '#e94560', '#e8a13c'];
+    function drawWalls() {
+      const SEG = 6, WALL_H = 1.35, WX = 2.08;
+      const base = Math.floor(scroll / SEG);
+      for (let k = -1; k < Z_SPAWN / SEG + 1; k++) {
+        const z0 = k * SEG - (scroll % SEG) - 1;
+        const z1 = z0 + SEG;
+        if (z1 < 0 || z0 > Z_SPAWN) continue;
+        const zc0 = Math.max(z0, 0), zc1 = Math.min(z1, Z_SPAWN);
+        const segIdx = base + k;
+        for (const sd of [-1, 1]) {
+          const lx = sd * WX;
+          const a = project(lx, zc1, 0), b = project(lx, zc1, WALL_H);
+          const c = project(lx, zc0, WALL_H), d = project(lx, zc0, 0);
+          // brick face, fading with distance
+          ctx.fillStyle = '#463a52';
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.g); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.g);
+          ctx.closePath(); ctx.fill();
+          // a splash of graffiti on the occasional segment
+          if (((segIdx % 7) + 7) % 7 === 2 && d.s > 0.25) {
+            ctx.fillStyle = GRAFFITI[((segIdx % 3) + 3) % 3];
+            ctx.globalAlpha = 0.4;
+            const m0 = project(lx, zc0 + (zc1 - zc0) * 0.2, WALL_H * 0.3);
+            const m1 = project(lx, zc0 + (zc1 - zc0) * 0.8, WALL_H * 0.85);
+            ctx.beginPath();
+            ctx.moveTo(m0.x, m0.y); ctx.lineTo(m1.x, m1.y);
+            ctx.lineWidth = Math.max(2, 9 * d.s); ctx.strokeStyle = ctx.fillStyle; ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
+          // mortar courses
+          ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+          ctx.lineWidth = Math.max(0.6, 1.4 * d.s);
+          for (const hf of [0.45, 0.9]) {
+            const e0 = project(lx, zc0, WALL_H * hf), e1 = project(lx, zc1, WALL_H * hf);
+            ctx.beginPath(); ctx.moveTo(e0.x, e0.y); ctx.lineTo(e1.x, e1.y); ctx.stroke();
+          }
+          // cap stone + distance fog on the face
+          ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+          ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+          ctx.fillStyle = 'rgba(22,26,48,' + Math.max(0, 0.8 - d.s) + ')';
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.g); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.g);
+          ctx.closePath(); ctx.fill();
+          // tunnel lamp every third segment
+          if (((segIdx % 3) + 3) % 3 === 0 && zc0 >= 0 && z0 >= 0) {
+            const lp = project(lx, z0 + 0.4, WALL_H + 0.28);
+            if (lp.s > 0.12) {
+              const lr = 26 * lp.s;
+              const lg = ctx.createRadialGradient(lp.x, lp.y, 1, lp.x, lp.y, lr);
+              lg.addColorStop(0, 'rgba(255,200,110,0.6)');
+              lg.addColorStop(1, 'rgba(255,200,110,0)');
+              ctx.fillStyle = lg;
+              ctx.beginPath(); ctx.arc(lp.x, lp.y, lr, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#ffd9a0';
+              ctx.beginPath(); ctx.arc(lp.x, lp.y, 3.2 * lp.s, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+        }
+      }
     }
 
     // ---------- draw: entities ----------
@@ -566,6 +773,17 @@
       ctx.restore();
       ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = Math.max(1, 2 * p.s);
       rr(p.x - hw, yt, hw * 2, yb - yt, 5 * p.s); ctx.stroke();
+      // blinking work light on top
+      const lit = Math.floor(scroll * 0.12) % 2 === 0;
+      if (lit) {
+        const lg = ctx.createRadialGradient(p.x, yt - 7 * p.s, 1, p.x, yt - 7 * p.s, 16 * p.s);
+        lg.addColorStop(0, 'rgba(255,176,58,0.55)');
+        lg.addColorStop(1, 'rgba(255,176,58,0)');
+        ctx.fillStyle = lg;
+        ctx.beginPath(); ctx.arc(p.x, yt - 7 * p.s, 16 * p.s, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = lit ? '#ffb03a' : '#7a5a20';
+      ctx.beginPath(); ctx.arc(p.x, yt - 7 * p.s, 4.5 * p.s, 0, Math.PI * 2); ctx.fill();
     }
 
     function drawSignEnt(en) {
@@ -591,87 +809,219 @@
     }
 
     function drawTrainEnt(en) {
-      const zn = Math.max(en.z, -1.2);
+      // ramp carts: the body starts where the ramp tops out
+      const bodyZ = en.ramp ? en.z + RAMP_LEN : en.z;
+      const zn = Math.max(bodyZ, -1.2);
       const zf = Math.min(en.z + en.len, Z_SPAWN + 4);
-      if (zf <= zn) return;
-      const TH = 2.1;                                  // train height in world units
-      const pn = project(en.lane, zn, 0), pf = project(en.lane, zf, 0);
-      const hn = 88 * pn.s, hf = 88 * pf.s;
-      const tn = project(en.lane, zn, TH).y, tf = project(en.lane, zf, TH).y;
-      const body = en.color || '#d23b3b';
-      // side walls
-      ctx.fillStyle = shade(body, 0.55);
-      ctx.beginPath();
-      ctx.moveTo(pn.x - hn, pn.g); ctx.lineTo(pn.x - hn, tn); ctx.lineTo(pf.x - hf, tf); ctx.lineTo(pf.x - hf, pf.g);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(pn.x + hn, pn.g); ctx.lineTo(pn.x + hn, tn); ctx.lineTo(pf.x + hf, tf); ctx.lineTo(pf.x + hf, pf.g);
-      ctx.closePath(); ctx.fill();
-      // roof
-      ctx.fillStyle = shade(body, 0.75);
-      ctx.beginPath();
-      ctx.moveTo(pn.x - hn, tn); ctx.lineTo(pn.x + hn, tn); ctx.lineTo(pf.x + hf, tf); ctx.lineTo(pf.x - hf, tf);
-      ctx.closePath(); ctx.fill();
-      // front face
-      if (en.z > -1.2) {
-        ctx.fillStyle = body;
-        rr(pn.x - hn, tn, hn * 2, pn.g - tn, 10 * pn.s); ctx.fill();
-        // windshield
-        ctx.fillStyle = '#1a2440';
-        rr(pn.x - hn * 0.72, tn + (pn.g - tn) * 0.12, hn * 1.44, (pn.g - tn) * 0.3, 6 * pn.s); ctx.fill();
-        // headlights
-        ctx.fillStyle = '#ffe8b0';
-        ctx.beginPath(); ctx.arc(pn.x - hn * 0.55, pn.g - (pn.g - tn) * 0.22, 8 * pn.s, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(pn.x + hn * 0.55, pn.g - (pn.g - tn) * 0.22, 8 * pn.s, 0, Math.PI * 2); ctx.fill();
-        // bumper stripes
-        ctx.fillStyle = '#ffd23f';
-        ctx.fillRect(pn.x - hn * 0.9, pn.g - 8 * pn.s, hn * 1.8, 5 * pn.s);
+      if (zf > zn) {
+        const pn = project(en.lane, zn, 0), pf = project(en.lane, zf, 0);
+        const hn = 88 * pn.s, hf = 88 * pf.s;
+        const tn = project(en.lane, zn, TRAIN_H).y, tf = project(en.lane, zf, TRAIN_H).y;
+        const body = en.color || '#d23b3b';
+        // side walls
+        ctx.fillStyle = shade(body, 0.55);
+        ctx.beginPath();
+        ctx.moveTo(pn.x - hn, pn.g); ctx.lineTo(pn.x - hn, tn); ctx.lineTo(pf.x - hf, tf); ctx.lineTo(pf.x - hf, pf.g);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(pn.x + hn, pn.g); ctx.lineTo(pn.x + hn, tn); ctx.lineTo(pf.x + hf, tf); ctx.lineTo(pf.x + hf, pf.g);
+        ctx.closePath(); ctx.fill();
+        // glowing side windows down the visible flank(s)
+        const sides = en.lane < 0 ? [1] : en.lane > 0 ? [-1] : [-1, 1];
+        for (const sd of sides) {
+          let wi = 0;
+          for (let zw = bodyZ + 1.6; zw + 1.6 < zf; zw += 3, wi++) {
+            if (zw + 1.6 < zn) continue;   // behind the camera clamp
+            const w0 = project(en.lane, zw, 0), w1 = project(en.lane, zw + 1.6, 0);
+            if (w0.s < 0.14) break;
+            const x0 = w0.x + sd * 88 * w0.s, x1 = w1.x + sd * 88 * w1.s;
+            const ya0 = project(en.lane, zw, 1.62).y, yb0 = project(en.lane, zw, 1.05).y;
+            const ya1 = project(en.lane, zw + 1.6, 1.62).y, yb1 = project(en.lane, zw + 1.6, 1.05).y;
+            ctx.fillStyle = (wi % 4 === 3) ? '#141c30' : 'rgba(255,224,150,0.75)';
+            ctx.beginPath();
+            ctx.moveTo(x0, ya0); ctx.lineTo(x1, ya1); ctx.lineTo(x1, yb1); ctx.lineTo(x0, yb0);
+            ctx.closePath(); ctx.fill();
+          }
+          // skirt shadow line under the flank
+          ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+          ctx.lineWidth = Math.max(1, 2.5 * pn.s);
+          ctx.beginPath();
+          ctx.moveTo(pn.x + sd * hn, pn.g - 6 * pn.s); ctx.lineTo(pf.x + sd * hf, pf.g - 6 * pf.s);
+          ctx.stroke();
+        }
+        // roof with ribs
+        ctx.fillStyle = shade(body, 0.75);
+        ctx.beginPath();
+        ctx.moveTo(pn.x - hn, tn); ctx.lineTo(pn.x + hn, tn); ctx.lineTo(pf.x + hf, tf); ctx.lineTo(pf.x - hf, tf);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+        for (let zr = zn + 2; zr < zf; zr += 3) {
+          const r0 = project(en.lane, zr, TRAIN_H);
+          const rw = 84 * r0.s;
+          if (r0.s < 0.14) break;
+          ctx.lineWidth = Math.max(0.6, 1.6 * r0.s);
+          ctx.beginPath(); ctx.moveTo(r0.x - rw, r0.y); ctx.lineTo(r0.x + rw, r0.y); ctx.stroke();
+        }
+        // front face (plain bulkhead on ramp carts — the ramp covers it)
+        if (bodyZ > -1.2) {
+          if (en.ramp) {
+            ctx.fillStyle = shade(body, 0.85);
+            rr(pn.x - hn, tn, hn * 2, pn.g - tn, 8 * pn.s); ctx.fill();
+          } else {
+            const fg = ctx.createLinearGradient(0, tn, 0, pn.g);
+            fg.addColorStop(0, shade(body, 1.08));
+            fg.addColorStop(1, shade(body, 0.78));
+            ctx.fillStyle = fg;
+            rr(pn.x - hn, tn, hn * 2, pn.g - tn, 10 * pn.s); ctx.fill();
+            // windshield with sheen
+            ctx.fillStyle = '#1a2440';
+            rr(pn.x - hn * 0.72, tn + (pn.g - tn) * 0.12, hn * 1.44, (pn.g - tn) * 0.3, 6 * pn.s); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.14)';
+            rr(pn.x - hn * 0.66, tn + (pn.g - tn) * 0.14, hn * 0.5, (pn.g - tn) * 0.24, 4 * pn.s); ctx.fill();
+            // rivet row under the roof line
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            for (let rx = -0.8; rx <= 0.8; rx += 0.2) {
+              ctx.beginPath(); ctx.arc(pn.x + rx * hn, tn + (pn.g - tn) * 0.06, 1.8 * pn.s, 0, Math.PI * 2); ctx.fill();
+            }
+            // headlights with glow
+            for (const sd of [-1, 1]) {
+              const hx = pn.x + sd * hn * 0.55, hy = pn.g - (pn.g - tn) * 0.22;
+              const hg = ctx.createRadialGradient(hx, hy, 1, hx, hy, 22 * pn.s);
+              hg.addColorStop(0, 'rgba(255,232,176,0.55)');
+              hg.addColorStop(1, 'rgba(255,232,176,0)');
+              ctx.fillStyle = hg;
+              ctx.beginPath(); ctx.arc(hx, hy, 22 * pn.s, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = '#ffe8b0';
+              ctx.beginPath(); ctx.arc(hx, hy, 8 * pn.s, 0, Math.PI * 2); ctx.fill();
+            }
+            // bumper stripes
+            ctx.fillStyle = '#ffd23f';
+            ctx.fillRect(pn.x - hn * 0.9, pn.g - 8 * pn.s, hn * 1.8, 5 * pn.s);
+          }
+        }
+      }
+      // the ramp wedge itself
+      if (en.ramp && en.z + RAMP_LEN > -1.2) {
+        const r0 = Math.max(en.z, -1.2), r1 = en.z + RAMP_LEN;
+        const h0 = TRAIN_H * Math.min(1, Math.max(0, (r0 - en.z) / RAMP_LEN));
+        const a = project(en.lane - 0.42, r0, h0), b = project(en.lane + 0.42, r0, h0);
+        const c = project(en.lane + 0.42, r1, TRAIN_H), d = project(en.lane - 0.42, r1, TRAIN_H);
+        // side skirts of the wedge
+        const ag = project(en.lane - 0.42, r0, 0), dg = project(en.lane - 0.42, r1, 0);
+        const bg = project(en.lane + 0.42, r0, 0), cg = project(en.lane + 0.42, r1, 0);
+        ctx.fillStyle = shade(RAMP_COLOR, 0.45);
+        ctx.beginPath(); ctx.moveTo(ag.x, ag.g); ctx.lineTo(a.x, a.y); ctx.lineTo(d.x, d.y); ctx.lineTo(dg.x, dg.g); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(bg.x, bg.g); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(cg.x, cg.g); ctx.closePath(); ctx.fill();
+        // sloped deck
+        const dk = ctx.createLinearGradient(0, d.y, 0, a.y);
+        dk.addColorStop(0, shade(RAMP_COLOR, 1.05));
+        dk.addColorStop(1, shade(RAMP_COLOR, 0.7));
+        ctx.fillStyle = dk;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y);
+        ctx.closePath(); ctx.fill();
+        // white chevrons pointing up the slope
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        for (let f = 0.22; f < 1; f += 0.28) {
+          const zc = r0 + (r1 - r0) * f, hc = h0 + (TRAIN_H - h0) * f;
+          const vL = project(en.lane - 0.26, zc, hc), vM = project(en.lane, zc + 0.7, hc + (TRAIN_H - h0) * 0.28 / (r1 - r0 || 1) * 0.7);
+          const vR = project(en.lane + 0.26, zc, hc);
+          ctx.lineWidth = Math.max(1.5, 4 * vM.s);
+          ctx.beginPath(); ctx.moveTo(vL.x, vL.y); ctx.lineTo(vM.x, vM.y); ctx.lineTo(vR.x, vR.y); ctx.stroke();
+        }
+        // edge rails
+        ctx.strokeStyle = '#ffd23f';
+        ctx.lineWidth = Math.max(1.5, 3.5 * a.s);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
       }
     }
 
-    function drawCoinEnt(en) {
-      const takers = [];
+    function drawCoinEnt(en) {   // a spinning can of Bud Light
       let anyTaken = false, allTaken = true;
       players.forEach(function (pl, i) { if (!pl.out) { if (en.taken[i]) anyTaken = true; else allTaken = false; } });
       if (allTaken && players.length) return;
       const p = project(en.lane, en.z, en.y);
-      const r = 13 * p.s;
-      const sq = 0.35 + 0.65 * Math.abs(Math.cos(scroll * 0.22 + en.z * 0.35));
+      const s = p.s;
+      const ph = scroll * 0.18 + en.z * 0.35;
+      const sq = 0.45 + 0.55 * Math.abs(Math.cos(ph));     // spin squish
+      const h = 30 * s, w = 11 * s * sq, cy = p.y - 6 * s;
       ctx.save();
       if (anyTaken) ctx.globalAlpha = 0.4;   // one bear already grabbed it
-      ctx.fillStyle = '#e3a81f';
-      ctx.beginPath(); ctx.ellipse(p.x, p.y - r, r * sq, r, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffd23f';
-      ctx.beginPath(); ctx.ellipse(p.x, p.y - r, r * sq * 0.72, r * 0.72, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffe89a';
-      ctx.beginPath(); ctx.ellipse(p.x - r * sq * 0.2, p.y - r * 1.25, r * sq * 0.25, r * 0.25, 0, 0, Math.PI * 2); ctx.fill();
+      // bobbing float shadow-glow
+      ctx.fillStyle = 'rgba(90,160,255,0.18)';
+      ctx.beginPath(); ctx.ellipse(p.x, cy - h / 2, w * 2.2, h * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+      // blue can body
+      ctx.fillStyle = '#1660d8';
+      rr(p.x - w, cy - h, w * 2, h, 3.5 * s); ctx.fill();
+      // white label band with a hint of script
+      ctx.fillStyle = '#f4f7ff';
+      ctx.fillRect(p.x - w, cy - h * 0.68, w * 2, h * 0.34);
+      ctx.strokeStyle = '#1660d8'; ctx.lineWidth = Math.max(1, 1.6 * s);
+      ctx.beginPath();
+      ctx.moveTo(p.x - w * 0.6, cy - h * 0.5);
+      ctx.quadraticCurveTo(p.x, cy - h * 0.62, p.x + w * 0.6, cy - h * 0.5);
+      ctx.stroke();
+      // rolling highlight fakes rotation
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillRect(p.x - w + Math.cos(ph) * w * 0.5, cy - h, 2.5 * s, h);
+      // silver top rim + tab
+      ctx.fillStyle = '#c8d0dd';
+      ctx.beginPath(); ctx.ellipse(p.x, cy - h, w, 3 * s, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8f97a8';
+      ctx.beginPath(); ctx.ellipse(p.x, cy - h, w * 0.45, 1.6 * s, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
 
     // ---------- draw: bears ----------
     function drawBear(pl, i) {
-      const skin = SKINS[i];
+      const superOn = pl.superT > 0 && !pl.out;
+      const baseSkin = SKINS[i];
+      // Super Grizzly: darker, wilder grizzly fur (scarf keeps telling the players apart)
+      const skin = superOn
+        ? { fur: '#8a4a22', dark: '#63300f', pad: '#e8b87a', scarf: baseSkin.scarf, scarfDark: baseSkin.scarfDark }
+        : baseSkin;
       const side = players.length === 2 ? (i === 0 ? -0.16 : 0.16) : 0;
       const ghost = pl.out && pl.tumbleT > TUMBLE_FRAMES * 0.8;
       const tumbling = pl.out && !ghost;
       const z = tumbling ? -Math.min(2.4, pl.tumbleT * 0.055) : 0;
       const p = project(pl.laneF + side, z, 0);
-      const px = p.x, gy = p.g, k = p.s;
+      const px = p.x, k = p.s * (superOn ? 1.25 : 1);
       const ph = scroll * 0.55;
 
       ctx.save();
       if (ghost) ctx.globalAlpha = 0.22;
-      else if (pl.stumbleT > 0 && Math.floor(pl.stumbleT / 4) % 2 === 0) ctx.globalAlpha = 0.4;
+      else if (pl.stumbleT > 0 && Math.floor(pl.stumbleT / 4) % 2 === 0) ctx.globalAlpha = 0.5;
 
-      // grounding shadow
+      const py = p.g - pl.y * Y_PX * p.s;    // feet position (unscaled projection)
+
+      // grounding shadow at the surface he's standing on
       if (!tumbling) {
+        const sg = surfaceUnder(pl);
+        const shy = p.g - sg * Y_PX * p.s;
         ctx.fillStyle = 'rgba(0,0,0,0.28)';
         ctx.beginPath();
-        ctx.ellipse(px, gy, 30 * k * (1 - pl.y * 0.3), 8 * k, 0, 0, Math.PI * 2);
+        ctx.ellipse(px, shy, 30 * k * (1 - (pl.y - sg) * 0.3), 8 * k, 0, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      const py = gy - pl.y * Y_PX * k;    // feet position
+      // Super Grizzly rampage aura
+      if (superOn && !tumbling) {
+        const pulse = 0.22 + 0.1 * Math.sin(scroll * 0.7);
+        const ar = 78 * k * (1 + 0.06 * Math.sin(scroll * 0.9));
+        const grad = ctx.createRadialGradient(px, py - 55 * k, 10 * k, px, py - 55 * k, ar);
+        grad.addColorStop(0, 'rgba(255,140,30,' + (pulse + 0.15) + ')');
+        grad.addColorStop(1, 'rgba(255,60,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(px, py - 55 * k, ar, 0, Math.PI * 2); ctx.fill();
+        // countdown ring above his head
+        const frac = pl.superT / SUPER_FRAMES;
+        ctx.strokeStyle = frac > 0.25 ? '#ffb03a' : '#ff5030';
+        ctx.lineWidth = 4 * k;
+        ctx.beginPath();
+        ctx.arc(px, py - 125 * k, 14 * k, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+        ctx.stroke();
+      }
 
       if (pl.rollT > 0 || tumbling) {
         // rolled up into a ball
@@ -696,7 +1046,7 @@
         return;
       }
 
-      const wob = pl.stumbleT > STUMBLE_FRAMES - 22 ? Math.sin(pl.stumbleT * 0.9) * 4 * k : 0;
+      const wob = pl.stumbleT > 0 ? Math.sin(pl.stumbleT * 0.9) * 4 * k : 0;
       const bob = Math.sin(ph * 2) * 2 * k;
       const jumping = pl.jumpT > 0;
 
@@ -754,15 +1104,67 @@
         ctx.beginPath(); ctx.arc(px + s * 16 * k + wob, headY - 16 * k, 4.5 * k, 0, Math.PI * 2); ctx.fill();
       }
 
+      // hackles up while Super Grizzly — spiky fur tufts on head and shoulders
+      if (superOn) {
+        ctx.fillStyle = skin.dark;
+        for (let t = -2; t <= 2; t++) {
+          const tx = px + t * 9 * k + wob;
+          ctx.beginPath();
+          ctx.moveTo(tx - 4 * k, headY - 18 * k);
+          ctx.lineTo(tx, headY - 30 * k - Math.abs(Math.sin(scroll * 0.5 + t)) * 4 * k);
+          ctx.lineTo(tx + 4 * k, headY - 18 * k);
+          ctx.closePath(); ctx.fill();
+        }
+      }
+
+      // worn out after the rampage: sweat drop + drained slump
+      if (pl.tiredT > 0 && !pl.out) {
+        ctx.fillStyle = '#7ec8ff';
+        const dy = headY - 6 * k + (Math.sin(scroll * 0.4) + 1) * 3 * k;
+        ctx.beginPath();
+        ctx.moveTo(px + 26 * k, dy - 8 * k);
+        ctx.quadraticCurveTo(px + 32 * k, dy, px + 26 * k, dy + 3 * k);
+        ctx.quadraticCurveTo(px + 20 * k, dy, px + 26 * k, dy - 8 * k);
+        ctx.closePath(); ctx.fill();
+      }
+
       ctx.restore();
     }
 
     // ---------- draw: HUD ----------
-    function drawCoinIcon(x, y, r) {
-      ctx.fillStyle = '#e3a81f';
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffd23f';
-      ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, Math.PI * 2); ctx.fill();
+    function drawCoinIcon(x, y, r) {   // little Bud Light can
+      const w = r * 0.72, h = r * 1.5;
+      ctx.fillStyle = '#1660d8';
+      rr(x - w, y - h * 0.6, w * 2, h * 1.2, r * 0.25); ctx.fill();
+      ctx.fillStyle = '#f4f7ff';
+      ctx.fillRect(x - w, y - h * 0.2, w * 2, h * 0.4);
+      ctx.fillStyle = '#c8d0dd';
+      ctx.beginPath(); ctx.ellipse(x, y - h * 0.6, w, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawSuperMeter(pl, x, right) {
+      if (pl.superT <= 0 && pl.tiredT <= 0) return;
+      ctx.font = "800 14px 'Nunito', sans-serif";
+      ctx.textAlign = right ? 'right' : 'left';
+      if (pl.superT > 0) {
+        const frac = pl.superT / SUPER_FRAMES;
+        const bw = 96;
+        const bx = right ? x - bw : x;
+        ctx.fillStyle = '#ff8c1e';
+        const bounce = 1 + 0.08 * Math.sin(scroll * 0.8);
+        ctx.save();
+        ctx.translate(x, 96); ctx.scale(bounce, bounce);
+        ctx.strokeText('SUPER GRIZZLY!', 0, 0); ctx.fillText('SUPER GRIZZLY!', 0, 0);
+        ctx.restore();
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        rr(bx, 102, bw, 9, 4.5); ctx.fill();
+        const fw = Math.max(4, bw * frac);
+        ctx.fillStyle = frac > 0.25 ? '#ffb03a' : '#ff5030';
+        rr(right ? x - fw : bx, 102, fw, 9, 4.5); ctx.fill();
+      } else {
+        ctx.fillStyle = '#8b93b0';
+        ctx.strokeText('worn out…', x, 96); ctx.fillText('worn out…', x, 96);
+      }
     }
 
     function drawHUD() {
@@ -779,6 +1181,7 @@
         ctx.font = "800 16px 'Nunito', sans-serif"; ctx.textAlign = 'right';
         ctx.fillStyle = '#cfd6ea';
         ctx.fillText('Best ' + Math.max(best.load(), pl.score), W - 16, 30);
+        drawSuperMeter(pl, 18, false);
       } else {
         for (let i = 0; i < 2; i++) {
           const pl = players[i];
@@ -798,6 +1201,8 @@
             ctx.font = "800 16px 'Nunito', sans-serif";
             ctx.fillStyle = '#e94560';
             ctx.strokeText('OUT', x, 84); ctx.fillText('OUT', x, 84);
+          } else {
+            drawSuperMeter(pl, x, right);
           }
         }
       }
@@ -805,28 +1210,65 @@
     }
 
     // ---------- draw ----------
+    // film-grain tile + vignette, built once
+    const grainPat = (function () {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d');
+      for (let i = 0; i < 400; i++) {
+        g.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.5) + ')';
+        g.fillRect(Math.floor(Math.random() * 64), Math.floor(Math.random() * 64), 1, 1);
+      }
+      return ctx.createPattern(c, 'repeat');
+    })();
+    const vignette = (function () {
+      const g = ctx.createRadialGradient(W / 2, H * 0.55, H * 0.45, W / 2, H * 0.55, H * 0.95);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.42)');
+      return g;
+    })();
+
     function draw() {
+      ctx.save();
+      if (shakeT > 0) {
+        const m = Math.min(shakeT, 12) * 0.55;
+        ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
+      }
       drawBackground();
       drawTrack();
 
       const showBears = state !== 'select';
-      const sorted = ents.slice().sort(function (a, b) { return b.z - a.z; });
+      const sorted = ents.filter(function (e) { return !e.dead; }).sort(function (a, b) { return b.z - a.z; });
       let bearsDrawn = false;
       for (const en of sorted) {
-        if (!bearsDrawn && en.z < 0 && showBears) { drawAllBears(); bearsDrawn = true; }
+        if (!bearsDrawn && en.z < 0 && showBears) { drawBearsAt(false); bearsDrawn = true; }
         if (en.kind === 'bar') drawBarEnt(en);
         else if (en.kind === 'sign') drawSignEnt(en);
         else if (en.kind === 'train') drawTrainEnt(en);
         else drawCoinEnt(en);
       }
-      if (!bearsDrawn && showBears) drawAllBears();
+      if (!bearsDrawn && showBears) drawBearsAt(false);
+      if (showBears) drawBearsAt(true);   // bears up on the roofs draw above the trains
+      drawParts();
+      ctx.restore();
+
+      // grainy asphalt/ballast texture streaming past + vignette
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      ctx.translate(0, scroll * 6 % 64);
+      ctx.fillStyle = grainPat;
+      ctx.fillRect(-64, HORIZON_Y - 64, W + 128, H - HORIZON_Y + 128);
+      ctx.restore();
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
+
       if (state !== 'select') drawHUD();
     }
 
-    function drawAllBears() {
+    function drawBearsAt(high) {
+      function onRoof(pl) { return !pl.out && pl.y > 1.6; }
       // ghosts first so the live bear draws on top
-      players.forEach(function (pl, i) { if (pl.out) drawBear(pl, i); });
-      players.forEach(function (pl, i) { if (!pl.out) drawBear(pl, i); });
+      players.forEach(function (pl, i) { if (pl.out && !high) drawBear(pl, i); });
+      players.forEach(function (pl, i) { if (!pl.out && onRoof(pl) === high) drawBear(pl, i); });
     }
 
     // ---------- main loop ----------
@@ -851,8 +1293,10 @@
       begin: beginGame,
       addEnt: function (e) {
         ents.push({ kind: e.kind, lane: e.lane, z: e.z, len: e.len || 1.5, y: e.y || 0,
-                    color: null, hit: [false, false], taken: [false, false] });
-      }
+                    ramp: !!e.ramp, color: e.ramp ? RAMP_COLOR : null,
+                    hit: [false, false], taken: [false, false] });
+      },
+      surface: function (pi) { return surfaceUnder(players[pi]); }
     };
   })();
   </script>
