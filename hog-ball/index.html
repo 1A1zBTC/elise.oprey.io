@@ -272,9 +272,8 @@
       const contest = contestOn(o, side);
       return clamp((0.05 + (o.shoot3 - 0.9) * 0.10) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009), 0.015, 0.12);
     }
-    // 2K bar speed: paced like NBA 2K / 2K Mobile release timing — elite shooters
-    // get a slow ~0.8s bar, big men a snappy ~0.35s one.
-    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 1.5; }
+    // 2K bar speed at 1.5x — elite shooters ~0.5s to the top, big men ~0.24s.
+    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 2.25; }
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
