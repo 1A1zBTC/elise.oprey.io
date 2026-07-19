@@ -196,11 +196,7 @@
         <div class="group-label">Trim colour</div>
         <div class="swatches" id="jz-trims"></div>
         <div class="group-label">Style</div>
-        <div class="choices" id="jz-styles">
-          <button class="choice" data-style="solid">Solid</button>
-          <button class="choice" data-style="stripes">Stripes</button>
-          <button class="choice" data-style="hoops">Hoops</button>
-        </div>
+        <div class="choices" id="jz-styles" style="flex-wrap:wrap"></div>
         <button class="secondary-btn" id="jz-back">‹ Back</button>
       </div>
     </div>
@@ -1169,6 +1165,59 @@
     // ---- jersey designer ----
     const jerseyEl = document.getElementById('jersey');
     const JCOLORS = ['#6fa8ff', '#e94560', '#46c46a', '#ffd23f', '#b06bff', '#ff8a3c', '#3ec8be', '#f2f2f2', '#2a2a2a', '#ff5da2'];
+    const JSTYLES = [
+      ['solid', 'Solid'], ['stripes', 'Stripes'], ['hoops', 'Hoops'], ['pinstripes', 'Pinstripes'],
+      ['sash', 'Sash'], ['halves', 'Halves'], ['chevron', 'Chevron'], ['checkers', 'Checkers'],
+      ['fade', 'Fade'], ['star', 'Star']
+    ];
+    // paints a jersey into the rect (x0,y0,w,h) on any canvas — used by both the
+    // in-game mobs and the designer preview so they always match
+    function paintJersey(g, x0, y0, w, h, jz) {
+      g.fillStyle = jz.color; g.fillRect(x0, y0, w, h);
+      g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+      g.fillStyle = jz.trim;
+      const cx = x0 + w / 2;
+      switch (jz.style) {
+        case 'stripes':
+          g.fillRect(x0 + w * 0.15, y0, w * 0.15, h); g.fillRect(x0 + w * 0.70, y0, w * 0.15, h); break;
+        case 'hoops':
+          g.fillRect(x0, y0 + h * 0.30, w, h * 0.22); g.fillRect(x0, y0 + h * 0.74, w, h * 0.16); break;
+        case 'pinstripes':
+          for (let i = w * 0.1; i < w; i += w * 0.2) g.fillRect(x0 + i, y0, Math.max(1, w * 0.06), h); break;
+        case 'sash':
+          g.beginPath();
+          g.moveTo(x0, y0); g.lineTo(x0 + w * 0.3, y0); g.lineTo(x0 + w, y0 + h); g.lineTo(x0 + w * 0.7, y0 + h);
+          g.closePath(); g.fill(); break;
+        case 'halves':
+          g.fillRect(cx, y0, w / 2, h); break;
+        case 'chevron':
+          g.beginPath();
+          g.moveTo(x0, y0); g.lineTo(cx, y0 + h * 0.55); g.lineTo(x0 + w, y0);
+          g.lineTo(x0 + w, y0 + h * 0.32); g.lineTo(cx, y0 + h * 0.87); g.lineTo(x0, y0 + h * 0.32);
+          g.closePath(); g.fill(); break;
+        case 'checkers': {
+          const c = w / 5;
+          for (let i = 0; i < 5; i++) for (let j = 0; j < Math.ceil(h / c); j++)
+            if ((i + j) % 2 === 0) g.fillRect(x0 + i * c, y0 + j * c, c, c);
+          break;
+        }
+        case 'fade': {
+          const gr = g.createLinearGradient(0, y0, 0, y0 + h);
+          gr.addColorStop(0, jz.color); gr.addColorStop(1, jz.trim);
+          g.fillStyle = gr; g.fillRect(x0, y0, w, h); break;
+        }
+        case 'star': {
+          const cy = y0 + h / 2, r = h * 0.42;
+          g.beginPath();
+          g.moveTo(cx, cy - r); g.lineTo(cx + r * 0.4, cy - r * 0.25); g.lineTo(cx + r, cy - r * 0.1);
+          g.lineTo(cx + r * 0.5, cy + r * 0.3); g.lineTo(cx + r * 0.65, cy + r); g.lineTo(cx, cy + r * 0.55);
+          g.lineTo(cx - r * 0.65, cy + r); g.lineTo(cx - r * 0.5, cy + r * 0.3); g.lineTo(cx - r, cy - r * 0.1);
+          g.lineTo(cx - r * 0.4, cy - r * 0.25);
+          g.closePath(); g.fill(); break;
+        }
+      }
+      g.restore();
+    }
     function buildSwatches(elId, prop) {
       const el = document.getElementById(elId); el.innerHTML = '';
       JCOLORS.forEach(function (col) {
@@ -1185,9 +1234,7 @@
       c2.save(); c2.translate(x, yb); c2.scale(1.6, 1.6); c2.translate(-x, -yb);
       c2.fillStyle = '#d77fa0'; c2.fillRect(x - 8, yb - 12, 7, 12); c2.fillRect(x + 1, yb - 12, 7, 12);
       c2.fillStyle = '#f2a6c0'; c2.fillRect(x - 10, yb - 31, 20, 20);
-      c2.fillStyle = jz.color; c2.fillRect(x - 10, yb - 31, 20, 12);
-      if (jz.style === 'stripes') { c2.fillStyle = jz.trim; c2.fillRect(x - 7, yb - 31, 3, 12); c2.fillRect(x + 4, yb - 31, 3, 12); }
-      else if (jz.style === 'hoops') { c2.fillStyle = jz.trim; c2.fillRect(x - 10, yb - 27, 20, 4); }
+      paintJersey(c2, x - 10, yb - 31, 20, 12, jz);
       c2.fillStyle = '#f2a6c0'; c2.fillRect(x - 9, yb - 49, 18, 18);
       c2.fillStyle = '#2a2a2a'; c2.fillRect(x - 6, yb - 45, 3, 4); c2.fillRect(x + 3, yb - 45, 3, 4);
       c2.fillStyle = '#ffc6dc'; c2.fillRect(x - 5, yb - 41, 10, 7);
@@ -1203,6 +1250,15 @@
       renderJerseyPreview();
     }
     buildSwatches('jz-colors', 'color'); buildSwatches('jz-trims', 'trim');
+    (function () {
+      const el = document.getElementById('jz-styles');
+      JSTYLES.forEach(function (st) {
+        const b = document.createElement('button');
+        b.className = 'choice'; b.dataset.style = st[0]; b.textContent = st[1];
+        b.style.cssText = 'flex:0 0 31%;font-size:0.7rem;padding:8px 2px';
+        el.appendChild(b);
+      });
+    })();
     document.getElementById('jz-styles').addEventListener('click', function (e) {
       const btn = e.target.closest('.choice'); if (!btn) return;
       career.jersey.style = btn.dataset.style; saveCareer(); renderJersey();
@@ -1684,9 +1740,7 @@
       roundRect(x - 10, yb - 31 - bob, 20, 20, 3); ctx.fill();
       const jz = (careerMatch && p.side === 0 && career && career.jersey) ? career.jersey : null;
       if (jz) {
-        ctx.fillStyle = jz.color; ctx.fillRect(x - 10, yb - 31 - bob, 20, 11);
-        if (jz.style === 'stripes') { ctx.fillStyle = jz.trim; ctx.fillRect(x - 7, yb - 31 - bob, 3, 11); ctx.fillRect(x + 4, yb - 31 - bob, 3, 11); }
-        else if (jz.style === 'hoops') { ctx.fillStyle = jz.trim; ctx.fillRect(x - 10, yb - 27 - bob, 20, 4); }
+        paintJersey(ctx, x - 10, yb - 31 - bob, 20, 11, jz);
       } else {
         ctx.fillStyle = SIDE_COLOR[p.side];
         ctx.fillRect(x - 10, yb - 28 - bob, 20, 6);
