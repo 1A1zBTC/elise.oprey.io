@@ -795,3 +795,81 @@ detail pages are Cloudflare-blocked headless). Key real mechanics adopted:
       "Pip the hamster plays with ferret toys (or any teddy) — pet store!" instead of the
       confusing bare "needs a ferret toy". Verified headless: play blocked without suitable
       toys, wheel purchasable from the cycling toys shelf, play works after. NOT deployed.
+
+### Follow-up 2 (same day): 30-min improvement session — audio + game-feel
+- [x] Per-theme procedural ambient beds, all null-guarded: fluorescent hum (yellow/office/school/
+      hospital/grocery), echoing drips (pool/sewer), gusting wind (forest), deep rumble + distant
+      squeal (subway/garage), settling creaks (haunted), machine thump + relay clack (factory),
+      muffled 4-on-floor party through the wall (Level Fun). stopAmbient on scare/slide/door.
+- [x] Positional hunter audio (stereo pan + inverse-square falloff, 12-tile radius): Clark boot+peg,
+      hound growl, bacteria squelch, partygoer giggle, smiler hiss, faceling shuffle; faster cadence
+      while chasing. Spotted-you sting (per-type pitch) + 0.35s freeze + 1.6s 1.18x burst chase.
+- [x] Footsteps every 0.58 tiles (alternating), head-bob + sway scaled by actual movement
+- [x] Doors: step-through white bloom (0.5s) + latch/creak sfx + after-glare fade-in; slides get
+      falling whoosh + same fade-in
+- [x] Jumpscare screech per entity: register table (hound 55Hz…smiler 590Hz) + noise shaped
+      lowpass/highpass per hunter
+- [x] Verified live: door walk-through lands in target theme; spot→freeze(alertT)→burst→catch→over
+      chain via localStorage-atomic test (shared daemon races dodged); 7-theme cycle with live
+      AudioContext error-free; tools/test.mjs 31 pages green. New hooks: state/theme/doorsAt/
+      hunterInfo. sw.js → v79 (pending deploy)
+
+### Polish pass (2026-07-19, "spend 30min improving it")
+- SOUND: tiny WebAudio synth (no asset files, file:// safe) — 14 effects: paw steps, sneak
+  notes, spike crunch (noise burst + saw drop), web boing, alarm bell, dog bark on wake,
+  chest jingle, cage clang (game cine + gacha lure), decoy sting, jackpot/win/lose
+  fanfares, UI pop, rarity-scaled reveal arpeggio (longer for rarer, 8 notes for Jimmy).
+  AudioContext unlocks on first gesture; 🔊/🔇 mute button in the topbar persists via
+  burgle-cats.mute. sfx() no-ops safely when muted/unavailable; exposed as __bc.sfx.
+- DUPE TRADE-IN: duplicate pulls feed the strays — points by rarity (1/2/4/8/15/30/60),
+  every 20 auto-converts to +1 💎 (banked synchronously in doBundle via bankDupes).
+  "🍖 Dupe points: N/20" line in the gacha panel. __bc.dupe getter. Verified: pre-owned
+  Jimmy dupe pull = +60 pts -> +3 gems with 5-pt remainder shown in UI.
+- FLAWLESS BONUS: winning with zero captures pays +2 💎 total ("🏆 FLAWLESS — no cats
+  caged!"). Verified +2 on a 0-capture win.
+- SMOOTH DOGS: per-dog px/py eased toward grid cell each frame (dt*9) — dogs glide on the
+  map + minimap instead of teleporting on their 1.5s/1.0s clocks.
+- DANGER TELEGRAPH: when an ALERT dog is in an adjacent room, its doorway pulses red with
+  a 🐕 icon (drowsy dogs stay hidden — blundering is still on you). Minimap now tints
+  alerted floors pulsing red. Screenshot-verified both.
+- Verified via atomic newtab+eval chains (bc-imp2.js/bc-vis4.js); all sfx smoke-ran
+  without exceptions headlessly; node --check clean; test localStorage keys (incl. new
+  dupe/mute) cleared; my tabs closed. NOT committed/deployed (sw.js v65 pending).
+
+## Mob Soccer: realistic slide tackles + fouls (2026-07-19)
+
+- REPLACED instant guaranteed steals with committed SLIDE TACKLES (attemptTackle/
+  resolveTackle): press F near a carrier -> burst lunge (2.2x speed cap during slide),
+  resolves on CONTACT (r+r+20). Clean tackle POKES THE BALL LOOSE (vx along slide dir,
+  freeCD 8 — not glued to the tackler); the carrier stumbles. Missed tackle = tackler on
+  the grass (down 40, 💫), beaten by the dribble. Success: 72% front/side, 50% from behind,
+  ±mass bonus. Tackle costs 5 stamina, 60-frame cooldown.
+- FOULS: failed tackles roll a foul — 45% from behind, 15% front. Foul = ✋ FOUL!/🟨 YELLOW
+  CARD! (every 2nd team foul books), tackler down 70, FREE KICK restart to the victim at
+  the spot (reuses restart()). Team foul counts on teams[].fouls.
+- FREQUENCY: AI defenders (incl. your AI teammates) attempt tackles only within 115px on a
+  55-130-frame cooldown (~1-2s) — knobs in the TK const. Body contact NO LONGER steals:
+  only the GK smothers on contact (🧤 SMOTHERED!) — dribbling/shielding is real now, so
+  possession changes via discrete tackle events. Measured AI-vs-AI: ~12 slides + 2 fouls
+  per 20 sim-seconds.
+- Visuals: sliding mobs rotate feet-first along the slide direction w/ grass-spray dots;
+  downed mobs lie flat with 💫 until they get up. Works in both renderers (mob + UT card).
+- Test hooks: __t.step(n) deterministic stepper, __t.attempt/tackle/pstate/fouls/p/ballRaw/TK.
+- Two bugs found via step-debug: moveMob's speed cap clamped the lunge to walking pace
+  (slides never reached the carrier from behind), and the contact window (+10px) sat inside
+  mobCollide's separation distance. Fixed (slide cap 2.2x, window +20px).
+- Verified deterministically (600 scripted tackles): front 67% clean/20% of fails foul;
+  behind 49% clean/49% of fails foul; shielding holds 90 frames of contact; clean tackles
+  leave a loose ball; foul->free-kick flow + slide/prone poses screenshot-confirmed.
+  node --check clean on all 3 scripts, no console errors. NOT committed/deployed (sw v65 pending).
+
+### Follow-up 3 (2026-07-19): open atriums + furniture phasing into walls AND floors
+- [x] buildMaze carves 1-2 big pillar atriums (7-10 x 5-7, even/even pillars kept) into every
+      maze theme; atriumCells tracked for glitch pooling
+- [x] Glitches now have wall + floor modes: floor pieces half-swallowed (22%-62%), slowly bobbing
+      through the slab (drawSprite srcH top-slice support); pool in atriums; 3rd glitch img
+      (filing cabinet, middle drawer out); Yellow Halls ALWAYS unstable, others lvl>=2 roll as before,
+      poolrooms still excluded; floor count scales 3..8 with depth
+- [x] Verified: yellow always has both modes (lvl 1/5/12), haunted/sewer roll correctly, pool never;
+      floor glitches placed clustered in atrium; screenshots show sunk crate bobbing + wall crate;
+      no console errors; smoke 31/31; sw.js → v80 (pending deploy). __sr.glitchInfo() hook added.

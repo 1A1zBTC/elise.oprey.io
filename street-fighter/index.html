@@ -38,6 +38,8 @@
     }
     .hp-chip { position: absolute; top: 0; bottom: 0; background: #ffd24a; transition: width 0.35s ease 0.12s; }
     .hp-fill { position: absolute; top: 0; bottom: 0; transition: width 0.08s linear; }
+    @keyframes hpflash { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.9); } }
+    .hp-fill.low { animation: hpflash 0.5s linear infinite; }
     .fhud.left  .hp-chip, .fhud.left  .hp-fill { left: 0; right: auto; }
     .fhud.right .hp-chip, .fhud.right .hp-fill { right: 0; left: auto; }
     .hp-fill.p0 { background: linear-gradient(#8ef6ff, #36d1dc 55%, #1f9fb0); }
@@ -130,11 +132,13 @@
     .btn:active { transform: scale(0.92); filter: brightness(1.3); }
     .dpad .btn { width: 38px; height: 38px; }
     .d-l { grid-area: 2 / 1; } .d-r { grid-area: 2 / 3; } .d-u { grid-area: 1 / 2; } .d-d { grid-area: 3 / 2; }
-    .atk { display: grid; grid-template-columns: 44px 44px; grid-template-rows: 44px 44px; gap: 6px; }
+    .atk { display: grid; grid-template-columns: 44px 44px; grid-template-rows: 44px 44px 44px; gap: 6px; }
     .atk .btn { width: 44px; height: 44px; font-size: 0.66rem; }
     .a-p { grid-area: 1 / 1; border-color: #ffe08a; color: #ffe08a; }
     .a-k { grid-area: 1 / 2; border-color: #8ad0ff; color: #8ad0ff; }
-    .a-s { grid-area: 2 / 1 / 3 / 3; border-color: #b6f23a; color: #b6f23a; }
+    .a-u { grid-area: 2 / 1; border-color: #ffb84a; color: #ffb84a; font-size: 0.56rem; }
+    .a-x { grid-area: 2 / 2; border-color: #ff8a6a; color: #ff8a6a; font-size: 0.5rem; }
+    .a-s { grid-area: 3 / 1 / 4 / 3; border-color: #b6f23a; color: #b6f23a; }
 
     .hint { margin-top: 8px; color: #a0a8c0; font-size: 0.76rem; text-align: center; max-width: 920px; line-height: 1.5; }
     body.touch .hint.kbd { display: none; }
@@ -235,6 +239,8 @@
       <div class="atk">
         <button class="btn a-p" data-p="0" data-k="light">PUN</button>
         <button class="btn a-k" data-p="0" data-k="heavy">KICK</button>
+        <button class="btn a-u" data-p="0" data-k="light" data-k2="up">UPPER</button>
+        <button class="btn a-x" data-p="0" data-k="light" data-k2="heavy">STRONG</button>
         <button class="btn a-s" data-p="0" data-k="special">SUPER</button>
       </div>
     </div>
@@ -248,6 +254,8 @@
       <div class="atk">
         <button class="btn a-p" data-p="1" data-k="light">PUN</button>
         <button class="btn a-k" data-p="1" data-k="heavy">KICK</button>
+        <button class="btn a-u" data-p="1" data-k="light" data-k2="up">UPPER</button>
+        <button class="btn a-x" data-p="1" data-k="light" data-k2="heavy">STRONG</button>
         <button class="btn a-s" data-p="1" data-k="special">SUPER</button>
       </div>
     </div>
@@ -264,6 +272,7 @@
         <button class="mode-btn active" id="mode1">1 Player</button>
         <button class="mode-btn" id="mode2">2 Players</button>
         <button class="mode-btn" id="modeC">🥊 Career</button>
+        <button class="mode-btn" id="sfxBtn">🔊</button>
       </div>
       <div class="selcols">
         <div class="selcol c0"><div class="who" id="who0">Player 1</div><div class="picks" id="picks0"></div></div>
@@ -341,7 +350,7 @@
   var CHARS = {
     // ---- Imperium of Man ----
     marine: {
-      key:'marine', faction:'Imperium of Man', name:'Intercessor',
+      key:'marine', faction:'Imperium of Man', name:'Intercessor', quip:'For the Emperor!',
       body:'#2a5caa', limb:'#1d4076', head:'#2a5caa', trim:'#ffd24a', eye:'#ff4444',
       speed:2.9, jump:12.6,
       special:{ name:'Bolter Volley', dmg:9, spd:9, r:12, color:'#ffb066', glow:'#ff7a3c', kb:6, life:95 },
@@ -350,7 +359,7 @@
             weapon:{ kind:'rifle', c1:'#22262e' } }
     },
     sororitas: {
-      key:'sororitas', faction:'Imperium of Man', name:'Battle Sister',
+      key:'sororitas', faction:'Imperium of Man', name:'Battle Sister', quip:'Faith is my shield!',
       body:'#23252f', limb:'#15161d', head:'#23252f', trim:'#e8e0c8', eye:'#ff5a5a',
       speed:2.8, jump:12.4,
       special:{ name:'Holy Flame', dmg:8, spd:8.5, r:13, color:'#ffd9a0', glow:'#ff9a3c', kb:5.5, life:90 },
@@ -359,7 +368,7 @@
             weapon:{ kind:'rifle', c1:'#26262c', glow:'#ff9a3c' } }
     },
     custodes: {
-      key:'custodes', faction:'Imperium of Man', name:'Custodian Guard',
+      key:'custodes', faction:'Imperium of Man', name:'Custodian Guard', quip:'None get past the Golden Legion.',
       body:'#d4a531', limb:'#a5791f', head:'#d4a531', trim:'#8a1e2c', eye:'#ff4040',
       speed:2.7, jump:12.2,
       special:{ name:'Sentinel Beam', dmg:10, spd:8.5, r:14, color:'#ffedb0', glow:'#ffce4a', kb:6.5, life:100 },
@@ -368,7 +377,7 @@
             weapon:{ kind:'halberd', shaft:'#6a5426', blade:'#ffd24a', glow:'#ffe8a0' } }
     },
     greyknight: {
-      key:'greyknight', faction:'Imperium of Man', name:'Grey Knight',
+      key:'greyknight', faction:'Imperium of Man', name:'Grey Knight', quip:'Another daemon banished!',
       body:'#9fa9b8', limb:'#6f7886', head:'#9fa9b8', trim:'#3c6df0', eye:'#7ab0ff',
       speed:2.9, jump:12.8,
       special:{ name:'Psybolt', dmg:8, spd:10, r:11, color:'#cfe0ff', glow:'#7aa8ff', kb:5, life:90 },
@@ -377,7 +386,7 @@
             weapon:{ kind:'halberd', shaft:'#3a3f4a', blade:'#d8dde6', glow:'#7aa8ff' } }
     },
     mechanicus: {
-      key:'mechanicus', faction:'Imperium of Man', name:'Skitarii Ranger',
+      key:'mechanicus', faction:'Imperium of Man', name:'Skitarii Ranger', quip:'The Omnissiah approves. 01101!',
       body:'#7a1f1f', limb:'#4d1313', head:'#101218', trim:'#c8c2a8', eye:'#4dff88',
       speed:2.6, jump:11.8,
       special:{ name:'Arc Volley', dmg:8, spd:10.5, r:10, color:'#d8f4ff', glow:'#4db8ff', kb:4.5, life:85 },
@@ -386,7 +395,7 @@
             weapon:{ kind:'rifle', c1:'#3a3026', glow:'#4dff88' } }
     },
     guard: {
-      key:'guard', faction:'Imperium of Man', name:'Cadian Trooper',
+      key:'guard', faction:'Imperium of Man', name:'Cadian Trooper', quip:'For Cadia! We stand strong!',
       body:'#6d6a3f', limb:'#4c4a2c', head:'#5c5a35', trim:'#c8b06a', eye:'#2a2416',
       speed:3.0, jump:12.6,
       special:{ name:'Lasgun Volley', dmg:6, spd:12.5, r:8, color:'#ff9a90', glow:'#ff3b30', kb:3, life:60 },
@@ -395,7 +404,7 @@
             weapon:{ kind:'rifle', c1:'#4c4a2c', glow:'#ff3b30' } }
     },
     knight: {
-      key:'knight', faction:'Imperium of Man', name:'Armiger',
+      key:'knight', faction:'Imperium of Man', name:'Armiger', quip:'My armour is thunder itself!',
       body:'#2e4f8f', limb:'#20355e', head:'#c9d2dd', trim:'#ffd24a', eye:'#ffb63c',
       speed:2.3, jump:11.2,
       special:{ name:'Battle Cannon', dmg:12, spd:7, r:18, color:'#ffcf7a', glow:'#ff9a3c', kb:8, life:115 },
@@ -405,7 +414,7 @@
     },
     // ---- Chaos ----
     chaos: {
-      key:'chaos', faction:'Chaos', name:'Chaos Legionary',
+      key:'chaos', faction:'Chaos', name:'Chaos Legionary', quip:'The dark gods laugh with me!',
       body:'#26262c', limb:'#17171c', head:'#26262c', trim:'#b08a3e', eye:'#ff3b3b',
       speed:2.9, jump:12.6,
       special:{ name:'Doombolt', dmg:9, spd:9, r:12, color:'#ff8a66', glow:'#d62828', kb:6, life:95 },
@@ -414,7 +423,7 @@
             weapon:{ kind:'rifle', c1:'#1c1c20', glow:'#d62828' } }
     },
     worldeater: {
-      key:'worldeater', faction:'Chaos', name:'Khorne Berzerker',
+      key:'worldeater', faction:'Chaos', name:'Khorne Berzerker', quip:'MORE! I must have MORE!',
       body:'#a02828', limb:'#6e1a1a', head:'#a02828', trim:'#c8963c', eye:'#ffdf4d',
       speed:3.4, jump:13,
       special:{ name:'Blood Fury', dmg:10, spd:10, r:11, color:'#ff6a5a', glow:'#c41f1f', kb:6.5, life:70 },
@@ -423,7 +432,7 @@
             weapon:{ kind:'axe', blade:'#b8bec9' } }
     },
     deathguard: {
-      key:'deathguard', faction:'Chaos', name:'Plague Marine',
+      key:'deathguard', faction:'Chaos', name:'Plague Marine', quip:'Cough… you look a bit sick, friend.',
       body:'#7a8a4a', limb:'#565f33', head:'#7a8a4a', trim:'#8a6a2a', eye:'#b6ff4d',
       speed:2.4, jump:11.4,
       special:{ name:'Plague Spew', dmg:9, spd:6.5, r:16, color:'#cde06a', glow:'#8aa826', kb:5, life:120 },
@@ -432,7 +441,7 @@
             weapon:{ kind:'rifle', c1:'#4a4430', glow:'#b6ff4d' } }
     },
     tsons: {
-      key:'tsons', faction:'Chaos', name:'Rubric Marine',
+      key:'tsons', faction:'Chaos', name:'Rubric Marine', quip:'All is dust… except me!',
       body:'#2456b0', limb:'#183a78', head:'#2456b0', trim:'#ffd24a', eye:'#7ad0ff',
       speed:2.7, jump:12.4,
       special:{ name:'Warpflame', dmg:8, spd:9.5, r:12, color:'#9fdcff', glow:'#3c8aff', kb:5.5, life:95 },
@@ -441,7 +450,7 @@
             weapon:{ kind:'rifle', c1:'#1d3f7a', glow:'#7ad0ff' } }
     },
     noise: {
-      key:'noise', faction:'Chaos', name:'Noise Marine',
+      key:'noise', faction:'Chaos', name:'Noise Marine', quip:'Too loud? TOO BAD!',
       body:'#a03a9e', limb:'#6e2a6c', head:'#a03a9e', trim:'#1c1c24', eye:'#8affff',
       speed:3.2, jump:13.2,
       special:{ name:'Sonic Blast', dmg:8, spd:11, r:10, color:'#ffb0f2', glow:'#e050d8', kb:5, life:80 },
@@ -450,7 +459,7 @@
             weapon:{ kind:'rifle', c1:'#2a1c2e', glow:'#ff7ae8' } }
     },
     daemon: {
-      key:'daemon', faction:'Chaos', name:'Bloodletter',
+      key:'daemon', faction:'Chaos', name:'Bloodletter', quip:'Back to the warp with you!',
       body:'#b22222', limb:'#8a1a1a', head:'#b22222', trim:'#1c1c1c', eye:'#ffd24a',
       speed:3.5, jump:13.8,
       special:{ name:'Hellfire', dmg:9, spd:9.5, r:12, color:'#ffb066', glow:'#ff5a1e', kb:5.5, life:85 },
@@ -459,7 +468,7 @@
             weapon:{ kind:'sword', blade:'#2a2026', glow:'#ff5a1e' } }
     },
     chaosknight: {
-      key:'chaosknight', faction:'Chaos', name:'War Dog',
+      key:'chaosknight', faction:'Chaos', name:'War Dog', quip:'My engine drinks your defeat!',
       body:'#2c2430', limb:'#1c161f', head:'#4a3f52', trim:'#c02828', eye:'#ff4040',
       speed:2.3, jump:11.2,
       special:{ name:'Reaper Volley', dmg:12, spd:7, r:18, color:'#ff8a66', glow:'#c41f1f', kb:8, life:115 },
@@ -469,7 +478,7 @@
     },
     // ---- Xenos ----
     aeldari: {
-      key:'aeldari', faction:'Xenos', name:'Guardian Defender',
+      key:'aeldari', faction:'Xenos', name:'Guardian Defender', quip:'Swift as the wind, sharp as sorrow.',
       body:'#3558b8', limb:'#25407e', head:'#e8e4d4', trim:'#ffd24a', eye:'#3affd4',
       speed:3.5, jump:14.2,
       special:{ name:'Shuriken Storm', dmg:6, spd:12.5, r:9, color:'#e8fcff', glow:'#7ae8ff', kb:3.5, life:65 },
@@ -478,7 +487,7 @@
             weapon:{ kind:'rifle', c1:'#ded8c4', glow:'#7ae8ff' } }
     },
     drukhari: {
-      key:'drukhari', faction:'Xenos', name:'Kabalite Warrior',
+      key:'drukhari', faction:'Xenos', name:'Kabalite Warrior', quip:'Delicious. Simply delicious.',
       body:'#2c2438', limb:'#1a1524', head:'#3a3050', trim:'#4dd0a0', eye:'#c4ff4d',
       speed:3.6, jump:13.8,
       special:{ name:'Splinter Storm', dmg:7, spd:11.5, r:9, color:'#d0a8ff', glow:'#8a4dff', kb:4, life:70 },
@@ -487,7 +496,7 @@
             weapon:{ kind:'rifle', c1:'#241c30', glow:'#c4ff4d' } }
     },
     ork: {
-      key:'ork', faction:'Xenos', name:'Ork Boy',
+      key:'ork', faction:'Xenos', name:'Ork Boy', quip:'WAAAGH! Dat woz a proppa scrap!',
       body:'#5a8a34', limb:'#4a7a2c', head:'#5a8a34', trim:'#c9c0a8', eye:'#ff3b3b',
       speed:3.0, jump:12.2,
       special:{ name:'Dakka Dakka', dmg:10, spd:8.5, r:14, color:'#ffb066', glow:'#ff6a3c', kb:7, life:85 },
@@ -496,7 +505,7 @@
             weapon:{ kind:'choppa', blade:'#9aa0aa' } }
     },
     tyranid: {
-      key:'tyranid', faction:'Xenos', name:'Termagant',
+      key:'tyranid', faction:'Xenos', name:'Termagant', quip:'Sssnack time is over.',
       body:'#7a3a8a', limb:'#5c2a68', head:'#e0d4c0', trim:'#e0d4c0', eye:'#ff4d6a',
       speed:3.6, jump:14,
       special:{ name:'Bio-Plasma', dmg:8, spd:10, r:11, color:'#d6ff8a', glow:'#8ae83c', kb:4.5, life:75 },
@@ -505,7 +514,7 @@
             weapon:{ kind:'organic', c1:'#c9a0a8', glow:'#8ae83c' } }
     },
     gsc: {
-      key:'gsc', faction:'Xenos', name:'Neophyte Hybrid',
+      key:'gsc', faction:'Xenos', name:'Neophyte Hybrid', quip:'The Star Children smile on us…',
       body:'#4a5a9e', limb:'#38466e', head:'#b8a8d4', trim:'#d4c9e8', eye:'#1a1a2e',
       speed:3.1, jump:13,
       special:{ name:'Mining Laser', dmg:8, spd:11, r:9, color:'#fff2b0', glow:'#ffd24a', kb:4, life:75 },
@@ -514,7 +523,7 @@
             weapon:{ kind:'rifle', c1:'#38466e', glow:'#ffd24a' } }
     },
     votann: {
-      key:'votann', faction:'Xenos', name:'Hearthkyn Warrior',
+      key:'votann', faction:'Xenos', name:'Hearthkyn Warrior', quip:'The Ancestors judged you wanting.',
       body:'#c9722c', limb:'#8a4e1c', head:'#8a9099', trim:'#2ee8a8', eye:'#2ee8a8',
       speed:2.5, jump:11.4,
       special:{ name:'Ion Blast', dmg:10, spd:8, r:13, color:'#b0ffe4', glow:'#2ee8a8', kb:6.5, life:95 },
@@ -523,7 +532,7 @@
             weapon:{ kind:'rifle', c1:'#5a4a38', glow:'#2ee8a8' } }
     },
     tau: {
-      key:'tau', faction:'Xenos', name:'Pathfinder',
+      key:'tau', faction:'Xenos', name:'Pathfinder', quip:'For the Greater Good!',
       body:'#2b6fb0', limb:'#1d4a78', head:'#d8c79a', trim:'#ffce4a', eye:'#0a2540',
       speed:2.7, jump:12.4,
       special:{ name:'Pulse Blast', dmg:9, spd:8, r:16, color:'#ffe07a', glow:'#ffce4a', kb:7, life:105 },
@@ -532,7 +541,7 @@
             weapon:{ kind:'rifle', c1:'#1d4a78', glow:'#8ad0ff' } }
     },
     necron: {
-      key:'necron', faction:'Xenos', name:'Necron Warrior',
+      key:'necron', faction:'Xenos', name:'Necron Warrior', quip:'Resistance: illogical. Outcome: inevitable.',
       body:'#9aa5af', limb:'#69737d', head:'#b4bec7', trim:'#39ff8e', eye:'#39ff8e',
       speed:2.8, jump:12.8,
       special:{ name:'Gauss Beam', dmg:8, spd:10.5, r:11, color:'#7dffb8', glow:'#39ff8e', kb:5, life:85 },
@@ -542,7 +551,7 @@
     },
     // ---- guest hunters ----
     predator: {
-      key:'predator', faction:'Hunter', name:'Predator',
+      key:'predator', faction:'Hunter', name:'Predator', quip:'You were… a worthy hunt.',
       body:'#5d6b34', limb:'#3f4a25', head:'#7b8a45', trim:'#b9d94a', eye:'#ff3b3b',
       speed:3.1, jump:13.2,
       special:{ name:'Plasma Bolt', dmg:8, spd:9.5, r:13, color:'#bdecff', glow:'#7fe0ff', kb:5.5, life:95 },
@@ -550,7 +559,7 @@
       art:{ helm:'predator', back:'cannon', decor:'predator' }
     },
     alien: {
-      key:'alien', faction:'Hunter', name:'Xenomorph',
+      key:'alien', faction:'Hunter', name:'Xenomorph', quip:'Hssssssss…',
       body:'#1f2533', limb:'#0c0f18', head:'#2a3146', trim:'#9fb0cf', eye:'#c6ff4d',
       speed:3.7, jump:14,
       special:{ name:'Acid Spit', dmg:7, spd:11.5, r:10, color:'#d6ff66', glow:'#b6f23a', kb:3.5, life:62 },
@@ -598,7 +607,7 @@
   var fighters = null, shots = [], particles = [], embers = [], decals = [];
   var gstate = 'select';
   var stateT = 0, round = 1, timeLeft = ROUND_TIME*60, hitstop = 0, shake = 0;
-  var banner = null, gtick = 0, superFlash = 0;
+  var banner = null, gtick = 0, superFlash = 0, slowmo = 0;
   var sel = [ 'marine', 'ork' ], onePlayer = true;
 
   // career attributes (1..10 each) → combat multipliers. No attrs = all neutral,
@@ -626,7 +635,7 @@
       state:'idle', stateT:0, crouch:false, blocking:false,
       move:null, moveT:0, hasHit:false, walkF:0,
       hitstun:0, blockstun:0, flash:0, spCd:0,
-      atkCd:0, atkCdMax:m.atkCdMax, secondWind:false, jumpT:0,
+      atkCd:0, atkCdMax:m.atkCdMax, secondWind:false, jumpT:0, juggled:false,
       combo:0, comboTimer:0,
       ai:{ t:0, plan:'approach' }, name:''
     };
@@ -667,9 +676,9 @@
   }
 
   Array.prototype.forEach.call(document.querySelectorAll('.btn[data-k]'), function(btn){
-    var p = +btn.dataset.p, k = btn.dataset.k;
-    function down(e){ e.preventDefault(); touchFlags[p][k] = true; }
-    function up(e){ e.preventDefault(); touchFlags[p][k] = false; }
+    var p = +btn.dataset.p, k = btn.dataset.k, k2 = btn.dataset.k2 || null;   // k2: chord buttons (UPPER/STRONG)
+    function down(e){ e.preventDefault(); touchFlags[p][k] = true; if (k2) touchFlags[p][k2] = true; }
+    function up(e){ e.preventDefault(); touchFlags[p][k] = false; if (k2) touchFlags[p][k2] = false; }
     btn.addEventListener('pointerdown', down);
     btn.addEventListener('pointerup', up);
     btn.addEventListener('pointercancel', up);
@@ -701,6 +710,7 @@
     else if (kind==='uppercut') startMove(p, 'uppercut');
     else if (kind==='light') startMove(p, p.crouch ? 'crouchLight' : 'light');
     else startMove(p, p.crouch ? 'sweep' : 'heavy');
+    SFX.whoosh();
     gainMeter(p, 1.5);
     return true;
   }
@@ -711,11 +721,59 @@
     var foe = (p===fighters[0]) ? fighters[1] : fighters[0];
     var fin = foe && foe.state!=='ko' && foe.hp <= FINISH_HP;   // low-HP foe → cinematic finisher
     var sp = CHARS[p.char].special;
+    SFX.superGo();
     p.state='special'; p.moveT=0; p.spCd = 30; p.vx = 0;
     p.pendingShot = { sp:sp, color:sp.color, glow:sp.glow, isSuper:true, isFinisher:fin };
     superFlash = fin?24:14; shake = Math.min(shake+(fin?9:5), fin?16:12);
     if (fin) finishFx = 64;
   }
+
+  // ======================= sound (tiny synth — no audio files) =======================
+  var actx = null, sfxOn = true;
+  try { sfxOn = localStorage.getItem('streetfighter.sfx') !== 'off'; } catch(e){}
+  function audio(){
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
+    if (actx && actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  window.addEventListener('pointerdown', audio, { once:false });
+  window.addEventListener('keydown', audio);
+  function tone(freq, dur, type, vol, slide, delay){
+    var a = actx; if (!a || !sfxOn) return;
+    try {
+      var t0 = a.currentTime + (delay || 0);
+      var o = a.createOscillator(), g = a.createGain();
+      o.type = type || 'square'; o.frequency.setValueAtTime(freq, t0);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t0 + dur);
+      g.gain.setValueAtTime(vol || 0.08, t0);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      o.connect(g); g.connect(a.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch(e){}
+  }
+  function noise(dur, vol, freq){
+    var a = actx; if (!a || !sfxOn) return;
+    try {
+      var n = Math.floor(a.sampleRate * dur), buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+      for (var i=0;i<n;i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+      var src = a.createBufferSource(); src.buffer = buf;
+      var f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq || 900;
+      var g = a.createGain(); g.gain.value = vol || 0.14;
+      src.connect(f); f.connect(g); g.connect(a.destination); src.start();
+    } catch(e){}
+  }
+  var SFX = {
+    whoosh:  function(){ noise(0.09, 0.05, 2200); },
+    hit:     function(dmg){ noise(0.08, 0.16, 700); tone(150 - dmg*4, 0.1, 'square', 0.10, -60); },
+    block:   function(){ tone(620, 0.06, 'square', 0.05, -100); },
+    jump:    function(){ tone(240, 0.12, 'sine', 0.05, 160); },
+    shot:    function(){ tone(880, 0.12, 'sawtooth', 0.06, -500); noise(0.06, 0.05, 3000); },
+    superGo: function(){ tone(180, 0.3, 'sawtooth', 0.10, 240); noise(0.25, 0.12, 1400); },
+    ko:      function(){ tone(90, 0.5, 'square', 0.14, -50); noise(0.35, 0.18, 500); },
+    getup:   function(){ tone(220, 0.12, 'square', 0.08, 120); tone(330, 0.12, 'square', 0.08, 140, 0.12); },
+    bell:    function(){ tone(1400, 0.35, 'triangle', 0.09, -180); tone(1400, 0.35, 'triangle', 0.08, -180, 0.42); },
+    win:     function(){ [262, 330, 392, 523].forEach(function(f, i){ tone(f, 0.22, 'triangle', 0.08, 0, i * 0.13); }); }
+  };
 
   // ======================= hit resolution =======================
   function blocksHit(def, hit){
@@ -727,6 +785,7 @@
     if (blocksHit(def, mv.hit)) {
       def.hp = Math.max(0, def.hp - 1);
       def.blockstun = 11; def.vx = att.face * 2.2;
+      SFX.block();
       spark(def.x + def.face*-18, def.y-70, '#bcd2ff', 6);
       gainMeter(def, 5); gainMeter(att, 3);
       hitstop = 2; shake = Math.min(shake+3, 8);
@@ -737,17 +796,24 @@
     att.combo = (att.comboTimer > 0) ? att.combo + 1 : 1;
     att.comboTimer = COMBO_WINDOW;
     def.combo = 0; def.comboTimer = 0;               // getting hit ends your own combo
+    var airJuggle = !def.onGround && def.state === 'down';   // hit landed on a launched foe
     var dmg = Math.max(1, Math.round(mv.dmg * comboScale(att.combo) * (att.dmgMul || 1) * (def.defMul || 1)));
     def.hp = Math.max(0, def.hp - dmg);
     def.hitstun = mv.stun; def.state = 'hit'; def.move = null; def.blocking=false;
     def.vx = att.face * mv.kb;
-    if (mv.knockdown) { def.vy = mv.launch ? -11.5 : -7.5; def.onGround=false; def.state='down'; def.hitstun = mv.stun+18; }
+    if (airJuggle) { def.juggled = true; def.vy = -6; def.state = 'down'; }   // juggle hit pops them back up
+    else if (mv.knockdown) { def.vy = mv.launch ? -11.5 : -7.5; def.onGround=false; def.state='down'; def.hitstun = mv.stun+18; }
     // blood stains the arena floor and stays there for the round
     if (decals.length < 44) decals.push({ x: def.x + EL.rnd(-26, 26), y: GROUND + EL.rnd(3, 15), r: EL.rnd(3, 6 + mv.dmg*0.4), color: 'rgba(150,22,26,0.5)' });
     // cap an over-long string with a hard knockdown so combos can't loop forever
     if (att.combo >= COMBO_MAX && !mv.knockdown) { def.vy = -7.5; def.onGround=false; def.state='down'; def.hitstun = mv.stun+18; }
     if (att.combo >= 2) comboFx = { i: (att===fighters[0]?0:1), n: att.combo, t: 0 };
     def.flash = 6;
+    SFX.hit(dmg);
+    if (att.combo >= 2) tone(360 + att.combo * 70, 0.1, 'triangle', 0.06);   // combo pitch climbs
+    // floating damage number — bigger hits, bigger numbers
+    particles.push({ txt:'-'+dmg, x:def.x + EL.rnd(-8,8), y:def.y-118, vx:att.face*0.6, vy:-1.1, life:34,
+                     color: dmg >= 14 ? '#ff5a6a' : (dmg >= 9 ? '#ffb84a' : '#ffe27a'), r: dmg >= 12 ? 19 : 15, g: 0.02 });
     spark(def.x, def.y-72, '#ffe27a', mv.dmg>7?16:9);
     impactRing(def.x, def.y-72, mv.dmg>9?'#ffffff':'#ffe27a');
     blood(def.x, def.y-72, CHARS[def.char].trim);
@@ -772,6 +838,7 @@
 
   function spawnShot(p){
     var ps = p.pendingShot; p.pendingShot=null; if (!ps) return;
+    SFX.shot();
     var sp = ps.sp, su = ps.isSuper, fin = ps.isFinisher;
     var r = fin ? sp.r*2.7 : (su ? sp.r*1.9 : sp.r);
     shots.push({ x:p.x + p.face*42, y:p.y-74, vx:p.face*(fin?sp.spd*0.8:(su?sp.spd*0.92:sp.spd)), r:r,
@@ -804,6 +871,8 @@
     var dist = foe.x - p.x, ad = Math.abs(dist), toward = dist>0?'right':'left', away = dist>0?'left':'right';
     var ready = p.meter >= METER_MAX;
 
+    // airborne over the foe → dropkick!
+    if (!p.onGround && ad < 130 && p.atkCd <= 0 && Math.random() < 0.2) { o.heavy = true; return o; }
     var foeSwinging = (foe.state==='attack' && foe.move && foe.moveT < foe.move.startup + foe.move.active + 3);
     var shotIncoming = shots.some(function(s){ return s.owner===foe && Math.abs(s.x-p.x) < 240; });
     if ((foeSwinging && ad<140) || shotIncoming) { if (Math.random()<0.72) { o[away]=true; if (Math.random()<0.4) o.down=true; return o; } }
@@ -823,7 +892,15 @@
       case 'special':  if (ready) { o.special=true; p.ai.plan='approach'; p.ai.t=14; } else { o[toward]=true; } break;
       case 'attack':
         if (p.atkCd > 0) { o[ad<80 ? away : toward]=true; break; }   // attack on cooldown — reposition
-        if (ad<96) { var k=Math.random(); if (k<0.4) o.light=true; else if (k<0.72) o.heavy=true; else { o.down=true; o.heavy=true; } p.ai.plan='approach'; p.ai.t=EL.rint(8,16); }
+        if (ad<96) {
+          var k=Math.random();
+          if (!foe.onGround && k<0.55) { o.up=true; o.light=true; }               // anti-air uppercut!
+          else if (k<0.34) o.light=true;
+          else if (k<0.66) o.heavy=true;
+          else if (k<0.78 && careerActive) { o.light=true; o.heavy=true; }        // strong chord: career CPUs only
+          else { o.down=true; o.heavy=true; }
+          p.ai.plan='approach'; p.ai.t=EL.rint(8,16);
+        }
         else o[toward]=true; break;
     }
     return o;
@@ -840,7 +917,7 @@
 
     if (!p.onGround) {
       p.vy += GRAV; p.y += p.vy;
-      if (p.y >= GROUND) { p.y = GROUND; p.vy = 0; p.onGround = true; dust(p.x, GROUND, 8);
+      if (p.y >= GROUND) { p.y = GROUND; p.vy = 0; p.onGround = true; p.juggled = false; dust(p.x, GROUND, 8);
         if (p.state==='jump' || p.state==='attack') p.state='idle';
         if (p.state==='down') { p.hitstun = Math.max(p.hitstun, 16); }
       }
@@ -859,7 +936,9 @@
       p.moveT++;
       var mv = p.move, a0 = mv.startup, a1 = mv.startup+mv.active;
       if (!p.hasHit && p.moveT>a0 && p.moveT<=a1) {
-        if (foe.state!=='ko' && foe.state!=='down' && rectsOverlap(attackbox(p), hurtbox(foe))) { applyHit(p, foe, mv, false); p.hasHit = true; }
+        // launched foes can be juggled ONCE while still in the air
+        var juggleable = foe.state==='down' && !foe.onGround && !foe.juggled;
+        if (foe.state!=='ko' && (foe.state!=='down' || juggleable) && rectsOverlap(attackbox(p), hurtbox(foe))) { applyHit(p, foe, mv, false); p.hasHit = true; }
       }
       if (p.moveT >= mv.startup+mv.active+mv.recovery) { p.state = p.onGround?'idle':'jump'; p.move=null; }
       clampX(p); return;
@@ -933,7 +1012,7 @@
     fighters.forEach(function(p,i){
       p.x=sx[i]; p.y=GROUND; p.vx=0; p.vy=0; p.face=fc[i]; p.onGround=true;
       p.hp=p.hpMax; p.meter=0; p.state='idle'; p.move=null; p.hitstun=0; p.blockstun=0; p.spCd=0; p.atkCd=0;
-      p.secondWind=false; p.jumpT=0;
+      p.secondWind=false; p.jumpT=0; p.juggled=false;
       p.crouch=false; p.blocking=false; p.flash=0; p.walkF=0; p.ai.t=0; p.ai.plan='approach';
       p.combo=0; p.comboTimer=0;
     });
@@ -944,6 +1023,7 @@
   }
   function endRound(winnerIdx, reason){
     gstate='roundend'; stateT=0;
+    if (reason==='ko') { SFX.ko(); slowmo = 50; }
     if (winnerIdx>=0) fighters[winnerIdx].wins++;
     var txt = winnerIdx<0 ? 'DRAW' : (reason==='timeout' ? 'TIME UP' : 'K.O.');
     var sub = winnerIdx<0 ? null : fighters[winnerIdx].name + ' wins the round';
@@ -954,11 +1034,13 @@
     var w0=fighters[0].wins, w1=fighters[1].wins;
     if (w0>=WINS_NEEDED || w1>=WINS_NEEDED) {
       var wi = w0>w1?0:1;
+      if (wi===0) SFX.win();
       if (careerActive) { careerFinish(wi); gstate='select'; fighters=null; openCareer(); return; }
       gstate='matchend';
       document.getElementById('winName').textContent = fighters[wi].name;
       document.getElementById('winName').style.color = wi===0?'#36d1dc':'#e94560';
-      document.getElementById('winSub').textContent = 'wins '+w0+' – '+w1+'!';
+      var wq = CHARS[sel[wi]] && CHARS[sel[wi]].quip;
+      document.getElementById('winSub').textContent = 'wins '+w0+' – '+w1+'!' + (wq ? '  “' + wq + '”' : '');
       document.getElementById('overOv').hidden = false;
     } else nextRound();
   }
@@ -967,11 +1049,13 @@
   function step(){
     if (gstate==='intro'){
       stateT++;
-      if (stateT===46) banner = { text:'FIGHT!', color:'#46ffaa', sub:null, t:0 };
+      if (stateT===46) { banner = { text:'FIGHT!', color:'#46ffaa', sub:null, t:0 }; SFX.bell(); }
       if (stateT>=78){ gstate='fight'; banner=null; }
       return;
     }
     if (gstate==='roundend'){
+      // KO slow-motion: the first moments of a knockout play at half speed
+      if (slowmo>0){ slowmo--; if (slowmo % 2 === 1) return; }
       stateT++;
       fighters.forEach(function(p){ if(!p.onGround){ p.vy+=GRAV; p.y+=p.vy; if(p.y>=GROUND){p.y=GROUND;p.vy=0;p.onGround=true;} } if(p.onGround) p.vx*=0.86; p.x+=p.onGround?0:p.vx; });
       stepParticles();
@@ -999,6 +1083,7 @@
         p.state = 'down'; p.vy = -8; p.onGround = false; p.hitstun = 42;
         p.combo = 0; p.comboTimer = 0;
         banner = { text: (p.name || CHARS[p.char].name).toUpperCase() + ' GETS BACK UP!', color: '#ffd24a', sub: null, t: 0, ttl: 80 };
+        SFX.getup();
         burst(p.x, p.y - 70, '#ffd24a', 18);
         shake = Math.min(shake + 8, 14);
       }
@@ -1019,7 +1104,9 @@
     if (!fighters) return;
     for (var i=0;i<2;i++){
       var f=fighters[i], hpct=f.hp/(f.hpMax||MAX_HP)*100;
-      document.getElementById('hp'+i).style.width = hpct+'%';
+      var hpEl = document.getElementById('hp'+i);
+      hpEl.style.width = hpct+'%';
+      hpEl.classList.toggle('low', hpct <= 25);
       document.getElementById('chip'+i).style.width = hpct+'%';
       var mpct=f.meter/METER_MAX*100, ready=f.meter>=METER_MAX;
       document.getElementById('sf'+i).style.width = mpct+'%';
@@ -1092,6 +1179,9 @@
   }
 
   function drawParticle(q){
+    if (q.txt){ ctx.globalAlpha=Math.min(1,q.life/16); ctx.font='800 '+q.r+"px 'Nunito', sans-serif"; ctx.textAlign='center';
+      ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillText(q.txt, q.x+1.5, q.y+1.5);
+      ctx.fillStyle=q.color; ctx.fillText(q.txt, q.x, q.y); ctx.globalAlpha=1; return; }
     if (q.ring){ ctx.globalAlpha=Math.min(1,q.life/14); ctx.strokeStyle=q.color; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,7); ctx.stroke(); ctx.globalAlpha=1; return; }
     ctx.globalAlpha = Math.min(1,q.life/12); ctx.fillStyle=q.color; ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,7); ctx.fill(); ctx.globalAlpha=1;
   }
@@ -2115,7 +2205,8 @@
     if (won) {
       purse = 12 + (20 - f.rank) + (f.title ? 25 : 0);
       career.wins++; career.streak++;
-      if (fighters && fighters[1] && fighters[1].hp <= 0) career.kos++;
+      purse += Math.min(10, (career.streak - 1) * 2);           // win-streak bonus
+      if (fighters && fighters[1] && fighters[1].hp <= 0) { career.kos++; purse += 6; }   // KO bonus
       if (f.title) { if (career.champion) career.defenses++; else career.champion = true; career.rank = 1; }
       else career.rank = f.rank;
     } else {
@@ -2220,6 +2311,13 @@
   document.getElementById('mode1').addEventListener('click', function(){ setMode(true); });
   document.getElementById('mode2').addEventListener('click', function(){ setMode(false); });
   document.getElementById('modeC').addEventListener('click', openCareer);
+  function syncSfxBtn(){ document.getElementById('sfxBtn').textContent = sfxOn ? '🔊' : '🔇'; }
+  document.getElementById('sfxBtn').addEventListener('click', function(){
+    sfxOn = !sfxOn;
+    try { localStorage.setItem('streetfighter.sfx', sfxOn ? 'on' : 'off'); } catch(e){}
+    syncSfxBtn(); if (sfxOn) { audio(); SFX.block(); }
+  });
+  syncSfxBtn();
   document.getElementById('carFightBtn').addEventListener('click', beginCareerFight);
   document.getElementById('carBackBtn').addEventListener('click', closeCareer);
   document.getElementById('carPickBack').addEventListener('click', closeCareer);

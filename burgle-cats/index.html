@@ -98,6 +98,9 @@
     .gacha-panel, .coll-panel { position: relative; max-width: 400px; }
     .gem-line { color: var(--muted); font-weight: 800; margin: 4px 0 8px; }
     .gem-line b { color: var(--gold); font-size: 1.1rem; }
+    .dupe-line { color: var(--muted); font-weight: 700; font-size: 0.74rem; margin: -4px 0 6px; }
+    .dupe-line b { color: #e8a06a; }
+    .mute { width: 54px; background: transparent; border: none; font-size: 1.15rem; cursor: pointer; opacity: 0.85; }
     .reveal { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 12px; min-height: 250px; justify-content: center; }
     .reveal canvas { width: 200px; height: 200px; }
     .reveal.pop { animation: revealpop 0.5s ease; }
@@ -140,7 +143,7 @@
   <div class="topbar">
     <a href="../index.html" class="back">‹ Games</a>
     <span class="title">Burgle Cats</span>
-    <span style="width:54px"></span>
+    <button class="mute" id="mute-btn" title="Sound on/off">🔊</button>
   </div>
 
   <div class="stage">
@@ -188,6 +191,7 @@
         <h2>Cat Gacha</h2>
         <div class="sub">Lay out <b>bait</b> to lure stray cats! Fancier bait attracts <b>rarer cats</b> — win heists to earn 💎 and save up.</div>
         <div class="gem-line">You have <b id="gacha-gems">0</b> 💎</div>
+        <div class="dupe-line">🍖 Dupe points: <b id="dupe-pts">0</b>/20 — doubles feed the strays, every 20 = <b>+1 💎</b></div>
         <div class="reveal" id="gacha-reveal">
           <canvas id="gacha-canvas" width="240" height="240"></canvas>
           <div class="reveal-name" id="reveal-name">Tap Pull to adopt a cat!</div>
@@ -239,6 +243,63 @@
     var W = canvas.width, H = canvas.height;
 
     var best = EL.best('burgle-cats.best');
+
+    // ======================= sound: tiny WebAudio synth, no asset files =======================
+    var AC = null, muted = false;
+    try { muted = localStorage.getItem('burgle-cats.mute') === '1'; } catch (e) {}
+    function audioCtx() {
+      if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+      if (AC.state === 'suspended') { try { AC.resume(); } catch (e) {} }
+      return AC;
+    }
+    function tone(type, f0, f1, t0, dur, vol) {
+      var o = AC.createOscillator(), g = AC.createGain(), now = AC.currentTime + (t0 || 0);
+      o.type = type; o.frequency.setValueAtTime(f0, now);
+      if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, now + dur);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(vol, now + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      o.connect(g); g.connect(AC.destination);
+      o.start(now); o.stop(now + dur + 0.05);
+    }
+    function noiseBurst(t0, dur, vol, fc) {
+      var n = Math.floor(AC.sampleRate * dur), buf = AC.createBuffer(1, n, AC.sampleRate), d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+      var src = AC.createBufferSource(); src.buffer = buf;
+      var f = AC.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = fc || 1200; f.Q.value = 1;
+      var g = AC.createGain(); g.gain.value = vol;
+      src.connect(f); f.connect(g); g.connect(AC.destination);
+      src.start(AC.currentTime + (t0 || 0));
+    }
+    var SFX = {
+      step:    function () { tone('triangle', 240, 180, 0, 0.05, 0.06); },
+      sneak:   function () { [330, 392, 330].forEach(function (f, i) { tone('sine', f, f, i * 0.1, 0.08, 0.06); }); },
+      spike:   function () { noiseBurst(0, 0.14, 0.25, 700); tone('sawtooth', 150, 60, 0, 0.18, 0.16); },
+      web:     function () { tone('sine', 320, 85, 0, 0.28, 0.14); },
+      alarm:   function () { [0, 0.13, 0.26].forEach(function (t, i) { tone('square', i === 2 ? 1100 : 880, 0, t, 0.1, 0.1); }); },
+      bark:    function () { tone('sawtooth', 190, 420, 0, 0.08, 0.14); tone('sawtooth', 170, 380, 0.13, 0.08, 0.12); },
+      chest:   function () { [660, 880, 1100].forEach(function (f, i) { tone('triangle', f, 0, i * 0.07, 0.1, 0.1); }); },
+      cage:    function () { noiseBurst(0, 0.18, 0.3, 2400); tone('square', 520, 240, 0, 0.24, 0.12); },
+      decoy:   function () { tone('sawtooth', 230, 100, 0, 0.32, 0.16); tone('sawtooth', 190, 420, 0.28, 0.08, 0.14); },
+      jackpot: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone('triangle', f, 0, i * 0.09, 0.16, 0.12); }); },
+      win:     function () { [523, 659, 784, 1047, 1319].forEach(function (f, i) { tone('triangle', f, 0, i * 0.11, 0.2, 0.13); }); },
+      lose:    function () { [392, 370, 349, 262].forEach(function (f, i) { tone('sawtooth', f, f * 0.96, i * 0.17, 0.22, 0.1); }); },
+      pop:     function () { tone('sine', 480, 900, 0, 0.07, 0.1); },
+      reveal:  function (r) { var sc = [523, 659, 784, 988, 1175, 1397, 1568, 1865]; var n = Math.min(2 + (r || 1), sc.length); for (var i = 0; i < n; i++) tone('triangle', sc[i], 0, i * 0.08, 0.15, 0.11); }
+    };
+    function sfx(name, arg) { if (muted || !audioCtx()) return; try { SFX[name](arg); } catch (e) {} }
+    // browsers require a user gesture before audio — the first tap/key unlocks it
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+      window.addEventListener(ev, function () { if (!muted) audioCtx(); }, { once: true, passive: true });
+    });
+    var muteBtn = document.getElementById('mute-btn');
+    function syncMute() { muteBtn.textContent = muted ? '🔇' : '🔊'; }
+    muteBtn.addEventListener('click', function () {
+      muted = !muted;
+      try { localStorage.setItem('burgle-cats.mute', muted ? '1' : '0'); } catch (e) {}
+      syncMute(); if (!muted) sfx('pop');
+    });
+    syncMute();
 
     var CREW = 5;            // heist team size (captures you can survive)
     var MAX_HP = 100;        // shared crew health, drained by traps
@@ -348,6 +409,7 @@
       S.cat = { x: x, y: y };
       r.seen = true; reveal(x, y);
       S.phase = 'play';
+      sfx('sneak');
       S.tr = { kind: 'drop', t: 0, dur: 0.45 };     // cat leaps down off the balcony
       var a = activeCat();
       flash(S.looted ? 'Get this loot out!'
@@ -392,7 +454,8 @@
       // Only an ALERT dog (woken by noise) catches a cat that walks in.
       var dg = dogeAt(x, y);
       if (dg && dg.chaseT > 0) { c.x = x; c.y = y; r.seen = true; reveal(x, y); capture(); return; }
-      if (dg) flash('🤫 You slip past the drowsy doge…');
+      if (dg) { flash('🤫 You slip past the drowsy doge…'); sfx('sneak'); }
+      else sfx('step');
 
       // move (vaults are now entered, not auto-opened — you choose to crack them)
       c.x = x; c.y = y; r.seen = true; reveal(x, y);
@@ -418,6 +481,7 @@
         S.shakeT = 0.3; S.shakeMag = 6; S.flash = { r: 255, g: 214, b: 90, a: 0.45 };
         S.pops.push({ cx: r.x, cy: r.y, txt: '💎 JACKPOT!', color: '#ffe08a', age: 0, life: 1.2, big: true });
         S.bursts.push({ cx: r.x, cy: r.y, age: 0, life: 0.7 });
+        sfx('jackpot');
         // only THIS floor's dogs pick up the commotion
         rouseRow(S.cat.y, S.cfg.chase * 2);
       } else {
@@ -425,6 +489,7 @@
         // The cage cinematic plays first; capture resolves when it finishes,
         // and the two dogs then join this floor's patrol for good.
         flash('🚨 Decoy! Guard dogs burst out of the vault!');
+        sfx('decoy');
         capture('decoy');
       }
     }
@@ -432,10 +497,12 @@
     // Dogs are chained to their row (floor) — so noise only ever matters to
     // the dogs on THAT floor. No cross-floor chasing.
     function rouseRow(y, turns) {
+      var woke = false;
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i];
-        if (d.y === y) d.chaseT = Math.max(d.chaseT, turns);
+        if (d.y === y) { if (d.chaseT <= 0) woke = true; d.chaseT = Math.max(d.chaseT, turns); }
       }
+      if (woke) sfx('bark');
     }
     // treasure chest — bonus loot, but a creaky lid can wake this floor's doges
     function lootChest(x, y) {
@@ -443,6 +510,7 @@
       S.loot += amt;
       S.pops.push({ cx: x, cy: y, txt: '+' + amt + ' 💰', color: '#ffd96b', age: 0, life: 1.0, big: false });
       S.bursts.push({ cx: x, cy: y, age: 0, life: 0.5 });
+      sfx('chest');
       if (Math.random() < 0.35) { rouseRow(y, S.cfg.chase); flash('💰 +' + amt + ' loot… but the lid CREAKED! 🐕'); }
       else flash('💰 Treasure chest! +' + amt + ' loot.');
     }
@@ -453,16 +521,19 @@
         S.stuck = 1;
         S.shakeT = 0.15; S.shakeMag = 3;
         flash('🕸️ A spiderweb! You\'re tangled up…');
+        sfx('web');
         return;
       }
       if (kind === 'alarm') {
         // ALARM trap: no damage, but this floor's pack charges at you
+        sfx('alarm');
         rouseRow(y, S.cfg.chase + 3);
         S.shakeT = 0.25; S.shakeMag = 5; S.flash = { r: 255, g: 200, b: 60, a: 0.4 };
         flash('🔔 ALARM! This floor\'s dogs are coming!');
         return;
       }
       // SPIKE trap: drains health (reduced by the active cat's Tough rating)
+      sfx('spike');
       var dmg = Math.round(S.cfg.trapDmg * S.toughMult);
       S.hp = Math.max(0, S.hp - dmg);
       fxDamage(dmg);
@@ -549,7 +620,12 @@
       if (S.ended) return;
       S.ended = true; S.running = false; S.win = won; S.reason = reason || '';
       if (won && S.level > best.load()) best.save(S.level);
-      if (won) awardGem();              // a heist win = 1 gacha gem
+      if (won) {
+        awardGem();                              // a heist win = 1 gacha gem
+        S.flawless = S.captures === 0;
+        if (S.flawless) awardGem();              // no cats caged = a bonus gem!
+      }
+      sfx(won ? 'win' : 'lose');
       showOver();
     }
 
@@ -872,11 +948,18 @@
           }
         }
       }
+      // alerted floors pulse red — the pack is hunting there
+      for (var ay = 0; ay < S.rows; ay++) {
+        if (!S.doges.some(function (d) { return d.y === ay && d.chaseT > 0; })) continue;
+        ctx.fillStyle = 'rgba(255,77,97,' + (0.15 + 0.12 * Math.sin((S.anim || 0) * 8)) + ')';
+        ctx.fillRect(bx, by + ay * mc, mw, mc);
+      }
       // dogs you can currently see
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i]; if (!room(d.x, d.y).seen) continue;
         ctx.fillStyle = d.chaseT > 0 ? '#ff4d61' : '#e08a3a';
-        ctx.beginPath(); ctx.arc(bx + d.x * mc + mc / 2, by + d.y * mc + mc / 2, mc * 0.28, 0, 7); ctx.fill();
+        var dmx = d.px != null ? d.px : d.x, dmy = d.py != null ? d.py : d.y;
+        ctx.beginPath(); ctx.arc(bx + dmx * mc + mc / 2, by + dmy * mc + mc / 2, mc * 0.28, 0, 7); ctx.fill();
       }
       // the cat — and a box around the room you're currently in
       if (S.cat) {
@@ -1005,6 +1088,20 @@
       var ar = side === 'up' ? '▴' : side === 'down' ? '▾' : side === 'left' ? '◂' : '▸';
       ctx.fillText(ar, x + w / 2, y + h / 2);
     }
+    // red pulse on a doorway when an ALERT dog is right on the other side —
+    // you can hear it coming (drowsy dogs stay hidden: blundering is on you)
+    function drawDanger(side, gm, t) {
+      var x, y, w, h, dl = (side === 'up' || side === 'down') ? gm.iw * 0.34 : gm.ih * 0.3;
+      if (side === 'up') { w = dl; h = gm.iy + 8; x = W / 2 - dl / 2; y = 0; }
+      else if (side === 'down') { w = dl; y = gm.iy + gm.ih - 8; h = H - y; x = W / 2 - dl / 2; }
+      else if (side === 'left') { h = dl; w = gm.ix + 8; x = 0; y = gm.iy + gm.ih / 2 - dl / 2; }
+      else { h = dl; x = gm.ix + gm.iw - 8; w = W - x; y = gm.iy + gm.ih / 2 - dl / 2; }
+      var a = 0.3 + 0.25 * Math.sin(t * 10);
+      ctx.fillStyle = 'rgba(255,60,80,' + a + ')'; rrect(x - 3, y - 3, w + 6, h + 6, 7); ctx.fill();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold ' + (gm.M * 0.38) + 'px Nunito, sans-serif';
+      ctx.fillText('🐕', x + w / 2, y + h / 2);
+    }
     function drawExitDoor(side, gm, t) {
       var x, y, w, h, dl = (side === 'up' || side === 'down') ? gm.iw * 0.34 : gm.ih * 0.3;
       if (side === 'up') { w = dl; h = gm.iy + 8; x = W / 2 - dl / 2; y = 0; }
@@ -1110,7 +1207,11 @@
       var sides = [['up', 0, -1], ['down', 0, 1], ['left', -1, 0], ['right', 1, 0]];
       for (var si = 0; si < sides.length; si++) {
         var sd = sides[si], nx = cat.x + sd[1], ny = cat.y + sd[2];
-        if (inGrid(nx, ny)) drawDoorway(sd[0], gm, t, true);
+        if (inGrid(nx, ny)) {
+          drawDoorway(sd[0], gm, t, true);
+          if (S.doges.some(function (dg) { return dg.x === nx && dg.y === ny && dg.chaseT > 0; }))
+            drawDanger(sd[0], gm, t);
+        }
         else if (cur.shutter) drawBalcony(sd[0], gm, t);     // exits are balconies
         else drawWindow(sd[0], gm);
       }
@@ -1189,6 +1290,7 @@
           if (ct > c1 && !cn.popped) {
             cn.popped = true;
             S.pops.push({ cx: cn.vx, cy: cn.vy, txt: 'CAGED!', color: '#ffd0d6', age: 0, life: 1.0, big: true });
+            sfx('cage');
           }
         }
       }
@@ -1300,10 +1402,10 @@
         }
       }
 
-      // ---- dogs (only in rooms you've explored) ----
+      // ---- dogs (only in rooms you've explored; drawn at their eased position) ----
       for (var i = 0; i < S.doges.length; i++) {
         var d = S.doges[i]; if (!room(d.x, d.y).seen) continue;
-        var dr = cellRect(d.x, d.y);
+        var dr = cellRect(d.px != null ? d.px : d.x, d.py != null ? d.py : d.y);
         drawDoge(dr.x + cell / 2, dr.y + cell / 2, cell * 0.82, d.chaseT > 0, t + i);
       }
 
@@ -1399,7 +1501,9 @@
         : loseSub;
       document.getElementById('over-score').textContent = S.level;
       document.getElementById('over-best').textContent = best.load();
-      document.getElementById('over-reward').textContent = S.win ? '🎉 +1 💎 earned — spend it on a cat!' : '';
+      document.getElementById('over-reward').textContent = S.win
+        ? (S.flawless ? '🏆 FLAWLESS — no cats caged! +2 💎 earned!' : '🎉 +1 💎 earned — spend it on bait!')
+        : '';
       againBtn.textContent = S.win ? 'Next Heist ›' : 'Retry Heist';
       refreshGemDisplays();
       overEl.hidden = false;
@@ -1516,6 +1620,13 @@
         for (j = S.bursts.length - 1; j >= 0; j--) { S.bursts[j].age += dt; if (S.bursts[j].age >= S.bursts[j].life) S.bursts.splice(j, 1); }
         if (S.tr) { S.tr.t += dt; if (S.tr.t >= S.tr.dur) S.tr = null; }   // room-move / jump animation
         simTick(dt);
+        // ease each dog's drawn position toward its grid cell (smooth prowling)
+        for (j = 0; j < S.doges.length; j++) {
+          var dd = S.doges[j];
+          if (dd.px == null) { dd.px = dd.x; dd.py = dd.y; }
+          var ef = Math.min(1, dt * 9);
+          dd.px += (dd.x - dd.px) * ef; dd.py += (dd.y - dd.py) * ef;
+        }
         updateHpBar(dt);
         // once the bar finishes draining to empty, the crew is out
         if (S.pendingDeath && S.dispHp <= 0.5) { S.pendingDeath = false; endRound(false, 'hurt'); }
@@ -1608,6 +1719,8 @@
 
     function gGems() { try { return parseInt(localStorage.getItem('burgle-cats.gems') || '0', 10) || 0; } catch (e) { return 0; } }
     function gSetGems(v) { try { localStorage.setItem('burgle-cats.gems', String(v)); } catch (e) {} }
+    function gDupe() { try { return parseInt(localStorage.getItem('burgle-cats.dupe') || '0', 10) || 0; } catch (e) { return 0; } }
+    function gSetDupe(v) { try { localStorage.setItem('burgle-cats.dupe', String(v)); } catch (e) {} }
     function gOwned() { try { var a = JSON.parse(localStorage.getItem('burgle-cats.owned')); if (a && a.length === GACHA_N) return a; if (a && a.length > 0 && a.length < GACHA_N) { while (a.length < GACHA_N) a.push(0); return a; } } catch (e) {} return new Array(GACHA_N).fill(0); }
     function gSetOwned(a) { try { localStorage.setItem('burgle-cats.owned', JSON.stringify(a)); } catch (e) {} }
     function awardGem() { gSetGems(gGems() + 1); }
@@ -1753,6 +1866,7 @@
     function refreshGemDisplays() {
       var g = gGems();
       ['menu-gems', 'gacha-gems', 'over-gems'].forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = g; });
+      var dp = document.getElementById('dupe-pts'); if (dp) dp.textContent = gDupe();
       Array.prototype.forEach.call(document.querySelectorAll('.bundle-btn'), function (b) { b.disabled = g < +b.dataset.cost; });
     }
     function showReveal(idx, isNew) {
@@ -1786,10 +1900,21 @@
         });
       }
     }
+    // duplicate cats feed the strays: dupe points by rarity, 20 points = +1 gem
+    var DUPE_VALS = [0, 1, 2, 4, 8, 15, 30, 60];
+    function bankDupes(results, news) {
+      var pts = gDupe(), gained = 0;
+      results.forEach(function (ix, i) { if (!news[i]) pts += DUPE_VALS[CATS[ix].rarity] || 1; });
+      while (pts >= 20) { pts -= 20; gained++; }
+      if (gained) gSetGems(gGems() + gained);
+      gSetDupe(pts);
+      return gained;
+    }
     function doBundle(b) {
       if (lure) return;                       // a lure is already playing out
       var g = gGems(); if (g < b.cost) return;
       gSetGems(g - b.cost);
+      sfx('pop');
       var results = [], news = [], owned = gOwned();
       for (var i = 0; i < b.pulls; i++) results.push(rollCat());
       // guarantee: if no pull hit the bait's rarity floor, upgrade the last one
@@ -1797,6 +1922,7 @@
         results[results.length - 1] = rollCatMin(b.minR);
       results.forEach(function (ix) { news.push(owned[ix] === 0); owned[ix]++; });
       gSetOwned(owned);
+      bankDupes(results, news);
       refreshGemDisplays(); startLure(b, results, news);
       return results;
     }
@@ -1866,14 +1992,18 @@
         var cp = clamp((t - 1.55) / 0.22, 0, 1), ce = 1 - (1 - cp) * (1 - cp);
         var wig = t > 1.77 ? Math.sin((t - 1.77) * 24) * 4 * Math.max(0, 1.4 - (t - 1.77)) : 0;
         drawCage(g, 145 + wig, lerp(-70, 148, ce), 150);
-        if (cp >= 1 && !lure.landed) { lure.landed = true; }
+        if (cp >= 1 && !lure.landed) { lure.landed = true; sfx('cage'); }
       }
       if (t >= 2.35) { finishLure(); return; }
       requestAnimationFrame(lureFrame);
     }
     function finishLure() {
       var l = lure; lure = null;
-      if (l) showRevealMulti(l.results, l.news);
+      if (!l) return;
+      var bestR = 0;
+      l.results.forEach(function (ix) { if (CATS[ix].rarity > bestR) bestR = CATS[ix].rarity; });
+      sfx('reveal', bestR);
+      showRevealMulti(l.results, l.news);
     }
     function openGacha() { refreshGemDisplays(); document.getElementById('gacha').hidden = false; }
     function updateTeamLine() {
@@ -1942,6 +2072,7 @@
                bundles: BUNDLES, bundle: doBundle, rollMin: rollCatMin, luring: function () { return !!lure; } },
       cine: function () { return S && S.cine; },
       tick: simTick,
+      sfx: sfx, dupe: gDupe,
       team: { get: gTeam, set: gSetTeam, info: teamInfo, catInfo: catInfo, active: function () { return activeCat(); } }
     };
   })();

@@ -352,7 +352,7 @@
     <b>On phone:</b> drag the pitch to steer the <b>joystick</b> 🕹️ &nbsp;·&nbsp; tap the buttons to <b>pass</b>, <b>shoot</b>, <b>switch</b> &amp; <b>sub</b>.
   </p>
   <p class="hint" style="margin-top:4px">
-    Ball out the <b>sides</b> = throw-in &nbsp;·&nbsp; out over a <b>goal line</b> = corner or goal kick, just like real life.
+    Ball out the <b>sides</b> = throw-in &nbsp;·&nbsp; out over a <b>goal line</b> = corner or goal kick &nbsp;·&nbsp; <b>slide tackle</b> to win the ball — mistime it and you're on the grass, and a lunge <b>from behind</b> risks a <b>FOUL</b>: free kick &amp; maybe a 🟨 — just like real life.
   </p>
 
   <script src="../shared/game.js"></script>
@@ -416,7 +416,8 @@
       const s = stats || MOBS[key];
       const p = { side: side, key: stats ? null : key, slot: slot, role: slot == null ? null : FORMATION[slot].role,
         x: 0, y: 0, vx: 0, vy: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
-        accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, kick: s.kick, stamina: 100, benched: slot == null, aiShootCD: 0, aiPassCD: 0, flash: 0, sprint: false };
+        accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, kick: s.kick, stamina: 100, benched: slot == null, aiShootCD: 0, aiPassCD: 0, flash: 0, sprint: false,
+        slide: 0, slDx: 0, slDy: 1, slideHit: false, down: 0, tackleCD: 0, aiTackleCD: 0 };
       if (stats) { p.emoji = stats.emoji; p.cardName = stats.name; p.rt = stats.rt; }
       return p;
     }
@@ -602,20 +603,52 @@
       kickBall(o, fx * speed, fy * speed, loft, 12);
       pops.push({ x: o.x, y: o.y - o.r - 18, txt: charge > 0.7 ? 'SHOOT! 💥' : 'SHOOT!', color: '#ffe066', t: 0 });
     }
+    // ---------- slide tackles: a committed lunge that resolves on contact ----------
+    // Clean tackle = the ball is POKED LOOSE (not glued to the tackler).
+    // Missed tackle = you're on the grass while the dribbler skips away.
+    // A wild lunge from BEHIND risks a foul → free kick (and maybe a yellow).
+    // Tuning knobs — aiCD* controls how often AI defenders dive in (~1-2s in range).
+    const TK = { aiRange: 115, aiCDMin: 55, aiCDMax: 130,
+                 front: 0.72, behind: 0.5, foulFront: 0.15, foulBehind: 0.45,
+                 downMiss: 40, downFoul: 70 };
+    function attemptTackle(p) {
+      if (state !== 'playing' || p.slide > 0 || p.down > 0 || p.tackleCD > 0) return;
+      if (ball.owner === p) return;
+      const dx = ball.x - p.x, dy = ball.y - p.y, dl = Math.hypot(dx, dy) || 1;
+      p.slide = 26; p.slideHit = false; p.slDx = dx / dl; p.slDy = dy / dl;
+      p.vx += p.slDx * p.maxSpd * 2.1; p.vy += p.slDy * p.maxSpd * 2.1;
+      p.tackleCD = 60; p.stamina = Math.max(0, p.stamina - 5);
+    }
+    function resolveTackle(p, o) {
+      p.slideHit = true;
+      const behind = ((p.x - o.x) * o.fx + (p.y - o.y) * o.fy) < 0;   // lunging in from the carrier's blind side
+      const chance = (behind ? TK.behind : TK.front) + clamp((p.mass - o.mass) * 0.06, -0.12, 0.12);
+      if (Math.random() < chance) {
+        // CLEAN: the ball squirts loose in the slide direction
+        ball.owner = null; ball.lastSide = p.side; ball.passTo = null; possCD = 0;
+        ball.vx = p.slDx * 8.5 + o.vx * 0.25; ball.vy = p.slDy * 8.5 + o.vy * 0.25;
+        ball.z = 0; ball.vz = 0; ball.freeCD = 8;
+        o.vx *= 0.45; o.vy *= 0.45;                                   // the carrier stumbles off it
+        pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'TACKLE!', color: p.side ? '#ff7d7d' : '#6fa8ff', t: 0 });
+      } else {
+        // BEATEN — committed to the grass
+        p.slide = Math.min(p.slide, 5);
+        if (Math.random() < (behind ? TK.foulBehind : TK.foulFront)) doFoul(p, o);
+        else { p.down = TK.downMiss; pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'MISSED!', color: '#d8d8d8', t: 0 }); }
+      }
+    }
+    function doFoul(p, o) {
+      const t = teams[p.side];
+      t.fouls = (t.fouls || 0) + 1;
+      p.down = TK.downFoul;
+      const booked = t.fouls % 2 === 0;      // every second foul earns a booking
+      pops.push({ x: o.x, y: o.y - 100, txt: booked ? '🟨 YELLOW CARD!' : '✋ FOUL!', color: '#ffd23f', t: 0, big: booked });
+      restart('freekick', ball.x, ball.y, o.side, 'FREE KICK!');
+    }
     function tackle(side) {
       if (state !== 'playing') return;
-      const t = teams[side], p = activePlayer(t);
-      if (ball.owner === p) return;
-      // lunge toward the ball
-      let dx = ball.x - p.x, dy = ball.y - p.y, dl = Math.hypot(dx, dy) || 1;
-      p.vx += (dx / dl) * p.maxSpd * 1.7; p.vy += (dy / dl) * p.maxSpd * 1.7;
-      // steal from an opponent carrier, or pounce on a loose ground ball, if close enough
-      if (ball.owner && ball.owner.side !== side) {
-        const o = ball.owner;
-        if (Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 24) { setOwner(p); pops.push({ x: p.x, y: p.y - p.r - 18, txt: 'TACKLE!', color: side ? '#ff7d7d' : '#6fa8ff', t: 0 }); }
-      } else if (!ball.owner && ball.z < 16 && Math.hypot(p.x - ball.x, p.y - ball.y) < p.r + ball.r + 26) {
-        setOwner(p);
-      }
+      const p = activePlayer(teams[side]);
+      attemptTackle(p);
     }
     // head a high, loose ball near you — same power formula as a shot
     function headerBall(side) {
@@ -848,7 +881,8 @@
 
     function moveMob(m) {
       m.vx *= Math.pow(0.84, dtf); m.vy *= Math.pow(0.84, dtf);
-      const cap = m.maxSpd * staminaFactor(m) * (m.sprint ? 1.5 : 1), sp = Math.hypot(m.vx, m.vy);
+      // a slide is a burst well past running pace — that's the whole point
+      const cap = m.maxSpd * staminaFactor(m) * (m.sprint ? 1.5 : (m.slide > 0 ? 2.2 : 1)), sp = Math.hypot(m.vx, m.vy);
       if (sp > cap) { const k = cap / sp; m.vx *= k; m.vy *= k; }
       m.x += m.vx * dtf; m.y += m.vy * dtf;
       m.x = clamp(m.x, M + m.r, WORLD_W - M - m.r);
@@ -945,7 +979,16 @@
         if (ball.trail.length) ball.trail.shift();   // dribbling: let any flight trail fade out
         if (possCD > 0) possCD -= dtf;
         else {
-          for (const t of teams) { for (const p of t.onPitch) { if (p.side === o.side) continue; if (Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 2) { setOwner(p); return; } } }
+          // realistic shielding: body contact alone doesn't win the ball any
+          // more — you have to TACKLE for it. Only the keeper can smother it.
+          for (const t of teams) { for (const p of t.onPitch) {
+            if (p.side === o.side || p.role !== 'gk') continue;
+            if (Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 2) {
+              setOwner(p);
+              pops.push({ x: p.x, y: p.y - p.r - 18, txt: '🧤 SMOTHERED!', color: '#fff', t: 0 });
+              return;
+            }
+          } }
         }
         return;
       }
@@ -996,6 +1039,7 @@
         for (let i = 0; i < t.onPitch.length; i++) {
           const p = t.onPitch[i];
           p.sprint = (human && i === t.active && sprintHeld[s] && p.stamina > 4);
+          if (p.slide > 0 || p.down > 0) { p.sprint = false; continue; }   // committed / on the grass
           if (human && i === t.active) driveHuman(p, s);
           else if (ball.owner === p) { if (p.role === 'gk') driveGKClear(p, s); else driveAIOwner(p, s); }
           else if (!ball.owner && ball.passTo === p) steer(p, ball.x + ball.vx * 8, ball.y + ball.vy * 8, 0.95);   // run to meet the pass
@@ -1003,6 +1047,35 @@
           else if (weOwn) driveHold(p, s);
           else if (i === chaser) driveChase(p);
           else driveHold(p, s);
+        }
+      }
+
+      // ---- tackle timers, slide-contact resolution & AI tackle attempts ----
+      for (const t of teams) for (const p of t.onPitch) {
+        if (p.tackleCD > 0) p.tackleCD -= dtf;
+        if (p.aiTackleCD > 0) p.aiTackleCD -= dtf;
+        if (p.down > 0) { p.down -= dtf; p.vx *= Math.pow(0.8, dtf); p.vy *= Math.pow(0.8, dtf); }
+        if (p.slide > 0) {
+          p.slide -= dtf;
+          const o = ball.owner;
+          if (!p.slideHit && o && o.side !== p.side && Math.hypot(p.x - o.x, p.y - o.y) < p.r + o.r + 20) resolveTackle(p, o);
+          else if (!ball.owner && ball.freeCD <= 0 && ball.z < 16 && Math.hypot(p.x - ball.x, p.y - ball.y) < p.r + ball.r + 14) setOwner(p);
+        }
+      }
+      // AI defenders dive in at a human-ish rate (TK.aiCD* controls how often)
+      const carrier = ball.owner;
+      if (live && carrier) {
+        for (const t of teams) {
+          if (t.side === carrier.side) continue;
+          const humanT = isHumanTeam(t.side);
+          for (let i = 0; i < t.onPitch.length; i++) {
+            const p = t.onPitch[i];
+            if (humanT && i === t.active) continue;    // the human times their own tackles
+            if (p.role === 'gk' || p.slide > 0 || p.down > 0 || p.tackleCD > 0 || p.aiTackleCD > 0) continue;
+            if (Math.hypot(p.x - carrier.x, p.y - carrier.y) > TK.aiRange) continue;
+            p.aiTackleCD = rnd(TK.aiCDMin, TK.aiCDMax);
+            attemptTackle(p);
+          }
         }
       }
 
@@ -1254,7 +1327,21 @@
       // aim guides sit on the turf, under the players
       for (let s = 0; s < 2; s++) { const ap = activePlayer(teams[s]); if (shootHeld[s] && ball.owner === ap) drawAimGuide(ap, s); }
       for (let s = 0; s < 2; s++) for (const pl of teams[s].onPitch) if (pl.flash > 0) drawFlash(pl);
-      for (let s = 0; s < 2; s++) { const t = teams[s], human = isHumanTeam(s); for (let i = 0; i < t.onPitch.length; i++) { const pl = t.onPitch[i]; (pl.emoji ? drawCardPlayer : drawPlayer)(pl, human && i === t.active && !(t.swFx && t.swFx.t < 1)); } }
+      for (let s = 0; s < 2; s++) { const t = teams[s], human = isHumanTeam(s); for (let i = 0; i < t.onPitch.length; i++) {
+        const pl = t.onPitch[i], act = human && i === t.active && !(t.swFx && t.swFx.t < 1);
+        // sliding mobs tip over feet-first; downed mobs lie flat until they recover
+        let rot = 0;
+        if (pl.slide > 0) rot = (Math.atan2(pl.slDy, pl.slDx) + Math.PI / 2) * Math.min(1, (27 - pl.slide) / 7);
+        else if (pl.down > 0) rot = (pl.fx >= 0 ? 1 : -1) * 1.5 * Math.min(1, pl.down / 8);
+        if (rot) { ctx.save(); ctx.translate(pl.x, pl.y); ctx.rotate(rot); ctx.translate(-pl.x, -pl.y); }
+        (pl.emoji ? drawCardPlayer : drawPlayer)(pl, act);
+        if (rot) ctx.restore();
+        if (pl.slide > 0) {   // grass spray behind the slide
+          ctx.fillStyle = 'rgba(220,255,210,0.7)';
+          for (let g = 0; g < 3; g++) { ctx.beginPath(); ctx.arc(pl.x - pl.slDx * (pl.r + 6 + g * 9) + rnd(-4, 4), pl.y - pl.slDy * (pl.r + 6 + g * 9) + rnd(-4, 4), 3.2 - g * 0.7, 0, 6.28); ctx.fill(); }
+        }
+        if (pl.down > 0) { ctx.font = "16px 'Nunito', sans-serif"; ctx.textAlign = 'center'; ctx.fillText('💫', pl.x, pl.y - pl.r - 20); }
+      } }
       drawPassTarget();
       for (let s = 0; s < 2; s++) { const t = teams[s]; if (isHumanTeam(s) && t.swFx && t.swFx.t < 1) drawSwitchMarker(t); }
       for (let s = 0; s < 2; s++) { if (shootHeld[s] && ball.owner === activePlayer(teams[s])) drawChargeBar(activePlayer(teams[s]), s); }
@@ -1289,7 +1376,15 @@
           swFx: teams.map(function (t) { return t.swFx ? Math.round(t.swFx.t * 100) / 100 : null; }) };
       },
       ball: function () { return { x: Math.round(ball.x), y: Math.round(ball.y), vx: Math.round(ball.vx * 10) / 10, vy: Math.round(ball.vy * 10) / 10, owner: !!ball.owner }; },
-      player: function (side, idx) { const p = teams[side].onPitch[idx]; return { x: Math.round(p.x), y: Math.round(p.y), role: p.role, flash: Math.round(p.flash) }; }
+      player: function (side, idx) { const p = teams[side].onPitch[idx]; return { x: Math.round(p.x), y: Math.round(p.y), role: p.role, flash: Math.round(p.flash) }; },
+      // deterministic stepping + tackle internals (for headless tests)
+      step: function (n) { for (let i = 0; i < (n || 1); i++) { dtMs = 16.7; dtf = 1; update(); } },
+      tackle: tackle, attempt: function (side, idx) { attemptTackle(teams[side].onPitch[idx]); },
+      pstate: function (side, idx) { const p = teams[side].onPitch[idx]; return { slide: Math.round(p.slide), down: Math.round(p.down), cd: Math.round(p.tackleCD), aiCD: Math.round(p.aiTackleCD) }; },
+      fouls: function () { return [teams[0].fouls || 0, teams[1].fouls || 0]; },
+      p: function (side, idx) { return teams[side].onPitch[idx]; },
+      ballRaw: function () { return ball; },
+      TK: TK
     };
 
     teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];

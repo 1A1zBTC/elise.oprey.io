@@ -151,7 +151,9 @@
     let darkness, blackout;      // per-level mood: 0 (lit) .. 1 (pitch black + flicker)
     let jumpT = 0, jumpType = 'clark'; // jumpscare timer + which entity's face lunges
     let slideT = 0;              // slide-down transition timer
-    let audio = null;            // WebAudio context (created on first start, for the screech)
+    let doorT = 0, doorTheme = null, doorFade = 0;  // stepping-through-a-door transition
+    let walkBob = 0, bobAmp = 0, stepAcc = 0;       // head-bob phase + footstep meter
+    let audio = null;            // WebAudio context (created on first start)
 
     // ---------- level generation ----------
     // Recursive-backtracker maze, then knock out extra walls to open it into
@@ -171,6 +173,7 @@
       subway: 'hall', office: 'hall', party: 'party', factory: 'hall'
     };
     let curArch = 'maze';
+    let atriumCells = [];        // open-hall cells carved by buildMaze — where glitch furniture pools
     function blankMap(w, h) { mapW = w; mapH = h; map = []; for (let y = 0; y < h; y++) map.push(new Array(w).fill(1)); }
     function carveRect(x, y, w, h) { for (let j = Math.max(1, y); j < Math.min(mapH - 1, y + h); j++) for (let i = Math.max(1, x); i < Math.min(mapW - 1, x + w); i++) map[j][i] = 0; }
     function addObst(tx, ty, img, sh, sw) { if (tx < 1 || ty < 1 || tx >= mapW - 1 || ty >= mapH - 1) return false; if (map[ty][tx] !== 0) return false; map[ty][tx] = 2; structProps.push({ img: img, x: tx + 0.5, y: ty + 0.5, sh: sh, sw: sw }); return true; }
@@ -217,6 +220,20 @@
         } else {
           const wy = rint(4, mapH - 5), g1 = rint(2, mapW - 3), g2 = rint(2, mapW - 3);
           for (let x = 1; x < mapW - 1; x++) { if (Math.abs(x - g1) <= 1 || Math.abs(x - g2) <= 1) continue; map[wy][x] = 1; }
+        }
+      }
+      // big open atriums torn out of the maze — pillar fields where the halls
+      // suddenly stop making sense (the even/even pillars stay, backrooms-style)
+      const atriums = 1 + (lvl >= 4 ? 1 : 0);
+      for (let a = 0; a < atriums; a++) {
+        const aw = rint(7, 10), ah = rint(5, 7);
+        const ax = rint(2, Math.max(2, mapW - aw - 3)), ay = rint(2, Math.max(2, mapH - ah - 3));
+        for (let y = ay; y < Math.min(mapH - 1, ay + ah); y++) {
+          for (let x = ax; x < Math.min(mapW - 1, ax + aw); x++) {
+            if (x % 2 === 0 && y % 2 === 0) continue;
+            map[y][x] = 0;
+            atriumCells.push({ x: x + 0.5, y: y + 0.5 });
+          }
         }
       }
       px = 1.5; py = 1.5; dir = 0;
@@ -484,6 +501,7 @@
 
     function buildLayout(theme, lvl) {
       structProps = [];
+      atriumCells = [];
       curArch = LAYOUT[theme] || 'maze';
       if (curArch === 'forest') buildForest(lvl);
       else if (curArch === 'aisles') buildAisles(lvl);
@@ -557,7 +575,8 @@
           const ex = rint(1, mapW - 2) + 0.5, ey = rint(1, mapH - 2) + 0.5;
           if (map[Math.floor(ey)][Math.floor(ex)] !== 0) continue;
           if (Math.hypot(ex - px, ey - py) < 6) continue;
-          entities.push({ type: type, x: ex, y: ey, ang: rnd(0, 6.28), state: 'wander', wT: 0, phase: rnd(0, 6.28), speed: speed });
+          entities.push({ type: type, x: ex, y: ey, ang: rnd(0, 6.28), state: 'wander', wT: 0, phase: rnd(0, 6.28), speed: speed,
+                          sndT: rnd(0.6, 2.2), alertT: 0, burstT: 0 });
           return;
         }
       }
@@ -602,20 +621,35 @@
 
       marks = [];   // fresh trail each level
 
-      // some rooms have stuff phasing through the walls (a glitch in the level) —
-      // only in the maze-style places, which have the interior walls for it
+      // the level glitches: furniture phasing through walls AND half-sunk into
+      // the floor. The Yellow Halls are ALWAYS unstable; other maze places roll
+      // for it from level 2. Floor-phasers pool in the open atrium spaces.
       glitches = [];
-      phasing = curArch === 'maze' && themeName !== 'pool' && lvl >= 2 && Math.random() < 0.55;
+      phasing = curArch === 'maze' && themeName !== 'pool' &&
+                (themeName === 'yellow' || (lvl >= 2 && Math.random() < 0.55));
       if (phasing) {
+        // walls: shoved partway into the masonry
         for (let g = 0, n = 0; g < 500 && n < 4 + (lvl % 3); g++) {
           const ox = rint(1, mapW - 2), oy = rint(1, mapH - 2);
           if (map[oy][ox] !== 0) continue;
-          // shove a chair/box partly into an adjacent wall
           const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
           const wd = dirs[rint(0, 3)];
           if (mapAt(ox + 0.5 + wd[0], oy + 0.5 + wd[1]) !== 1) continue;
           if (Math.hypot(ox + 0.5 - px, oy + 0.5 - py) < 2) continue;
-          glitches.push({ x: ox + 0.5 + wd[0] * 0.55, y: oy + 0.5 + wd[1] * 0.55, kind: rint(0, 2), ph: rnd(0, 6.28) });
+          glitches.push({ mode: 'wall', x: ox + 0.5 + wd[0] * 0.55, y: oy + 0.5 + wd[1] * 0.55, kind: rint(0, 2), ph: rnd(0, 6.28) });
+          n++;
+        }
+        // floors: half-swallowed, slowly bobbing through the slab
+        const floorSpots = atriumCells.length ? atriumCells : reach.slice(0, 60);
+        const wantF = clamp(3 + (lvl >> 1), 3, 8);
+        for (let g = 0, n = 0; g < 400 && n < wantF && floorSpots.length; g++) {
+          const c = floorSpots[rint(0, floorSpots.length - 1)];
+          if (Math.hypot(c.x - px, c.y - py) < 2.5) continue;
+          if (mapAt(c.x, c.y) !== 0) continue;
+          if (doors.some(function (d) { return Math.hypot(d.x - c.x, d.y - c.y) < 1.3; })) continue;
+          if (slides.some(function (sl) { return Math.hypot(sl.x - c.x, sl.y - c.y) < 1.3; })) continue;
+          if (glitches.some(function (o) { return Math.hypot(o.x - c.x, o.y - c.y) < 1.1; })) continue;
+          glitches.push({ mode: 'floor', x: c.x + rnd(-0.25, 0.25), y: c.y + rnd(-0.25, 0.25), kind: rint(0, 2), ph: rnd(0, 6.28) });
           n++;
         }
       }
@@ -633,6 +667,7 @@
 
       updateCamera();
       banner = { text: 'LEVEL ' + lvl, sub: THEME_NAMES[themeName] + (phasing ? ' · it\'s unstable here' : ''), t: 1.7 };
+      startAmbient();
     }
 
     // move to a new level via a door (its theme) or a slide (deeper, random)
@@ -665,6 +700,11 @@
       map: function () { return map.map(function (row) { return row.join(''); }); },
       scare: function (t, at) { caughtBy = t || 'clark'; triggerJumpscare(); if (at != null) jumpT = at; return jumpType; },  // QA: preview a jumpscare
       freeze: function () { jumpT = 1e9; return true; },    // QA: hold the current jumpscare frame timer
+      state: function () { return state; },
+      theme: function () { return themeName; },
+      doorsAt: function () { return doors.map(function (d) { return { x: d.x, y: d.y, theme: d.theme }; }); },
+      hunterInfo: function () { return entities.map(function (e) { return { type: e.type, x: Math.round(e.x * 10) / 10, y: Math.round(e.y * 10) / 10, state: e.state, alertT: Math.round(e.alertT * 100) / 100, burstT: Math.round(e.burstT * 100) / 100 }; }); },
+      glitchInfo: function () { return { atriumCells: atriumCells.length, wall: glitches.filter(function (g) { return g.mode === 'wall'; }).length, floor: glitches.filter(function (g) { return g.mode === 'floor'; }).map(function (g) { return { x: Math.round(g.x * 10) / 10, y: Math.round(g.y * 10) / 10 }; }) }; },
       doorThemes: function () { return doors.map(function (d) { return d.theme; }); },
       corpseInfo: function () {
         return corpses.map(function (b) {
@@ -2001,6 +2041,18 @@
         g.strokeStyle = '#2c2012'; g.lineWidth = 4; g.strokeRect(10, 18, 76, 70);
         g.beginPath(); g.moveTo(10, 18); g.lineTo(86, 88); g.moveTo(86, 18); g.lineTo(10, 88); g.stroke();
         return c;
+      })(),
+      (function () {   // filing cabinet, drawers half-out
+        const c = makeCanvas(70, 120), g = c.getContext('2d');
+        g.fillStyle = '#5a6068'; g.fillRect(12, 8, 46, 106);
+        g.strokeStyle = '#3a3e44'; g.lineWidth = 3; g.strokeRect(12, 8, 46, 106);
+        for (let d = 0; d < 3; d++) {
+          const dy = 16 + d * 34, out = d === 1 ? 10 : 0;    // middle drawer hangs open
+          g.fillStyle = '#6a7078'; g.fillRect(16 - out, dy, 38, 26);
+          g.strokeStyle = '#3a3e44'; g.lineWidth = 2; g.strokeRect(16 - out, dy, 38, 26);
+          g.fillStyle = '#2c3036'; g.fillRect(28 - out, dy + 10, 14, 4);   // handle
+        }
+        return c;
       })()
     ];
 
@@ -2506,8 +2558,11 @@
         }
       }
 
-      // blit the textured scene up to the full screen (soft, atmospheric)
+      // blit the textured scene up to the full screen (soft, atmospheric),
+      // gently head-bobbing with your stride (vignette hides the edge slack)
       sceneCtx.putImageData(sceneImg, 0, 0);
+      ctx.save();
+      ctx.translate(Math.sin(walkBob) * W * 0.004 * bobAmp, Math.abs(Math.sin(walkBob * 2)) * H * 0.007 * bobAmp);
       ctx.drawImage(sceneCanvas, 0, 0, RW, RH, 0, 0, W, H);
 
       // billboards — far to near, zbuffer-occluded. Doors/markers glow so
@@ -2526,10 +2581,20 @@
         if (d > 17) continue;                                     // cull distant props (3D fills are costlier than billboards)
         sprites.push({ fu: true, boxes: p._boxes || (p._boxes = boxesFor(p)), x: p.x, y: p.y, bright: clamp(ambient * (1.2 - d * 0.04) + 0.12, 0.3, 1) });
       }
-      // furniture phasing through the walls — flickers, no occlusion so it pokes through
+      // glitch furniture: wall pieces poke through the masonry (no occlusion,
+      // flickering); floor pieces sit half-swallowed, slowly bobbing through
+      // the slab as if the level can't decide whether to keep them
       for (const gl of glitches) {
         const flick2 = Math.sin(perfNow * 0.02 + gl.ph) > -0.3 ? 1 : 0.25;
-        sprites.push({ img: glitchImgs[gl.kind] || glitchImgs[0], x: gl.x, y: gl.y, sh: gl.kind === 0 ? 0.62 : 0.5, sw: 0.42, bob: 0, bright: clamp(ambient + 0.1, 0.2, 1) * flick2, noOcc: true });
+        const sh = gl.kind === 0 ? 0.62 : gl.kind === 2 ? 0.72 : 0.5;
+        if (gl.mode === 'floor') {
+          const sink = 0.42 + 0.2 * Math.sin(perfNow * 0.0007 + gl.ph);   // 22%..62% swallowed
+          sprites.push({ img: glitchImgs[gl.kind] || glitchImgs[0], x: gl.x, y: gl.y, sh: sh, sw: 0.42,
+                         bob: 0, srcH: 1 - sink, bright: clamp(ambient + 0.1, 0.2, 1) * flick2 });
+        } else {
+          sprites.push({ img: glitchImgs[gl.kind] || glitchImgs[0], x: gl.x, y: gl.y, sh: sh, sw: 0.42,
+                         bob: 0, bright: clamp(ambient + 0.1, 0.2, 1) * flick2, noOcc: true });
+        }
       }
       for (const e of entities) {
         const d = Math.hypot(e.x - px, e.y - py);
@@ -2544,6 +2609,7 @@
         s.tY = invDet * (-planeY * sx + planeX * sy); }
       sprites.sort((a, b) => b.tY - a.tY);
       for (const s of sprites) { if (s.fu) drawFurn(s); else drawSprite(s); }
+      ctx.restore();   // end head-bob transform
 
       // vignette (stronger in the dark)
       const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.22, W / 2, H / 2, H * 0.72);
@@ -2570,7 +2636,10 @@
       const lineH = H / tY;
       const spH = lineH * s.sh, spW = lineH * s.sw;
       const bottomY = H / 2 + lineH / 2;
-      const topY = bottomY - spH + s.bob;
+      // srcH < 1 draws only the TOP slice of the sprite, bottom-anchored at the
+      // floor line — the rest of the object reads as sunk INTO the floor
+      const srcHF = s.srcH == null ? 1 : s.srcH;
+      const topY = bottomY - spH * srcHF + s.bob;
       const startX = Math.floor(screenX - spW / 2), endX = Math.ceil(screenX + spW / 2);
       const img = s.img;
       // grounding contact shadow so figures sit IN the space instead of floating on it
@@ -2588,7 +2657,7 @@
           const runEnd = vis ? x : x - 1;
           const srcX = ((runStart - startX) / spW) * img.width;
           const srcW = ((runEnd - runStart + 1) / spW) * img.width;
-          ctx.drawImage(img, srcX, 0, srcW, img.height, runStart, topY, runEnd - runStart + 1, spH);
+          ctx.drawImage(img, srcX, 0, srcW, img.height * srcHF, runStart, topY, runEnd - runStart + 1, spH * srcHF);
           runStart = -1;
         }
       }
@@ -2914,24 +2983,43 @@
 
       if (tn) { dir += tn * TURN_SPEED * dt; updateCamera(); }
       // move freely, then push the circle out of any solid tile (never wedges)
+      const pox = px, poy = py;
       let nx = px, ny = py;
       if (mv) { nx += dirX * mv * MOVE_SPEED * dt; ny += dirY * mv * MOVE_SPEED * dt; }
       const mr = pushOut(nx, ny, PLAYER_R); px = mr[0]; py = mr[1];
+
+      // head-bob + footsteps driven by actual distance covered
+      const covered = Math.hypot(px - pox, py - poy);
+      bobAmp += ((covered > 0.001 ? 1 : 0) - bobAmp) * Math.min(1, dt * 8);
+      if (covered > 0.001) {
+        walkBob += dt * 8.5;
+        stepAcc += covered;
+        if (stepAcc > 0.58) { stepAcc = 0; stepSound(); }
+      }
 
       // ---- hunters: wander, then chase on sight; a catch = death ----
       for (const e of entities) {
         const dx = px - e.x, dy = py - e.y, d = Math.hypot(dx, dy);
         const sees = d < 8 && hasLOS(e.x, e.y, px, py);
-        if (sees) { e.state = 'chase'; e.ang = Math.atan2(dy, dx); }
-        else {
+        if (sees) {
+          if (e.state !== 'chase') { e.state = 'chase'; e.alertT = 0.35; e.burstT = 1.6; stingFor(e); }  // SPOTTED: freeze a beat, then burst
+          e.ang = Math.atan2(dy, dx);
+        } else {
           e.wT -= dt;
           if (e.state === 'chase' && d > 9) e.state = 'wander';
           if (e.wT <= 0) { e.ang += rnd(-1.4, 1.4); e.wT = rnd(0.6, 1.8); }
         }
-        const sp = (e.state === 'chase' ? e.speed : e.speed * 0.5);
-        const r = tryMove(e.x, e.y, e.x + Math.cos(e.ang) * sp * dt, e.y + Math.sin(e.ang) * sp * dt, 0.3);
-        if (r[0] === e.x && r[1] === e.y) { e.ang += rnd(1.5, 4.7); e.wT = 0.3; } // bumped a wall
-        e.x = r[0]; e.y = r[1];
+        // it keeps making its noises — that's how you know where it is
+        e.sndT -= dt;
+        if (e.sndT <= 0) { e.sndT = e.state === 'chase' ? rnd(0.45, 1.0) : rnd(1.3, 2.8); hunterSound(e); }
+        if (e.alertT > 0) { e.alertT -= dt; }
+        else {
+          const sp = e.state === 'chase' ? e.speed * (e.burstT > 0 ? 1.18 : 1) : e.speed * 0.5;
+          if (e.state === 'chase' && e.burstT > 0) e.burstT -= dt;
+          const r = tryMove(e.x, e.y, e.x + Math.cos(e.ang) * sp * dt, e.y + Math.sin(e.ang) * sp * dt, 0.3);
+          if (r[0] === e.x && r[1] === e.y) { e.ang += rnd(1.5, 4.7); e.wT = 0.3; } // bumped a wall
+          e.x = r[0]; e.y = r[1];
+        }
         if (d < CATCH_DIST) { caughtBy = e.type; return triggerJumpscare(); }
       }
 
@@ -2944,9 +3032,14 @@
         }
       }
 
-      // ---- open a door -> go to its kind of level ----
+      // ---- open a door -> step through it into its kind of level ----
       for (const dr of doors) {
-        if (Math.hypot(dr.x - px, dr.y - py) < 0.65) return goToLevel(dr.theme);
+        if (Math.hypot(dr.x - px, dr.y - py) < 0.65) {
+          state = 'door'; doorT = 0.5; doorTheme = dr.theme;
+          keys.fwd = keys.back = keys.left = keys.right = false; joy.active = false;
+          stopAmbient(); doorSfx();
+          return;
+        }
       }
       // ---- step onto a slide -> whoosh down into the next (random) level ----
       for (const sl of slides) {
@@ -2957,6 +3050,10 @@
     function startSlide() {
       state = 'slide'; slideT = 1.0;
       keys.fwd = keys.back = keys.left = keys.right = false; joy.active = false;
+      stopAmbient();
+      // falling whoosh
+      const ac = audio;
+      if (ac) { try { const g = ac.createGain(); g.gain.value = 1; g.connect(ac.destination); noise1(ac, g, ac.currentTime, 'bandpass', 500, 0.9, 0.12); } catch (e) {} }
     }
 
     let caughtBy = 'clark';
@@ -2964,6 +3061,7 @@
       state = 'jumpscare';
       jumpT = JUMP_LEN;
       jumpType = caughtBy;
+      stopAmbient();   // the room goes dead silent for the scream
       screech();
       keys.fwd = keys.back = keys.left = keys.right = false;
       joy.active = false;
@@ -2982,11 +3080,203 @@
       document.getElementById('over').hidden = false;
     }
 
-    // (The eerie ambient drone was removed — the levels now play silent except
-    // for the jumpscare screech below.)
+    // ---------- ambient + positional audio ----------
+    // All procedural WebAudio, deliberately quiet, and null-guarded throughout:
+    // if the context never got its user-gesture the game simply stays silent.
+    let _nb = null;
+    function noiseBuffer(ac) {
+      if (_nb && _nb.sampleRate === ac.sampleRate) return _nb;
+      const b = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      _nb = b; return b;
+    }
+
+    let amb = null;   // current level's ambient bed: { nodes: [], timers: [] }
+    const AMB_KIND = { yellow: 'hum', office: 'hum', school: 'hum', hospital: 'hum', grocery: 'hum',
+      pool: 'drip', sewer: 'drip', forest: 'wind', subway: 'rumble', garage: 'rumble',
+      haunted: 'creak', factory: 'machine', party: 'muffparty' };
+
+    function stopAmbient() {
+      if (!amb) return;
+      amb.timers.forEach(clearInterval);
+      amb.nodes.forEach(function (n) { try { if (n.stop) n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
+      amb = null;
+    }
+    function startAmbient() {
+      stopAmbient();
+      const ac = audio; if (!ac) return;
+      try {
+        amb = { nodes: [], timers: [] };
+        const master = ac.createGain(); master.gain.value = 1; master.connect(ac.destination); amb.nodes.push(master);
+        function keep() { for (let i = 0; i < arguments.length; i++) amb.nodes.push(arguments[i]); }
+        function loopNoise(filterType, freq, vol) {
+          const src = ac.createBufferSource(); src.buffer = noiseBuffer(ac); src.loop = true;
+          const f = ac.createBiquadFilter(); f.type = filterType; f.frequency.value = freq;
+          const g = ac.createGain(); g.gain.value = vol;
+          src.connect(f); f.connect(g); g.connect(master); src.start();
+          keep(src, f, g); return g;
+        }
+        function every(ms, fn) { amb.timers.push(setInterval(function () { try { fn(ac.currentTime); } catch (e) {} }, ms)); }
+        function blip(t, type, f0, f1, dur, vol, filtF) {
+          const o = ac.createOscillator(); o.type = type;
+          o.frequency.setValueAtTime(f0, t);
+          if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          let node = g;
+          if (filtF) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filtF; o.connect(f); f.connect(g); }
+          else o.connect(g);
+          g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+        }
+        loopNoise('lowpass', 380, 0.012);                                   // faint room tone under everything
+        const kind = AMB_KIND[themeName] || 'hum';
+        if (kind === 'hum') {                                               // dying fluorescent fixtures
+          for (const fv of [[120, 0.013], [240, 0.005]]) {
+            const o = ac.createOscillator(); o.frequency.value = fv[0];
+            const g = ac.createGain(); g.gain.value = fv[1];
+            o.connect(g); g.connect(master); o.start(); keep(o, g);
+          }
+        } else if (kind === 'drip') {                                       // water everywhere
+          every(1400, function (t) {
+            if (Math.random() < 0.35) return;
+            const dly = Math.random() * 0.8;
+            blip(t + dly, 'sine', 700 + Math.random() * 500, 220, 0.14, 0.05);
+            blip(t + dly + 0.13, 'sine', 500, 180, 0.1, 0.02);              // echo of the plop
+          });
+        } else if (kind === 'wind') {                                       // wind pushing through the pines
+          const wg = loopNoise('bandpass', 320, 0.0001);
+          const lfo = ac.createOscillator(); lfo.frequency.value = 0.13;
+          const lg = ac.createGain(); lg.gain.value = 0.028;
+          lfo.connect(lg); lg.connect(wg.gain); lfo.start();
+          wg.gain.value = 0.032; keep(lfo, lg);
+        } else if (kind === 'rumble') {                                     // something huge moving far away
+          loopNoise('lowpass', 85, 0.05);
+          every(9000, function (t) { if (Math.random() < 0.5) blip(t, 'sawtooth', 900, 640, 1.1, 0.008, 1200); });  // distant flange squeal
+        } else if (kind === 'creak') {                                      // the house settling around you
+          every(3800, function (t) {
+            if (Math.random() < 0.4) return;
+            blip(t + Math.random() * 1.5, 'sawtooth', 74, 46, 0.55, 0.02, 190);
+          });
+        } else if (kind === 'machine') {                                    // the factory never stopped
+          every(860, function (t) { blip(t, 'sine', 55, 38, 0.12, 0.045); });
+          every(3440, function (t) { blip(t + 0.4, 'square', 210, 180, 0.06, 0.006, 500); });  // relay clack
+        } else if (kind === 'muffparty') {                                  // a party, through a wall, forever
+          let beat = 0;
+          every(470, function (t) {
+            blip(t, 'sine', 92, 38, 0.1, 0.06);                             // kick
+            blip(t + 0.02, 'sine', beat % 2 ? 55 : 73, 0, 0.2, 0.026, 160); // bass note
+            if (beat % 4 === 2) blip(t + 0.235, 'square', 1800, 1500, 0.03, 0.004, 2200);  // hat, barely there
+            beat++;
+          });
+        }
+      } catch (e) { amb = null; }
+    }
+
+    // one-shot at a world position: distance falloff + stereo pan
+    function posPlay(x, y, mult, build) {
+      const ac = audio; if (!ac) return;
+      try {
+        const dx = x - px, dy = y - py, d = Math.hypot(dx, dy);
+        if (d > 12) return;
+        const vol = mult / (1 + d * d * 0.055);
+        const pl = Math.hypot(planeX, planeY) || 1;
+        const pan = clamp((dx * planeX + dy * planeY) / (pl * (d || 1)), -1, 1);
+        const g = ac.createGain(); g.gain.value = vol;
+        let tail = g;
+        if (ac.createStereoPanner) { const p = ac.createStereoPanner(); p.pan.value = pan; g.connect(p); tail = p; }
+        tail.connect(ac.destination);
+        build(ac, g, ac.currentTime);
+      } catch (e) {}
+    }
+    function osc1(ac, g, t, type, f0, f1, dur, vol, filtF) {
+      const o = ac.createOscillator(); o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+      const gg = ac.createGain();
+      gg.gain.setValueAtTime(vol, t); gg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      if (filtF) { const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filtF; o.connect(f); f.connect(gg); }
+      else o.connect(gg);
+      gg.connect(g); o.start(t); o.stop(t + dur + 0.02);
+    }
+    function noise1(ac, g, t, filtType, freq, dur, vol) {
+      const src = ac.createBufferSource(); src.buffer = noiseBuffer(ac);
+      const f = ac.createBiquadFilter(); f.type = filtType; f.frequency.value = freq;
+      const gg = ac.createGain();
+      gg.gain.setValueAtTime(vol, t); gg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f); f.connect(gg); gg.connect(g); src.start(t); src.stop(t + dur + 0.02);
+    }
+
+    // each hunter announces itself in the dark — this replaces any visual alert
+    function hunterSound(e) {
+      posPlay(e.x, e.y, 0.5, function (ac, g, t) {
+        switch (e.type) {
+          case 'clark':                                              // heavy boot, then the peg
+            osc1(ac, g, t, 'sine', 62, 44, 0.12, 0.9);
+            osc1(ac, g, t + 0.16, 'square', 190, 150, 0.05, 0.28, 800);
+            break;
+          case 'hound':                                              // wet rolling growl
+            osc1(ac, g, t, 'sawtooth', 58, 46, 0.5, 0.5, 160);
+            osc1(ac, g, t + 0.07, 'sawtooth', 88, 60, 0.4, 0.2, 220);
+            break;
+          case 'bacteria':                                           // something moist unsticking
+            noise1(ac, g, t, 'bandpass', 320, 0.16, 0.5);
+            osc1(ac, g, t + 0.1, 'sine', 110, 60, 0.12, 0.4);
+            break;
+          case 'partygoer':                                          // a little giggle, wrong register
+            osc1(ac, g, t, 'square', 520, 500, 0.05, 0.16, 1400);
+            osc1(ac, g, t + 0.08, 'square', 430, 410, 0.05, 0.14, 1400);
+            osc1(ac, g, t + 0.16, 'square', 360, 330, 0.07, 0.12, 1400);
+            break;
+          case 'smiler':                                             // thin hiss between teeth
+            noise1(ac, g, t, 'highpass', 3200, 0.3, 0.22);
+            break;
+          default:                                                   // faceling: soft polite shuffle
+            noise1(ac, g, t, 'lowpass', 480, 0.08, 0.5);
+            noise1(ac, g, t + 0.14, 'lowpass', 480, 0.08, 0.4);
+        }
+      });
+    }
+    // the instant it SEES you: a sting, a frozen beat, then the burst
+    const STING_PITCH = { clark: 1, hound: 0.55, smiler: 1.6, bacteria: 0.72, partygoer: 1.25, faceling: 0.9 };
+    function stingFor(e) {
+      const k = STING_PITCH[e.type] || 1;
+      posPlay(e.x, e.y, 1.4, function (ac, g, t) {
+        osc1(ac, g, t, 'sawtooth', 190 * k, 620 * k, 0.24, 0.5);
+        osc1(ac, g, t + 0.02, 'sawtooth', 202 * k, 660 * k, 0.24, 0.4);
+        noise1(ac, g, t, 'highpass', 1200, 0.09, 0.5);
+      });
+    }
+
+    let stepFlip = false;
+    function stepSound() {
+      const ac = audio; if (!ac) return;
+      try {
+        const t = ac.currentTime;
+        const g = ac.createGain(); g.gain.value = 1; g.connect(ac.destination);
+        stepFlip = !stepFlip;
+        noise1(ac, g, t, 'lowpass', stepFlip ? 300 : 260, 0.07, 0.055);
+        osc1(ac, g, t, 'sine', stepFlip ? 78 : 70, 50, 0.06, 0.05);
+      } catch (e) {}
+    }
+    function doorSfx() {
+      const ac = audio; if (!ac) return;
+      try {
+        const t = ac.currentTime;
+        const g = ac.createGain(); g.gain.value = 1; g.connect(ac.destination);
+        osc1(ac, g, t, 'square', 820, 700, 0.03, 0.08, 2000);      // latch
+        osc1(ac, g, t + 0.05, 'sawtooth', 92, 58, 0.4, 0.06, 240); // long hinge creak
+        noise1(ac, g, t + 0.05, 'lowpass', 600, 0.3, 0.03);
+      } catch (e) {}
+    }
 
     // Jumpscare screech (dissonant noise + detuned tones). Guarded — silent if
     // WebAudio is unavailable or the context never got a user-gesture resume.
+    // each hunter screams in its own register
+    const SCREECH_FREQS = {
+      clark: [98, 104, 207, 220], hound: [55, 62, 110, 118], smiler: [300, 315, 590, 610],
+      bacteria: [70, 76, 140, 150], partygoer: [160, 170, 330, 350], faceling: [120, 126, 240, 250]
+    };
     function screech() {
       try {
         const ac = audio; if (!ac) return;
@@ -2995,9 +3285,13 @@
         const data = buf.getChannelData(0);
         for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.4);
         const noise = ac.createBufferSource(); noise.buffer = buf;
+        const nf = ac.createBiquadFilter();   // shape the roar per hunter
+        if (jumpType === 'hound' || jumpType === 'bacteria') { nf.type = 'lowpass'; nf.frequency.value = 700; }
+        else if (jumpType === 'smiler') { nf.type = 'highpass'; nf.frequency.value = 1400; }
+        else { nf.type = 'allpass'; nf.frequency.value = 800; }
         const ng = ac.createGain(); ng.gain.value = 0.3;
-        noise.connect(ng).connect(ac.destination); noise.start(t0);
-        [98, 104, 207, 220].forEach(function (f) {
+        noise.connect(nf); nf.connect(ng); ng.connect(ac.destination); noise.start(t0);
+        (SCREECH_FREQS[jumpType] || SCREECH_FREQS.clark).forEach(function (f) {
           const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
           const g = ac.createGain();
           g.gain.setValueAtTime(0.0001, t0);
@@ -3035,19 +3329,42 @@
       if (!last) last = ts;
       let dt = (ts - last) / 1000; last = ts;
       if (dt > 0.05) dt = 0.05;           // clamp big gaps (tab switch)
-      if (state === 'playing') { update(dt); render(); }
+      if (state === 'playing') {
+        update(dt); render();
+        // white after-glare fading out just after stepping through a door / slide
+        if (doorFade > 0) {
+          ctx.fillStyle = 'rgba(255,255,255,' + (doorFade / 0.35) * 0.9 + ')';
+          ctx.fillRect(0, 0, W, H);
+          doorFade -= dt;
+        }
+      }
       else if (state === 'jumpscare') {
         jumpT -= dt; drawJumpscare();
         if (jumpT <= 0) gameOver();
       }
+      else if (state === 'door') {
+        render(); drawDoorFlash();
+        doorT -= dt;
+        if (doorT <= 0) { goToLevel(doorTheme); doorFade = 0.35; state = 'playing'; }
+      }
       else if (state === 'slide') {
         render(); drawSlide();
         slideT -= dt;
-        if (slideT <= 0) { goToLevel(SLIDE_THEMES[(level + 1) % SLIDE_THEMES.length]); state = 'playing'; }
+        if (slideT <= 0) { goToLevel(SLIDE_THEMES[(level + 1) % SLIDE_THEMES.length]); doorFade = 0.3; state = 'playing'; }
       }
       else if (state === 'over') { render(); }   // keep the frozen scene behind the panel
     }
     requestAnimationFrame(frame);
+
+    // stepping through a door: the glow floods out and swallows the screen
+    function drawDoorFlash() {
+      const p = 1 - clamp(doorT / 0.5, 0, 1);
+      const a = Math.pow(p, 1.6);
+      const g = ctx.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, H * (0.25 + p * 0.9));
+      g.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+      g.addColorStop(1, 'rgba(255,255,255,' + a * a * 0.9 + ')');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
 
     // brief "sliding down" transition: dark vignette closing in + downward streaks
     const SLIDE_THEMES = ['sewer', 'subway', 'school', 'garage', 'hospital', 'grocery', 'forest', 'office', 'factory', 'party', 'haunted', 'pool', 'yellow'];
