@@ -906,3 +906,17 @@ hooks. OT is timed and repeats while tied — basket() no longer sudden-death en
 NOTE: this file was accidentally overwritten by a concurrent-instance race
 (read → other instance appended → my write clobbered); restored from git and
 re-appended. Lesson recorded in tasks/lessons.md.
+
+# Hog Ball — Card Shop, Superstar Spinner, Full Court Press
+- [x] Shop overlay (main menu + season hub): 4 card packs (Starter $8M / Pro $18M /
+      Elite $32M 4★+ guaranteed / Legend $55M 25% legend), odds shown on pack art
+- [x] Superstar Spinner: canvas prize wheel, $10M/spin, 8 segments incl. LEGEND slice,
+      eased landing animation, cash/card/legend payouts, full-club cash fallbacks
+- [x] Full Court Press boost: $25M, gated behind 3 total wins (career + quick-play),
+      toggleable; on-ball gap -8 + off-ball sag 0.12 for team 0 in season games, HUD chip
+- [x] 4 legend foil cards (Golden Hog/Midnight Moo/Emerald Fizz/Baron von Brains) with
+      stat bonuses, painted card art (rarity gradients, foil sparkles, OVR/pos badges,
+      blocky portraits), card-back design, pack flip reveal, mini-cards in lineup slots
+- [x] Save migration (items/totalWins), duplicate→cash conversion, HB shop test hooks
+- [x] Verified headless: pack buy/economy, flip flow, FCP lock at 0 wins → buy at 3,
+      forced legend spin lands + pays out, pressing(0) true in career game only

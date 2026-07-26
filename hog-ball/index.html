@@ -91,6 +91,27 @@
     .swatches { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
     .swatch { width: 30px; height: 30px; border-radius: 9px; border: 2px solid #0f3460; cursor: pointer; padding: 0; }
     .swatch.selected { border-color: #ffd23f; box-shadow: 0 0 10px rgba(255,210,63,0.5); }
+
+    /* ---------- Card shop ---------- */
+    .pack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pack-btn { font-family: 'Nunito', sans-serif; text-align: center; color: #fff; border: 2px solid #0f3460; border-radius: 14px; padding: 10px 6px; cursor: pointer; transition: transform 0.1s ease; }
+    .pack-btn:active { transform: scale(0.96); }
+    .pack-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+    .pack-btn .pk-name { font-weight: 800; font-size: 0.82rem; display: block; }
+    .pack-btn .pk-odds { font-size: 0.58rem; color: rgba(255,255,255,0.85); display: block; margin-top: 2px; }
+    .pack-btn .pk-price { font-weight: 800; font-size: 0.72rem; display: block; margin-top: 4px; color: #fff; }
+    .pack-btn.pk-starter { background: linear-gradient(150deg, #35507a, #22314e); }
+    .pack-btn.pk-pro { background: linear-gradient(150deg, #7a8aa0, #4a5a72); }
+    .pack-btn.pk-elite { background: linear-gradient(150deg, #c98f00, #8a5c00); }
+    .pack-btn.pk-legend { background: linear-gradient(150deg, #8a2be2, #d4265e); }
+    .boost-row { display: flex; align-items: center; gap: 8px; background: #0f1830; border: 2px solid #0f3460; border-radius: 12px; padding: 8px 10px; text-align: left; }
+    .boost-row .em { font-size: 1.5rem; }
+    .boost-row.owned { border-color: #46c46a; }
+    .boost-row.locked { opacity: 0.6; }
+    .pr-cards { display: flex; gap: 10px; justify-content: center; margin: 12px 0; }
+    .pr-cards canvas { border-radius: 10px; cursor: pointer; box-shadow: 0 8px 22px rgba(0,0,0,0.5); transition: transform 0.12s ease; }
+    .pr-cards canvas:active { transform: scale(0.95); }
+    .cr-slot canvas { display: block; margin: 0 auto 3px; border-radius: 6px; }
   </style>
 </head>
 <body>
@@ -145,6 +166,7 @@
         <div class="legend" id="legend"></div>
         <button class="start-btn" id="start-btn">Tip Off!</button>
         <button class="start-btn gold" id="season-btn">🏆 Season Mode</button>
+        <button class="secondary-btn" id="menu-shop-btn">🛍 Card Shop — packs, spinner &amp; boosts</button>
       </div>
     </div>
 
@@ -169,6 +191,7 @@
           <div class="cr-stat"><div class="v" id="cr-troph">–</div><div class="k">Trophy case</div></div>
         </div>
         <button class="start-btn" id="cr-play">▶ Play next game</button>
+        <button class="start-btn gold" id="cr-shop-btn">🛍 Card Shop &amp; Spinner</button>
         <button class="secondary-btn" id="cr-lineup-btn">👥 Lineup &amp; trades</button>
         <button class="secondary-btn" id="cr-jersey-btn">🎽 Jersey designer</button>
         <button class="secondary-btn" id="cr-market-btn">🛒 Transfer market</button>
@@ -201,6 +224,42 @@
         <div class="group-label">Style</div>
         <div class="choices" id="jz-styles" style="flex-wrap:wrap"></div>
         <button class="secondary-btn" id="jz-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Season mode: card shop -->
+    <div class="overlay" id="shop" hidden>
+      <div class="panel">
+        <h2>Card Shop</h2>
+        <div class="sub">Budget: <span class="money" id="sh-money">$0M</span> · rip packs, spin the wheel, unlock boosts!</div>
+        <div class="group-label">Card Packs</div>
+        <div class="pack-grid" id="sh-packs"></div>
+        <div class="group-label">Superstar Spinner</div>
+        <button class="start-btn gold" id="sh-spin-btn" style="margin-top:0">🎡 Superstar Spinner — $10M a spin</button>
+        <div class="group-label">Boosts</div>
+        <div id="sh-boosts"></div>
+        <button class="secondary-btn" id="sh-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- Pack opening: card reveal -->
+    <div class="overlay" id="packrev" hidden>
+      <div class="panel">
+        <h2 id="pr-title">Pack!</h2>
+        <div class="sub" id="pr-sub">Tap each card to flip it over!</div>
+        <div class="pr-cards" id="pr-cards"></div>
+        <button class="start-btn" id="pr-done" disabled>Flip all the cards first…</button>
+      </div>
+    </div>
+
+    <!-- Superstar spinner -->
+    <div class="overlay" id="spinwheel" hidden>
+      <div class="panel">
+        <h2>Superstar Spinner</h2>
+        <div class="sub" id="sp-sub">$10M a spin — land on a LEGEND for the rarest cards in the game!</div>
+        <canvas id="sp-cv" width="260" height="280" style="display:block;margin:0 auto"></canvas>
+        <button class="start-btn gold" id="sp-go">SPIN — $10M</button>
+        <button class="secondary-btn" id="sp-back">‹ Back</button>
       </div>
     </div>
 
@@ -915,7 +974,7 @@
       if (actx && actx.state === 'suspended') actx.resume();
       if (state === 'select') {
         // don't launch a quick match while the season overlays are open
-        const seasonOpen = !document.getElementById('career').hidden || !document.getElementById('market').hidden || !document.getElementById('lineup').hidden || !document.getElementById('jersey').hidden;
+        const seasonOpen = ['career', 'market', 'lineup', 'jersey', 'shop', 'packrev', 'spinwheel'].some(function (id) { return !document.getElementById(id).hidden; });
         if (!seasonOpen && (e.code === 'Space' || e.code === 'Enter')) { e.preventDefault(); beginGame(); }
         return;
       }
@@ -1094,7 +1153,7 @@
     // a star rating and a position — and you can start anyone anywhere.
     const CAREER_KEY = 'hogball.career.v1';
     const VALUES = [4, 10, 20, 34, 55];                 // $M by star rating
-    function valueOf(c) { return VALUES[c.stars - 1]; }
+    function valueOf(c) { return c.foil ? 70 : VALUES[c.stars - 1]; }
     function starStr(n) { return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n); }
 
     const ROSTER = [
@@ -1108,17 +1167,18 @@
     ].map(function (r, i) { return { id: 'r' + i, name: r[0], key: r[1], pos: r[2], stars: r[3] }; });
 
     // card → on-court stats. Guards are quick sharpshooters, centres are slow bruisers.
+    // Legend foil cards carry a little extra shine in every column.
     function cardStats(c) {
-      const g = c.pos === 'G' ? 1 : 0, ctr = c.pos === 'C' ? 1 : 0;
+      const g = c.pos === 'G' ? 1 : 0, ctr = c.pos === 'C' ? 1 : 0, lg = c.foil ? 1 : 0;
       return {
         pName: c.name, stars: c.stars,
-        accel: 0.26 + c.stars * 0.03 + g * 0.03,
-        maxSpd: 1.7 + c.stars * 0.16 + g * 0.2 - ctr * 0.2,
+        accel: 0.26 + c.stars * 0.03 + g * 0.03 + lg * 0.03,
+        maxSpd: 1.7 + c.stars * 0.16 + g * 0.2 - ctr * 0.2 + lg * 0.15,
         mass: ctr ? 2.4 : (c.pos === 'F' ? 1.7 : 1.2),
         r: ctr ? 18 : (c.pos === 'F' ? 16 : 14),
-        shoot3: 0.82 + c.stars * 0.09 + g * 0.05 - ctr * 0.05,
-        steal: 0.82 + c.stars * 0.06 + g * 0.08,
-        fit: 0.72 + c.stars * 0.07 + g * 0.05 - ctr * 0.06
+        shoot3: 0.82 + c.stars * 0.09 + g * 0.05 - ctr * 0.05 + lg * 0.06,
+        steal: 0.82 + c.stars * 0.06 + g * 0.08 + lg * 0.08,
+        fit: 0.72 + c.stars * 0.07 + g * 0.05 - ctr * 0.06 + lg * 0.08
       };
     }
 
@@ -1167,9 +1227,13 @@
     function loadCareer() {
       try { const c = JSON.parse(localStorage.getItem(CAREER_KEY)); if (c && c.owned && c.lineup) career = c; } catch (e) {}
       if (career && !career.jersey) career.jersey = { color: '#6fa8ff', trim: '#f2f2f2', style: 'solid' };
+      // shop-era migrations for old saves
+      if (career && !career.items) career.items = { fcp: false, fcpOn: true };
+      if (career && career.totalWins == null) career.totalWins = career.wins || 0;
     }
     function newCareer() {
-      career = { season: 1, money: 40, wins: 0, losses: 0, gameIdx: 0, phase: 'regular', cupDone: false, cups: 0, titles: 0,
+      career = { season: 1, money: 40, wins: 0, losses: 0, totalWins: 0, gameIdx: 0, phase: 'regular', cupDone: false, cups: 0, titles: 0,
+        items: { fcp: false, fcpOn: true },
         owned: [
           { id: 'k0', name: 'Rookie Rex', key: 'pig', pos: 'G', stars: 2 },
           { id: 'k1', name: 'Rookie Moo', key: 'cow', pos: 'F', stars: 2 },
@@ -1201,6 +1265,7 @@
     }
     function careerFinish(winner) {
       const won = winner === 0, c = career;
+      if (won) c.totalWins = (c.totalWins || 0) + 1;
       let reward = 0, head = '';
       if (c.phase === 'regular') {
         reward = won ? 6 : 2; if (won) c.wins++; else c.losses++; c.gameIdx++;
@@ -1295,15 +1360,25 @@
       lineupCards().forEach(function (card) {
         const d = document.createElement('div');
         d.className = 'cr-slot' + (card ? ' filled' : '');
-        d.innerHTML = card ? '<span class="em">' + MOBS[card.key].emoji + '</span>' + card.name + '<br><span style="color:#ffd23f">' + starStr(card.stars) + '</span>' : 'Empty —<br>tap Start below';
+        if (card) {
+          // mini painted card, same art as the pack reveals
+          const cv = document.createElement('canvas'); cv.width = 74; cv.height = 104;
+          drawCard(cv.getContext('2d'), 0, 0, 74, 104, card, false);
+          d.appendChild(cv);
+          const cap = document.createElement('span');
+          cap.style.color = card.foil ? '#ffb300' : '#ffd23f';
+          cap.textContent = card.foil ? '★ LEGEND ★' : starStr(card.stars);
+          d.appendChild(cap);
+        } else d.innerHTML = 'Empty —<br>tap Start below';
         slots.appendChild(d);
       });
       const list = document.getElementById('lu-list'); list.innerHTML = '';
       career.owned.forEach(function (o) {
         const inL = career.lineup.indexOf(o.id) >= 0;
         const row = document.createElement('div'); row.className = 'cr-row' + (inL ? ' inlineup' : '');
+        const rare = o.foil ? '<span style="color:#ffb300">★ LEGEND ★</span>' : '<span class="stars">' + starStr(o.stars) + '</span>';
         row.innerHTML = '<span class="em">' + MOBS[o.key].emoji + '</span><div class="cr-info"><div class="cr-nm">' + o.name + '</div>' +
-          '<div class="cr-meta"><span class="pos">' + o.pos + '</span> · <span class="stars">' + starStr(o.stars) + '</span> · worth $' + valueOf(o) + 'M</div></div>';
+          '<div class="cr-meta"><span class="pos">' + o.pos + '</span> · ' + rare + ' · worth $' + valueOf(o) + 'M</div></div>';
         const tog = document.createElement('button'); tog.className = 'cr-btn' + (inL ? ' bench' : '');
         tog.textContent = inL ? 'Bench' : 'Start';
         tog.disabled = !inL && career.lineup.indexOf(null) < 0 && career.lineup.filter(function (id) { return career.owned.find(function (x) { return x.id === id; }); }).length >= 3;
@@ -1444,6 +1519,333 @@
     document.getElementById('mk-refresh').addEventListener('click', function () { restock(); renderMarket(); });
     document.getElementById('mk-back').addEventListener('click', function () { marketEl.hidden = true; openCareer(); });
     document.getElementById('lu-back').addEventListener('click', function () { lineupEl.hidden = true; openCareer(); });
+
+    // ---------- Card Shop: packs, superstar spinner, boosts ----------
+    // Legend foil cards — spinner & Legend-pack exclusives with unique card art
+    const LEGENDS = [
+      { id: 'L1', name: 'The Golden Hog', key: 'pig',     pos: 'F', stars: 5, foil: 'gold' },
+      { id: 'L2', name: 'Midnight Moo',   key: 'cow',     pos: 'C', stars: 5, foil: 'holo' },
+      { id: 'L3', name: 'Emerald Fizz',   key: 'creeper', pos: 'G', stars: 5, foil: 'emerald' },
+      { id: 'L4', name: 'Baron von Brains', key: 'zombie', pos: 'F', stars: 5, foil: 'ruby' }
+    ];
+    // pack tiers: price in $M, 3 cards each, star odds as weights
+    const PACKS = [
+      { key: 'starter', name: 'Starter Pack',  emoji: '📦', price: 8,  odds: { 1: 50, 2: 35, 3: 15 },          legendPct: 0 },
+      { key: 'pro',     name: 'Pro Pack',      emoji: '🥈', price: 18, odds: { 2: 45, 3: 35, 4: 18, 5: 2 },    legendPct: 0 },
+      { key: 'elite',   name: 'Elite Pack',    emoji: '🥇', price: 32, odds: { 3: 40, 4: 40, 5: 20 },          legendPct: 5,  min4: true },
+      { key: 'legend',  name: 'Legend Pack',   emoji: '💎', price: 55, odds: { 4: 55, 5: 45 },                 legendPct: 25 }
+    ];
+    const FCP_PRICE = 25, FCP_WINS = 3, SPIN_PRICE = 10;
+
+    function ovrOf(c) { return c.foil ? 99 : [62, 70, 78, 86, 94][c.stars - 1]; }
+    function totalWinsAll() { return (career ? (career.totalWins || 0) : 0) + bestWins.load(); }
+
+    // ---- card artwork: every card is painted, foils get full special designs ----
+    const FOIL_BG = {
+      gold:    ['#ffe27a', '#c98f00', '#7a4a00'],
+      holo:    ['#8ab9ff', '#b06bff', '#1a2c66'],
+      emerald: ['#8affc1', '#1f9e57', '#0b3d22'],
+      ruby:    ['#ff9d9d', '#d4265e', '#5c0f2a']
+    };
+    function cardBG(g, x, y, w, h, c) {
+      const gr = g.createLinearGradient(x, y, x + w, y + h);
+      if (c.foil) { const f = FOIL_BG[c.foil]; gr.addColorStop(0, f[0]); gr.addColorStop(0.55, f[1]); gr.addColorStop(1, f[2]); }
+      else if (c.stars >= 5) { gr.addColorStop(0, '#7d6bff'); gr.addColorStop(1, '#2a1a5e'); }
+      else if (c.stars === 4) { gr.addColorStop(0, '#e8b64c'); gr.addColorStop(1, '#7a4a10'); }
+      else if (c.stars === 3) { gr.addColorStop(0, '#c7d0e0'); gr.addColorStop(1, '#5a6a85'); }
+      else { gr.addColorStop(0, '#3a5580'); gr.addColorStop(1, '#1c2a45'); }
+      return gr;
+    }
+    // blocky mob portrait at any scale (u = one "pixel")
+    function drawCardFace(g, cx, cy, u, key) {
+      const s = MOBS[key];
+      g.fillStyle = s.color; g.fillRect(cx - 9 * u, cy - 9 * u, 18 * u, 18 * u);
+      if (key === 'creeper') {
+        g.fillStyle = '#1d1d1d';
+        g.fillRect(cx - 7 * u, cy - 5 * u, 5 * u, 5 * u); g.fillRect(cx + 2 * u, cy - 5 * u, 5 * u, 5 * u);
+        g.fillRect(cx - 2 * u, cy, 4 * u, 5 * u); g.fillRect(cx - 4 * u, cy + 3 * u, 2 * u, 4 * u); g.fillRect(cx + 2 * u, cy + 3 * u, 2 * u, 4 * u);
+      } else if (key === 'zombie') {
+        g.fillStyle = '#1d2e16'; g.fillRect(cx - 7 * u, cy - 4 * u, 5 * u, 4 * u); g.fillRect(cx + 2 * u, cy - 4 * u, 5 * u, 4 * u);
+        g.fillStyle = '#26401b'; g.fillRect(cx - 5 * u, cy + 4 * u, 10 * u, 3 * u);
+      } else if (key === 'pig') {
+        g.fillStyle = '#2a2a2a'; g.fillRect(cx - 6 * u, cy - 4 * u, 3 * u, 4 * u); g.fillRect(cx + 3 * u, cy - 4 * u, 3 * u, 4 * u);
+        g.fillStyle = s.face; g.fillRect(cx - 5 * u, cy + 1 * u, 10 * u, 7 * u);
+        g.fillStyle = '#c76b94'; g.fillRect(cx - 3 * u, cy + 3 * u, 2 * u, 3 * u); g.fillRect(cx + 1 * u, cy + 3 * u, 2 * u, 3 * u);
+      } else { // cow
+        g.fillStyle = '#2a2a2a'; g.fillRect(cx + 1 * u, cy - 9 * u, 8 * u, 5 * u);
+        g.fillRect(cx - 6 * u, cy - 3 * u, 3 * u, 4 * u); g.fillRect(cx + 3 * u, cy - 3 * u, 3 * u, 4 * u);
+        g.fillStyle = s.face; g.fillRect(cx - 9 * u, cy + 3 * u, 18 * u, 6 * u);
+        g.fillStyle = '#7a4a5a'; g.fillRect(cx - 5 * u, cy + 5 * u, 2 * u, 3 * u); g.fillRect(cx + 3 * u, cy + 5 * u, 2 * u, 3 * u);
+        g.fillStyle = '#b8b0a0'; g.fillRect(cx - 12 * u, cy - 9 * u, 3 * u, 5 * u); g.fillRect(cx + 9 * u, cy - 9 * u, 3 * u, 5 * u);
+      }
+    }
+    // paints a full card (or its back) into rect (x,y,w,h) on any canvas
+    function drawCard(g, x, y, w, h, c, faceDown) {
+      g.save();
+      const rr = function () { g.beginPath(); g.moveTo(x + 8, y); g.arcTo(x + w, y, x + w, y + h, 8); g.arcTo(x + w, y + h, x, y + h, 8); g.arcTo(x, y + h, x, y, 8); g.arcTo(x, y, x + w, y, 8); g.closePath(); };
+      rr(); g.clip();
+      if (faceDown) {
+        // card back: house design
+        g.fillStyle = '#16213e'; g.fillRect(x, y, w, h);
+        g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 6;
+        for (let d = -h; d < w + h; d += 16) { g.beginPath(); g.moveTo(x + d, y); g.lineTo(x + d + h, y + h); g.stroke(); }
+        g.fillStyle = '#e2731d'; g.beginPath(); g.arc(x + w / 2, y + h / 2 - 6, w * 0.22, 0, 6.28); g.fill();
+        g.strokeStyle = '#8a3d0f'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(x + w / 2 - w * 0.22, y + h / 2 - 6); g.lineTo(x + w / 2 + w * 0.22, y + h / 2 - 6); g.stroke();
+        g.beginPath(); g.moveTo(x + w / 2, y + h / 2 - 6 - w * 0.22); g.lineTo(x + w / 2, y + h / 2 - 6 + w * 0.22); g.stroke();
+        g.fillStyle = '#ffe8b0'; g.font = "800 " + Math.round(w * 0.11) + "px 'Nunito', sans-serif"; g.textAlign = 'center';
+        g.fillText('HOG BALL', x + w / 2, y + h - 14);
+        g.restore(); return;
+      }
+      g.fillStyle = cardBG(g, x, y, w, h, c); g.fillRect(x, y, w, h);
+      // foil sparkles
+      if (c.foil) {
+        g.fillStyle = 'rgba(255,255,255,0.8)';
+        [[0.2, 0.18], [0.82, 0.3], [0.15, 0.62], [0.75, 0.75], [0.5, 0.08]].forEach(function (p, i) {
+          const sx = x + w * p[0], sy = y + h * p[1], r2 = 2 + (i % 2);
+          g.beginPath(); g.moveTo(sx, sy - r2); g.lineTo(sx + r2 * 0.5, sy); g.lineTo(sx, sy + r2); g.lineTo(sx - r2 * 0.5, sy); g.closePath(); g.fill();
+        });
+      }
+      // portrait window
+      g.fillStyle = 'rgba(10,16,34,0.35)';
+      g.fillRect(x + 6, y + h * 0.16, w - 12, h * 0.5);
+      drawCardFace(g, x + w / 2, y + h * 0.40, w / 46, c.key);
+      // OVR badge
+      g.fillStyle = 'rgba(10,16,34,0.75)'; g.beginPath(); g.arc(x + 15, y + 15, 12, 0, 6.28); g.fill();
+      g.fillStyle = c.foil ? '#ffe27a' : '#fff'; g.font = "800 11px 'Nunito', sans-serif"; g.textAlign = 'center';
+      g.fillText(String(ovrOf(c)), x + 15, y + 19);
+      // position badge
+      g.fillStyle = 'rgba(10,16,34,0.75)'; g.fillRect(x + w - 24, y + 6, 18, 15);
+      g.fillStyle = '#9fc6ff'; g.font = "800 10px 'Nunito', sans-serif";
+      g.fillText(c.pos, x + w - 15, y + 17);
+      // name plate + stars
+      g.fillStyle = 'rgba(10,16,34,0.78)'; g.fillRect(x, y + h - 34, w, 34);
+      g.fillStyle = '#fff'; g.font = "800 " + Math.round(w * 0.095) + "px 'Nunito', sans-serif";
+      g.fillText(c.name, x + w / 2, y + h - 20);
+      g.fillStyle = '#ffd23f'; g.font = "800 9px 'Nunito', sans-serif";
+      g.fillText(c.foil ? '★ LEGEND ★' : starStr(c.stars), x + w / 2, y + h - 8);
+      g.restore();
+    }
+
+    // ---- pack rolling ----
+    function rollStars(odds) {
+      let tot = 0; for (const k in odds) tot += odds[k];
+      let r = Math.random() * tot;
+      for (const k in odds) { r -= odds[k]; if (r <= 0) return parseInt(k, 10); }
+      return 1;
+    }
+    function unownedLegend() {
+      const ids = {}; career.owned.forEach(function (o) { ids[o.id] = true; });
+      const pool = LEGENDS.filter(function (l) { return !ids[l.id]; });
+      return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+    }
+    function rollCard(stars) {
+      const ids = {}; career.owned.forEach(function (o) { ids[o.id] = true; });
+      let pool = ROSTER.filter(function (r) { return r.stars === stars && !ids[r.id]; });
+      if (!pool.length) pool = ROSTER.filter(function (r) { return !ids[r.id]; });
+      if (!pool.length) return null;   // own everything: converts to cash
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    // returns [{card|null, cash}] x3 and applies them to the career
+    function openPack(pk) {
+      const out = [];
+      for (let i = 0; i < 3; i++) {
+        let card = null;
+        if (pk.legendPct && Math.random() * 100 < pk.legendPct) card = unownedLegend();
+        if (!card) {
+          let st = rollStars(pk.odds);
+          if (pk.min4 && i === 2 && !out.some(function (o) { return o.card && o.card.stars >= 4; }) && st < 4) st = 4;
+          card = rollCard(st);
+        }
+        if (card) {
+          career.owned.push({ id: card.id, name: card.name, key: card.key, pos: card.pos, stars: card.stars, foil: card.foil || null });
+          career.stock = career.stock.filter(function (x) { return x !== card.id; });
+          out.push({ card: card, cash: 0 });
+        } else {
+          const cash = 12;   // full club! duplicates convert to cold hard cash
+          career.money += cash;
+          out.push({ card: null, cash: cash });
+        }
+      }
+      saveCareer();
+      return out;
+    }
+
+    // ---- shop UI ----
+    const shopEl = document.getElementById('shop');
+    const packrevEl = document.getElementById('packrev');
+    const spinEl = document.getElementById('spinwheel');
+    function openShop() {
+      if (!career) { loadCareer(); if (!career) newCareer(); }
+      state = 'select';
+      setupEl.hidden = true; careerEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true; jerseyEl.hidden = true; overEl.hidden = true;
+      shopEl.hidden = false;
+      renderShop(); setControls();
+    }
+    function renderShop() {
+      document.getElementById('sh-money').textContent = '$' + career.money + 'M';
+      const pg = document.getElementById('sh-packs'); pg.innerHTML = '';
+      PACKS.forEach(function (pk) {
+        const b = document.createElement('button');
+        b.className = 'pack-btn pk-' + pk.key;
+        let odds = Object.keys(pk.odds).map(function (k) { return k + '★ ' + pk.odds[k] + '%'; }).join(' · ');
+        if (pk.legendPct) odds += ' · LEGEND ' + pk.legendPct + '%';
+        b.innerHTML = '<span style="font-size:1.6rem">' + pk.emoji + '</span><span class="pk-name">' + pk.name + '</span>' +
+          '<span class="pk-odds">3 cards · ' + odds + (pk.min4 ? ' · 4★+ guaranteed' : '') + '</span>' +
+          '<span class="pk-price">$' + pk.price + 'M</span>';
+        b.disabled = career.money < pk.price;
+        b.addEventListener('click', function () { buyPack(pk.key); });
+        pg.appendChild(b);
+      });
+      document.getElementById('sh-spin-btn').disabled = career.money < SPIN_PRICE;
+      // boosts
+      const bx = document.getElementById('sh-boosts'); bx.innerHTML = '';
+      const row = document.createElement('div');
+      const wins = totalWinsAll(), locked = wins < FCP_WINS, owned = career.items.fcp;
+      row.className = 'boost-row' + (owned ? ' owned' : (locked ? ' locked' : ''));
+      row.innerHTML = '<span class="em">🗜️</span><div class="cr-info"><div class="cr-nm">Full Court Press</div>' +
+        '<div class="cr-meta">' + (owned ? 'OWNED — your mobs hound the ball ALL over the court' :
+          (locked ? 'Unlocks after 3 wins — you have ' + wins : 'Defenders press the full court every Season game — $' + FCP_PRICE + 'M')) + '</div></div>';
+      const btn = document.createElement('button'); btn.className = 'cr-btn';
+      if (owned) {
+        btn.textContent = career.items.fcpOn ? 'ON' : 'OFF';
+        btn.className += career.items.fcpOn ? '' : ' bench';
+        btn.addEventListener('click', function () { career.items.fcpOn = !career.items.fcpOn; saveCareer(); renderShop(); });
+      } else {
+        btn.textContent = locked ? '🔒 ' + wins + '/' + FCP_WINS : 'Buy $' + FCP_PRICE + 'M';
+        btn.disabled = locked || career.money < FCP_PRICE;
+        btn.addEventListener('click', function () {
+          if (career.money < FCP_PRICE || totalWinsAll() < FCP_WINS) return;
+          career.money -= FCP_PRICE; career.items.fcp = true; career.items.fcpOn = true;
+          saveCareer(); renderShop();
+        });
+      }
+      row.appendChild(btn); bx.appendChild(row);
+    }
+    function buyPack(key) {
+      const pk = PACKS.find(function (p) { return p.key === key; });
+      if (!pk || career.money < pk.price) return;
+      career.money -= pk.price;
+      const out = openPack(pk);
+      shopEl.hidden = true; packrevEl.hidden = false;
+      document.getElementById('pr-title').textContent = pk.emoji + ' ' + pk.name;
+      document.getElementById('pr-sub').textContent = 'Tap each card to flip it over!';
+      const wrap = document.getElementById('pr-cards'); wrap.innerHTML = '';
+      let flipped = 0;
+      const done = document.getElementById('pr-done');
+      done.disabled = true; done.textContent = 'Flip all the cards first…';
+      out.forEach(function (o) {
+        const cv = document.createElement('canvas'); cv.width = 110; cv.height = 154;
+        const g = cv.getContext('2d');
+        const c = o.card || { name: '+$' + o.cash + 'M', key: 'pig', pos: '$', stars: 1 };
+        drawCard(g, 0, 0, 110, 154, c, true);
+        let open = false;
+        cv.addEventListener('click', function () {
+          if (open) return;
+          open = true; flipped++;
+          g.clearRect(0, 0, 110, 154);
+          if (o.card) drawCard(g, 0, 0, 110, 154, o.card, false);
+          else {
+            g.fillStyle = '#1c3a2c'; g.fillRect(0, 0, 110, 154);
+            g.fillStyle = '#7be39a'; g.font = "800 20px 'Nunito', sans-serif"; g.textAlign = 'center';
+            g.fillText('+$' + o.cash + 'M', 55, 74);
+            g.font = "800 11px 'Nunito', sans-serif"; g.fillText('full club bonus!', 55, 94);
+          }
+          if (o.card && o.card.foil) sfx.three(); else sfx.ding();
+          if (flipped === out.length) { done.disabled = false; done.textContent = 'Sweet! ▶'; }
+        });
+        wrap.appendChild(cv);
+      });
+    }
+    document.getElementById('pr-done').addEventListener('click', function () { packrevEl.hidden = true; openShop(); });
+
+    // ---- superstar spinner ----
+    const SPIN_SEGS = [
+      { t: 'cash', v: 2,  label: '$2M',  col: '#3a5580' },
+      { t: 'card', st: 2, label: '2★',   col: '#5a6a85' },
+      { t: 'cash', v: 6,  label: '$6M',  col: '#2c7a4f' },
+      { t: 'card', st: 3, label: '3★',   col: '#7a8aa0' },
+      { t: 'cash', v: 15, label: '$15M', col: '#1f9e57' },
+      { t: 'card', st: 4, label: '4★',   col: '#c98f00' },
+      { t: 'card', st: 5, label: '5★',   col: '#7d6bff' },
+      { t: 'legend',      label: 'LEGEND', col: '#d4265e' }
+    ];
+    let spinAngle = 0, spinAnim = null;
+    function drawSpinner() {
+      const cv = document.getElementById('sp-cv'), g = cv.getContext('2d');
+      const cx = 130, cy = 150, R = 118;
+      g.clearRect(0, 0, cv.width, cv.height);
+      const n = SPIN_SEGS.length, arc = Math.PI * 2 / n;
+      for (let i = 0; i < n; i++) {
+        const a0 = spinAngle + i * arc;
+        g.fillStyle = SPIN_SEGS[i].col;
+        g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, R, a0, a0 + arc); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 2; g.stroke();
+        g.save();
+        g.translate(cx, cy); g.rotate(a0 + arc / 2);
+        g.fillStyle = '#fff'; g.font = "800 13px 'Nunito', sans-serif"; g.textAlign = 'right';
+        g.fillText(SPIN_SEGS[i].label, R - 10, 5);
+        g.restore();
+      }
+      g.fillStyle = '#16213e'; g.beginPath(); g.arc(cx, cy, 26, 0, 6.28); g.fill();
+      g.strokeStyle = '#ffd23f'; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 26, 0, 6.28); g.stroke();
+      g.font = "18px 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif"; g.textAlign = 'center';
+      g.fillText('⭐', cx, cy + 7);
+      // pointer at 12 o'clock
+      g.fillStyle = '#e94560';
+      g.beginPath(); g.moveTo(cx, cy - R + 20); g.lineTo(cx - 12, cy - R - 8); g.lineTo(cx + 12, cy - R - 8); g.closePath(); g.fill();
+    }
+    function spinPayout(seg) {
+      let msg;
+      if (seg.t === 'cash') { career.money += seg.v; msg = 'You won ' + seg.label + '!'; }
+      else if (seg.t === 'legend') {
+        const l = unownedLegend();
+        if (l) { career.owned.push({ id: l.id, name: l.name, key: l.key, pos: l.pos, stars: 5, foil: l.foil }); msg = '🎆 LEGEND! ' + l.name + ' joins your club!'; sfx.three(); }
+        else { career.money += 30; msg = 'All legends owned — $30M instead!'; }
+      } else {
+        const c = rollCard(seg.st);
+        if (c) { career.owned.push({ id: c.id, name: c.name, key: c.key, pos: c.pos, stars: c.stars }); msg = c.name + ' (' + starStr(c.stars) + ') joins your club!'; }
+        else { career.money += 12; msg = 'Full club — $12M instead!'; }
+      }
+      saveCareer();
+      document.getElementById('sp-sub').textContent = msg;
+      document.getElementById('sp-go').disabled = career.money < SPIN_PRICE;
+      sfx.ding();
+    }
+    function startSpin(forceIdx) {
+      if (spinAnim || career.money < SPIN_PRICE) return;
+      career.money -= SPIN_PRICE; saveCareer();
+      document.getElementById('sp-go').disabled = true;
+      document.getElementById('sp-sub').textContent = 'Round and round it goes…';
+      const n = SPIN_SEGS.length, arc = Math.PI * 2 / n;
+      const idx = forceIdx != null ? forceIdx : Math.floor(Math.random() * n);
+      // land the chosen segment's centre under the 12-o'clock pointer
+      const target = -Math.PI / 2 - (idx * arc + arc / 2) + Math.PI * 2 * (4 + Math.floor(Math.random() * 2));
+      const from = spinAngle % (Math.PI * 2), dur = 2600;
+      let t0 = null;
+      spinAnim = function step(ts) {
+        if (t0 == null) t0 = ts;
+        const k = Math.min((ts - t0) / dur, 1), e = 1 - Math.pow(1 - k, 3);
+        spinAngle = from + (target - from) * e;
+        drawSpinner();
+        if (k < 1) requestAnimationFrame(step);
+        else { spinAnim = null; spinPayout(SPIN_SEGS[idx]); }
+      };
+      requestAnimationFrame(spinAnim);
+      if (Math.random) sfx.pass();
+    }
+    document.getElementById('sh-spin-btn').addEventListener('click', function () {
+      shopEl.hidden = true; spinEl.hidden = false;
+      document.getElementById('sp-sub').textContent = '$' + SPIN_PRICE + 'M a spin — land on a LEGEND for the rarest cards in the game!';
+      document.getElementById('sp-go').disabled = career.money < SPIN_PRICE;
+      drawSpinner();
+    });
+    document.getElementById('sp-go').addEventListener('click', function () { startSpin(); });
+    document.getElementById('sp-back').addEventListener('click', function () { spinEl.hidden = true; openShop(); });
+    document.getElementById('sh-back').addEventListener('click', function () { shopEl.hidden = true; openCareer(); });
+    document.getElementById('cr-shop-btn').addEventListener('click', function () { careerEl.hidden = true; openShop(); });
+    document.getElementById('menu-shop-btn').addEventListener('click', openShop);
+
     loadCareer();
 
     // ---------- movement / AI ----------
@@ -1545,12 +1947,18 @@
         if (best) opps.splice(opps.indexOf(best), 1);
       }
     }
+    // Full Court Press: an owned+enabled shop boost — your whole team hounds
+    // its marks everywhere instead of sagging back toward the paint
+    function pressing(side) {
+      return side === 0 && careerMatch && career && career.items && career.items.fcp && career.items.fcpOn;
+    }
     function driveDefense(p, side, auto) {
       let mark = p.mark || teams[1 - side].onPitch[p.slot];
       if (mark && mark.ejected) mark = teams[1 - side].onPitch.find(function (q) { return !q.ejected; });
       if (!mark) return;
       const own = ownHoop(side);
       const isCarrier = ball.owner === mark;
+      const press = pressing(side);
       p.aiJumpCD -= dtf; p.stealCD -= dtf;
       if (isCarrier) {
         // real man defense: sit GOAL-SIDE with an arm's-length cushion and mirror
@@ -1558,8 +1966,8 @@
         const dx = own.x - mark.x, dy = own.y - mark.y, dl = Math.hypot(dx, dy) || 1;
         const charging = shootHeld[mark.side];
         const nearHoop = Math.hypot(mark.x - attackHoop(mark.side).x, mark.y - attackHoop(mark.side).y) < 230;
-        const gap = charging ? 14 : (nearHoop ? 24 : 38);
-        steer(p, mark.x + dx / dl * gap, mark.y + dy / dl * gap, 0.9);
+        const gap = (charging ? 14 : (nearHoop ? 24 : 38)) - (press ? 8 : 0);
+        steer(p, mark.x + dx / dl * gap, mark.y + dy / dl * gap, press ? 0.98 : 0.9);
         if (auto || !isHumanTeam(side)) {
           const iq = isHumanTeam(side) ? 1 : cpuDiff().iq;
           const d = Math.hypot(p.x - mark.x, p.y - mark.y);
@@ -1569,8 +1977,10 @@
           if (d < p.r + mark.r + 18 && Math.random() < 0.004 * iq) attemptSteal(p, mark);
         }
       } else {
-        // off-ball: deny goal-side, a third of the way back to our hoop
-        steer(p, mark.x + (own.x - mark.x) * 0.33, mark.y + (own.y - mark.y) * 0.33, 0.75);
+        // off-ball: deny goal-side, a third of the way back to our hoop —
+        // unless we're PRESSING, in which case stay glued to the shirt
+        const sag = press ? 0.12 : 0.33;
+        steer(p, mark.x + (own.x - mark.x) * sag, mark.y + (own.y - mark.y) * sag, press ? 0.9 : 0.75);
       }
     }
 
@@ -2236,6 +2646,11 @@
         ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(px, 27, 6, 0, 6.28); ctx.fill(); ctx.stroke();
       }
+      // Full Court Press boost active this game
+      if (pressing(0) && (state === 'playing' || state === 'score')) {
+        ctx.fillStyle = '#3ec8be'; ctx.font = "800 11px 'Nunito', sans-serif"; ctx.textAlign = 'center';
+        ctx.fillText('🗜️ FULL COURT PRESS', VW / 2 - 160, 33);
+      }
       ctx.textAlign = 'left';
     }
 
@@ -2416,6 +2831,12 @@
       career: function () { return career; },
       startCareer: startCareerMatch,
       openCareer: openCareer,
+      openShop: openShop,
+      buyPack: buyPack,
+      spin: startSpin,
+      pressing: pressing,
+      legends: LEGENDS,
+      packs: PACKS,
       hoop: HOOP,
       consts: { RIM_Z: RIM_Z, RIM_R: RIM_R, THREE_R: THREE_R, QTR_MS: QTR_MS, OT_MS: OT_MS, HALF_MS: QTR_MS }
     };
