@@ -94,12 +94,18 @@
   <div class="stage">
     <canvas id="cv" width="700" height="750"></canvas>
   </div>
-  <div class="hint"><b>Drag</b> your disc over a column and let go — or just <b>tap</b> a column. First to get <b>4 in a row</b> wins!</div>
+  <div class="hint"><b>Drag</b> your disc over a column and let go — or just <b>tap</b> a column. First to get <b id="hintWin">4 in a row</b> wins!</div>
 
   <div class="overlay" id="setup">
     <div class="panel">
       <h2>🔴 Connect 4 🟡</h2>
-      <div class="sub">Drop discs into the grid. Get four in a row — across, down, or diagonally — before your opponent!</div>
+      <div class="sub">Drop discs into the grid. Get them in a row — across, down, or diagonally — before your opponent!</div>
+      <div class="group-label">Game</div>
+      <div class="choices" id="sizeChoices">
+        <button class="choice active" data-n="4"><span class="big">4</span>in a row<span class="small">7 × 6 board</span></button>
+        <button class="choice" data-n="5"><span class="big">5</span>in a row<span class="small">9 × 7 board</span></button>
+        <button class="choice" data-n="6"><span class="big">6</span>in a row<span class="small">11 × 9 board</span></button>
+      </div>
       <div class="group-label">Players</div>
       <div class="choices" id="modeChoices">
         <button class="choice active" data-mode="2"><span class="big">👧👦</span>2 Players<span class="small">same device</span></button>
@@ -133,11 +139,16 @@
     const clamp = EL.clamp, lerp = EL.lerp, playerName = EL.playerName;
 
     // ---- Board geometry (intrinsic canvas coords) ----
-    const W = 700, H = 750;
-    const COLS = 7, ROWS = 6, CELL = 100;
+    const CELL = 100;
     const BOARD_Y = 150;                 // top of the frame; above it is the "hand" area
     const R_HOLE = 37, R_DISC = 40, R_HAND = 44;
-    const HAND_HOME_X = W / 2, HAND_Y = 82;
+    const HAND_Y = 94;
+    // Longer lines get bigger boards to stay fair.
+    const SIZES = { 4: { cols: 7, rows: 6 }, 5: { cols: 9, rows: 7 }, 6: { cols: 11, rows: 9 } };
+    const NUMWORD = { 4: 'Four', 5: 'Five', 6: 'Six' };
+    let WIN = 4, COLS = 7, ROWS = 6;
+    let W = COLS * CELL, H = BOARD_Y + ROWS * CELL;
+    let HAND_HOME_X = W / 2;
     const colX = c => c * CELL + CELL / 2;
     const rowY = r => BOARD_Y + (ROWS - 1 - r) * CELL + CELL / 2;  // row 0 = bottom
 
@@ -223,13 +234,13 @@
       for (const [dx, dy] of dirs) {
         const cells = [[c, r]];
         for (const s of [1, -1]) {
-          for (let k = 1; k < 4; k++) {
+          for (let k = 1; k < WIN; k++) {
             const x = c + dx * k * s, y = r + dy * k * s;
             if (x < 0 || x >= COLS || y < 0 || y >= ROWS || g[x][y] !== p) break;
             cells.push([x, y]);
           }
         }
-        if (cells.length >= 4) return cells;
+        if (cells.length >= WIN) return cells;
       }
       return null;
     }
@@ -260,11 +271,11 @@
         });
         if (safe.length) cands = safe;
       }
-      const weights = [1, 2, 4, 8, 4, 2, 1];
+      const weight = c => 1 << Math.min(c, COLS - 1 - c, 4);   // center-peaked, e.g. [1,2,4,8,4,2,1] on 7 cols
       let total = 0;
-      for (const c of cands) total += weights[c];
+      for (const c of cands) total += weight(c);
       let roll = Math.random() * total;
-      for (const c of cands) { roll -= weights[c]; if (roll <= 0) return c; }
+      for (const c of cands) { roll -= weight(c); if (roll <= 0) return c; }
       return cands[cands.length - 1];
     }
 
@@ -319,16 +330,30 @@
       if (winner === -1) {
         disc.className = 'win-disc tie';
         title.textContent = "It's a tie! 🤝";
-        sub.textContent = 'The board is full — nobody got four in a row.';
+        sub.textContent = 'The board is full — nobody got ' + WIN + ' in a row.';
       } else {
         disc.className = 'win-disc ' + (winner === 0 ? 'red' : 'yellow');
         title.textContent = (mode === 1 && winner === 0 ? 'You win! 🎉'
                           : mode === 1 ? 'Computer wins!'
                           : n[winner] + ' wins!');
-        sub.textContent = 'Four in a row!';
+        sub.textContent = NUMWORD[WIN] + ' in a row!';
       }
       el('winTally').textContent = n[0] + ' ' + scores[0] + ' – ' + scores[1] + ' ' + n[1];
       el('winOverlay').hidden = false;
+    }
+
+    function applySize(n) {
+      WIN = n;
+      COLS = SIZES[n].cols; ROWS = SIZES[n].rows;
+      W = COLS * CELL; H = BOARD_Y + ROWS * CELL;
+      HAND_HOME_X = W / 2;
+      cv.width = W; cv.height = H;
+      const maxW = (480 + (COLS - 7) * 30) + 'px';   // wider boards get more screen room
+      document.querySelectorAll('.stage, .topbar, .hint').forEach(e => { e.style.maxWidth = maxW; });
+      cv.parentElement.style.aspectRatio = W + ' / ' + H;
+      buildFrame();
+      document.querySelector('.title').textContent = 'Connect ' + n;
+      el('hintWin').textContent = n + ' in a row';
     }
 
     function newGame() {
@@ -357,8 +382,11 @@
       el('diffGroup').hidden = mode !== 1;
     });
     wireChoices('diffChoices', 'diff', v => { difficulty = v; });
+    let sizeSel = 4;
+    wireChoices('sizeChoices', 'n', v => { sizeSel = parseInt(v, 10); });
     el('startBtn').addEventListener('click', () => {
       el('setup').hidden = true;
+      applySize(sizeSel);
       starter = 0;
       scores = [0, 0];
       newGame();
@@ -561,10 +589,13 @@
 
       // Hand area: turn label + draggable disc
       if (inPlay && phase !== 'over') {
+        // Counter some of the shrink from wider canvases, but cap it so the
+        // label never grows into the hand disc (the hand area stays 150 tall).
+        const fs = Math.min(W / 700, 1.2);
         ctx.textAlign = 'center';
-        ctx.font = "800 30px 'Nunito', sans-serif";
+        ctx.font = "800 " + Math.round(30 * fs) + "px 'Nunito', sans-serif";
         ctx.fillStyle = DISC[cur].label;
-        ctx.fillText(turnText(cur), W / 2, 36);
+        ctx.fillText(turnText(cur), W / 2, 38);
 
         const showHand = phase === 'idle' || phase === 'drag' || phase === 'return' || phase === 'cpu';
         if (showHand) {
@@ -572,7 +603,7 @@
           drawDisc(handX, HAND_Y, cur, r);
           if (!everDropped && phase === 'idle') {
             const bob = Math.sin(performance.now() / 300) * 5;
-            ctx.font = "800 20px 'Nunito', sans-serif";
+            ctx.font = "800 " + Math.round(20 * fs) + "px 'Nunito', sans-serif";
             ctx.fillStyle = '#ffe8b0';
             ctx.textAlign = 'left';
             ctx.fillText('👈 Drag me!', handX + R_HAND + 16 + bob, HAND_Y + 7);
@@ -608,7 +639,7 @@
     // ---- Headless test hook ----
     window.__c4 = {
       state: () => ({
-        phase, cur, mode, winner, movesMade,
+        phase, cur, mode, winner, movesMade, win: WIN, cols: COLS, rows: ROWS,
         scores: scores.slice(),
         grid: grid.map(c => c.slice()),
         winCells: winCells.map(c => c.slice())
@@ -620,9 +651,10 @@
         resolveLanding(col, row);
         return true;
       },
-      start: (m, d) => {
+      start: (m, d, n) => {
         mode = m || 2; difficulty = d || 'easy';
         el('setup').hidden = true;
+        applySize(n || 4);
         starter = 0; scores = [0, 0];
         newGame();
       }
