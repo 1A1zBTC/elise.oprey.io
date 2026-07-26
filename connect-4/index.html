@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Connect 4</title>
+  <link rel="stylesheet" href="../fonts/fonts.css">
+  <link rel="stylesheet" href="../shared/game.css">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="../icons/favicon.png">
+  <script src="../pwa.js" defer></script>
+  <style>
+    .topbar, .hint { max-width: 480px; }
+    .stage { max-width: 480px; aspect-ratio: 700 / 750; }
+
+    .mute-btn {
+      background: none; border: none; font-size: 1.2rem; cursor: pointer;
+      padding: 4px 8px; border-radius: 10px; line-height: 1; width: 56px; text-align: right;
+    }
+    .mute-btn:hover { background: rgba(255,255,255,0.06); }
+
+    /* ---- Session score tally ---- */
+    .c4-tally {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+      color: var(--fg); font-weight: 800; font-size: 0.95rem;
+    }
+    .c4-tally .chip {
+      display: flex; align-items: center; gap: 7px;
+      background: var(--bg-1); border: 2px solid var(--border);
+      border-radius: 14px; padding: 5px 12px;
+    }
+    .c4-tally .chip.turn-on { border-color: var(--accent); box-shadow: 0 0 14px rgba(233,69,96,0.3); }
+    .c4-tally .dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto; }
+    .c4-tally .dot.red { background: #e84545; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3); }
+    .c4-tally .dot.yellow { background: #ffd23f; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3); }
+    .c4-tally .nm { color: var(--muted); font-size: 0.8rem; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .c4-tally b { font-size: 1.1rem; }
+    .c4-tally .vs { color: var(--muted); }
+
+    /* ---- Setup choices ---- */
+    .group-label {
+      color: var(--muted); font-size: 0.72rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.6px; margin: 14px 0 8px; text-align: left;
+    }
+    .choices { display: flex; gap: 10px; }
+    .choice {
+      flex: 1 1 0; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.95rem;
+      color: var(--fg); background: #2a3a64; border: 2px solid var(--border); border-radius: 14px;
+      padding: 12px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    }
+    .choice .big { font-size: 1.3rem; }
+    .choice .small { font-size: 0.7rem; color: var(--muted); font-weight: 700; }
+    .choice.active { background: var(--accent); border-color: var(--accent); }
+    .choice.active .small { color: #ffd2dc; }
+    .choice:active { transform: scale(0.97); }
+    #diffGroup[hidden] { display: none; }
+
+    /* ---- Win overlay bits ---- */
+    .win-disc {
+      width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 12px;
+      box-shadow: inset 0 -6px 0 rgba(0,0,0,0.25), 0 6px 20px rgba(0,0,0,0.4);
+    }
+    .win-disc.red { background: radial-gradient(circle at 35% 30%, #ff7a6e, #e84545 70%); }
+    .win-disc.yellow { background: radial-gradient(circle at 35% 30%, #ffe58a, #ffd23f 70%); }
+    .win-disc.tie { background: linear-gradient(90deg, #e84545 50%, #ffd23f 50%); }
+    .win-tally { color: var(--gold); font-weight: 800; font-size: 1.05rem; margin-top: 4px; }
+    .menu-btn {
+      margin-top: 10px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800;
+      font-size: 0.95rem; color: var(--muted); background: none; border: 2px solid var(--border);
+      border-radius: 16px; padding: 11px 20px; cursor: pointer;
+    }
+    .menu-btn:hover { color: var(--fg); border-color: #2a3a64; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title">Connect 4</span>
+    <button class="mute-btn" id="muteBtn" aria-label="Toggle sound">🔊</button>
+  </div>
+
+  <div class="c4-tally" id="tally">
+    <span class="chip" id="chip0"><span class="dot red"></span><span class="nm" id="name0">Red</span><b id="score0">0</b></span>
+    <span class="vs">–</span>
+    <span class="chip" id="chip1"><b id="score1">0</b><span class="nm" id="name1">Yellow</span><span class="dot yellow"></span></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="cv" width="700" height="750"></canvas>
+  </div>
+  <div class="hint"><b>Drag</b> your disc over a column and let go — or just <b>tap</b> a column. First to get <b>4 in a row</b> wins!</div>
+
+  <div class="overlay" id="setup">
+    <div class="panel">
+      <h2>🔴 Connect 4 🟡</h2>
+      <div class="sub">Drop discs into the grid. Get four in a row — across, down, or diagonally — before your opponent!</div>
+      <div class="group-label">Players</div>
+      <div class="choices" id="modeChoices">
+        <button class="choice active" data-mode="2"><span class="big">👧👦</span>2 Players<span class="small">same device</span></button>
+        <button class="choice" data-mode="1"><span class="big">🤖</span>1 Player<span class="small">vs computer</span></button>
+      </div>
+      <div id="diffGroup" hidden>
+        <div class="group-label">Computer</div>
+        <div class="choices" id="diffChoices">
+          <button class="choice active" data-diff="easy"><span class="big">🐣</span>Easy</button>
+          <button class="choice" data-diff="tricky"><span class="big">🦊</span>Tricky</button>
+        </div>
+      </div>
+      <button class="start-btn" id="startBtn">Start Game</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="winOverlay" hidden>
+    <div class="panel">
+      <div class="win-disc red" id="winDisc"></div>
+      <h2 id="winTitle">Red wins!</h2>
+      <div class="sub" id="winSub">Four in a row!</div>
+      <div class="win-tally" id="winTally"></div>
+      <button class="start-btn" id="againBtn">Play Again</button>
+      <button class="menu-btn" id="menuBtn">Change Players</button>
+    </div>
+  </div>
+
+  <script src="../shared/game.js"></script>
+  <script>
+    'use strict';
+    const clamp = EL.clamp, lerp = EL.lerp, playerName = EL.playerName;
+
+    // ---- Board geometry (intrinsic canvas coords) ----
+    const W = 700, H = 750;
+    const COLS = 7, ROWS = 6, CELL = 100;
+    const BOARD_Y = 150;                 // top of the frame; above it is the "hand" area
+    const R_HOLE = 37, R_DISC = 40, R_HAND = 44;
+    const HAND_HOME_X = W / 2, HAND_Y = 82;
+    const colX = c => c * CELL + CELL / 2;
+    const rowY = r => BOARD_Y + (ROWS - 1 - r) * CELL + CELL / 2;  // row 0 = bottom
+
+    const cv = document.getElementById('cv');
+    const ctx = cv.getContext('2d');
+
+    const DISC = [
+      { main: '#e84545', hi: '#ff7a6e', lo: '#b32d2d', label: '#ff6b6b' },   // 0 red
+      { main: '#ffd23f', hi: '#ffe58a', lo: '#d9a616', label: '#ffd23f' }    // 1 yellow
+    ];
+
+    // ---- State ----
+    let mode = 2;                 // 1 = vs computer (computer is yellow / player 1)
+    let difficulty = 'easy';
+    let grid = newGrid();         // grid[col] = array of player ids, index 0 = bottom
+    let cur = 0;                  // whose turn: 0 red, 1 yellow
+    let starter = 0;              // alternates each rematch
+    let phase = 'setup';          // setup | idle | drag | drop | return | cpu | over
+    let movesMade = 0;
+    let everDropped = false;      // hides the "Drag me!" nudge after the first drop
+    let scores = [0, 0];
+    let winner = -1, winCells = [];
+    let handX = HAND_HOME_X;      // draggable disc position (y is fixed at HAND_Y)
+    let drop = null;              // {col, x, y, vy, stage:'fly'|'fall', bounced}
+    let cpuTimer = 0;
+    let overTimer = 0, overlayShown = false;
+    let glowT = 0;
+    let confetti = [];
+    let activePointer = null;
+
+    function newGrid() { const g = []; for (let c = 0; c < COLS; c++) g.push([]); return g; }
+
+    // ---- Names ----
+    function names() {
+      if (mode === 1) return [playerName(0, 'You'), 'Computer'];
+      return [playerName(0, 'Red'), playerName(1, 'Yellow')];
+    }
+    function turnText(i) {
+      const n = names()[i];
+      if (mode === 1 && i === 1) return 'Computer is thinking…';
+      return n === 'You' ? 'Your turn' : n + "'s turn";
+    }
+
+    // ---- Sound (local WebAudio, shared-pattern beep) ----
+    let actx = null;
+    let muted = false;
+    try { muted = localStorage.getItem('connect4.muted') === '1'; } catch (e) {}
+    function beep(freq, dur, type, gain, slideTo) {
+      if (muted) return;
+      try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const t = actx.currentTime;
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type || 'sine';
+        o.frequency.setValueAtTime(freq, t);
+        if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+        g.gain.setValueAtTime(gain || 0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); g.connect(actx.destination);
+        o.start(t); o.stop(t + dur);
+      } catch (e) {}
+    }
+    const sfxPick = () => beep(520, 0.08, 'sine', 0.1, 660);
+    const sfxDrop = () => { beep(170, 0.12, 'square', 0.12, 90); beep(340, 0.06, 'sine', 0.06); };
+    const sfxNope = () => beep(220, 0.15, 'sawtooth', 0.08, 150);
+    function sfxWin() {
+      [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.22, 'triangle', 0.14), i * 130));
+    }
+    const sfxTie = () => { beep(330, 0.2, 'triangle', 0.1); setTimeout(() => beep(262, 0.3, 'triangle', 0.1), 180); };
+
+    const muteBtn = document.getElementById('muteBtn');
+    function syncMute() { muteBtn.textContent = muted ? '🔇' : '🔊'; }
+    muteBtn.addEventListener('click', () => {
+      muted = !muted;
+      try { localStorage.setItem('connect4.muted', muted ? '1' : '0'); } catch (e) {}
+      syncMute();
+    });
+    syncMute();
+
+    // ---- Rules ----
+    function winCellsAt(g, c, r, p) {
+      const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+      for (const [dx, dy] of dirs) {
+        const cells = [[c, r]];
+        for (const s of [1, -1]) {
+          for (let k = 1; k < 4; k++) {
+            const x = c + dx * k * s, y = r + dy * k * s;
+            if (x < 0 || x >= COLS || y < 0 || y >= ROWS || g[x][y] !== p) break;
+            cells.push([x, y]);
+          }
+        }
+        if (cells.length >= 4) return cells;
+      }
+      return null;
+    }
+    function wouldWin(g, c, p) {
+      const r = g[c].length;
+      if (r >= ROWS) return false;
+      g[c][r] = p;
+      const win = !!winCellsAt(g, c, r, p);
+      g[c].pop();
+      return win;
+    }
+
+    // ---- CPU (yellow = player 1) ----
+    function cpuChoose(g, diff) {
+      const legal = [];
+      for (let c = 0; c < COLS; c++) if (g[c].length < ROWS) legal.push(c);
+      for (const c of legal) if (wouldWin(g, c, 1)) return c;                 // take the win
+      const lazy = diff === 'easy' && Math.random() < 0.3;                    // easy: sometimes misses the block
+      if (!lazy) for (const c of legal) if (wouldWin(g, c, 0)) return c;      // block
+      let cands = legal;
+      if (diff === 'tricky') {
+        // Don't gift the human a win directly on top of our disc.
+        const safe = legal.filter(c => {
+          g[c].push(1);
+          const gifts = g[c].length < ROWS && wouldWin(g, c, 0);
+          g[c].pop();
+          return !gifts;
+        });
+        if (safe.length) cands = safe;
+      }
+      const weights = [1, 2, 4, 8, 4, 2, 1];
+      let total = 0;
+      for (const c of cands) total += weights[c];
+      let roll = Math.random() * total;
+      for (const c of cands) { roll -= weights[c]; if (roll <= 0) return c; }
+      return cands[cands.length - 1];
+    }
+
+    // ---- Tally / DOM ----
+    const el = id => document.getElementById(id);
+    function syncTally() {
+      const n = names();
+      el('name0').textContent = n[0];
+      el('name1').textContent = n[1];
+      el('score0').textContent = scores[0];
+      el('score1').textContent = scores[1];
+      const active = (phase !== 'setup' && phase !== 'over');
+      el('chip0').classList.toggle('turn-on', active && cur === 0);
+      el('chip1').classList.toggle('turn-on', active && cur === 1);
+    }
+
+    // ---- Moves ----
+    function startMove(col) {
+      // Fly the hand disc above the column, then let it fall.
+      phase = 'drop';
+      drop = { col, x: handX, y: HAND_Y, vy: 0, stage: 'fly', bounced: false };
+    }
+
+    function resolveLanding(col, row) {
+      grid[col][row] = cur;
+      movesMade++;
+      everDropped = true;
+      const win = winCellsAt(grid, col, row, cur);
+      if (win) {
+        winner = cur; winCells = win;
+        scores[cur]++;
+        phase = 'over'; overTimer = 1.15; overlayShown = false; glowT = 0;
+        spawnConfetti();
+        sfxWin();
+      } else if (movesMade >= COLS * ROWS) {
+        winner = -1; winCells = [];
+        phase = 'over'; overTimer = 0.8; overlayShown = false;
+        sfxTie();
+      } else {
+        cur = 1 - cur;
+        handX = HAND_HOME_X;
+        if (mode === 1 && cur === 1) { phase = 'cpu'; cpuTimer = 0.55; }
+        else phase = 'idle';
+      }
+      syncTally();
+    }
+
+    function showEndOverlay() {
+      overlayShown = true;
+      const n = names();
+      const disc = el('winDisc'), title = el('winTitle'), sub = el('winSub');
+      if (winner === -1) {
+        disc.className = 'win-disc tie';
+        title.textContent = "It's a tie! 🤝";
+        sub.textContent = 'The board is full — nobody got four in a row.';
+      } else {
+        disc.className = 'win-disc ' + (winner === 0 ? 'red' : 'yellow');
+        title.textContent = (mode === 1 && winner === 0 ? 'You win! 🎉'
+                          : mode === 1 ? 'Computer wins!'
+                          : n[winner] + ' wins!');
+        sub.textContent = 'Four in a row!';
+      }
+      el('winTally').textContent = n[0] + ' ' + scores[0] + ' – ' + scores[1] + ' ' + n[1];
+      el('winOverlay').hidden = false;
+    }
+
+    function newGame() {
+      grid = newGrid();
+      movesMade = 0; winner = -1; winCells = []; confetti = [];
+      drop = null; handX = HAND_HOME_X;
+      cur = starter;
+      el('winOverlay').hidden = true;
+      if (mode === 1 && cur === 1) { phase = 'cpu'; cpuTimer = 0.7; }
+      else phase = 'idle';
+      syncTally();
+    }
+
+    // ---- Setup overlay wiring ----
+    function wireChoices(containerId, attr, onPick) {
+      const box = el(containerId);
+      box.addEventListener('click', e => {
+        const btn = e.target.closest('.choice');
+        if (!btn) return;
+        box.querySelectorAll('.choice').forEach(b => b.classList.toggle('active', b === btn));
+        onPick(btn.dataset[attr]);
+      });
+    }
+    wireChoices('modeChoices', 'mode', v => {
+      mode = parseInt(v, 10);
+      el('diffGroup').hidden = mode !== 1;
+    });
+    wireChoices('diffChoices', 'diff', v => { difficulty = v; });
+    el('startBtn').addEventListener('click', () => {
+      el('setup').hidden = true;
+      starter = 0;
+      scores = [0, 0];
+      newGame();
+    });
+    el('againBtn').addEventListener('click', () => {
+      starter = 1 - starter;
+      newGame();
+    });
+    el('menuBtn').addEventListener('click', () => {
+      el('winOverlay').hidden = true;
+      phase = 'setup';
+      el('setup').hidden = false;
+      syncTally();
+    });
+
+    // ---- Input: drag from the hand area, or tap a column ----
+    function humanCanAct() {
+      return phase === 'idle' && !(mode === 1 && cur === 1);
+    }
+    cv.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (!humanCanAct() || activePointer !== null) return;
+      const p = EL.canvasPos(cv, e, W, H);
+      if (p.y < BOARD_Y + 20 && EL.dist2(p.x, p.y, handX, HAND_Y) < (R_HAND * 1.6) ** 2) {
+        activePointer = e.pointerId;
+        phase = 'drag';
+        handX = clamp(p.x, CELL / 2, W - CELL / 2);
+        sfxPick();
+      } else if (p.y >= BOARD_Y) {
+        // Tap-to-drop: send the hand disc to the tapped column.
+        const col = clamp(Math.floor(p.x / CELL), 0, COLS - 1);
+        if (grid[col].length < ROWS) { sfxPick(); startMove(col); }
+        else sfxNope();
+      }
+    });
+    window.addEventListener('pointermove', e => {
+      if (e.pointerId !== activePointer || phase !== 'drag') return;
+      e.preventDefault();
+      const p = EL.canvasPos(cv, e, W, H);
+      handX = clamp(p.x, CELL / 2, W - CELL / 2);
+    }, { passive: false });
+    function endDrag(e, cancelled) {
+      if (e.pointerId !== activePointer) return;
+      activePointer = null;
+      if (phase !== 'drag') return;
+      const col = clamp(Math.floor(handX / CELL), 0, COLS - 1);
+      if (!cancelled && grid[col].length < ROWS) startMove(col);
+      else { phase = 'return'; sfxNope(); }
+    }
+    window.addEventListener('pointerup', e => endDrag(e, false));
+    window.addEventListener('pointercancel', e => endDrag(e, true));
+
+    // ---- Confetti ----
+    function spawnConfetti() {
+      const colors = ['#e84545', '#ffd23f', '#fff', '#ffe8b0', '#7ec8ff'];
+      for (let i = 0; i < 90; i++) {
+        confetti.push({
+          x: EL.rnd(0, W), y: EL.rnd(-60, BOARD_Y),
+          vx: EL.rnd(-60, 60), vy: EL.rnd(-80, 60),
+          w: EL.rnd(6, 12), h: EL.rnd(4, 8),
+          rot: EL.rnd(0, Math.PI * 2), vr: EL.rnd(-5, 5),
+          color: EL.pick(colors), life: EL.rnd(1.6, 2.8)
+        });
+      }
+    }
+
+    // ---- Update ----
+    const GRAV = 4200;
+    function update(dt) {
+      if (phase === 'return') {
+        handX = lerp(handX, HAND_HOME_X, 1 - Math.pow(0.0001, dt));
+        if (Math.abs(handX - HAND_HOME_X) < 2) { handX = HAND_HOME_X; phase = 'idle'; }
+      }
+      if (phase === 'cpu') {
+        cpuTimer -= dt;
+        if (cpuTimer <= 0) { sfxPick(); startMove(cpuChoose(grid, difficulty)); }
+      }
+      if (phase === 'drop' && drop) {
+        const tx = colX(drop.col);
+        if (drop.stage === 'fly') {
+          drop.x = lerp(drop.x, tx, 1 - Math.pow(0.000001, dt));
+          if (Math.abs(drop.x - tx) < 3) { drop.x = tx; drop.stage = 'fall'; }
+        } else {
+          const row = grid[drop.col].length;
+          const targetY = rowY(row);
+          drop.vy += GRAV * dt;
+          drop.y += drop.vy * dt;
+          if (drop.y >= targetY) {
+            if (!drop.bounced && drop.vy > 500) {
+              drop.y = targetY; drop.vy = -drop.vy * 0.22; drop.bounced = true;
+              sfxDrop();
+            } else {
+              drop.y = targetY;
+              if (!drop.bounced) sfxDrop();
+              const col = drop.col;
+              drop = null;
+              resolveLanding(col, row);
+            }
+          }
+        }
+      }
+      if (phase === 'over') {
+        glowT += dt;
+        if (!overlayShown) {
+          overTimer -= dt;
+          if (overTimer <= 0) showEndOverlay();
+        }
+      }
+      for (let i = confetti.length - 1; i >= 0; i--) {
+        const p = confetti[i];
+        p.life -= dt;
+        if (p.life <= 0 || p.y > H + 20) { confetti.splice(i, 1); continue; }
+        p.vy += 500 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+      }
+    }
+
+    // ---- Draw ----
+    let framePath = null, frameGrad = null;
+    function buildFrame() {
+      framePath = new Path2D();
+      const x = 4, y = BOARD_Y + 4, w = W - 8, h = H - BOARD_Y - 8, r = 26;
+      framePath.moveTo(x + r, y);
+      framePath.arcTo(x + w, y, x + w, y + h, r);
+      framePath.arcTo(x + w, y + h, x, y + h, r);
+      framePath.arcTo(x, y + h, x, y, r);
+      framePath.arcTo(x, y, x + w, y, r);
+      framePath.closePath();
+      for (let c = 0; c < COLS; c++) for (let r2 = 0; r2 < ROWS; r2++) {
+        const cx = colX(c), cy = rowY(r2);
+        framePath.moveTo(cx + R_HOLE, cy);
+        framePath.arc(cx, cy, R_HOLE, 0, Math.PI * 2);
+      }
+      frameGrad = ctx.createLinearGradient(0, BOARD_Y, 0, H);
+      frameGrad.addColorStop(0, '#2565e0');
+      frameGrad.addColorStop(1, '#173f9e');
+    }
+    buildFrame();
+
+    function drawDisc(x, y, p, r) {
+      const col = DISC[p];
+      const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.15, x, y, r);
+      g.addColorStop(0, col.hi);
+      g.addColorStop(0.75, col.main);
+      g.addColorStop(1, col.lo);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, r * 0.62, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#0c1124';
+      ctx.fillRect(0, 0, W, H);
+
+      const inPlay = phase !== 'setup';
+      const dragging = phase === 'drag';
+
+      // Column highlight + ghost landing preview while dragging
+      if (dragging) {
+        const col = clamp(Math.floor(handX / CELL), 0, COLS - 1);
+        const open = grid[col].length < ROWS;
+        ctx.fillStyle = open ? 'rgba(255,255,255,0.07)' : 'rgba(232,69,69,0.08)';
+        ctx.fillRect(col * CELL, BOARD_Y, CELL, H - BOARD_Y);
+        if (open) {
+          ctx.globalAlpha = 0.35;
+          drawDisc(colX(col), rowY(grid[col].length), cur, R_DISC);
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // Settled discs (behind the frame)
+      for (let c = 0; c < COLS; c++) for (let r = 0; r < grid[c].length; r++) {
+        drawDisc(colX(c), rowY(r), grid[c][r], R_DISC);
+      }
+      // Flying/falling disc
+      if (drop) drawDisc(drop.x, drop.y, cur, R_DISC);
+
+      // Frame plate with punched holes — discs show through
+      ctx.fillStyle = frameGrad;
+      ctx.fill(framePath, 'evenodd');
+      // Hole rims
+      ctx.strokeStyle = 'rgba(10,20,60,0.5)';
+      ctx.lineWidth = 3;
+      for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+        ctx.beginPath(); ctx.arc(colX(c), rowY(r), R_HOLE, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      // Winning glow rings
+      if (winner >= 0 && winCells.length) {
+        const pulse = 0.55 + 0.45 * Math.sin(glowT * 6);
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 + 0.55 * pulse).toFixed(3) + ')';
+        ctx.lineWidth = 6 + 3 * pulse;
+        for (const [c, r] of winCells) {
+          ctx.beginPath(); ctx.arc(colX(c), rowY(r), R_HOLE + 3, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+
+      // Hand area: turn label + draggable disc
+      if (inPlay && phase !== 'over') {
+        ctx.textAlign = 'center';
+        ctx.font = "800 30px 'Nunito', sans-serif";
+        ctx.fillStyle = DISC[cur].label;
+        ctx.fillText(turnText(cur), W / 2, 36);
+
+        const showHand = phase === 'idle' || phase === 'drag' || phase === 'return' || phase === 'cpu';
+        if (showHand) {
+          const r = dragging ? R_HAND * 1.12 : R_HAND;
+          drawDisc(handX, HAND_Y, cur, r);
+          if (!everDropped && phase === 'idle') {
+            const bob = Math.sin(performance.now() / 300) * 5;
+            ctx.font = "800 20px 'Nunito', sans-serif";
+            ctx.fillStyle = '#ffe8b0';
+            ctx.textAlign = 'left';
+            ctx.fillText('👈 Drag me!', handX + R_HAND + 16 + bob, HAND_Y + 7);
+            ctx.textAlign = 'center';
+          }
+        }
+      }
+
+      // Confetti on top of everything
+      for (const p of confetti) {
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.globalAlpha = clamp(p.life, 0, 1);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---- Main loop ----
+    let lastT = 0;
+    function frame(t) {
+      const dt = Math.min((t - lastT) / 1000, 0.05);
+      lastT = t;
+      update(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
+    syncTally();
+
+    // ---- Headless test hook ----
+    window.__c4 = {
+      state: () => ({
+        phase, cur, mode, winner, movesMade,
+        scores: scores.slice(),
+        grid: grid.map(c => c.slice()),
+        winCells: winCells.map(c => c.slice())
+      }),
+      // Synchronous drop for scripted boards (skips animation).
+      dropIn: col => {
+        if ((phase !== 'idle' && phase !== 'cpu') || grid[col].length >= ROWS) return false;
+        const row = grid[col].length;
+        resolveLanding(col, row);
+        return true;
+      },
+      start: (m, d) => {
+        mode = m || 2; difficulty = d || 'easy';
+        el('setup').hidden = true;
+        starter = 0; scores = [0, 0];
+        newGame();
+      }
+    };
+  </script>
+</body>
+</html>
