@@ -873,3 +873,36 @@ detail pages are Cloudflare-blocked headless). Key real mechanics adopted:
 - [x] Verified: yellow always has both modes (lvl 1/5/12), haunted/sewer roll correctly, pool never;
       floor glitches placed clustered in atrium; screenshots show sunk crate bobbing + wall crate;
       no console errors; smoke 31/31; sw.js → v80 (pending deploy). __sr.glitchInfo() hook added.
+
+# Hog Ball — full 2K-style sim upgrade
+
+## Spec
+Make Hog Ball play like a modern sim basketball game, adapted to the existing
+2D canvas 3-on-3. Original mechanics/assets only.
+
+## Tasks
+- [x] Fix latent bug: bare `pick()` (no EL.pick alias) broke crossover dribble moves
+- [x] Four 45s quarters (was two 90s halves), team fouls reset per quarter, bonus at 5
+- [x] Timed 30s overtime periods (repeat while tied) instead of sudden death
+- [x] Release feedback: VERY EARLY/EARLY/GREEN/LATE/VERY LATE + OPEN/CONTESTED/SMOTHERED
+- [x] And-one: made shot + shooting foul = points count + 1 FT; 3 FTs on a fouled 3PA
+- [x] FT rework: same vertical timing meter as jump shots (tap to stop in the green)
+- [x] Takeover: 3 straight makes = 1.6x green window, +8% speed, golden aura; miss cools off
+- [x] Turbo sprint: Shift (P1) / 5 (P2) + touch buttons; 1.4x cap, 5x stamina drain
+- [x] Pump fake: quick shoot tap with ball; baits CPU defenders (0.55/iq chance)
+- [x] 8-second backcourt violation
+- [x] Fatigue shrinks the green window (0.7 + 0.3 * stamina)
+- [x] Broadcast: quarter HUD + bonus chips, commentary lower-third, halftime box score
+- [x] Headless verify via browse daemon (HB API): green make + stats + heat, takeover
+      at heat 3, 3-shot FT trip w/ green +1, 8s turnover to CPU, quarter rollover
+      (period 2, clock 45000, fouls reset). Screenshot: HUD/turbo button/hints OK.
+- [x] Commit f39f432, sw.js cache v83, deployed to S3 + CloudFront invalidation
+
+## Review
+All shipped in hog-ball/index.html (single-file game, classic script, file:// safe).
+Key decisions: kept the state name 'half' for all period breaks to avoid churn;
+HB.state() now returns `period` (with `half` alias); HB gained ftFill/turbo/pump
+hooks. OT is timed and repeats while tied — basket() no longer sudden-death ends.
+NOTE: this file was accidentally overwritten by a concurrent-instance race
+(read → other instance appended → my write clobbered); restored from git and
+re-appended. Lesson recorded in tasks/lessons.md.

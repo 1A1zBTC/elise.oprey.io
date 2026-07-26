@@ -117,3 +117,11 @@
   transition OUT of that state before declaring it fine. For games: verify the HUMAN input
   path by actually playing a few seconds (move + attack + get knocked down + recover), not
   just CPU-vs-CPU sims and special-case hooks.
+
+## 2026-07-26 — Shared-file clobber via stale read (tasks/todo.md)
+Read tasks/todo.md early, then Write'd it much later; a concurrent instance had
+appended ~830 lines in between and my Write wiped them (restored from git).
+Rule: for shared cross-instance files (tasks/todo.md, sw.js, shared/*), re-read
+or check mtime IMMEDIATELY before writing, and prefer append (cat >>) over
+whole-file Write. Also: sw.js cache version may be bumped by the other instance
+mid-session — re-check the current version right before bumping.

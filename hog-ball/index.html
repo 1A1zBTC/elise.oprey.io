@@ -28,7 +28,8 @@
     .ctl-btn.p1 { background: #3f6ea8; left: 10px; }
     .ctl-btn.p2 { background: #a84747; right: 10px; }
     .ctl-btn.shoot { background: #c79321; font-size: 0.95rem; padding: 13px 15px; }
-    .ctl-btn.b0 { bottom: 12px; } .ctl-btn.b1 { bottom: 60px; } .ctl-btn.b2 { bottom: 108px; } .ctl-btn.b3 { bottom: 156px; }
+    .ctl-btn.b0 { bottom: 12px; } .ctl-btn.b1 { bottom: 60px; } .ctl-btn.b2 { bottom: 108px; } .ctl-btn.b3 { bottom: 156px; } .ctl-btn.b4 { bottom: 204px; }
+    .ctl-btn.turbo { background: #3ec8be; }
     /* single-player: action buttons go right so the left thumb works the joystick */
     .stage.solo .ctl-btn.p1 { left: auto; right: 10px; }
 
@@ -102,10 +103,12 @@
 
   <div class="stage">
     <canvas id="game" width="760" height="560"></canvas>
+    <button class="ctl-btn turbo p1 b4" id="turbo1" hidden>💨 ⇧</button>
     <button class="ctl-btn shoot p1 b3" id="shoot1" hidden>⚡Q</button>
     <button class="ctl-btn p1 b2" id="def1" hidden>🛡 E</button>
     <button class="ctl-btn p1 b1" id="pass1" hidden>➤ R</button>
     <button class="ctl-btn p1 b0" id="sw1" hidden>⇄ F</button>
+    <button class="ctl-btn turbo p2 b4" id="turbo2" hidden>5 💨</button>
     <button class="ctl-btn shoot p2 b3" id="shoot2" hidden>4⚡</button>
     <button class="ctl-btn p2 b2" id="def2" hidden>3 🛡</button>
     <button class="ctl-btn p2 b1" id="pass2" hidden>2 ➤</button>
@@ -114,7 +117,7 @@
     <div class="overlay" id="setup">
       <div class="panel">
         <h2>Hog Ball</h2>
-        <div class="sub"><b style="color:#ffe8b0">3-on-3 Minecraft basketball!</b> Two 90-second halves. <b style="color:#ffe8b0">Hold shoot</b> to fill the circle bar — release right at the <b style="color:#ffe8b0">top</b>, in the <b style="color:#7ed37e">green</b>, for a swish. Better shooters get a bigger green! Deep shots past the arc are worth <b style="color:#ffe8b0">3</b>. Hold 🛡 to auto-defend! 🏀</div>
+        <div class="sub"><b style="color:#ffe8b0">3-on-3 Minecraft basketball!</b> Four 45-second quarters. <b style="color:#ffe8b0">Hold shoot</b> to fill the bar — release right at the <b style="color:#ffe8b0">top</b>, in the <b style="color:#7ed37e">green</b>, for a swish. Three straight buckets = <b style="color:#ffb300">TAKEOVER 🔥</b>. Hold <b style="color:#ffe8b0">Shift</b> for turbo, tap 🛡 with the ball for a crossover, tap shoot for a <b style="color:#ffe8b0">pump fake</b>! 🏀</div>
         <div class="group-label">Players</div>
         <div class="choices" id="count-choices">
           <button class="choice" data-players="1"><span>1P</span><span style="display:block;font-size:0.6rem;color:#8b93b0">vs computer</span></button>
@@ -214,10 +217,10 @@
   </div>
 
   <p class="hint">
-    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release in the <b style="color:#7ed37e">green at the top</b> of the bar!) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> 💨 &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
+    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release in the <b style="color:#7ed37e">green at the top</b>; a quick <i>tap</i> = <b>pump fake</b> 🎣) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>Turbo:</b> hold Shift / 5 💨 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
   </p>
   <p class="hint" style="margin-top:4px">
-    <b style="color:#7ed37e">GREEN = automatic bucket</b> — but the bar is lightning fast and the green sliver shrinks when you're guarded or deep &nbsp;·&nbsp; fouls = a <b>free-throw minigame</b>: stop both balls in the middle of the ➕ &nbsp;·&nbsp; dribble moves (E/3) can <b>break ankles</b> 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b>
+    <b style="color:#7ed37e">GREEN = automatic bucket</b> — the sliver shrinks when you're guarded, deep or <b>gassed</b> (turbo drains your legs!) &nbsp;·&nbsp; free throws use the <b>same timing bar</b> — tap to stop it in the green (3 shots if fouled on a three, <b>and-one</b> if the bucket dropped!) &nbsp;·&nbsp; 3 straight makes = <b style="color:#ffb300">TAKEOVER 🔥</b> (bigger green + faster legs, a miss cools you off) &nbsp;·&nbsp; 5 team fouls a quarter = <b>bonus</b> &nbsp;·&nbsp; dribble moves (E/3) can <b>break ankles</b> 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b>
   </p>
 
   <script src="../shared/game.js"></script>
@@ -241,11 +244,14 @@
     const GRAV_Z = 0.55;
     const SHOT_MAX = 900;                          // legacy base — real bar speed comes from shotMaxFor(shooter)
     const OVERFILL = 1.25;                         // meter keeps creeping past the top, then auto-bricks
-    const HALF_MS = 90000;
+    const QTR_MS = 45000;                          // four 45-second quarters, sim-style
+    const OT_MS = 30000;                           // timed OT periods; keep playing extra ones while tied
+    const PERIOD_NAMES = ['1st', '2nd', '3rd', '4th'];
     const FORMATION = [ { fx: 0.30, fy: 0.50 }, { fx: 0.55, fy: 0.28 }, { fx: 0.55, fy: 0.72 } ];
 
     const clamp = EL.clamp;
     const rnd = EL.rnd;
+    const pick = EL.pick;
     const playerName = EL.playerName;
     const bestWins = EL.best('hogball.wins');
 
@@ -269,10 +275,12 @@
     let pickL = 'pig', pickR = 'creeper';
     let teams = [], ball = null, score = [0, 0];
     let pops = [], freeze = 0, inboundSide = 0;
-    let clockMs = HALF_MS, half = 1, otMode = false;
-    let teamFouls = [0, 0];      // per-half team fouls: 10 puts the other team in the BONUS
+    let clockMs = QTR_MS, period = 1, otMode = false;
+    let teamFouls = [0, 0];      // per-quarter team fouls: 5 puts the other team in the BONUS
     let shotClock = 24000;       // NBA 24-second clock
     let halfPending = false;     // clock hit zero with a shot in the air — buzzer beater!
+    let comm = null;             // broadcast commentary lower-third: {txt, t}
+    let stats = [ { fgm: 0, fga: 0 }, { fgm: 0, fga: 0 } ];   // team shooting for the box score
     let crowdHype = 0;           // crowd jumps after every bucket
     let lastTickSec = 99;        // shot-clock countdown ticks
     let possFront = false;       // has this possession reached the frontcourt? (over-and-back)
@@ -282,7 +290,7 @@
     let lastCareer = false;      // routes the over panel's Continue back to the season hub
     let animT = 0;               // global animation clock — keeps idle dribbles and bobs alive
     let lastTs = 0, dtMs = 16.7, dtf = 1;
-    const shootHeld = [false, false], chargeT = [0, 0], defendHeld = [false, false];
+    const shootHeld = [false, false], chargeT = [0, 0], defendHeld = [false, false], turboHeld = [false, false];
 
     // how contested the shooter is right now (0 = wide open)
     function contestOn(o, side) {
@@ -296,7 +304,9 @@
       const h = attackHoop(side);
       const D = Math.hypot(h.x - o.x, h.y - o.y);
       const contest = contestOn(o, side);
-      return clamp((0.05 + (o.shoot3 - 0.9) * 0.10) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009), 0.015, 0.12);
+      const fatigue = 0.7 + 0.3 * (o.stamina / 100);   // gassed legs shrink the window
+      const take = o.takeT > 0 ? 1.6 : 1;              // takeover: a fatter green while you're rolling
+      return clamp((0.05 + (o.shoot3 - 0.9) * 0.10) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009) * fatigue * take, 0.015, 0.14);
     }
     // 2K bar speed at 1.5x — elite shooters ~0.5s to the top, big men ~0.24s.
     function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 2.25; }
@@ -304,7 +314,7 @@
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
     const ctlEls = {};
-    ['shoot1', 'pass1', 'sw1', 'def1', 'shoot2', 'pass2', 'sw2', 'def2'].forEach(function (id) { ctlEls[id] = document.getElementById(id); });
+    ['shoot1', 'pass1', 'sw1', 'def1', 'turbo1', 'shoot2', 'pass2', 'sw2', 'def2', 'turbo2'].forEach(function (id) { ctlEls[id] = document.getElementById(id); });
 
     function attackHoop(side) { return HOOP[side === 0 ? 1 : 0]; }
     function ownHoop(side) { return HOOP[side === 0 ? 0 : 1]; }
@@ -315,6 +325,7 @@
         x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
         accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, shoot3: s.shoot3, steal: s.steal,
         pName: s.pName || null, stars: s.stars || 0, fouls: 0, ejected: false, stamina: 100, fit: s.fit || 1, pts: 0,
+        heat: 0, takeT: 0, sprinting: false, fakeCD: 0,
         aiShootCD: 0, aiPassCD: 0, aiJumpCD: 0, stealCD: 0, stunT: 0, crossT: 0, crossCD: 0,
         flash: 0, legPhase: 0, mark: null, dunk: null };
     }
@@ -402,8 +413,8 @@
     function setControls() {
       const on1 = (state === 'playing' || state === 'score' || state === 'half');
       const on2 = on1 && numPlayers === 2;
-      ['shoot1', 'pass1', 'sw1', 'def1'].forEach(function (id) { ctlEls[id].hidden = !on1; });
-      ['shoot2', 'pass2', 'sw2', 'def2'].forEach(function (id) { ctlEls[id].hidden = !on2; });
+      ['shoot1', 'pass1', 'sw1', 'def1', 'turbo1'].forEach(function (id) { ctlEls[id].hidden = !on1; });
+      ['shoot2', 'pass2', 'sw2', 'def2', 'turbo2'].forEach(function (id) { ctlEls[id].hidden = !on2; });
       const stage = document.querySelector('.stage'); if (stage) stage.classList.toggle('solo', numPlayers === 1);
     }
 
@@ -413,9 +424,10 @@
       teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
       applyDiff(teams[1]);
       score = [0, 0]; pops = []; freeze = 60;
-      clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0]; halfPending = false;
+      clockMs = QTR_MS; period = 1; otMode = false; teamFouls = [0, 0]; halfPending = false; comm = null;
+      stats = [ { fgm: 0, fga: 0 }, { fgm: 0, fga: 0 } ];
       shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
-      defendHeld[0] = defendHeld[1] = false;
+      defendHeld[0] = defendHeld[1] = false; turboHeld[0] = turboHeld[1] = false;
       setupEl.hidden = true; overEl.hidden = true;
       if (numPlayers === 1) { placeTip(); }        // 1P opens with the mash-Space jump ball
       else { placeInbound(0); state = 'playing'; }
@@ -431,9 +443,38 @@
       return MOBS[teams[side].key].emoji;
     }
 
+    // ---------- broadcast commentary: one lower-third line at a time ----------
+    function mobName(p) { return p.pName || (MOBS[p.key].name + (p.slot != null ? ' #' + (p.slot + 1) : '')); }
+    const CALLS = {
+      three:  ['{p} from WAY downtown! 💦', 'Rains it in from deep! {p}!', '{p} lets it fly… BANG!', 'No hesitation — {p} buries the three!'],
+      bucket: ['{p} with the smooth finish!', 'Count it! {p} gets it to drop.', '{p} rises and fires… good!', 'Silky stuff from {p}!'],
+      dunk:   ['{p} THROWS IT DOWN! 💥', 'Get out of the way — {p} with the hammer!', 'POSTERIZED! {p} with authority!'],
+      steal:  ['Picked! {p} with the takeaway!', '{p} with lightning hands!', 'Cookies snatched by {p}!'],
+      block:  ['REJECTED! {p} says not today!', '{p} sends it back!', 'Swatted into the cheap seats by {p}!'],
+      take:   ['{p} is TAKING OVER this game! 🔥', 'You cannot leave {p} open right now! 🔥'],
+      buzzer: ['AT THE BUZZER! Are you kidding?!', 'BANG! Right at the horn!'],
+      andone: ['Bucket AND the foul! {p} is strong!', '{p} finishes through contact — and one!']
+    };
+    function say(kind, p) { comm = { txt: pick(CALLS[kind]).replace('{p}', p ? mobName(p) : ''), t: 0 }; }
+
+    function coolOff(o) {
+      if (!o) return;
+      if (o.takeT > 0) pops.push({ x: o.x, y: o.y - o.r - 30, txt: 'COOLED OFF 🧊', color: '#9fc6ff', t: 0 });
+      o.heat = 0; o.takeT = 0;
+    }
+
     function basket(side, pts, label, shooter) {
       score[side] += pts;
-      if (shooter) shooter.pts = (shooter.pts || 0) + pts;
+      stats[side].fgm++;
+      if (shooter) {
+        shooter.pts = (shooter.pts || 0) + pts;
+        shooter.heat = (shooter.heat || 0) + 1;
+        if (shooter.heat === 3 && shooter.takeT <= 0) {
+          shooter.takeT = 1800;   // ~30s of takeover unless a miss cools it first
+          pops.push({ x: shooter.x, y: shooter.y - shooter.r - 34, txt: 'TAKEOVER! 🔥', color: '#ffb300', t: 0, big: true });
+          say('take', shooter);
+        }
+      }
       crowdHype = 55;
       const h = attackHoop(side);
       const buzzer = halfPending;
@@ -441,21 +482,27 @@
       if (label && label.indexOf('DUNK') >= 0) sfx.dunk();
       else if (buzzer || pts === 3) sfx.three();
       else sfx.swish();
+      if (shooter && !comm) {
+        if (buzzer) say('buzzer', shooter);
+        else if (label && label.indexOf('DUNK') >= 0) say('dunk', shooter);
+        else if (pts === 3) say('three', shooter);
+        else if (Math.random() < 0.5) say('bucket', shooter);
+      }
       if (ball) { ball.shot = null; ball.owner = null; ball.vx = ball.vy = 0; ball.vz = -1; ball.z = Math.min(ball.z, RIM_Z); ball.x = h.x; ball.y = h.y; ball.passTo = null; }
-      if (otMode) { endGame(); return; }
-      if (buzzer) { halfPending = false; endHalf(); return; }
+      if (buzzer) { halfPending = false; endPeriod(); return; }
       state = 'score'; freeze = 70; inboundSide = 1 - side;
     }
 
-    function endHalf() {
+    function endPeriod() {
       sfx.buzzer();
-      if (half === 1) {
-        state = 'half'; freeze = 130;
-        pops.push({ x: VW / 2, y: CY - 60, txt: 'HALFTIME', color: '#ffe066', t: 0, big: true });
+      if (!otMode && period < 4) {
+        state = 'half'; freeze = period === 2 ? 240 : 130;
+        pops.push({ x: VW / 2, y: CY - 60, txt: period === 2 ? 'HALFTIME' : 'END OF THE ' + PERIOD_NAMES[period - 1], color: '#ffe066', t: 0, big: true });
       } else if (score[0] === score[1]) {
-        otMode = true; state = 'score'; freeze = 110; inboundSide = Math.random() < 0.5 ? 0 : 1;
+        // tied after the 4th (or after an OT): play a timed extra period
+        otMode = true; state = 'half'; freeze = 130;
         pops.push({ x: VW / 2, y: CY - 60, txt: 'OVERTIME!', color: '#ffe066', t: 0, big: true });
-        pops.push({ x: VW / 2, y: CY - 10, txt: 'next basket wins', color: '#fff', t: 0 });
+        pops.push({ x: VW / 2, y: CY - 10, txt: '30 extra seconds on the clock', color: '#fff', t: 0 });
       } else endGame();
     }
 
@@ -597,6 +644,7 @@
     function releaseShot(side, c, shooter) {
       const o = shooter || activePlayer(teams[side]);
       if (ball.owner !== o || o.dunk) return;
+      stats[side].fga++;
       const h = attackHoop(side);
       const sx = o.x, sy = o.y;
       const D = Math.hypot(h.x - sx, h.y - sy);
@@ -605,6 +653,7 @@
       const err = c <= 1 ? (1 - c) : (c - 1) * 1.6;
       const gw = greenWindowFor(o, side);
       const green = c >= 1 - gw && c <= 1 + gw * 0.4;
+      const contest = contestOn(o, side);
       if (D < 62 && green) { startDunk(side, o, h); return; }
       let make;
       if (green) make = true;                       // a green is AUTOMATIC
@@ -632,7 +681,13 @@
       ball.shot = { make: make, airball: airball, pts: three ? 3 : 2, side: side, t: 0, T: T, hoop: h, shooter: o, blockTried: false };
       if (o.z <= 0) o.vz = 6;    // jump shot
       sfx.shoot();
-      pops.push({ x: sx, y: sy - o.r - 24, txt: green ? 'GREEN!' : 'SHOOT!', color: green ? '#7ed37e' : '#ffe066', t: 0 });
+      // release feedback: timing grade + how contested the look was
+      const cov = contest > 0.25 ? 'SMOTHERED' : contest > 0.08 ? 'CONTESTED' : 'OPEN';
+      let tim, tcol;
+      if (green) { tim = 'GREEN!'; tcol = '#7ed37e'; }
+      else if (c < 1) { tim = err > 0.14 ? 'VERY EARLY' : 'EARLY'; tcol = err > 0.14 ? '#ff9d9d' : '#ffe066'; }
+      else { tim = err > 0.14 ? 'VERY LATE' : 'LATE'; tcol = err > 0.14 ? '#ff9d9d' : '#ffe066'; }
+      pops.push({ x: sx, y: sy - o.r - 24, txt: green ? 'GREEN!' : tim + ' · ' + cov, color: tcol, t: 0 });
     }
 
     function startDunk(side, o, h) {
@@ -679,19 +734,22 @@
       }
     }
     // charge a personal + team foul; returns true when the fouled team is in the bonus
+    // (5 team fouls in a quarter, NBA-style)
     function chargeFoul(fouler) {
       fouler.fouls++; teamFouls[fouler.side]++;
       checkEject(fouler);
-      return teamFouls[fouler.side] >= 10;
+      return teamFouls[fouler.side] >= 5;
     }
 
-    // Free throws: the game stops, the fouled mob steps to the LINE and shoots
-    // TWO. Each shot is the ➕ minigame (stop both balls in the middle). A made
-    // second FT is a dead ball (other team inbounds); a missed second FT comes
-    // off the rim LIVE — anyone can grab the rebound and play on.
-    const FT_TOL = 0.22, FT_SPEED = 0.085;
-    function startFT(shooter) {
-      ft = { side: shooter.side, shooter: shooter, taken: 0, stage: 0, offA: 0, offB: 0, t: rnd(0, 70) };
+    // Free throws: the game stops, the fouled mob steps to the LINE. Each shot
+    // uses the SAME timing meter as a jump shot — the fill races up, tap to stop
+    // it in the green at the top. Shooting fouls award 2 (or 3 behind the arc),
+    // an and-one awards 1. A made last FT is a dead ball (other team inbounds);
+    // a missed last FT comes off the rim LIVE — anyone can grab the rebound.
+    function ftGreen(o) { return clamp(0.06 + (o.shoot3 - 0.9) * 0.12, 0.03, 0.13); }
+    function ftMaxFor(o) { return shotMaxFor(o) * 1.5; }   // calmer than a live jumper
+    function startFT(shooter, n) {
+      ft = { side: shooter.side, shooter: shooter, total: n || 2, taken: 0, ms: 0, lastMade: false };
       stageFTScene();
       state = 'ft';
     }
@@ -727,25 +785,27 @@
     }
     function ftPress() {
       if (!ft) return;
-      const cur = Math.sin(ft.t * FT_SPEED);
-      if (ft.stage === 0) { ft.offA = cur; ft.stage = 1; ft.t = rnd(0, 70); }
-      else {
-        ft.offB = cur;
-        const made = Math.abs(ft.offA) < FT_TOL && Math.abs(ft.offB) < FT_TOL;
-        ft.taken++;
-        if (made) { score[ft.side] += 1; ft.shooter.pts = (ft.shooter.pts || 0) + 1; sfx.ding(); pops.push({ x: VW / 2, y: CY - 84, txt: 'FT ' + ft.taken + ' GOOD! +1', color: SIDE_COLOR[ft.side], t: 0, big: true }); }
-        else { sfx.clang(); pops.push({ x: VW / 2, y: CY - 84, txt: 'FT ' + ft.taken + ' CLANKS!', color: '#ff9d9d', t: 0, big: true }); }
-        if (ft.taken < 2) { ft.stage = 0; ft.offA = 0; ft.offB = 0; ft.t = rnd(0, 70); }
-        else { const side = ft.side; ft = null; ftAftermath(side, made); }
-      }
+      const o = ft.shooter;
+      const c = ft.ms / ftMaxFor(o);
+      if (c < 0.12) return;                        // ignore taps before the bar even moves
+      const gw = ftGreen(o);
+      const green = c >= 1 - gw && c <= 1 + gw * 0.4;
+      const err = c <= 1 ? (1 - c) : (c - 1) * 1.6;
+      const made = green || Math.random() < Math.max(0, 0.82 - err * 2.4);
+      ft.taken++; ft.lastMade = made;
+      if (made) { score[ft.side] += 1; o.pts = (o.pts || 0) + 1; sfx.ding(); pops.push({ x: VW / 2, y: CY - 84, txt: 'FT ' + ft.taken + (green ? ' GREEN! +1' : ' GOOD! +1'), color: green ? '#7ed37e' : SIDE_COLOR[ft.side], t: 0, big: true }); }
+      else { sfx.clang(); pops.push({ x: VW / 2, y: CY - 84, txt: 'FT ' + ft.taken + ' CLANKS!', color: '#ff9d9d', t: 0, big: true }); }
+      if (ft.taken < ft.total) { ft.ms = 0; }
+      else { const side = ft.side; ft = null; ftAftermath(side, made); }
     }
-    // CPU free throws resolve by shooter rating — two quick rolls
-    function cpuFTs(o) {
+    // CPU free throws resolve by shooter rating — quick rolls
+    function cpuFTs(o, n) {
+      n = n || 2;
       const P = clamp(0.45 + (o.shoot3 - 0.85) * 0.9, 0.5, 0.92);
-      const m1 = Math.random() < P, m2 = Math.random() < P;
-      if (m1) { score[o.side] += 1; o.pts = (o.pts || 0) + 1; } if (m2) { score[o.side] += 1; o.pts = (o.pts || 0) + 1; }
-      pops.push({ x: o.x, y: o.y - 44, txt: 'CPU FREE THROWS ' + ((m1 ? 1 : 0) + (m2 ? 1 : 0)) + '/2', color: SIDE_COLOR[o.side], t: 0 });
-      ftAftermath(o.side, m2);
+      let made = 0, last = false;
+      for (let i = 0; i < n; i++) { last = Math.random() < P; if (last) { made++; score[o.side] += 1; o.pts = (o.pts || 0) + 1; } }
+      pops.push({ x: o.x, y: o.y - 44, txt: 'CPU FREE THROWS ' + made + '/' + n, color: SIDE_COLOR[o.side], t: 0 });
+      ftAftermath(o.side, last);
     }
 
     // Stealing is an ATTEMPT with a risk: whiff, win the ball, or get whistled
@@ -759,22 +819,20 @@
       // NBA-realistic: most reaches are whiffs — clean steals are rare, fouls hurt
       if (roll < 0.16 * p.steal) {
         setOwner(p); pops.push({ x: p.x, y: p.y - 34, txt: 'STEAL!', color: SIDE_COLOR[p.side], t: 0 });
-        sfx.steal();
+        sfx.steal(); say('steal', p);
       } else if (roll < 0.16 * p.steal + 0.22) {
         p.stunT = 70;
         pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
         sfx.whistle();
         const bonus = chargeFoul(p);
-        if (!otMode) {
-          if (bonus) {
-            // 10 team fouls: the fouled team shoots the BONUS
-            pops.push({ x: o.x, y: o.y - 40, txt: 'BONUS — 2 SHOTS!', color: SIDE_COLOR[o.side], t: 0 });
-            if (isHumanTeam(o.side)) startFT(o); else cpuFTs(o);
-          } else {
-            // no free throws yet — just a whistle and the ball stays with them
-            pops.push({ x: o.x, y: o.y - 40, txt: 'SIDE BALL', color: '#cfd6ea', t: 0 });
-            possCD = 45; freeze = 26;
-          }
+        if (bonus) {
+          // 5 team fouls this quarter: the fouled team shoots the BONUS
+          pops.push({ x: o.x, y: o.y - 40, txt: 'BONUS — 2 SHOTS!', color: SIDE_COLOR[o.side], t: 0 });
+          if (isHumanTeam(o.side)) startFT(o, 2); else cpuFTs(o, 2);
+        } else {
+          // no free throws yet — just a whistle and the ball stays with them
+          pops.push({ x: o.x, y: o.y - 40, txt: 'SIDE BALL', color: '#cfd6ea', t: 0 });
+          possCD = 45; freeze = 26;
         }
       } else {
         pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 });
@@ -828,6 +886,23 @@
       const c = chargeT[side]; shootHeld[side] = false; chargeT[side] = 0;
       const o = activePlayer(teams[side]);
       if (c > 40 && ball.owner === o) releaseShot(side, c / shotMaxFor(o));
+      else if (c > 0 && ball.owner === o) pumpFake(side, o);   // a quick tap = pump fake
+    }
+    // Pump fake: sell the shot without leaving your feet — nearby grounded CPU
+    // defenders can bite and fly past (sharper CPUs bite less often).
+    function pumpFake(side, o) {
+      if (o.fakeCD > 0 || o.dunk || o.stunT > 0) return;
+      o.fakeCD = 55;
+      pops.push({ x: o.x, y: o.y - o.r - 24, txt: 'PUMP FAKE!', color: '#cfd6ea', t: 0 });
+      for (const q of teams[1 - side].onPitch) {
+        if (q.ejected || q.z > 0) continue;
+        const d = Math.hypot(q.x - o.x, q.y - o.y);
+        const isCpu = !isHumanTeam(q.side);
+        if (d < 70 && isCpu && Math.random() < 0.55 / cpuDiff().iq) {
+          q.vz = 7; q.aiJumpCD = 110;
+          pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'BITES! 🎣', color: '#ffe066', t: 0 });
+        }
+      }
     }
 
     // ---------- input ----------
@@ -868,6 +943,9 @@
         case 'KeyE': if (!e.repeat) defendDown(0); e.preventDefault(); break;
         case 'KeyR': passBall(0); e.preventDefault(); break;
         case 'KeyF': switchPlayer(0); e.preventDefault(); break;
+        case 'ShiftLeft': turboHeld[0] = true; e.preventDefault(); break;
+        case 'ShiftRight': turboHeld[numPlayers === 2 ? 1 : 0] = true; e.preventDefault(); break;
+        case 'Digit5': case 'Numpad5': if (numPlayers === 2) turboHeld[1] = true; e.preventDefault(); break;
         case 'ArrowUp': keys[as].u = true; e.preventDefault(); break;
         case 'ArrowDown': keys[as].d = true; e.preventDefault(); break;
         case 'ArrowLeft': keys[as].l = true; e.preventDefault(); break;
@@ -887,6 +965,9 @@
         case 'KeyD': keys[0].r = false; break;
         case 'KeyQ': shootRelease(0); break;
         case 'KeyE': defendHeld[0] = false; break;
+        case 'ShiftLeft': turboHeld[0] = false; break;
+        case 'ShiftRight': turboHeld[0] = false; if (numPlayers === 2) turboHeld[1] = false; break;
+        case 'Digit5': case 'Numpad5': turboHeld[1] = false; break;
         case 'Digit3': case 'Numpad3': defendHeld[1] = false; break;
         case 'ArrowUp': keys[as].u = false; break;
         case 'ArrowDown': keys[as].d = false; break;
@@ -960,6 +1041,15 @@
       btn.addEventListener('touchend', function (e) { e.preventDefault(); defendHeld[side] = false; }, { passive: false });
     }
     wireDefend(ctlEls.def1, 0); wireDefend(ctlEls.def2, 1);
+    // turbo button: hold to sprint
+    function wireTurbo(btn, side) {
+      btn.addEventListener('mousedown', function (e) { e.preventDefault(); turboHeld[side] = true; });
+      btn.addEventListener('mouseup', function () { turboHeld[side] = false; });
+      btn.addEventListener('mouseleave', function () { turboHeld[side] = false; });
+      btn.addEventListener('touchstart', function (e) { e.preventDefault(); turboHeld[side] = true; }, { passive: false });
+      btn.addEventListener('touchend', function (e) { e.preventDefault(); turboHeld[side] = false; }, { passive: false });
+    }
+    wireTurbo(ctlEls.turbo1, 0); wireTurbo(ctlEls.turbo2, 1);
 
     // ---------- setup UI ----------
     function buildPickers() {
@@ -1148,8 +1238,9 @@
       teams = [ buildCustomTeam(0, 'pig', cards, myBench), buildCustomTeam(1, fr.key, cpuCards(fr, nx.boost), cpuCards(fr, nx.boost).slice(0, 2)) ];
       applyDiff(teams[1]);
       score = [0, 0]; pops = []; freeze = 0;
-      clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0]; halfPending = false;
-      shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0; defendHeld[0] = defendHeld[1] = false;
+      clockMs = QTR_MS; period = 1; otMode = false; teamFouls = [0, 0]; halfPending = false; comm = null;
+      stats = [ { fgm: 0, fga: 0 }, { fgm: 0, fga: 0 } ];
+      shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0; defendHeld[0] = defendHeld[1] = false; turboHeld[0] = turboHeld[1] = false;
       careerEl.hidden = true; marketEl.hidden = true; lineupEl.hidden = true; jerseyEl.hidden = true; setupEl.hidden = true; overEl.hidden = true;
       placeTip();   // Season games are 1P: every one opens with the jump ball
       setControls();
@@ -1370,9 +1461,12 @@
       let ay = (k.d ? 1 : 0) - (k.u ? 1 : 0);
       if (ax === 0 && ay === 0 && joy[side].active) { const dx = joy[side].tx - joy[side].bx, dy = joy[side].ty - joy[side].by, dl = Math.hypot(dx, dy); if (dl > 6) { ax = dx / dl; ay = dy / dl; } }
       if (ax === 0 && ay === 0 && !ball.owner && ball.passTo === m) { steer(m, ball.x + ball.vx * 8, ball.y + ball.vy * 8, 0.8); return; }
+      // turbo: a real burst while the tank holds out — it torches stamina
+      m.sprinting = turboHeld[side] && m.stamina > 8;
+      const spr = m.sprinting ? 1.5 : 1;
       const l = Math.hypot(ax, ay) || 1, f = airFactor(m) * staminaFactor(m);
-      m.vx += (ax / l) * m.accel * 2.4 * f * dtf;
-      m.vy += (ay / l) * m.accel * 2.4 * f * dtf;
+      m.vx += (ax / l) * m.accel * 2.4 * spr * f * dtf;
+      m.vy += (ay / l) * m.accel * 2.4 * spr * f * dtf;
     }
     function driveChase(p) { steer(p, ball.x, ball.y, 0.98); }
 
@@ -1483,15 +1577,16 @@
     function moveMob(m) {
       if (m.z > 0 || m.vz > 0) { m.vz -= GRAV_Z * dtf; m.z += m.vz * dtf; if (m.z <= 0) { m.z = 0; m.vz = 0; } }
       m.vx *= Math.pow(0.84, dtf); m.vy *= Math.pow(0.84, dtf);
-      const cap = m.maxSpd * (m.crossT > 0 ? 2.4 : 1) * staminaFactor(m), sp = Math.hypot(m.vx, m.vy);
+      const cap = m.maxSpd * (m.crossT > 0 ? 2.4 : (m.sprinting ? 1.4 : 1)) * (m.takeT > 0 ? 1.08 : 1) * staminaFactor(m), sp = Math.hypot(m.vx, m.vy);
       if (sp > cap) { const k = cap / sp; m.vx *= k; m.vy *= k; }
       m.x += m.vx * dtf; m.y += m.vy * dtf;
       m.x = clamp(m.x, X0 + m.r * 0.6, X1 - m.r * 0.6);
       m.y = clamp(m.y, Y0 + m.r * 0.6, Y1 - m.r * 0.6);
       if (sp > 0.5) { m.fx = m.vx / sp; m.fy = m.vy / sp; }
       m.legPhase += sp * 0.22 * dtf;
-      // fatigue: effort drains the tank (~3-5 real minutes depending on fitness), resting refills a little
-      if (sp > 0.3) m.stamina = Math.max(0, m.stamina - (0.0035 + (sp / m.maxSpd) * 0.0065) / m.fit * dtf);
+      // fatigue: effort drains the tank (~3-5 real minutes depending on fitness),
+      // turbo burns it ~5x faster, resting refills a little
+      if (sp > 0.3) m.stamina = Math.max(0, m.stamina - (0.0035 + (sp / m.maxSpd) * 0.0065) * (m.sprinting ? 5 : 1) / m.fit * dtf);
       else m.stamina = Math.min(100, m.stamina + 0.006 * dtf);
     }
     function mobCollide(a, b) {
@@ -1533,7 +1628,7 @@
         if (ball.z <= 0 && ball.vz < 0) {
           ball.z = 0; ball.vz = -ball.vz * 0.55;
           if (Math.abs(ball.vz) < 1.2) ball.vz = 0;
-          if (ball.shot) { pops.push({ x: ball.x, y: ball.y - 26, txt: ball.shot.airball ? 'AIRBALL!' : 'BRICK!', color: '#ff9d9d', t: 0 }); ball.shot = null; }
+          if (ball.shot) { pops.push({ x: ball.x, y: ball.y - 26, txt: ball.shot.airball ? 'AIRBALL!' : 'BRICK!', color: '#ff9d9d', t: 0 }); coolOff(ball.shot.shooter); ball.shot = null; }
         }
       }
       ball.vx *= Math.pow(0.99, dtf); ball.vy *= Math.pow(0.99, dtf);
@@ -1554,17 +1649,27 @@
               const r = Math.random();
               if (r < 0.15) {
                 pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'BLOCKED!', color: SIDE_COLOR[q.side], t: 0, big: true });
-                sfx.block();
+                sfx.block(); say('block', q); coolOff(sh.shooter);
                 ball.shot = null; ball.vx = -ball.vx * 0.35 + rnd(-2, 2); ball.vy = -ball.vy * 0.35 + rnd(-2, 2); ball.vz = -2; ball.freeCD = 8;
               } else if (r < 0.30) {
-                // caught the arm — SHOOTING FOUL, always free throws
+                // caught the arm — SHOOTING FOUL. If the shot was going in anyway
+                // the bucket COUNTS plus one FT (and-one); otherwise it's 2 free
+                // throws, or 3 when the foul came on a three-point attempt.
                 pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'SHOOTING FOUL!', color: '#ff9d9d', t: 0, big: true });
                 sfx.whistle();
                 chargeFoul(q);
-                const shooter = sh.shooter;
-                ball.shot = null; ball.vx = ball.vy = ball.vz = 0;
-                if (!otMode && shooter) { if (isHumanTeam(shooter.side)) startFT(shooter); else cpuFTs(shooter); }
-                else if (shooter) { setOwner(shooter); freeze = 20; }
+                const shooter = sh.shooter, shSide = sh.side, shPts = sh.pts, wasIn = sh.make;
+                ball.shot = null; ball.vx = ball.vy = ball.vz = 0; ball.z = Math.min(ball.z, RIM_Z);
+                let nFT;
+                if (wasIn) {
+                  score[shSide] += shPts; stats[shSide].fgm++;
+                  if (shooter) shooter.pts = (shooter.pts || 0) + shPts;
+                  pops.push({ x: q.x, y: q.y - q.r - 50, txt: 'AND ONE! +' + shPts, color: SIDE_COLOR[shSide], t: 0, big: true });
+                  say('andone', shooter);
+                  sfx.three(); crowdHype = 55;
+                  nFT = 1;
+                } else nFT = shPts;   // 2 from inside the arc, 3 from deep
+                if (shooter) { if (isHumanTeam(shooter.side)) startFT(shooter, nFT); else cpuFTs(shooter, nFT); }
                 return;
               }
               break;   // contest tried — no second bite at this shot
@@ -1595,6 +1700,7 @@
             ball.vx = (ball.vx - 2 * vn * nx) * 0.45 + nx * 1.5;
             ball.vy = (ball.vy - 2 * vn * ny) * 0.45 + ny * 1.5;
             ball.vz = Math.abs(ball.vz) * 0.35;
+            coolOff(sh.shooter);
             ball.shot = null; ball.freeCD = 6; shotClock = 24000;
             pops.push({ x: h.x, y: h.y - RIM_Z - 16, txt: 'CLANG!', color: '#ffbd6b', t: 0 });
             sfx.clang();
@@ -1649,14 +1755,26 @@
         if (tipT >= TIP_FRAMES) settleTip();
         return;
       }
-      if (state === 'ft') { if (ft) ft.t += dtf; return; }
+      if (comm && (comm.t += dtf) > 240) comm = null;
+      if (state === 'ft') {
+        if (ft) {
+          ft.ms += dtMs;
+          if (ft.ms / ftMaxFor(ft.shooter) > OVERFILL) ftPress();   // crept past the top → late brick
+        }
+        return;
+      }
       if (state !== 'playing' && state !== 'score' && state !== 'half') return;
 
       if (freeze > 0) {
         freeze -= dtf;
         if (freeze <= 0) {
           if (state === 'score') { placeInbound(inboundSide); state = 'playing'; }
-          else if (state === 'half') { half = 2; clockMs = HALF_MS; teamFouls = [0, 0]; placeInbound(1); state = 'playing'; }
+          else if (state === 'half') {
+            // next period: quarters 2-4, or a fresh 30s OT while the game stays tied
+            if (!otMode) period++;
+            clockMs = otMode ? OT_MS : QTR_MS; teamFouls = [0, 0];
+            placeInbound((period + (otMode ? 1 : 0)) % 2); state = 'playing';
+          }
         }
       }
       const live = state === 'playing' && freeze <= 0;
@@ -1667,16 +1785,16 @@
         if (ball.z <= 0) { ball.z = 0; ball.vz = 0; }
       }
 
-      // game clock (regulation only — OT is sudden death, untimed)
-      if (live && !otMode) {
+      // game clock (regulation and timed OT periods alike)
+      if (live) {
         clockMs -= dtMs;
         if (clockMs <= 0) {
           clockMs = 0;
           if (ball && ball.shot) { if (!halfPending) { halfPending = true; sfx.buzzer(); } }   // let the buzzer beater fly
-          else { endHalf(); }
+          else { endPeriod(); }
         }
       }
-      if (halfPending && state === 'playing' && (!ball || !ball.shot)) { halfPending = false; endHalf(); }
+      if (halfPending && state === 'playing' && (!ball || !ball.shot)) { halfPending = false; endPeriod(); }
       if (crowdHype > 0) crowdHype -= dtf;
       // 24-second shot clock (rim contact and possession changes reset it)
       if (live && state === 'playing') {
@@ -1689,13 +1807,14 @@
           deadBallTurnover(1 - ps, 'SHOT CLOCK!');
         }
       }
-      // over-and-back + offensive 3-seconds, judged on the ball-handler
+      // over-and-back, 8-second backcourt + offensive 3-seconds, judged on the ball-handler
       if (live && state === 'playing' && ball.owner) {
         const o = ball.owner, s2 = o.side;
         const inFront = s2 === 0 ? o.x > VW / 2 + 6 : o.x < VW / 2 - 6;
         const inBack = s2 === 0 ? o.x < VW / 2 - 6 : o.x > VW / 2 + 6;
         if (inFront) possFront = true;
         else if (possFront && inBack) deadBallTurnover(1 - s2, 'OVER & BACK!');
+        else if (!possFront && shotClock < 24000 - 8000) deadBallTurnover(1 - s2, '8 SECONDS!');
         const inPaint = s2 === 0 ? (o.x > X1 - KEY_W && Math.abs(o.y - CY) < KEY_H / 2) : (o.x < X0 + KEY_W && Math.abs(o.y - CY) < KEY_H / 2);
         if (inPaint) { paintT += dtf; if (paintT > 180) deadBallTurnover(1 - s2, '3 SECONDS!'); }
         else paintT = 0;
@@ -1736,6 +1855,9 @@
           if (p.ejected) continue;
           if (p.crossT > 0) p.crossT -= dtf;
           if (p.crossCD > 0) p.crossCD -= dtf;
+          if (p.fakeCD > 0) p.fakeCD -= dtf;
+          if (p.takeT > 0) { p.takeT -= dtf; if (p.takeT <= 0) p.heat = 0; }
+          p.sprinting = false;                              // driveHuman re-sets it while turbo is held
           if (p.stunT > 0) { p.stunT -= dtf; continue; }   // dazed: no driving, just coast
           if (p.dunk) continue;
           if (human && i === t.active) {
@@ -1879,6 +2001,13 @@
       // spin move: the whole mob pirouettes through the dribble move
       if (p.crossT > 0 && p.moveType === 'spin') {
         ctx.translate(p.x, p.y - 24); ctx.rotate((1 - p.crossT / 22) * 6.283); ctx.translate(-p.x, -(p.y - 24));
+      }
+      // takeover: a pulsing golden aura under a player who's caught fire
+      if (p.takeT > 0 && !p.ejected) {
+        const pulse = 1 + Math.sin(animT * 0.18) * 0.15;
+        ctx.strokeStyle = '#ffb300'; ctx.globalAlpha = 0.75; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y + 8, p.r * 1.15 * pulse, p.r * 0.5 * pulse, 0, 0, 6.28); ctx.stroke();
+        ctx.globalAlpha = p.ejected ? 0.4 : 1;
       }
       // shadow stays on the floor
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -2087,13 +2216,16 @@
       ctx.fillStyle = SIDE_COLOR[0]; ctx.textAlign = 'right'; ctx.fillText(sideEmoji(0) + ' ' + score[0], VW / 2 - 12, 32);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('–', VW / 2, 32);
       ctx.fillStyle = SIDE_COLOR[1]; ctx.textAlign = 'left'; ctx.fillText(score[1] + ' ' + sideEmoji(1), VW / 2 + 12, 32);
-      // clock line
+      // clock line: period + game clock + team fouls (+ BONUS chips at 5)
       ctx.textAlign = 'center';
-      const low = !otMode && clockMs < 10000 && state === 'playing';
+      const low = clockMs < 10000 && state === 'playing';
       ctx.fillStyle = low && Math.floor(lastTs / 300) % 2 === 0 ? '#ff5a5a' : '#cfd6ea';
       ctx.font = "800 15px 'Nunito', sans-serif";
-      ctx.fillText((otMode ? 'OT · next basket wins' : (half === 1 ? '1st' : '2nd') + '  ' + fmtClock(clockMs)) + '  ·  F ' + teamFouls[0] + '–' + teamFouls[1], VW / 2, 52);
-      if (state === 'playing' && !otMode) {
+      let line = (otMode ? 'OT' : PERIOD_NAMES[period - 1]) + '  ' + fmtClock(clockMs) + '  ·  F ' + teamFouls[0] + '–' + teamFouls[1];
+      if (teamFouls[1] >= 5) line = '🔵bonus · ' + line;      // red team's fouls put BLUE in the bonus
+      if (teamFouls[0] >= 5) line = line + ' · bonus🔴';
+      ctx.fillText(line, VW / 2, 52);
+      if (state === 'playing') {
         const sc = Math.max(0, Math.ceil(shotClock / 1000));
         ctx.fillStyle = sc <= 5 ? '#ff5a5a' : '#ffe066';
         ctx.font = "800 17px 'Nunito', sans-serif";
@@ -2142,37 +2274,27 @@
       if (state !== 'select') drawHUD();
       if (state === 'playing' || state === 'score') for (let s = 0; s < 2; s++) { if (joy[s].active && isHumanTeam(s)) drawJoystick(joy[s]); }
       if (state === 'ft' && ft) {
-        // free-throw scene: shooter staged at the line, the big ➕ minigame above
+        // free-throw scene: shooter staged at the line, the big timing meter beside
         ctx.fillStyle = 'rgba(10,14,28,0.38)'; ctx.fillRect(0, 0, VW, VH);
         const atRight = attackHoop(ft.side).dir < 0;
-        const cx = atRight ? VW / 2 - 130 : VW / 2 + 130, cy = CY - 40, ARM = 82, TH = 28, AMP = 66;
+        const cx = atRight ? VW / 2 - 130 : VW / 2 + 130, cy = CY - 30;
+        const o = ft.shooter, gw = ftGreen(o);
+        const c = Math.min(ft.ms / ftMaxFor(o), OVERFILL);
         ctx.textAlign = 'center';
         ctx.fillStyle = SIDE_COLOR[ft.side]; ctx.font = "800 24px 'Nunito', sans-serif";
-        ctx.fillText('FREE THROW ' + (ft.taken + 1) + ' of 2', cx, cy - 130);
+        ctx.fillText('FREE THROW ' + (ft.taken + 1) + ' of ' + ft.total, cx, cy - 140);
         ctx.fillStyle = '#cfd6ea'; ctx.font = "800 14px 'Nunito', sans-serif";
-        ctx.fillText(ft.stage === 0 ? 'Tap to stop ball 1 in the middle of the ➕' : 'Now stop ball 2 in the middle!', cx, cy - 108);
-        if (ft.taken === 1) { ctx.fillStyle = '#ffe066'; ctx.fillText('Miss this one and the rebound is LIVE!', cx, cy + 128); }
-        // plus-sign arms
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        roundRect(cx - ARM, cy - TH / 2, ARM * 2, TH, 8); ctx.fill();
-        roundRect(cx - TH / 2, cy - ARM, TH, ARM * 2, 8); ctx.fill();
-        // the sweet spot: middle of the addition sign
-        ctx.fillStyle = 'rgba(126,211,126,0.55)';
-        roundRect(cx - TH / 2, cy - TH / 2, TH, TH, 6); ctx.fill();
-        ctx.strokeStyle = '#7ed37e'; ctx.lineWidth = 2;
-        roundRect(cx - TH / 2, cy - TH / 2, TH, TH, 6); ctx.stroke();
-        // the two basketballs
-        function ftBall(bx, by, dim) {
-          ctx.globalAlpha = dim ? 0.45 : 1;
-          ctx.fillStyle = '#e2731d'; ctx.beginPath(); ctx.arc(bx, by, 11, 0, 6.28); ctx.fill();
-          ctx.strokeStyle = '#8a3d0f'; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.moveTo(bx - 11, by); ctx.lineTo(bx + 11, by); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(bx, by - 11); ctx.lineTo(bx, by + 11); ctx.stroke();
-          ctx.globalAlpha = 1;
-        }
-        const cur = Math.sin(ft.t * FT_SPEED);
-        ftBall(cx + (ft.stage === 0 ? cur : ft.offA) * AMP, cy, false);          // horizontal ball
-        ftBall(cx, cy + cur * AMP, ft.stage === 0);                              // vertical ball (waits its turn)
+        ctx.fillText(mobName(o) + ' at the line — tap to stop the bar in the GREEN', cx, cy - 118);
+        if (ft.taken === ft.total - 1) { ctx.fillStyle = '#ffe066'; ctx.fillText('Miss the last one and the rebound is LIVE!', cx, cy + 132); }
+        // the big vertical meter — same rules as a jump shot
+        const w = 26, hgt = 190, mx = cx - w / 2, myTop = cy - 95;
+        const yFor = function (cc) { return myTop + hgt * (1 - Math.min(cc, 1)); };
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; roundRect(mx - 4, myTop - 4, w + 8, hgt + 8, 8); ctx.fill();
+        const inG = c >= 1 - gw && c <= 1 + gw * 0.4;
+        ctx.fillStyle = inG ? '#eaffea' : (c > 1 + gw * 0.4 ? '#ff5a5a' : '#ffd23f');
+        ctx.fillRect(mx, yFor(c), w, yFor(0) - yFor(c));
+        ctx.fillStyle = '#2fbf2f';
+        ctx.fillRect(mx, yFor(1), w, Math.max(3, yFor(1 - gw) - yFor(1)));
         ctx.textAlign = 'left';
       }
       if (state === 'tip') {
@@ -2187,8 +2309,60 @@
         ctx.fillText(tipCount + (tipCount === 1 ? ' tap' : ' taps'), VW / 2, y0 + 32);
         ctx.textAlign = 'left';
       }
-      if (state === 'half') { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif"; ctx.fillText('☕ Halftime — switch it up!', VW / 2, CY + 90); ctx.textAlign = 'left'; }
+      if (state === 'half') {
+        ctx.textAlign = 'center';
+        if (period === 2 && !otMode) drawBoxScore();
+        else { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = "800 22px 'Nunito', sans-serif"; ctx.fillText(otMode ? '⏱ Overtime coming up…' : '☕ Quarter break — catch your breath!', VW / 2, CY + 90); }
+        ctx.textAlign = 'left';
+      }
       else if ((state === 'playing' || state === 'score') && freeze > 0) { ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.textAlign = 'center'; ctx.font = "800 22px 'Nunito', sans-serif"; ctx.fillText('Get ready…', VW / 2, CY + 90); ctx.textAlign = 'left'; }
+      drawCommentary();
+    }
+
+    // broadcast lower-third: one commentary line at a time along the baseline
+    function drawCommentary() {
+      if (!comm || state === 'select') return;
+      const fade = comm.t < 20 ? comm.t / 20 : (comm.t > 200 ? Math.max(0, 1 - (comm.t - 200) / 40) : 1);
+      ctx.save();
+      ctx.globalAlpha = fade * 0.95;
+      ctx.font = "800 15px 'Nunito', sans-serif";
+      const tw = ctx.measureText(comm.txt).width + 58;
+      const bx = VW / 2 - tw / 2, by = VH - 26;
+      ctx.fillStyle = '#0f1830'; roundRect(bx, by - 15, tw, 24, 12); ctx.fill();
+      ctx.strokeStyle = '#2a3a5e'; ctx.lineWidth = 1.5; roundRect(bx, by - 15, tw, 24, 12); ctx.stroke();
+      ctx.textAlign = 'left';
+      ctx.font = "13px 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif";
+      ctx.fillText('🎙️', bx + 10, by + 3);
+      ctx.fillStyle = '#ffe8b0'; ctx.font = "800 15px 'Nunito', sans-serif";
+      ctx.fillText(comm.txt, bx + 32, by + 3);
+      ctx.restore();
+    }
+
+    // halftime box score: team shooting numbers + every player's points
+    function drawBoxScore() {
+      const bw = 480, bh = 300, bx = VW / 2 - bw / 2, by = CY - bh / 2 + 10;
+      ctx.fillStyle = 'rgba(12,20,40,0.94)'; roundRect(bx, by, bw, bh, 16); ctx.fill();
+      ctx.strokeStyle = '#0f3460'; ctx.lineWidth = 2; roundRect(bx, by, bw, bh, 16); ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffe066'; ctx.font = "800 22px 'Nunito', sans-serif";
+      ctx.fillText('HALFTIME REPORT', VW / 2, by + 32);
+      for (let s = 0; s < 2; s++) {
+        const colX = bx + bw * (s === 0 ? 0.27 : 0.73);
+        ctx.fillStyle = SIDE_COLOR[s]; ctx.font = "800 17px 'Nunito', sans-serif";
+        ctx.fillText(sideEmoji(s) + ' ' + score[s], colX, by + 64);
+        const pct = stats[s].fga ? Math.round(stats[s].fgm / stats[s].fga * 100) : 0;
+        ctx.fillStyle = '#cfd6ea'; ctx.font = "800 12px 'Nunito', sans-serif";
+        ctx.fillText('FG ' + stats[s].fgm + '/' + stats[s].fga + ' · ' + pct + '%  ·  fouls ' + teamFouls[s], colX, by + 84);
+        let ry = by + 112;
+        const everyone = teams[s].onPitch.concat(teams[s].bench || []);
+        for (const p of everyone) {
+          ctx.fillStyle = p.takeT > 0 ? '#ffb300' : '#fff'; ctx.font = "800 13px 'Nunito', sans-serif";
+          ctx.fillText(mobName(p) + ' — ' + (p.pts || 0) + ' pts' + (p.fouls ? ' · ' + p.fouls + 'F' : '') + (p.takeT > 0 ? ' 🔥' : ''), colX, ry);
+          ry += 22;
+        }
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = "800 12px 'Nunito', sans-serif";
+      ctx.fillText('Second half coming up…', VW / 2, by + bh - 16);
     }
 
     // ---------- main loop ----------
@@ -2207,18 +2381,20 @@
           numPlayers = np;
           teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
           score = [0, 0]; pops = []; freeze = 0;
-          clockMs = HALF_MS; half = 1; otMode = false; teamFouls = [0, 0]; halfPending = false;
+          clockMs = QTR_MS; period = 1; otMode = false; teamFouls = [0, 0]; halfPending = false; comm = null;
+          stats = [ { fgm: 0, fga: 0 }, { fgm: 0, fga: 0 } ];
           shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
-          defendHeld[0] = defendHeld[1] = false;
+          defendHeld[0] = defendHeld[1] = false; turboHeld[0] = turboHeld[1] = false;
           placeInbound(0);
           setupEl.hidden = true; overEl.hidden = true;
           state = 'playing'; setControls();
         } else beginGame();
       },
       state: function () {
-        return { state: state, score: score.slice(), half: half, otMode: otMode, clockMs: Math.round(clockMs),
+        return { state: state, score: score.slice(), period: period, half: period, otMode: otMode, clockMs: Math.round(clockMs),
           owner: ball && ball.owner ? { side: ball.owner.side, slot: ball.owner.slot } : null,
-          active: [teams[0].active, teams[1].active], tip: { t: Math.round(tipT), count: tipCount } };
+          active: [teams[0].active, teams[1].active], tip: { t: Math.round(tipT), count: tipCount },
+          teamStats: [ { fgm: stats[0].fgm, fga: stats[0].fga }, { fgm: stats[1].fgm, fga: stats[1].fga } ] };
       },
       ball: function () { return ball; },
       player: function (s, i) { return teams[s].onPitch[i]; },
@@ -2233,12 +2409,15 @@
       teamFouls: function (a, b) { if (a != null) teamFouls = [a, b]; return teamFouls.slice(); },
       shotClock: function (v) { if (v != null) shotClock = v; return shotClock; },
       ftPress: ftPress,
-      startFT: function (side) { startFT(activePlayer(teams[side])); },
+      startFT: function (side, n) { startFT(activePlayer(teams[side]), n); },
+      ftFill: function (ms) { if (ft && ms != null) ft.ms = ms; return ft ? ft.ms : null; },
+      turbo: function (side, on) { turboHeld[side] = !!on; },
+      pump: function (side) { pumpFake(side, activePlayer(teams[side])); },
       career: function () { return career; },
       startCareer: startCareerMatch,
       openCareer: openCareer,
       hoop: HOOP,
-      consts: { RIM_Z: RIM_Z, RIM_R: RIM_R, THREE_R: THREE_R, HALF_MS: HALF_MS }
+      consts: { RIM_Z: RIM_Z, RIM_R: RIM_R, THREE_R: THREE_R, QTR_MS: QTR_MS, OT_MS: OT_MS, HALF_MS: QTR_MS }
     };
 
     teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
