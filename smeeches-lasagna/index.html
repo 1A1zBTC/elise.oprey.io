@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smeeche's Lasagna</title>
+  <link rel="stylesheet" href="../fonts/fonts.css">
+  <link rel="stylesheet" href="../shared/game.css">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="../icons/favicon.png">
+  <script src="../pwa.js" defer></script>
+  <style>
+    body { font-family:'Nunito','Segoe UI',system-ui,sans-serif; background:linear-gradient(160deg,#1a1a2e,#16213e); min-height:100vh;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; padding:8px; touch-action:none;
+      user-select:none; -webkit-user-select:none; color:#fff; overflow:hidden; }
+    .topbar { width:100%; max-width:920px; display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+    .back { color:#a0a8c0; text-decoration:none; font-weight:700; font-size:0.95rem; padding:6px 10px; border-radius:12px; }
+
+    .hud { width:100%; max-width:920px; display:flex; gap:7px; margin-bottom:6px; align-items:center; flex-wrap:wrap; }
+    .money { background:#143d2a; border:2px solid #2faf5a; color:#7df0a8; font-weight:900; font-size:1.05rem; padding:6px 13px; border-radius:12px; }
+    .stat { background:#16213e; border:2px solid #0f3460; color:#cfd6ea; font-weight:800; font-size:0.8rem; padding:6px 11px; border-radius:12px; }
+    .stat.star { color:#ffe08a; } .stat.tick { color:#ffb0a0; } .grow { flex:1; }
+
+    .stage { position:relative; width:100%; max-width:920px; border-radius:16px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5);
+      border:2px solid #0f3460; aspect-ratio:880/560; touch-action:none; }
+    canvas#game { display:block; width:100%; height:100%; }
+
+    .prompt { position:absolute; left:50%; bottom:15%; transform:translateX(-50%); background:rgba(10,14,28,0.82); border:1px solid rgba(255,255,255,0.18);
+      color:#fff; font-weight:800; font-size:0.9rem; padding:8px 16px; border-radius:999px; pointer-events:none; white-space:nowrap; z-index:6; }
+    .prompt b { color:#ffe08a; } .prompt[hidden]{ display:none; }
+    .toast { position:absolute; left:50%; top:12px; transform:translateX(-50%); background:rgba(10,14,28,0.85); border:1px solid rgba(255,255,255,0.18);
+      color:#7df0a8; font-weight:800; font-size:0.88rem; padding:7px 14px; border-radius:999px; z-index:7; max-width:92%; text-align:center; }
+    .toast[hidden]{ display:none; }
+
+    .pads { width:100%; max-width:920px; display:none; justify-content:space-between; margin-top:8px; gap:8px; align-items:flex-end; }
+    body.touch .pads { display:flex; }
+    .dpad { display:grid; grid-template-columns:repeat(3,44px); grid-template-rows:repeat(3,44px); gap:4px; }
+    .btn { border:2px solid rgba(255,255,255,0.22); background:rgba(10,14,28,0.6); color:#fff; border-radius:12px; font-weight:900;
+      display:flex; align-items:center; justify-content:center; touch-action:none; font-size:0.78rem; }
+    .btn:active { transform:scale(0.93); filter:brightness(1.3); }
+    .dpad .btn { width:44px; height:44px; }
+    .d-u{grid-area:1/2} .d-l{grid-area:2/1} .d-r{grid-area:2/3} .d-d{grid-area:3/2}
+    .actcol { display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+    .bigbtn { width:126px; height:46px; border-radius:14px; font-size:0.9rem; }
+    .act { border-color:#ffd24a; color:#ffe8b0; } .phone { border-color:#8ad0ff; color:#cfeaff; } .ord { border-color:#b6f23a; color:#dfffa8; }
+
+    .place-bar { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); display:flex; gap:8px; z-index:8; }
+    .place-bar[hidden]{ display:none; }
+    .place-bar button { font-family:inherit; font-weight:800; font-size:0.9rem; padding:10px 16px; border-radius:12px; border:2px solid; cursor:pointer; color:#fff; background:rgba(10,14,28,0.78); }
+    #pbRotate{ border-color:#8ad0ff; color:#cfeaff; } #pbPlace{ border-color:#2faf5a; color:#9af0bd; } #pbCancel{ border-color:#e94560; color:#ffc2cd; }
+
+    .hint { margin-top:8px; color:#a0a8c0; font-size:0.75rem; text-align:center; max-width:920px; line-height:1.5; }
+    body.touch .hint.kbd { display:none; } .hint.touchonly { display:none; } body.touch .hint.touchonly { display:block; }
+
+    .overlay { position:fixed; inset:0; background:rgba(10,14,28,0.92); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center;
+      padding:16px; z-index:20; overflow-y:auto; }
+    .overlay[hidden]{ display:none; }
+    .panel { width:100%; max-width:470px; background:#16213e; border:2px solid #0f3460; border-radius:22px; padding:22px 20px; text-align:center; box-shadow:0 18px 50px rgba(0,0,0,0.5); }
+    .panel h2 { font-family:'Pacifico',cursive; color:#fff; font-size:1.9rem; font-weight:400; margin-bottom:6px; }
+    .panel .sub { color:#a0a8c0; font-size:0.88rem; line-height:1.55; margin-bottom:14px; } .panel .sub b{ color:#ffe8b0; }
+    .start-btn { margin-top:8px; width:100%; max-width:320px; background:#c8483c; color:#fff; border:none; border-radius:16px; padding:15px;
+      font-family:inherit; font-weight:800; font-size:1.05rem; cursor:pointer; box-shadow:0 6px 0 #8f2f26; transition:transform .1s,box-shadow .1s; }
+    .start-btn:active{ transform:translateY(4px); box-shadow:0 2px 0 #8f2f26; }
+    .smidge-card { display:flex; align-items:center; gap:12px; background:#101a30; border:2px solid #28324a; border-radius:16px; padding:10px 12px; margin-bottom:12px; text-align:left; }
+    .smidge-card canvas { flex:none; border-radius:12px; background:#0c1322; }
+    .smidge-card .who { font-weight:900; color:#fff; font-size:1rem; }
+    .smidge-card .what { color:#9fb0cf; font-size:0.76rem; line-height:1.45; }
+
+    .phone-ov { position:fixed; inset:0; background:rgba(8,10,20,0.6); display:flex; align-items:center; justify-content:center; padding:14px; z-index:25; }
+    .phone-ov[hidden]{ display:none; }
+    .device { width:100%; max-width:370px; background:#0f1626; border:3px solid #28324a; border-radius:30px; padding:14px 12px 16px; box-shadow:0 20px 60px rgba(0,0,0,0.6); }
+    .ph-top { display:flex; align-items:center; justify-content:space-between; padding:2px 8px 10px; }
+    .ph-title { font-weight:900; font-size:1.05rem; color:#fff; } .ph-title small{ color:#7df0a8; font-weight:800; font-size:0.85rem; margin-left:6px; }
+    .ph-x { background:#28324a; border:none; color:#cfd6ea; font-weight:900; width:30px; height:30px; border-radius:50%; cursor:pointer; }
+    .ph-tabs { display:flex; gap:5px; margin-bottom:10px; flex-wrap:wrap; }
+    .ph-tab { flex:1 1 auto; background:#16203a; border:2px solid #28324a; color:#9fb0cf; font-family:inherit; font-weight:800; font-size:0.74rem; padding:8px 4px; border-radius:11px; cursor:pointer; }
+    .ph-tab.active { background:#8f2f26; border-color:#c8483c; color:#fff; }
+    .ph-list { display:flex; flex-direction:column; gap:8px; max-height:56vh; overflow-y:auto; }
+    .row { display:flex; align-items:center; gap:10px; background:#16203a; border:2px solid #28324a; border-radius:14px; padding:9px 10px; }
+    .row .ic { width:42px; height:42px; border-radius:10px; flex:none; background:#0c1322; border:1px solid #28324a; }
+    .row .info { flex:1; min-width:0; text-align:left; } .row .nm { font-weight:800; font-size:0.9rem; color:#fff; } .row .ds { font-size:0.71rem; color:#9fb0cf; }
+    .row .buy { background:#2faf5a; border:none; color:#fff; font-family:inherit; font-weight:800; font-size:0.84rem; padding:9px 12px; border-radius:11px; cursor:pointer; white-space:nowrap; }
+    .row .buy:disabled { background:#3a4252; color:#7c869a; cursor:not-allowed; }
+    .row .buy.owned { background:#3a4252; color:#9fb0cf; }
+    .row .buy.mini { padding:7px 9px; font-size:0.74rem; }
+    .row .buy.off { background:#3a4252; color:#9fb0cf; }
+    .buyslot { display:flex; gap:4px; align-items:center; flex-wrap:wrap; justify-content:flex-end; max-width:58%; }
+    .price-ctl { display:flex; align-items:center; gap:3px; }
+    .price-ctl button { width:27px; height:27px; border-radius:8px; border:none; background:#28324a; color:#fff; font-weight:900; cursor:pointer; }
+    .price-ctl .pv { min-width:34px; text-align:center; font-weight:900; font-size:0.88rem; color:#7df0a8; }
+    .rev { background:#16203a; border:2px solid #28324a; border-radius:12px; padding:9px 11px; text-align:left; }
+    .rev .st { color:#ffd24a; font-weight:900; font-size:0.85rem; } .rev .tx { color:#cfd6ea; font-size:0.78rem; line-height:1.45; } .rev .tx b { color:#ffe8b0; }
+    .ratebar { display:flex; gap:10px; align-items:center; background:#101a30; border:2px solid #28324a; border-radius:14px; padding:10px 12px; margin-bottom:8px; }
+    .ratebar .big { font-size:1.5rem; font-weight:900; color:#ffd24a; } .ratebar .lab { font-size:0.72rem; color:#9fb0cf; font-weight:800; }
+    .grp { color:#ffb090; font-weight:900; font-size:0.78rem; padding:8px 4px 2px; letter-spacing:0.4px; }
+
+    .cash-panel { max-width:400px; text-align:left; }
+    .cash-panel h2 { font-size:1.5rem; text-align:center; }
+    .cash-line { display:flex; justify-content:space-between; background:#101a30; border:2px solid #28324a; border-radius:12px; padding:9px 12px; margin-bottom:7px; font-weight:800; font-size:0.92rem; }
+    .cash-line .lab { color:#9fb0cf; } .cash-line .val { color:#fff; } .cash-line .val.big { color:#7df0a8; font-size:1.05rem; }
+    .cash-change { text-align:center; margin:10px 0 8px; font-weight:900; font-size:1.35rem; color:#ffd24a; min-height:1.6em; }
+    .cash-bills { display:flex; gap:8px; justify-content:center; margin-bottom:10px; }
+    .bill { flex:1; max-width:84px; border:none; border-radius:10px; padding:12px 0; font-family:inherit; font-weight:900; font-size:1rem; cursor:pointer; color:#0b2416; box-shadow:0 4px 0 rgba(0,0,0,0.35); }
+    .bill:active { transform:translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,0.35); }
+    .bill.b20{ background:#8fd8a0; } .bill.b10{ background:#e8c87a; } .bill.b5{ background:#c9a8e8; } .bill.b1{ background:#bfcbdc; }
+    .cash-acts { display:flex; gap:8px; }
+    .cash-acts button { flex:1; font-family:inherit; font-weight:800; font-size:0.95rem; padding:12px 0; border-radius:12px; border:2px solid; cursor:pointer; background:rgba(10,14,28,0.6); color:#fff; }
+    #cashClear { border-color:#e94560; color:#ffc2cd; } #cashGive { border-color:#2faf5a; color:#9af0bd; }
+    .cash-msg { text-align:center; min-height:1.3em; font-weight:800; font-size:0.85rem; color:#ff9aa8; margin-top:8px; }
+    @keyframes cashshake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 75%{transform:translateX(7px)} }
+    .cash-panel.shake { animation:cashshake 0.3s; }
+
+    .list-panel { max-width:440px; }
+    .list-body { display:flex; flex-direction:column; gap:7px; max-height:54vh; overflow-y:auto; margin:10px 0; }
+    .tick-row { display:flex; align-items:center; gap:9px; background:#16203a; border:2px solid #28324a; border-radius:12px; padding:8px 10px; text-align:left; }
+    .tick-row.ready { border-color:#2faf5a; } .tick-row.late { border-color:#e94560; }
+    .tick-row .ic { width:38px; height:38px; border-radius:9px; flex:none; background:#0c1322; }
+    .tick-row .info { flex:1; min-width:0; }
+    .tick-row .nm { font-weight:800; font-size:0.86rem; color:#fff; }
+    .tick-row .ds { font-size:0.7rem; color:#9fb0cf; }
+    .wbar { height:5px; border-radius:3px; background:#28324a; margin-top:4px; overflow:hidden; }
+    .wbar i { display:block; height:100%; background:#7df0a8; }
+    .wbar.warn i { background:#ffd24a; } .wbar.bad i { background:#e94560; }
+    .tag { font-size:0.62rem; font-weight:900; border-radius:6px; padding:2px 6px; white-space:nowrap; }
+    .tag.cooking { background:#8a5a1a; color:#ffe0a0; } .tag.ready { background:#1c5c33; color:#9af0bd; } .tag.wait { background:#3a4252; color:#cfd6ea; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="../index.html" class="back">‹ Games</a>
+    <span class="title" style="font-family:'Pacifico',cursive;font-size:1.4rem">Smeeche's Lasagna</span>
+    <span style="width:56px"></span>
+  </div>
+
+  <div class="hud">
+    <span class="money" id="money">$0</span>
+    <span class="stat star" id="rating">⭐ —</span>
+    <span class="stat" id="covers">🍽️ 0</span>
+    <span class="stat tick" id="tickets">🔔 0</span>
+    <span class="grow"></span>
+    <span class="stat" id="rival">🍕 Rival 4.0</span>
+    <span class="stat" id="queue">🧍 0</span>
+    <button class="stat" id="saveBtn2" style="cursor:pointer;font-family:inherit">💾 Save</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+    <div class="prompt" id="prompt" hidden></div>
+    <div class="toast" id="toast" hidden></div>
+    <div class="place-bar" id="placeBar" hidden>
+      <button id="pbRotate">↻ Rotate</button>
+      <button id="pbPlace">✓ Place</button>
+      <button id="pbCancel">✕ Cancel</button>
+    </div>
+  </div>
+
+  <div class="pads" id="pads">
+    <div class="dpad">
+      <button class="btn d-u" data-k="up">▲</button>
+      <button class="btn d-l" data-k="left">↺</button>
+      <button class="btn d-r" data-k="right">↻</button>
+      <button class="btn d-d" data-k="down">▼</button>
+    </div>
+    <div class="actcol">
+      <button class="btn bigbtn ord" id="ordBtn">🔔 Orders</button>
+      <button class="btn bigbtn phone" id="phoneBtn">📱 Phone</button>
+      <button class="btn bigbtn act" id="actBtn">✋ Action</button>
+    </div>
+  </div>
+
+  <p class="hint kbd"><b>WASD/Arrows</b> walk &amp; turn · <b>Space/E</b> action (cook · pick up · serve · clear · till) ·
+    <b>O</b> order tickets · <b>P</b> phone · <b>F</b> move a fitting · placing: <b>R</b> rotate, <b>Esc</b> cancel</p>
+  <p class="hint touchonly">▲▼ walk · ↺↻ turn · drag to look · <b>Action</b> cook / carry / serve / clear · <b>Orders</b> tickets · <b>Phone</b> to buy</p>
+
+  <div class="overlay" id="startOv">
+    <div class="panel">
+      <h2>Smeeche's Lasagna</h2>
+      <div class="smidge-card">
+        <canvas id="smidgePic" width="86" height="86"></canvas>
+        <div>
+          <div class="who">You are Smidge 🐈‍⬛</div>
+          <div class="what">A majority-black tortoiseshell cat, and the owner-chef of the best little
+            trattoria in town. The <b>lasagna</b> is what people come for.</div>
+        </div>
+      </div>
+      <div class="sub">Open your <b>📱 phone</b> and buy the <b>till</b> first, then a <b>stove</b>, a <b>table</b>
+        and a <b>fridge</b>. Order crates of ingredients, <b>cook</b> at a station, carry the plate to the table
+        that ordered it, then take their money at the till. Hire staff, grow the room, and chase 5 stars.</div>
+      <button class="start-btn" id="startBtn">Open for lunch</button>
+      <button class="start-btn" id="continueBtn" style="background:#2f6fd0;box-shadow:0 6px 0 #1f4f9a" hidden>Continue saved restaurant</button>
+    </div>
+  </div>
+
+  <div class="phone-ov" id="phoneOv" hidden>
+    <div class="device">
+      <div class="ph-top">
+        <div class="ph-title">TrattoriaMart <small id="phMoney">$0</small></div>
+        <button class="ph-x" id="phClose">✕</button>
+      </div>
+      <div class="ph-tabs">
+        <button class="ph-tab active" data-tab="pantry">🧺 Pantry</button>
+        <button class="ph-tab" data-tab="menu">🍝 Menu</button>
+        <button class="ph-tab" data-tab="furn">🪑 Fittings</button>
+        <button class="ph-tab" data-tab="staff">🧑‍🍳 Staff</button>
+        <button class="ph-tab" data-tab="rooms">🚪 Floor</button>
+        <button class="ph-tab" data-tab="rev">⭐ Reviews</button>
+      </div>
+      <div class="ph-list" id="phList"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="cashOv" hidden>
+    <div class="panel cash-panel" id="cashPanel">
+      <h2>💵 The Bill</h2>
+      <div class="cash-line"><span class="lab" id="cashItem">Dish</span><span class="val" id="cashPrice">$0</span></div>
+      <div class="cash-line"><span class="lab">Diner hands you</span><span class="val big" id="cashTender">$0</span></div>
+      <div class="cash-change" id="cashChange">Change: $0</div>
+      <div class="cash-bills">
+        <button class="bill b20" data-v="20">$20</button>
+        <button class="bill b10" data-v="10">$10</button>
+        <button class="bill b5" data-v="5">$5</button>
+        <button class="bill b1" data-v="1">$1</button>
+      </div>
+      <div class="cash-acts">
+        <button id="cashClear">Clear</button>
+        <button id="cashGive">Hand it over</button>
+      </div>
+      <div class="cash-msg" id="cashMsg"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ordOv" hidden>
+    <div class="panel list-panel">
+      <h2>🔔 Order Tickets</h2>
+      <div class="sub" id="ordSub">Nobody's ordered yet.</div>
+      <div class="list-body" id="ordList"></div>
+      <button class="start-btn" id="ordClose" style="margin-top:4px;background:#3a4252;box-shadow:0 6px 0 #262c38">Back to the floor (O)</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="saveOv" hidden>
+    <div class="panel list-panel">
+      <h2>💾 Save Slots</h2>
+      <div class="sub">Name a slot to save your restaurant. It also autosaves when you leave.</div>
+      <div style="display:flex;gap:8px;margin:6px 0">
+        <input id="slotName" type="text" maxlength="24" placeholder="Name this save…" style="flex:1;min-width:0;font-family:inherit;font-weight:700;font-size:0.95rem;color:#fff;background:#0f1830;border:2px solid #28324a;border-radius:12px;padding:9px 12px">
+        <button class="buy" id="slotSaveBtn" style="flex:0 0 auto">Save</button>
+      </div>
+      <div class="list-body" id="slotList"></div>
+      <button class="start-btn" id="saveOvClose" style="margin-top:4px;background:#3a4252;box-shadow:0 6px 0 #262c38">Close</button>
+    </div>
+  </div>
+
+  <script src="../shared/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

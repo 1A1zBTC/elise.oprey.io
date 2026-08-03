@@ -5,22 +5,22 @@
 
    MAINTENANCE: when you add a new game, add its "<game>/" to PAGES below and
    bump CACHE (e.g. el-games-v2) so clients pick up the new precache list. */
-const CACHE = 'el-games-v87';
+const CACHE = 'el-games-v89';
 
 const PAGES = [
   '/', 'battleships/', 'bunny-dig/', 'burgle-cats/', 'catch-the-treats/', 'chameleons/',
   'connect-4/', 'crossy-pets/', 'flappy-dog/', 'fly-or-die/', 'frog-feast/', 'fruit-merge/',
   'grindy-vet/', 'hog-ball/', 'hungry-pig/', 'kit-clash/', 'kitten-jump/', 'match-it/',
   'mob-soccer/', 'monkey-swing/', 'mr-grizzles/', 'naughty-shelf/', 'pet-lovers/', 'picwits/',
-  'scroot-rooms/', 'snakes-and-ladders/', 'street-fighter/', 'sumo/', 'twisted-system/', 'wavelength/',
-  'whack-a-mole/', 'your-store/'
+  'scroot-rooms/', 'smeeches-lasagna/', 'snakes-and-ladders/', 'street-fighter/', 'sumo/',
+  'twisted-system/', 'wavelength/', 'whack-a-mole/', 'your-store/'
 ];
 const ASSETS = [
   'manifest.webmanifest', 'pwa.js', 'shared/game.css',
   'shared/game.js', 'fonts/fonts.css', 'fonts/nunito.woff2',
   'fonts/pacifico.woff2', 'icons/icon-192.png', 'icons/icon-512.png',
   'icons/icon-512-maskable.png', 'icons/apple-touch-icon.png', 'icons/favicon.png',
-  'grindy-vet/js/main.js'
+  'grindy-vet/js/main.js', 'smeeches-lasagna/js/main.js'
 ];
 const PRECACHE = PAGES.concat(ASSETS);
 

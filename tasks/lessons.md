@@ -125,3 +125,36 @@ Rule: for shared cross-instance files (tasks/todo.md, sw.js, shared/*), re-read
 or check mtime IMMEDIATELY before writing, and prefer append (cat >>) over
 whole-file Write. Also: sw.js cache version may be bumped by the other instance
 mid-session — re-check the current version right before bumping.
+
+## Raycaster verticality (scroot-rooms, 2026-08-02)
+When adding a camera height to a Wolfenstein-style raycaster, GENERALISE the
+existing projection instead of adding special cases: every screen y is
+`halfH + (eyeZ - z) * (RH / dist)`. Setting eyeZ = 0.5 and ceilH = 1 reproduces
+the original formulas exactly, so the change is provably a no-op on old content
+(A/B it against a `git show HEAD:file` copy served alongside).
+
+## Deterministic sim stepping beats real-time key presses
+Testing movement/AI through RAF + dispatched KeyboardEvents is flaky because the
+loop keeps running between browse commands. Expose `__sr.step(n, dt)` (call
+update() n times directly) plus a `key(k, down)` shim and assert inside ONE js
+call. This is what caught the "slow entity reads as wall-bump and spins" bug.
+
+## Sim games: AI helpers need a different policy from the player (2026-08-02)
+Smeeche's Lasagna shipped with the sous chef reusing the player's "nothing to do?
+cook the dearest dish" fallback. For a human that's a nice prep affordance; for an
+always-on agent it filled every pass with unordered plates and starved the real
+tickets until they all timed out at 1 star. Same for the purchaser: reusing the
+player's "how much is in the pantry" number made it re-buy forever once storage was
+full. Rule: when an employee/automation shares a helper with the player, check
+whether the *fallback* branch is safe to run continuously — usually it needs a
+`ticketsOnly`-style flag and a resource count that includes everything you own, not
+just what's tidied away.
+
+## Look for livelocks in resource loops, not just deadlocks (2026-08-02)
+The nastiest bug was self-inflicted starvation: storage filled with the wrong
+ingredient, so the crate holding the needed one could never be unpacked, so nothing
+was consumed, so no space ever freed. It only showed up in ~1 of 3 long hands-off
+runs. Catching it needed a *time-series* probe (pantry levels every 50s), not an
+end-state assertion — the end state looked merely "bad", the series showed `veg=0`
+frozen while crates sat on the floor. When testing a sim, sample the resource
+counters over time and look for a value that never moves.

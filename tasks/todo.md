@@ -920,3 +920,134 @@ re-appended. Lesson recorded in tasks/lessons.md.
 - [x] Save migration (items/totalWins), duplicate→cash conversion, HB shop test hooks
 - [x] Verified headless: pack buy/economy, flip flow, FCP lock at 0 wins → buy at 3,
       forced legend spin lands + pays out, pressing(0) true in career game only
+
+# Scroot Rooms — Captain Clark in 3D, verticality, vision cones
+- [x] 1. Vertical camera: generalise floor/ceiling/wall projection to an arbitrary
+      eye height + per-level ceiling height (identical output at eye 0.5 / ceil 1)
+- [x] 2. Remove all contact shadows (entities, corpses, props)
+- [x] 3. Platforms: crates you step onto, catwalks you walk under and on top of,
+      standing/falling physics, solid push-out for tall boxes
+- [x] 4. Ladders: short ones climb onto in-map catwalks; tall ones climb OUT to a
+      brand-new level (upward twin of the slide)
+- [x] 5. Hide spots: crouch under desks/gurneys/tables — hunters lose sight of you
+- [x] 6. Captain Clark as a real 3D box model (rotatable parts, per-face lighting,
+      z-buffer clipped), replacing his billboard
+- [x] 7. Stumbling peg-leg gait: lurch-drag speed cycle, body roll, random stumbles
+- [x] 8. Vision cones: hunters only see you inside their gaze cone; heads sweep while
+      searching, hearing at close range, 'search' state on losing you
+- [x] 9. Dim rooms: per-level dark zones that locally crush the lighting (and blind
+      the hunters too)
+- [x] 10. More entities: Skin Stealer, Deathmoth, Crawler + harmless screaming
+      Survivors that flee, plus distant ambient screams
+- [x] 11. UI: help text, hide/climb prompt + button, test hooks, headless QA
+
+# Street Fighter — keyboard controls that don't feel clunky
+- [x] Root cause: 30-frame (0.5s) attack lockout, no input buffering (a press during
+      recovery/cooldown was silently discarded), and chords that can't be done on a
+      keyboard — pressing kick fires a kick and starts the cooldown, so the follow-up
+      punch could never become a strong punch
+- [x] Input buffer (10 frames): a press waits and fires the moment the fighter can act,
+      and is only consumed once the move actually comes out
+- [x] Human attack cooldown 30 → 17 frames; CPU keeps the old 30 so 1P difficulty is unchanged
+- [x] Dedicated keys for every move — P1 F=strong SPACE=uppercut, P2 3=strong 5=uppercut;
+      chords (punch+kick, UP+punch) still work but are no longer required
+- [x] A waiting punch beats the pending jump, so UP+punch uppercut still comes out
+- [x] window blur clears held keys (no more stuck key after alt-tab)
+- [x] Verified headless A/B vs main: mash punch 12x/1.8s → 3 attacks before, 7 after;
+      20x/2.0s → 4 before, 8 after. All command moves, touch buttons, super,
+      2P independence and blur-unstick confirmed
+
+## Review — Scroot Rooms verticality + 3D Clark
+All 11 items done. Key design decisions:
+- **Projection generalised, not special-cased.** floor/ceiling/wall/sprite/box
+  projection all now go through eye height `eyeZ` and per-level `ceilH`; at
+  eyeZ 0.5 / ceilH 1 the maths reduces to exactly the old formulas, so every
+  existing level renders identically (verified against a git-HEAD copy).
+- **One list for physics and render.** `platforms[]` drives collision, standing
+  height AND the 3D draw, so anything you can see you can stand on. Crates are
+  ≤ STEP_UP so they can never seal a corridor; catwalks are non-solid so you
+  walk under them.
+- **Clark is a rigged box model** (`drawModel` + `clarkParts`), rebuilt each
+  frame from his gait, with back-face culling, a fixed key light, painter
+  sorting and the same z-buffer column clip the props use. His head has its own
+  yaw — that's the tell for whether he's seen you.
+- **Vision is per-entity** (`fov`/`range`/`sweep` in ENTITY_DEFS): gaze =
+  heading + head turn. Lost sight → `search` state walks to your last known
+  position with a faster head sweep. Dim rooms cut sight range; hiding zeroes it.
+- Bug found + fixed while testing: a hunter moving very slowly (Clark mid-lurch,
+  or any zero-speed entity) tripped the "bumped a wall" test and span on the
+  spot. Now compares distance actually covered against the intended step.
+Verified headless: 52 theme×depth level-sims with no errors/NaN/wall-clipping,
+ladder climb → catwalk, walk off → fall, exit ladder → new level, hide → unhide,
+crate step-up, vision cone A/B (head away = never spotted at 3.2 tiles with LOS;
+head on you = chase in 0.1s), and frame rate unchanged vs the old build
+(32.6 fps vs 33.3 fps headless, same scene).
+
+## 2026-08-02 — Smeeche's Lasagna (new game)
+
+Italian restaurant sim at `smeeches-lasagna/index.html`. Runs on the **Your Store**
+first-person raycast engine (Dan chose it over the Pet Vet isometric one), with
+Pet Vet-style depth: build the room out, hire staff, keep the stars up.
+Owner/player character: **Smidge**, a majority-black tortoiseshell cat. House
+speciality: **lasagna**.
+
+- [x] Read the Your Store engine end to end (raycaster, furniture boxes, customers,
+      employees, phone, checkout, save slots) + Pet Vet's structure
+- [x] Confirm engine choice with Dan (first-person / Your Store)
+- [ ] Trattoria textures: plaster + wainscot walls, terracotta floor, beamed ceiling,
+      wooden `APERTO` door
+- [ ] Ingredients (8 keys: pasta, cheese, tomato, meat, veg, dough, sweet, coffee),
+      bought as crates from the phone
+- [ ] ~20 dishes with recipes, cook times, prices, procedural plate art; lasagna is
+      the signature (extra margin + review bonus)
+- [ ] 6 cooking stations (stove, lasagna oven, wood-fired oven, antipasti counter,
+      dolci case, espresso bar)
+- [ ] Furniture: till, tables (2/4/booth), fridge, pantry, decor, restroom, wall
+- [ ] Diner lifecycle: enter -> seat -> read menu -> order -> wait -> eat -> queue -> pay
+- [ ] Serving: cook at a station -> carry the plate -> Action on the table that ordered it
+- [ ] 6 staff roles: maitre d', waiter, chef, kitchen porter, busser, purchaser
+- [ ] Phone: Pantry (crates + reorder targets), Menu (prices / on-off / special of the
+      day), Fittings, Staff, Floor, Reviews
+- [ ] Change-making checkout minigame (kept from Your Store)
+- [ ] Save slots + autosave under `smeeches.slots`
+- [ ] Smidge: player is the cat -- tortoiseshell paws hold the plate/crate on screen
+- [ ] Register in `index.html` launcher + `sw.js` PAGES, bump cache
+- [ ] `__t.step(n, dt)` deterministic harness + headless test of the full loop
+
+### Review — Smeeche's Lasagna (2026-08-02)
+
+Shipped `smeeches-lasagna/` (index.html + js/main.js, ~1560 lines). Registered in the
+launcher and in `sw.js` (PAGES + ASSETS, cache bumped v88 -> v89).
+
+What it is: first-person trattoria on the Your Store raycast engine. Trattoria
+textures (cream plaster + olive dado + tricolore band, terracotta tiles, beamed
+ceiling, APERTO door). 8 ingredients -> 23 dishes across 6 stations; lasagna is the
+signature (best margin + a review bonus). Diners seat -> read the menu -> order ->
+wait -> eat -> queue -> pay (the change-making minigame is kept). Six staff roles:
+maitre d', waiter, sous chef, kitchen porter, busser, purchaser. Special of the Day,
+save slots, $50/square floor building. You play Smidge; her tortoiseshell paws hold
+whatever you're carrying.
+
+Three real bugs found by headless testing, all fixed:
+
+1. **Purchaser money drain.** It re-ordered against *stored* stock only, so a full
+   pantry meant the target was never met and it bought the same crate forever
+   ($7045 -> $29 in 300s). Now counts everything you own (`ownedCount`) and refuses
+   to order with no storage space or 6+ crates already on the floor.
+2. **Kitchen deadlock.** The sous chef used the same "cook the dearest dish" prep
+   fallback the player gets, so both passes filled with unordered plates that the
+   waiter would never collect; every real ticket then timed out at 1 star. The chef
+   now cooks tickets only (`nextDishFor(f, true)`), and any plate nobody wants for
+   30s is scraped so a pass can't stay blocked. Covers 11 -> 25, rating 2.96 -> 4.13.
+3. **Storage livelock.** Storage filling with the wrong ingredients permanently
+   stranded the one the kitchen needed (`veg=0` for a whole run with veg crates
+   sitting by the door). Cooking now falls back to unpacked floor crates, the porter
+   fetches whatever the pantry is shortest on, and loose crates count toward
+   grubbiness so there's still a reason to tidy up.
+
+Verified headlessly via `window.__t` (`step(n, dt)` drives update() directly):
+manual cook -> carry -> serve -> eat -> pay loop; both checkout branches (exact cash,
+and change-making incl. the wrong-change shake + flub penalty); save/load round-trip;
+build-mode validity on floor vs rock; 300s hands-off with a full brigade now lands
+consistently at 19-37 covers and 4.1-4.3 stars with zero timeout reviews. No console
+errors. All paths relative + classic scripts, so it runs from file://.
