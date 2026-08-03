@@ -261,7 +261,7 @@
     </div>
   </div>
 
-  <p class="hint kbd"><b>P1</b> WASD move · <b>Q</b> punch <b>E</b> kick <b>R</b> super &nbsp;·&nbsp; <b>P2</b> Arrows · <b>1</b> punch <b>2</b> kick <b>4</b> super <i>(1-player: either set works)</i> &nbsp;·&nbsp; <b>W+Q</b> uppercut · <b>E+Q</b> strong punch · kick <b>in the air</b> for a dropkick &nbsp;·&nbsp; hold <b>back</b> to block &nbsp;·&nbsp; chain hits for <b>COMBOS</b>; super a low-HP rival for a <b>FINISHER</b> — and a first knockout only puts them <b>down</b>: they get back up once!</p>
+  <p class="hint kbd"><b>P1</b> WASD move · <b>Q</b> punch <b>E</b> kick <b>F</b> strong <b>SPACE</b> uppercut <b>R</b> super &nbsp;·&nbsp; <b>P2</b> Arrows · <b>1</b> punch <b>2</b> kick <b>3</b> strong <b>5</b> uppercut <b>4</b> super <i>(1-player: either set works)</i> &nbsp;·&nbsp; kick <b>in the air</b> for a dropkick &nbsp;·&nbsp; hold <b>back</b> to block &nbsp;·&nbsp; chain hits for <b>COMBOS</b>; super a low-HP rival for a <b>FINISHER</b> — and a first knockout only puts them <b>down</b>: they get back up once!</p>
   <p class="hint touchonly">Hold <b>back</b> to block · chain hits for <b>combos</b> · fill the meter, then tap <b>SUPER</b> — finish a low-HP rival with it!</p>
 
   <!-- character select -->
@@ -579,7 +579,7 @@
     crouchLight: { startup:3, active:3, recovery:9,  dmg:4,  kb:2.6, reach:66, cy:40, halfH:20, hit:'mid',  knockdown:false, stun:11 },
     sweep:       { startup:6, active:4, recovery:20, dmg:9,  kb:4.5, reach:90, cy:18, halfH:18, hit:'low',  knockdown:true,  stun:16 },
     air:         { startup:3, active:7, recovery:8,  dmg:8,  kb:4.0, reach:62, cy:60, halfH:34, hit:'over', knockdown:false, stun:15 },
-    // command moves: uppercut = hold UP + punch · strong punch = hold kick + punch · dropkick = kick in the air
+    // command moves: uppercut = SPACE (or UP+punch) · strong = F (or punch+kick) · dropkick = kick in the air
     uppercut:    { startup:5, active:5, recovery:16, dmg:12, kb:3.0, reach:52, cy:84, halfH:52, hit:'mid',  knockdown:true,  stun:22, launch:true },
     strong:      { startup:10, active:5, recovery:22, dmg:14, kb:8.5, reach:80, cy:70, halfH:30, hit:'mid', knockdown:false, stun:20 },
     dropkick:    { startup:4, active:10, recovery:10, dmg:11, kb:8.0, reach:66, cy:58, halfH:36, hit:'over', knockdown:true, stun:18 }
@@ -635,7 +635,12 @@
       state:'idle', stateT:0, crouch:false, blocking:false,
       move:null, moveT:0, hasHit:false, walkF:0,
       hitstun:0, blockstun:0, flash:0, spCd:0,
-      atkCd:0, atkCdMax:m.atkCdMax, secondWind:false, jumpT:0, juggled:false,
+      // the old 30-frame gap was longer than the moves themselves — half a second of
+      // dead air after every punch. Humans get a much shorter leash (the move's own
+      // recovery still stops true spam); the CPU keeps its original pacing so 1P
+      // difficulty is unchanged.
+      atkCd:0, atkCdMax: cpu ? m.atkCdMax : Math.round(m.atkCdMax * 0.55),
+      secondWind:false, jumpT:0, juggled:false,
       combo:0, comboTimer:0,
       ai:{ t:0, plan:'approach' }, name:''
     };
@@ -643,10 +648,15 @@
 
   // ======================= input =======================
   var keys = {};
+  // Every move has its OWN key — chords (up+punch, punch+kick) still work, but you
+  // never *need* them, which is what made this unplayable on a keyboard.
   var KMAP = {
-    0:{ left:['KeyA'], right:['KeyD'], up:['KeyW'], down:['KeyS'], light:['KeyQ'], heavy:['KeyE'], special:['KeyR'] },
+    0:{ left:['KeyA'], right:['KeyD'], up:['KeyW'], down:['KeyS'],
+        light:['KeyQ'], heavy:['KeyE'], special:['KeyR'],
+        strong:['KeyF'], uppercut:['Space'] },
     1:{ left:['ArrowLeft'], right:['ArrowRight'], up:['ArrowUp'], down:['ArrowDown'],
-        light:['Digit1','Numpad1'], heavy:['Digit2','Numpad2'], special:['Digit4','Numpad4'] }
+        light:['Digit1','Numpad1'], heavy:['Digit2','Numpad2'], special:['Digit4','Numpad4'],
+        strong:['Digit3','Numpad3'], uppercut:['Digit5','Numpad5'] }
   };
   var WATCH = {};
   Object.keys(KMAP).forEach(function(p){ Object.keys(KMAP[p]).forEach(function(a){ KMAP[p][a].forEach(function(c){ WATCH[c]=true; }); }); });
@@ -656,9 +666,12 @@
 
   window.addEventListener('keydown', function(e){
     if (e.repeat) return;
-    if (WATCH[e.code]) { keys[e.code]=true; if (gstate==='fight') e.preventDefault(); }
+    // don't swallow keys on the menus — SPACE/arrows still drive focused buttons there
+    if (WATCH[e.code]) { keys[e.code]=true; if (gstate!=='select') e.preventDefault(); }
   });
   window.addEventListener('keyup', function(e){ if (WATCH[e.code]) keys[e.code]=false; });
+  // alt-tabbing away used to leave a key "stuck down" — the classic mid-fight walk into the wall
+  window.addEventListener('blur', function(){ keys = {}; });
 
   function readRaw(i){
     // in 1-player mode the lone human can use EITHER keyset (WASD/QER or Arrows/124)
@@ -674,6 +687,30 @@
     });
     return o;
   }
+
+  // ---- input buffer ----------------------------------------------------------
+  // Real fighting games remember a button for a few frames. Without it, a press
+  // during hitstun / attack recovery / attack cooldown is silently thrown away —
+  // which is exactly why keyboard play felt like mashing into a void. Now a press
+  // is held for BUF_FRAMES and fires the moment the fighter can act again.
+  var BUF_FRAMES = 10;            // ~0.17s of "I pressed it, please remember"
+  var CHORD_FRAMES = 5;           // two buttons this close together = a chord
+  var buf = [ {}, {} ];
+  var BUF_ACTIONS = ['light','heavy','special','strong','uppercut','up'];
+
+  function bufferPresses(i){
+    for (var n=0;n<BUF_ACTIONS.length;n++){
+      var a = BUF_ACTIONS[n];
+      if (raw[i][a] && !prev[i][a]) buf[i][a] = BUF_FRAMES;
+    }
+  }
+  function tickBuffers(){
+    for (var i=0;i<2;i++) for (var a in buf[i]) if (buf[i][a] > 0) buf[i][a]--;
+  }
+  function held(i, a){ return buf[i][a] > 0; }                              // pressed recently
+  function chord(i, a){ return buf[i][a] > BUF_FRAMES - CHORD_FRAMES; }     // pressed just now
+  function eat(i){ for (var n=1;n<arguments.length;n++) buf[i][arguments[n]] = 0; }
+  function clearBuffers(){ buf = [ {}, {} ]; }
 
   Array.prototype.forEach.call(document.querySelectorAll('.btn[data-k]'), function(btn){
     var p = +btn.dataset.p, k = btn.dataset.k, k2 = btn.dataset.k2 || null;   // k2: chord buttons (UPPER/STRONG)
@@ -715,8 +752,8 @@
     return true;
   }
   function trySpecial(p){
-    if (!actionable(p) || !p.onGround || p.spCd>0) return;
-    if (p.meter < METER_MAX) return;                 // needs a full super bar
+    if (!actionable(p) || !p.onGround || p.spCd>0) return false;
+    if (p.meter < METER_MAX) return false;           // needs a full super bar
     p.meter = 0;
     var foe = (p===fighters[0]) ? fighters[1] : fighters[0];
     var fin = foe && foe.state!=='ko' && foe.hp <= FINISH_HP;   // low-HP foe → cinematic finisher
@@ -726,6 +763,7 @@
     p.pendingShot = { sp:sp, color:sp.color, glow:sp.glow, isSuper:true, isFinisher:fin };
     superFlash = fin?24:14; shake = Math.min(shake+(fin?9:5), fin?16:12);
     if (fin) finishFx = 64;
+    return true;
   }
 
   // ======================= sound (tiny synth — no audio files) =======================
@@ -956,9 +994,13 @@
     if (p.onGround) {
       p.crouch = !!control.down;
       p.blocking = !!holdBack;
-      // tiny jump delay leaves a window to press UP+punch for the uppercut
+      // tiny jump delay leaves a window to press UP+punch for the uppercut. If a
+      // punch is sitting in the buffer ready to fire, it wins over the jump — that
+      // is what keeps the classic UP+punch uppercut usable on a keyboard.
       if (control.up) { p.jumpT = (p.jumpT || 0) + 1; } else p.jumpT = 0;
-      if (control.up && p.jumpT >= 4) { p.jumpT = 0; p.vy = -c.jump * (p.spdMul || 1); p.onGround=false; p.state='jump'; p.crouch=false; p.blocking=false; }
+      var upcutWaiting = !p.cpu && p.atkCd <= 0 &&
+                         (held(p.idx,'light') || held(p.idx,'uppercut'));
+      if (control.up && p.jumpT >= 3 && !upcutWaiting) { p.jumpT = 0; p.vy = -c.jump * (p.spdMul || 1); p.onGround=false; p.state='jump'; p.crouch=false; p.blocking=false; }
       else if (!p.crouch && !p.blocking) {
         var mvx = 0; if (control.left) mvx -= 1; if (control.right) mvx += 1;
         p.vx = mvx * c.speed * (p.spdMul || 1); p.x += p.vx;
@@ -973,10 +1015,31 @@
     }
 
     var i = p.idx;
-    if (pressed(i,'special')) trySpecial(p);
-    else if ((pressed(i,'light') && control.heavy) || (pressed(i,'heavy') && control.light)) tryAttack(p,'strong');   // punch+kick chord
-    else if (pressed(i,'light')) tryAttack(p, (control.up && p.onGround) ? 'uppercut' : 'light');                     // UP+punch = uppercut
-    else if (pressed(i,'heavy')) tryAttack(p,'heavy');
+    if (p.cpu) {
+      // the AI hands us fresh one-frame intent, so it reads its own input directly
+      if (pressed(i,'special')) trySpecial(p);
+      else if ((pressed(i,'light') && control.heavy) || (pressed(i,'heavy') && control.light)) tryAttack(p,'strong');
+      else if (pressed(i,'light')) tryAttack(p, (control.up && p.onGround) ? 'uppercut' : 'light');
+      else if (pressed(i,'heavy')) tryAttack(p,'heavy');
+      clampX(p); return;
+    }
+
+    // Humans go through the buffer. A press is only *eaten* once the move actually
+    // comes out, so it keeps waiting through recovery instead of vanishing.
+    var wantStrong   = p.onGround && (held(i,'strong') ||
+                       (chord(i,'light')  && (control.heavy || chord(i,'heavy'))) ||
+                       (chord(i,'heavy')  && (control.light  || chord(i,'light'))));
+    var wantUppercut = p.onGround && (held(i,'uppercut') ||
+                       (held(i,'light') && (control.up || held(i,'up'))));
+
+    if (held(i,'special') && trySpecial(p)) eat(i,'special');
+    else if (wantStrong && tryAttack(p,'strong')) eat(i,'strong','light','heavy');
+    else if (wantUppercut && tryAttack(p,'uppercut')) eat(i,'uppercut','light','up');
+    else if (held(i,'light') && tryAttack(p,'light')) eat(i,'light');
+    else if (held(i,'heavy') && tryAttack(p,'heavy')) eat(i,'heavy');
+    // mid-air, the ground-only buttons just become the air attack instead of nothing
+    else if (!p.onGround && held(i,'uppercut') && tryAttack(p,'light')) eat(i,'uppercut');
+    else if (!p.onGround && held(i,'strong') && tryAttack(p,'heavy')) eat(i,'strong');
     clampX(p);
   }
   function clampX(p){ p.x = clamp(p.x, WALL_L+BODY_HW, WALL_R-BODY_HW); }
@@ -1016,7 +1079,7 @@
       p.crouch=false; p.blocking=false; p.flash=0; p.walkF=0; p.ai.t=0; p.ai.plan='approach';
       p.combo=0; p.comboTimer=0;
     });
-    comboFx=null; finishFx=0;
+    comboFx=null; finishFx=0; clearBuffers();   // no leftover press firing on the bell
     shots=[]; particles=[]; decals=[]; timeLeft = ROUND_TIME*60;
     banner = { text:'ROUND '+round, color:'#ffe8b0', sub: round===1 ? (STAGES[stageKey]||STAGES.city).nm : null, t:0 };
     gstate='intro'; stateT=0; updateHUD();
@@ -1064,8 +1127,15 @@
     }
     if (gstate!=='fight') return;
 
-    for (var i=0;i<2;i++){ prev[i] = raw[i]; raw[i] = fighters[i].cpu ? aiInput(fighters[i], fighters[1-i]) : readRaw(i); }
+    for (var i=0;i<2;i++){
+      prev[i] = raw[i];
+      raw[i] = fighters[i].cpu ? aiInput(fighters[i], fighters[1-i]) : readRaw(i);
+      bufferPresses(i);
+    }
+    // buffers only age on frames the fight actually advances, so a press landing
+    // during hitstop isn't quietly eaten by the freeze
     if (hitstop>0){ hitstop--; stepParticles(); return; }
+    tickBuffers();
 
     timeLeft--;
     var a=fighters[0], b=fighters[1];
@@ -2344,6 +2414,7 @@
                  beginMatch:beginMatch, blocksHit:blocksHit, step:step, render:render, tick:function(){ gtick++; },
                  setHP:function(i,v){ fighters[i].hp=v; }, setMeter:function(i,v){ fighters[i].meter=v; },
                  tryAttack:tryAttack, attrMods:attrMods, applyHit:applyHit,
+                 get buf(){ return buf; }, get raw(){ return raw; }, KMAP:KMAP,
                  setSel:function(a,b){ sel[0]=a; sel[1]=b; }, get stage(){ return stageKey; },
                  career:{ state:function(){ return career ? JSON.parse(JSON.stringify(career)) : null; },
                           open:openCareer, pick:newCareer, train:train, cost:trainCost,
