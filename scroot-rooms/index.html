@@ -689,7 +689,8 @@
         hides.push({ x: p.x, y: p.y, what: 'prop' });
       }
       // start every level standing on the floor, out in the open
-      pz = 0; vz = 0; eyeZ = EYE_H; crouch = 0; hidden = false; hideAt = null; climbing = null; darkLocal = 0;
+      pz = 0; vz = 0; eyeZ = EYE_H; crouch = 0; hidden = false; hideAt = null; hideFrom = null; hideK = 0;
+      climbing = null; darkLocal = 0;
 
       // lighting: per-theme base + a gentle depth ramp. Dim, atmospheric levels
       // flicker — but nothing goes fully pitch black anymore.
@@ -784,7 +785,7 @@
       freeze: function () { jumpT = 1e9; return true; },    // QA: hold the current jumpscare frame timer
       state: function () { return state; },
       theme: function () { return themeName; },
-      doorsAt: function () { return doors.map(function (d) { return { x: d.x, y: d.y, theme: d.theme }; }); },
+      doorsAt: function () { return doors.map(function (d) { return { x: d.x, y: d.y, z: d.z || 0, theme: d.theme }; }); },
       hunterInfo: function () { return entities.map(function (e) { return { type: e.type, x: Math.round(e.x * 10) / 10, y: Math.round(e.y * 10) / 10, state: e.state, alertT: Math.round(e.alertT * 100) / 100, burstT: Math.round(e.burstT * 100) / 100 }; }); },
       glitchInfo: function () { return { atriumCells: atriumCells.length, wall: glitches.filter(function (g) { return g.mode === 'wall'; }).length, floor: glitches.filter(function (g) { return g.mode === 'floor'; }).map(function (g) { return { x: Math.round(g.x * 10) / 10, y: Math.round(g.y * 10) / 10 }; }) }; },
       doorThemes: function () { return doors.map(function (d) { return d.theme; }); },
@@ -869,6 +870,7 @@
     let platforms, ladders, hides, darkZones;
     let climbing = null;               // the ladder you're currently on
     let hidden = false, hideAt = null; // crouched under a table / gurney / car
+    let hideFrom = null, hideK = 0;    // where you ducked down from, and how far under you are
     let vz = 0;                        // fall speed
     let darkLocal = 0;                 // smoothed extra darkness from dim rooms
     let climbAcc = 0;                  // rung meter, for the climbing footsteps
@@ -1015,10 +1017,14 @@
         hides.push({ x: c.x, y: c.y, what: 'table' });
       }
 
-      // --- a catwalk running above an open lane, with a ladder up to it. Only
-      // in places with the architecture for it — and the ceiling lifts to suit.
+      // --- The upper level. A walkway is only worth climbing if it goes
+      // somewhere, so it always does: a ladder at BOTH ends (a shortcut clean
+      // over the level), a branch spur, and one of the level's doors moved up
+      // onto it — you can see the glow from the floor and have to work out how
+      // to reach it. The ceiling lifts to 2 tiles to make room to walk under.
       const canRun = curArch === 'hall' || curArch === 'aisles' || curArch === 'garage' || curArch === 'rooms' || curArch === 'party';
-      if (canRun && Math.random() < 0.72) {
+      let walkTiles = null;
+      if (canRun && Math.random() < 0.8) {
         let run = null;
         for (let t = 0; t < 260 && !run; t++) {
           const horiz = Math.random() < 0.5;
@@ -1029,36 +1035,66 @@
           const lim = horiz ? mapW - 2 : mapH - 2;
           while (a - 1 >= 1 && at(a - 1) === 0) a--;
           while (b + 1 < lim && at(b + 1) === 0) b++;
-          if (b - a + 1 >= 5) run = { horiz: horiz, a: a, b: b, s: horiz ? sy : sx };
+          if (b - a + 1 >= 6) run = { horiz: horiz, a: a, b: b, s: horiz ? sy : sx };
         }
         if (run) {
-          ceilH = 2.0;                                   // give the walkway real headroom
+          ceilH = 2.0;
           const TOP = 1.0, RAIL = '#6a7076', DECK = '#565c62';
-          const lo = run.a + 1, hi = Math.min(run.b - 1, run.a + 12);
-          for (let i = lo; i <= hi; i++) {
-            const cx = (run.horiz ? i : run.s) + 0.5, cy = (run.horiz ? run.s : i) + 0.5;
-            const hw = run.horiz ? 0.5 : 0.34, hh = run.horiz ? 0.34 : 0.5;
-            const p = addPlatform(cx, cy, hw, hh, TOP - 0.08, TOP, DECK, { kind: 'catwalk', solid: false });
-            const bx = [{ x0: -hw, y0: -hh, x1: hw, y1: hh, z0: TOP - 0.08, z1: TOP, col: DECK }];
-            // handrails down both long sides
-            if (run.horiz) {
-              bx.push({ x0: -hw, y0: -hh, x1: hw, y1: -hh + 0.05, z0: TOP, z1: TOP + 0.34, col: RAIL });
-              bx.push({ x0: -hw, y0: hh - 0.05, x1: hw, y1: hh, z0: TOP, z1: TOP + 0.34, col: RAIL });
-            } else {
-              bx.push({ x0: -hw, y0: -hh, x1: -hw + 0.05, y1: hh, z0: TOP, z1: TOP + 0.34, col: RAIL });
-              bx.push({ x0: hw - 0.05, y0: -hh, x1: hw, y1: hh, z0: TOP, z1: TOP + 0.34, col: RAIL });
-            }
+          const seen = {}, tiles = [];
+          const K = function (x, y) { return x + ',' + y; };
+          const put = function (tx, ty) {
+            if (tx < 1 || ty < 1 || tx >= mapW - 1 || ty >= mapH - 1) return false;
+            if (map[ty][tx] !== 0 || seen[K(tx, ty)]) return false;
+            seen[K(tx, ty)] = 1; tiles.push({ tx: tx, ty: ty }); return true;
+          };
+          const lo = run.a + 1, hi = Math.min(run.b - 1, run.a + 18);
+          for (let i = lo; i <= hi; i++) put(run.horiz ? i : run.s, run.horiz ? run.s : i);
+          const endA = tiles[0], endB = tiles[tiles.length - 1];
+          // a spur off the middle, wherever the cross lane happens to be open
+          let spur = null;
+          const bAt = clamp(Math.floor((lo + hi) / 2) + rint(-2, 2), lo, hi);
+          const bDir = Math.random() < 0.5 ? 1 : -1;
+          for (let k = 1; k <= 6; k++) {
+            const bx = run.horiz ? bAt : run.s + bDir * k, by = run.horiz ? run.s + bDir * k : bAt;
+            if (!put(bx, by)) break;
+            spur = tiles[tiles.length - 1];
+          }
+          // ladders at both ends: climb up here, cross, climb down over there
+          ladders.push({ x: endA.tx + 0.5, y: endA.ty + 0.5, top: TOP, exit: false });
+          ladders.push({ x: endB.tx + 0.5, y: endB.ty + 0.5, top: TOP, exit: false });
+          seen[K(endA.tx, endA.ty)] = 2; seen[K(endB.tx, endB.ty)] = 2;   // 2 = leave the rail open here
+          // deck the whole width of the tile so you only fall off at the edges
+          for (const t of tiles) {
+            const p = addPlatform(t.tx + 0.5, t.ty + 0.5, 0.5, 0.5, TOP - 0.08, TOP, DECK, { kind: 'catwalk', solid: false });
+            const bx = [{ x0: -0.5, y0: -0.5, x1: 0.5, y1: 0.5, z0: TOP - 0.08, z1: TOP, col: DECK }];
+            const open = seen[K(t.tx, t.ty)] === 2;
+            if (!seen[K(t.tx, t.ty - 1)] && !open) bx.push({ x0: -0.5, y0: -0.5, x1: 0.5, y1: -0.43, z0: TOP, z1: TOP + 0.34, col: RAIL });
+            if (!seen[K(t.tx, t.ty + 1)] && !open) bx.push({ x0: -0.5, y0: 0.43, x1: 0.5, y1: 0.5, z0: TOP, z1: TOP + 0.34, col: RAIL });
+            if (!seen[K(t.tx - 1, t.ty)] && !open) bx.push({ x0: -0.5, y0: -0.5, x1: -0.43, y1: 0.5, z0: TOP, z1: TOP + 0.34, col: RAIL });
+            if (!seen[K(t.tx + 1, t.ty)] && !open) bx.push({ x0: 0.43, y0: -0.5, x1: 0.5, y1: 0.5, z0: TOP, z1: TOP + 0.34, col: RAIL });
             p.boxes = bx;
           }
-          const lx = (run.horiz ? lo : run.s) + 0.5, ly = (run.horiz ? run.s : lo) + 0.5;
-          ladders.push({ x: lx, y: ly, top: TOP, exit: false });
-          platforms[platforms.length - (hi - lo + 1)].boxes.pop();   // open the rail where the ladder lands
+          // and the reason to be up here at all: a way out, on the walkway
+          const dt = spur || tiles[Math.max(0, tiles.length - 2)];
+          if (doors.length && dt) {
+            const dr = doors[doors.length - 1];
+            dr.x = dt.tx + 0.5; dr.y = dt.ty + 0.5; dr.z = TOP;
+          }
+          walkTiles = tiles;
         }
       }
 
-      // --- a ceiling hatch on a ladder: climb right out into a fresh level
-      if (Math.random() < 0.45) {
-        const c = take(3, 2.2);
+      // --- a ceiling hatch on a ladder: climb right out into a fresh level.
+      // If there's a walkway, the hatch hangs over it — the walkway is the way
+      // to reach the roof.
+      if (Math.random() < 0.5) {
+        let c = null;
+        if (walkTiles && walkTiles.length > 3) {
+          const t = walkTiles[rint(1, walkTiles.length - 2)];
+          if (!ladders.some(function (l) { return Math.hypot(l.x - t.tx - 0.5, l.y - t.ty - 0.5) < 1.2; }) &&
+              !doors.some(function (d) { return Math.hypot(d.x - t.tx - 0.5, d.y - t.ty - 0.5) < 1.2; })) c = { x: t.tx + 0.5, y: t.ty + 0.5 };
+        }
+        if (!c) c = take(3, 2.2);
         if (c) ladders.push({ x: c.x, y: c.y, top: ceilH - 0.12, exit: true });
       }
 
@@ -3160,8 +3196,8 @@
       // billboards — far to near, zbuffer-occluded. Doors/markers glow so
       // they're findable; the hunters fade into shadow and loom out of it.
       const sprites = [];
-      for (const dr of doors) sprites.push({ img: DOOR_IMGS[dr.theme] || DOOR_IMGS.yellow, x: dr.x, y: dr.y, sh: 1.0, sw: 0.6, bob: 0, bright: 1 });
-      for (const sl of slides) sprites.push({ img: slideImg, x: sl.x, y: sl.y, sh: 0.42, sw: 0.62, bob: 0, bright: clamp(ambient + 0.3, 0.4, 1), foot: 1 });
+      for (const dr of doors) sprites.push({ img: DOOR_IMGS[dr.theme] || DOOR_IMGS.yellow, x: dr.x, y: dr.y, sh: 1.0, sw: 0.6, bob: 0, bright: 1, z0: dr.z || 0 });
+      for (const sl of slides) sprites.push({ img: slideImg, x: sl.x, y: sl.y, sh: 0.42, sw: 0.62, bob: 0, bright: clamp(ambient + 0.3, 0.4, 1), foot: 1, z0: sl.z || 0 });
       for (const m of marks) sprites.push({ img: markImg, x: m.x, y: m.y, sh: 0.22, sw: 0.22, bob: 0, bright: 0.9, foot: 1 });
       for (const b of corpses) {
         const d = Math.hypot(b.x - px, b.y - py);
@@ -3210,8 +3246,9 @@
         const bright = clamp((eAmb + def.brightK) * (1.2 - d * 0.055), def.minB, 1);
         if (MODELS[e.type]) {                                     // real geometry, not a billboard
           if (d > 24) continue;
-          sprites.push({ mdl: true, parts: MODELS[e.type](e), x: e.x, y: e.y, z: e.z || 0,
-            yaw: e.ang - Math.PI / 2, top: 1.35, rad: 0.36, bright: bright });
+          const lod = d < 5.5 ? 0 : (d < 11 ? 1 : 2);             // full detail only when he's on top of you
+          sprites.push({ mdl: true, parts: MODELS[e.type](e, lod), x: e.x, y: e.y, z: e.z || 0,
+            yaw: e.ang - Math.PI / 2, top: 1.45, rad: 0.36, bright: bright });
           continue;
         }
         const stepMs = e.state === 'chase' ? 70 : 120;
@@ -3534,9 +3571,14 @@
     // A model is a bag of boxes in body space (x = its right, y = forward,
     // z = up). Each box carries its own yaw/pitch/roll so limbs can swing and a
     // head can turn independently of the shoulders. Faces are back-face culled,
-    // lit by a fixed key light, painter-sorted and clipped to the columns where
-    // the figure is nearer than the wall behind it.
-    const LKX = 0.4, LKY = -0.6, LKZ = 0.69;      // key light direction
+    // painter-sorted and clipped to the columns where the figure is nearer than
+    // the wall behind it.
+    // Lighting is a key light from above and in front, a dim cool bounce from
+    // the opposite side so nothing goes flat black, and a vertical falloff so
+    // boots sit in the floor's shadow while the face catches the light — that
+    // gradient is most of what stops a box figure looking like a box figure.
+    const LKX = 0.38, LKY = -0.58, LKZ = 0.72;    // key light
+    const FLX = -0.62, FLY = 0.42, FLZ = 0.22;    // fill light, from behind-left
     function rotY3(v, c, s) { return [v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c]; }
     function rotX3(v, c, s) { return [v[0], v[1] * c - v[2] * s, v[1] * s + v[2] * c]; }
     function rotZ3(v, c, s) { return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]]; }
@@ -3555,15 +3597,36 @@
       }
       if (maxX < 0 || minX > W) return;
       const xr = RW / W, near = dN - R;
-      ctx.save(); ctx.beginPath();
-      let run = -1; const lo = Math.max(0, minX | 0), hi = Math.min(W - 1, Math.ceil(maxX));
-      for (let x = lo; x <= hi; x++) {
-        const vis = near < zbuf[(x * xr) | 0];
-        if (vis && run < 0) run = x;
-        if (!vis && run >= 0) { ctx.rect(run, 0, x - run, H); run = -1; }
+      const lo = Math.max(0, minX | 0), hi = Math.min(W - 1, Math.ceil(maxX));
+      // Clipping to the columns where he's in front of the wall is only needed
+      // when a wall actually cuts him. Setting a clip region makes every one of
+      // the couple of hundred face fills below markedly more expensive, so take
+      // the common case — nothing in the way — without one.
+      let hidCols = 0, seenCols = 0;
+      for (let x = lo; x <= hi; x++) { seenCols++; if (!(near < zbuf[(x * xr) | 0])) hidCols++; }
+      if (seenCols && hidCols === seenCols) return;               // entirely behind a wall
+      const clipped = hidCols > 0;
+      ctx.save();
+      if (clipped) {
+        // Keep the clip to the two widest visible runs: a rectangle or two is a
+        // fast path, a comb of forty of them is not, and two is plenty for a
+        // figure stepping out from behind a corner.
+        let best0 = -1, bestW0 = 0, best1 = -1, bestW1 = 0, run = -1;
+        for (let x = lo; x <= hi + 1; x++) {
+          const vis = x <= hi && (near < zbuf[(x * xr) | 0]);
+          if (vis && run < 0) run = x;
+          if (!vis && run >= 0) {
+            const w = x - run;
+            if (w > bestW0) { best1 = best0; bestW1 = bestW0; best0 = run; bestW0 = w; }
+            else if (w > bestW1) { best1 = run; bestW1 = w; }
+            run = -1;
+          }
+        }
+        ctx.beginPath();
+        if (bestW0 > 0) ctx.rect(best0, 0, bestW0, H);
+        if (bestW1 > 2) ctx.rect(best1, 0, bestW1, H);
+        ctx.clip();
       }
-      if (run >= 0) ctx.rect(run, 0, hi - run + 1, H);
-      ctx.clip();
 
       const byaw = m.yaw, bc = Math.cos(byaw), bs = Math.sin(byaw);
       const faces = [];
@@ -3594,82 +3657,247 @@
           const pts = [projP(_cw[i0], _cw[i0 + 1], _cw[i0 + 2]), projP(_cw[i1], _cw[i1 + 1], _cw[i1 + 2]),
                        projP(_cw[i2], _cw[i2 + 1], _cw[i2 + 2]), projP(_cw[i3], _cw[i3 + 1], _cw[i3 + 2])];
           if (!pts[0] || !pts[1] || !pts[2] || !pts[3]) continue;
-          faces.push({ p: pts, col: p.col, sh: 0.5 + 0.5 * Math.max(0, nx * LKX + ny * LKY + nz * LKZ), d: camDepth(cx4, cy4) });
+          // drop faces that land on almost nothing, and anything off-screen —
+          // a detailed figure has a lot of trim that costs a fill and shows
+          // nobody anything
+          let ax0 = pts[0].x, ax1 = ax0, ay0 = pts[0].y, ay1 = ay0;
+          for (let k = 1; k < 4; k++) {
+            const q = pts[k];
+            if (q.x < ax0) ax0 = q.x; else if (q.x > ax1) ax1 = q.x;
+            if (q.y < ay0) ay0 = q.y; else if (q.y > ay1) ay1 = q.y;
+          }
+          const fw = ax1 - ax0, fh = ay1 - ay0;
+          if ((fw < 2 && fh < 2) || ax1 < 0 || ax0 > W || ay1 < 0 || ay0 > H) continue;
+          const key = Math.max(0, nx * LKX + ny * LKY + nz * LKZ);
+          const fill = Math.max(0, nx * FLX + ny * FLY + nz * FLZ);
+          const up = (cz4 - m.z) * 0.34;                                    // higher up = closer to the light
+          faces.push({ p: pts, col: p.col, big: fw > 14 || fh > 14,
+                       sh: 0.34 + up + key * 0.62 + fill * 0.16, d: camDepth(cx4, cy4) });
         }
       }
       faces.sort(function (a, b) { return b.d - a.d; });
-      for (const f of faces) fillFace(f.p, shadeC(f.col, f.sh * B), shadeC(f.col, f.sh * B * 0.6));
+      // Big faces get an outline just off the fill — enough to keep panels
+      // legible without reading as cel-shading. Small ones are filled only:
+      // the stroke costs as much as the fill and nobody can see it.
+      for (const f of faces) {
+        const c = shadeC(f.col, f.sh * B);
+        const q = f.p;
+        ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); ctx.lineTo(q[1].x, q[1].y); ctx.lineTo(q[2].x, q[2].y); ctx.lineTo(q[3].x, q[3].y); ctx.closePath();
+        ctx.fillStyle = c; ctx.fill();
+        if (f.big) { ctx.strokeStyle = shadeC(f.col, f.sh * B * 0.86); ctx.lineWidth = 1; ctx.stroke(); }
+      }
       ctx.restore();
     }
 
-    // Captain Clark, rebuilt every frame from his gait — so the peg stabs, the
-    // shoulders roll into the limp, and his head hunts around on its own.
-    const CK = { flesh: '#5c4836', skin2: '#6a5440', coat: '#b8a878', shirt: '#2a6359', sash: '#43285a',
-                 pants: '#4a3318', boot: '#2f1f0d', wood: '#7a5128', hat: '#2c1e0e', brim: '#160f07',
-                 gold: '#e8c860', blood: '#5a0e08', dark: '#0a0403' };
-    function clarkParts(e) {
+    // ===================== Captain Clark, in the round =====================
+    // Rebuilt every frame from his gait: the peg stabs, the shoulders roll into
+    // the limp, the spine hunches, and his head hunts around on its own. Built
+    // in three levels of detail — the full ~75-part figure only while he's on
+    // top of you, which is exactly when you're looking at his face.
+    const CK = {
+      flesh: '#5c4836', flesh2: '#6e5540', fleshLo: '#3a2c20', hollow: '#241a12',
+      coat: '#b8a878', coatLo: '#8a7c52', trim: '#6f5618',
+      shirt: '#2a6359', shirtLo: '#1a4840', cravat: '#cdc29f',
+      sash: '#43285a', sashLo: '#301a44',
+      pants: '#4a3318', pantsLo: '#34230f', boot: '#2f1f0d', sole: '#17100a',
+      wood: '#7a5128', woodLo: '#4e3212', iron: '#4a4a52',
+      hat: '#2c1e0e', hatLo: '#1a1208', brim: '#160f07',
+      gold: '#e8c860', goldLo: '#a8842a',
+      blood: '#5a0e08', bloodWet: '#7d1a10',
+      teeth: '#c8b88e', dark: '#0a0403', eye: '#efe8d0', pupil: '#050302',
+      hair: '#0c0a08', nail: '#8a7256'
+    };
+    function clarkParts(e, lod) {
       const PT = [];
-      const g = e.gait || 0, look = e.look || 0, lur = e.lurchT > 0 ? Math.sin(e.lurchT * 9) * (e.lurchT / 0.5) : 0;
-      const sw = Math.sin(g);                        // >0: peg planted, he sinks onto it
-      const drop = Math.max(0, sw) * 0.06 + Math.abs(lur) * 0.04;   // the stump-dip
-      const roll = -sw * 0.14 + lur * 0.3;           // shoulders tip over the peg
-      const lean = 0.1 + Math.max(0, sw) * 0.06;     // permanently hunched forward
-      const hipZ = 0.62 - drop;
-      const pushC = function (c, h, col, o) { const q = { c: c, h: h, col: col }; if (o) for (const k in o) q[k] = o[k]; PT.push(q); };
-
-      // --- real leg (his right): long stride ---
-      const pr = sw * 0.78;
-      const rk = [-0.1, Math.sin(pr) * 0.3, hipZ - Math.cos(pr) * 0.3];
-      pushC([rk[0], rk[1], rk[2]], [0.058, 0.058, 0.31], CK.pants, { pitch: pr });
-      pushC([-0.1 + Math.sin(pr) * 0.0, Math.sin(pr) * 0.6, hipZ - Math.cos(pr) * 0.6 + 0.02], [0.07, 0.105, 0.045], CK.boot, { pitch: pr });
-      // --- peg leg (his left): stiff, stabbing, no knee ---
-      const pp = -sw * 0.56;
-      pushC([0.1, Math.sin(pp) * 0.12, hipZ - Math.cos(pp) * 0.12], [0.075, 0.075, 0.13], CK.pants, { pitch: pp });
-      pushC([0.1, Math.sin(pp) * 0.26, hipZ - Math.cos(pp) * 0.26], [0.055, 0.055, 0.02], '#1c1209', { pitch: pp });   // strap
-      pushC([0.1, Math.sin(pp) * 0.44, hipZ - Math.cos(pp) * 0.44], [0.036, 0.036, 0.2], CK.wood, { pitch: pp });
-      pushC([0.1, Math.sin(pp) * 0.62, hipZ - Math.cos(pp) * 0.62], [0.018, 0.018, 0.045], '#3c2611', { pitch: pp });  // worn tip
-
-      // --- body ---
+      const L = lod || 0;                                   // 0 = close, 1 = mid, 2 = far
+      const g = e.gait || 0, look = e.look || 0;
+      const lur = e.lurchT > 0 ? Math.sin(e.lurchT * 9) * (e.lurchT / 0.5) : 0;
+      const sw = Math.sin(g);                               // >0: weight on the peg, and he sinks
+      const drop = Math.max(0, sw) * 0.055 + Math.abs(lur) * 0.04;
+      const roll = -sw * 0.13 + lur * 0.3;                  // shoulders tip over the peg
+      const hipZ = 0.66 - drop;
+      // a stooped spine: everything above the hip leans further forward the
+      // higher it goes, which is what makes him read as a hunched giant
+      const HUNCH = 0.17, sag = function (z) { return (z - 0.62) * HUNCH; };
       const bz = function (z) { return z - drop; };
-      pushC([0, 0.02, bz(0.68)], [0.16, 0.1, 0.06], CK.sash, { roll: roll, pitch: lean * 0.3 });
-      pushC([0, -0.09, bz(0.68)], [0.035, 0.014, 0.03], CK.gold, { roll: roll });
-      pushC([0, 0.01, bz(0.83)], [0.175, 0.112, 0.12], CK.coat, { roll: roll, pitch: lean * 0.3 });
-      pushC([0, -0.11, bz(0.84)], [0.05, 0.008, 0.1], CK.blood, { roll: roll });
-      pushC([0, 0.01, bz(0.95)], [0.15, 0.1, 0.035], CK.shirt, { roll: roll });
+      const add = function (c, h, col, o) { const q = { c: c, h: h, col: col }; if (o) for (const k in o) q[k] = o[k]; PT.push(q); };
 
-      // --- arms: long, gangly, swinging against the legs ---
-      for (const side of [-1, 1]) {
-        const sh = [side * 0.215, 0.01, bz(0.94)];
-        pushC(sh, [0.068, 0.088, 0.075], CK.shirt, { roll: roll });
-        const aa = -sw * side * 0.42 + lur * 0.4;
-        const el = [sh[0] + side * 0.02, sh[1] + Math.sin(aa) * 0.17, sh[2] - Math.cos(aa) * 0.17];
-        pushC(el, [0.05, 0.05, 0.17], CK.shirt, { pitch: aa });
-        const fa = aa + 0.3;
-        const wr = [el[0], el[1] + Math.sin(fa) * 0.17, el[2] - Math.cos(fa) * 0.17];
-        pushC(wr, [0.045, 0.045, 0.16], CK.shirt, { pitch: fa });
-        pushC([wr[0], wr[1] + Math.sin(fa) * 0.19, wr[2] - Math.cos(fa) * 0.19], [0.05, 0.05, 0.07], '#28190f', { pitch: fa });
+      // ---------------- real leg (his right): a full stride ----------------
+      const pr = sw * 0.78;
+      const cs = Math.cos(pr), sn = Math.sin(pr);
+      const hipX = -0.105;
+      const kneeY = sn * 0.34, kneeZ = hipZ - cs * 0.34;
+      add([hipX, sn * 0.09, hipZ - cs * 0.09], [0.066, 0.07, 0.1], CK.pants, { pitch: pr });      // thigh, thick at the hip
+      add([hipX, sn * 0.24, hipZ - cs * 0.24], [0.056, 0.06, 0.11], CK.pants, { pitch: pr });     // tapering to the knee
+      if (L < 2) add([hipX, kneeY, kneeZ], [0.053, 0.054, 0.03], CK.pantsLo, { pitch: pr });        // knee
+      const kn2 = pr * 0.55;                                                                        // shin trails the thigh
+      const sc = Math.cos(kn2), ss = Math.sin(kn2);
+      const ankY = kneeY + ss * 0.26, ankZ = kneeZ - sc * 0.26;
+      add([hipX, kneeY + ss * 0.13, kneeZ - sc * 0.13], [0.047, 0.05, 0.14], CK.pants, { pitch: kn2 });
+      if (L < 2) add([hipX, ankY - ss * 0.02, ankZ + 0.03], [0.043, 0.045, 0.03], '#e7e2d2', { pitch: kn2 });   // white sock
+      add([hipX, ankY + 0.03, ankZ - 0.015], [0.053, 0.098, 0.035], CK.boot);                        // boot upper
+      add([hipX, ankY + 0.035, ankZ - 0.045], [0.056, 0.106, 0.018], CK.sole);                     // sole
+      if (L < 1) add([hipX, ankY - 0.06, ankZ - 0.035], [0.043, 0.028, 0.026], CK.sole);            // heel
+
+      // ---------------- peg leg (his left): stiff, no knee ----------------
+      const pp = -sw * 0.56;
+      const pc = Math.cos(pp), ps = Math.sin(pp);
+      const pegX = 0.105;
+      const P2 = function (t) { return [pegX, ps * t, hipZ - pc * t]; };
+      add(P2(0.08), [0.07, 0.074, 0.1], CK.pants, { pitch: pp });                                 // the stump, still trousered
+      add(P2(0.19), [0.06, 0.062, 0.045], CK.pantsLo, { pitch: pp });                               // trouser tied off below the knee
+      if (L < 2) {
+        add(P2(0.235), [0.053, 0.055, 0.016], '#1c1209', { pitch: pp });                           // leather strapping
+        add(P2(0.275), [0.05, 0.052, 0.014], '#1c1209', { pitch: pp });
+      }
+      add(P2(0.34), [0.044, 0.044, 0.075], CK.wood, { pitch: pp });                                // the leg itself, tapering
+      add(P2(0.46), [0.034, 0.034, 0.06], CK.wood, { pitch: pp });
+      add(P2(0.56), [0.026, 0.026, 0.05], CK.woodLo, { pitch: pp });
+      add(P2(0.615), [0.03, 0.03, 0.014], CK.iron, { pitch: pp });                                 // iron ferrule, worn shiny
+
+      // ---------------- hips, waist, ribcage ----------------
+      const wz = bz(0.72);
+      add([0, sag(0.72), wz], [0.112, 0.086, 0.055], CK.pants, { roll: roll });                     // hips
+      add([0, sag(0.75) + 0.005, bz(0.75)], [0.124, 0.092, 0.038], CK.sash, { roll: roll });         // sash
+      if (L < 2) {
+        add([0.06, sag(0.75) - 0.09, bz(0.74)], [0.045, 0.02, 0.05], CK.sashLo, { roll: roll });   // knotted sash tail
+        add([0.065, sag(0.72) - 0.083, bz(0.66)], [0.028, 0.014, 0.06], CK.sashLo, { roll: roll, pitch: 0.2 });
+      }
+      add([0, sag(0.79), bz(0.79)], [0.119, 0.089, 0.022], '#2a1f12', { roll: roll });             // belt
+      add([0, sag(0.79) - 0.088, bz(0.79)], [0.034, 0.014, 0.026], CK.goldLo, { roll: roll });     // buckle plate
+      if (L < 2) add([0, sag(0.79) - 0.097, bz(0.79)], [0.024, 0.008, 0.017], CK.gold, { roll: roll });
+      // ribcage: narrow at the waist, wide at the chest — a proper barrel
+      add([0, sag(0.86), bz(0.86)], [0.101, 0.086, 0.05], CK.coat, { roll: roll });
+      add([0, sag(0.95), bz(0.95)], [0.116, 0.094, 0.055], CK.coat, { roll: roll });
+      add([0, sag(1.02), bz(1.02)], [0.124, 0.09, 0.032], CK.coatLo, { roll: roll });               // shoulder yoke
+      if (L < 2) {                                                                                 // waistcoat edges + buttons
+        add([-0.052, sag(0.92) - 0.097, bz(0.92)], [0.026, 0.008, 0.1], CK.coatLo, { roll: roll - 0.18 });
+        add([0.052, sag(0.92) - 0.097, bz(0.92)], [0.026, 0.008, 0.1], CK.coatLo, { roll: roll + 0.18 });
+        for (let i = 0; i < 3; i++) add([0, sag(0.84 + i * 0.07) - 0.101, bz(0.84 + i * 0.07)], [0.011, 0.006, 0.011], CK.goldLo, { roll: roll });
+      }
+      // the coat itself hanging open, with tails behind
+      add([-0.128, sag(0.9) - 0.02, bz(0.9)], [0.028, 0.094, 0.14], CK.shirtLo, { roll: roll - 0.1 });
+      add([0.128, sag(0.9) - 0.02, bz(0.9)], [0.028, 0.094, 0.14], CK.shirtLo, { roll: roll + 0.1 });
+      if (L < 2) {
+        add([-0.078, sag(0.72) + 0.104, bz(0.7)], [0.05, 0.03, 0.125], CK.shirtLo, { pitch: -0.12 });   // coat tails
+        add([0.078, sag(0.72) + 0.104, bz(0.7)], [0.05, 0.03, 0.125], CK.shirtLo, { pitch: -0.12 });
+      }
+      // blood, run down from the collar and dried
+      add([0.015, sag(0.92) - 0.109, bz(0.92)], [0.036, 0.006, 0.09], CK.blood, { roll: roll });
+      if (L < 1) {
+        add([-0.045, sag(0.86) - 0.099, bz(0.86)], [0.022, 0.005, 0.03], CK.bloodWet, { roll: roll });
+        add([0.052, sag(0.8) - 0.098, bz(0.8)], [0.016, 0.005, 0.022], CK.blood, { roll: roll });
+      }
+      // collar + filthy cravat
+      add([0, sag(1.06), bz(1.06)], [0.103, 0.08, 0.028], CK.shirt, { roll: roll });
+      if (L < 2) {
+        add([0, sag(1.05) - 0.078, bz(1.05)], [0.05, 0.02, 0.03], CK.cravat, { roll: roll });
+        add([0, sag(1.0) - 0.083, bz(1.0)], [0.032, 0.014, 0.045], CK.cravat, { roll: roll, pitch: 0.15 });
       }
 
-      // --- head, on its own swivel: this is what tells you if he's seen you ---
-      const hz = bz(1.16), lc = Math.cos(look), ls = Math.sin(look);
-      const HP = function (ox, oy, oz) { return [ox * lc - oy * ls, ox * ls + oy * lc, hz + oz]; };
-      pushC([0, 0.01, bz(1.01)], [0.048, 0.048, 0.055], CK.flesh, { roll: roll });
-      pushC(HP(0, 0, 0), [0.092, 0.082, 0.108], CK.flesh, { yaw: look });
-      pushC(HP(0, 0.04, -0.118), [0.062, 0.052, 0.03], CK.flesh, { yaw: look });                 // jaw
-      pushC(HP(0, 0.095, -0.005), [0.016, 0.024, 0.032], CK.skin2, { yaw: look });             // nose
-      // misaligned eyes — one sits lower than the other
-      pushC(HP(-0.042, 0.084, 0.038), [0.028, 0.008, 0.024], '#efe8d0', { yaw: look });
-      pushC(HP(-0.042, 0.092, 0.038), [0.012, 0.006, 0.012], '#050302', { yaw: look });
-      pushC(HP(0.046, 0.084, 0.012), [0.026, 0.008, 0.022], '#efe8d0', { yaw: look });
-      pushC(HP(0.046, 0.092, 0.012), [0.011, 0.006, 0.011], '#050302', { yaw: look });
-      pushC(HP(0, 0.087, -0.042), [0.046, 0.008, 0.036], CK.dark, { yaw: look });             // screaming mouth
-      pushC(HP(0, 0.093, -0.022), [0.041, 0.005, 0.008], '#c8b88e', { yaw: look });            // teeth
-      pushC(HP(0, 0.091, -0.008), [0.054, 0.009, 0.009], '#0c0a08', { yaw: look });           // mustache
-      // tricorn hat + crow feather
-      pushC(HP(0, 0.005, 0.142), [0.082, 0.076, 0.05], CK.hat, { yaw: look });
-      pushC(HP(0, 0.01, 0.106), [0.155, 0.14, 0.014], CK.brim, { yaw: look });
-      pushC(HP(0.005, 0.01, 0.12), [0.16, 0.145, 0.006], '#967034', { yaw: look });
-      pushC(HP(0.1, -0.03, 0.21), [0.014, 0.045, 0.085], '#131318', { yaw: look, roll: 0.35 });
+      // ---------------- arms: long, gangly, swinging against the legs -------
+      for (const side of [-1, 1]) {
+        const shx = side * 0.156, shz = bz(1.02), shy = sag(1.02);
+        add([shx * 1.06, shy, shz - 0.01], [0.05, 0.078, 0.062], CK.shirt, { roll: roll + side * 0.25 });     // billowing shoulder puff
+        if (L < 2) add([shx * 1.14, shy, shz - 0.07], [0.045, 0.068, 0.04], CK.shirt, { roll: roll + side * 0.3 });
+        const aa = -sw * side * 0.44 + lur * 0.4;
+        const ac = Math.cos(aa), as = Math.sin(aa);
+        const A = function (t) { return [shx + side * 0.012 * t / 0.2, shy + as * t, shz - ac * t]; };
+        add(A(0.1), [0.045, 0.047, 0.105], CK.shirt, { pitch: aa });                                   // upper arm
+        add(A(0.22), [0.04, 0.042, 0.08], CK.shirt, { pitch: aa });
+        const elY = shy + as * 0.29, elZ = shz - ac * 0.29;
+        if (L < 2) add([shx + side * 0.018, elY, elZ], [0.045, 0.045, 0.028], CK.shirtLo, { pitch: aa });   // elbow
+        const fa = aa + 0.34;                                                                       // forearm hangs a little straighter
+        const fc = Math.cos(fa), fs = Math.sin(fa);
+        const F = function (t) { return [shx + side * 0.02, elY + fs * t, elZ - fc * t]; };
+        add(F(0.1), [0.038, 0.04, 0.105], CK.shirt, { pitch: fa });
+        if (L < 2) add(F(0.205), [0.05, 0.05, 0.022], CK.cravat, { pitch: fa });                    // ragged cuff
+        const wY = elY + fs * 0.24, wZ = elZ - fc * 0.24;
+        add([shx + side * 0.02, wY + fs * 0.05, wZ - fc * 0.05], [0.042, 0.036, 0.05], CK.fleshLo, { pitch: fa });   // palm
+        if (L < 1) {                                                                                // long crooked fingers
+          for (let f = 0; f < 4; f++) {
+            const fx = shx + side * 0.02 + (f - 1.5) * 0.021;
+            add([fx, wY + fs * 0.13, wZ - fc * 0.13], [0.009, 0.009, 0.042], CK.fleshLo, { pitch: fa + 0.12 });
+            add([fx, wY + fs * 0.185, wZ - fc * 0.185], [0.0075, 0.0075, 0.016], CK.nail, { pitch: fa + 0.3 });
+          }
+          add([shx + side * 0.06, wY + fs * 0.09, wZ - fc * 0.09], [0.02, 0.009, 0.009], CK.fleshLo, { pitch: fa, yaw: side * 0.5 });   // thumb
+        }
+      }
+
+      // ---------------- neck ----------------
+      const nz = bz(1.11);
+      add([0, sag(1.11), nz], [0.042, 0.042, 0.045], CK.flesh, { roll: roll });
+      if (L < 1) {                                                                                  // stretched neck cords
+        add([-0.028, sag(1.11) - 0.03, nz], [0.009, 0.012, 0.04], CK.fleshLo, { roll: roll, pitch: 0.2 });
+        add([0.028, sag(1.11) - 0.03, nz], [0.009, 0.012, 0.04], CK.fleshLo, { roll: roll, pitch: 0.2 });
+      }
+
+      // ---------------- head: gaunt, screaming, and it turns on its own -----
+      const hz = bz(1.24), hy = sag(1.24) + 0.03;    // carried forward of the shoulders, vulture-like
+      const lc = Math.cos(look), ls = Math.sin(look);
+      const HP = function (ox, oy, oz) { return [ox * lc - (oy + hy) * ls, ox * ls + (oy + hy) * lc, hz + oz]; };
+      const Y = { yaw: look };
+      add(HP(0, -0.005, 0.028), [0.069, 0.07, 0.064], CK.flesh, Y);                                // cranium
+      add(HP(0, 0.004, -0.042), [0.062, 0.066, 0.03], CK.flesh, Y);                                  // mid-face
+      add(HP(0, -0.008, -0.086), [0.051, 0.056, 0.028], CK.flesh, Y);                               // jaw
+      if (L < 2) {
+        add(HP(0, 0.066, 0.05), [0.064, 0.014, 0.014], CK.flesh2, Y);                               // heavy brow ridge
+        add(HP(-0.062, 0.03, 0.01), [0.011, 0.05, 0.046], CK.fleshLo, Y);                            // hollow temples
+        add(HP(0.062, 0.03, 0.01), [0.011, 0.05, 0.046], CK.fleshLo, Y);
+        add(HP(-0.05, 0.05, -0.03), [0.018, 0.026, 0.02], CK.flesh2, Y);                           // cheekbones
+        add(HP(0.05, 0.05, -0.03), [0.018, 0.026, 0.02], CK.flesh2, Y);
+        add(HP(-0.069, -0.02, -0.005), [0.012, 0.022, 0.026], CK.fleshLo, Y);                       // ears
+        add(HP(0.069, -0.02, -0.005), [0.012, 0.022, 0.026], CK.fleshLo, Y);
+      }
+      // eyes, set in black sockets and misaligned — one rides lower than the other
+      add(HP(-0.042, 0.062, 0.026), [0.031, 0.016, 0.026], CK.hollow, Y);
+      add(HP(0.046, 0.062, 0.0), [0.029, 0.016, 0.024], CK.hollow, Y);
+      add(HP(-0.042, 0.076, 0.026), [0.026, 0.008, 0.021], CK.eye, Y);
+      add(HP(0.046, 0.076, 0.0), [0.024, 0.008, 0.019], CK.eye, Y);
+      add(HP(-0.04, 0.084, 0.024), [0.011, 0.005, 0.011], CK.pupil, Y);
+      add(HP(0.049, 0.084, -0.002), [0.01, 0.005, 0.01], CK.pupil, Y);
+      if (L < 1) {                                                                                  // bloodshot rims
+        add(HP(-0.042, 0.081, 0.041), [0.026, 0.005, 0.005], '#6a1c14', Y);
+        add(HP(0.046, 0.081, 0.015), [0.024, 0.005, 0.005], '#6a1c14', Y);
+      }
+      // nose
+      add(HP(0, 0.072, 0.0), [0.016, 0.02, 0.03], CK.flesh2, Y);
+      add(HP(0, 0.086, -0.026), [0.02, 0.022, 0.014], CK.flesh2, Y);
+      if (L < 1) {
+        add(HP(-0.014, 0.09, -0.036), [0.006, 0.008, 0.006], CK.hollow, Y);                         // nostrils
+        add(HP(0.014, 0.09, -0.036), [0.006, 0.008, 0.006], CK.hollow, Y);
+      }
+      // the scream: a black cavity with broken teeth top and bottom
+      add(HP(0, 0.062, -0.072), [0.042, 0.016, 0.036], CK.dark, Y);
+      add(HP(0, 0.075, -0.05), [0.038, 0.006, 0.009], CK.teeth, Y);
+      add(HP(0, 0.073, -0.094), [0.034, 0.006, 0.008], CK.teeth, Y);
+      if (L < 1) {
+        for (let i = -2; i <= 2; i++) if (i !== 0)                                                  // a couple of long crooked ones
+          add(HP(i * 0.014, 0.077, -0.058), [0.005, 0.005, 0.012], CK.teeth, Y);
+        add(HP(0.01, 0.072, -0.102), [0.006, 0.006, 0.022], CK.bloodWet, Y);                        // drool of blood off the chin
+      }
+      // matted mustache drooping over the top lip
+      add(HP(-0.026, 0.075, -0.05), [0.026, 0.012, 0.008], CK.hair, { yaw: look, roll: 0.35 });
+      add(HP(0.026, 0.075, -0.05), [0.026, 0.012, 0.008], CK.hair, { yaw: look, roll: -0.35 });
+      if (L < 2) {                                                                                  // lank hair under the hat
+        add(HP(-0.062, 0.0, 0.03), [0.013, 0.06, 0.05], CK.hair, Y);
+        add(HP(0.062, 0.0, 0.03), [0.013, 0.06, 0.05], CK.hair, Y);
+        add(HP(0, -0.062, 0.02), [0.054, 0.014, 0.055], CK.hair, Y);
+      }
+
+      // ---------------- tricorn hat: three cocked brim segments ------------
+      add(HP(0, -0.004, 0.11), [0.064, 0.066, 0.038], CK.hat, Y);                                  // crown
+      add(HP(0, -0.004, 0.148), [0.058, 0.06, 0.012], CK.hatLo, Y);                                // flat top
+      add(HP(0, 0.086, 0.09), [0.077, 0.05, 0.012], CK.brim, { yaw: look, pitch: -0.42 });         // front cock, swept up
+      add(HP(-0.078, -0.02, 0.088), [0.05, 0.082, 0.012], CK.brim, { yaw: look, roll: 0.46 });      // left cock
+      add(HP(0.078, -0.02, 0.088), [0.05, 0.082, 0.012], CK.brim, { yaw: look, roll: -0.46 });      // right cock
+      if (L < 2) {
+        add(HP(0, 0.094, 0.1), [0.07, 0.014, 0.006], CK.goldLo, { yaw: look, pitch: -0.42 });    // gold brim trim
+        add(HP(0, -0.004, 0.092), [0.067, 0.069, 0.008], CK.hatLo, Y);                               // hat band
+      }
+      // ragged crow feather stuck in the band
+      add(HP(0.074, -0.03, 0.146), [0.012, 0.04, 0.05], '#131318', { yaw: look, roll: 0.4, pitch: -0.25 });
+      if (L < 2) add(HP(0.1, -0.052, 0.202), [0.009, 0.03, 0.045], '#1c1c22', { yaw: look, roll: 0.55, pitch: -0.35 });
       return PT;
     }
     const MODELS = { clark: clarkParts };
@@ -3685,7 +3913,8 @@
       // contextual prompt — ladders and hiding places only work if you know
       // they're there, so say so when you're standing at one
       let tip = null;
-      if (hidden) tip = 'HIDDEN — move to come out';
+      if (hidden) tip = hideK >= 1 ? 'HIDDEN — move to come out' : 'getting under…';
+      else if (hideAt) tip = 'climbing back out…';
       else if (climbing) tip = climbing.exit ? 'climbing out…' : 'hold forward to climb · back to come down';
       else {
         const l = nearLadder(0.8);
@@ -3773,20 +4002,35 @@
       const pox = px, poy = py;
 
       // ---- hide: duck under a table / gurney / car. Nothing can see you under
-      // there unless it walks right into you. Moving pops you back out.
+      // there unless it walks right into you.
+      // Getting in and out is a scripted crawl along a fixed line between the
+      // spot you were standing on and the spot under the furniture — no physics
+      // runs during it, so you can never be spat out through a wall or shoved
+      // somewhere you didn't choose. Coming out puts you back exactly where you
+      // ducked down from.
       if (wantHide) {
         wantHide = false;
-        if (hidden) { hidden = false; hideAt = null; }
+        if (hidden) hidden = false;                        // start crawling out
         else if (!climbing) {
-          let best = null, bd = 1.4;
-          for (const h of hides) { const d = Math.hypot(h.x - px, h.y - py); if (d < bd) { bd = d; best = h; } }
-          if (best) { hidden = true; hideAt = best; hideSfx(); }
+          if (hideAt) hidden = true;                       // changed your mind mid-crawl
+          else {
+            let best = null, bd = 1.4;
+            for (const h of hides) { const d = Math.hypot(h.x - px, h.y - py); if (d < bd) { bd = d; best = h; } }
+            if (best) { hidden = true; hideAt = best; hideFrom = { x: px, y: py }; hideK = 0; hideSfx(); }
+          }
         }
       }
-      if (hidden) {
-        px += (hideAt.x - px) * Math.min(1, dt * 5);
-        py += (hideAt.y - py) * Math.min(1, dt * 5);
-        if (mv) { hidden = false; hideAt = null; }         // scramble out
+      if (hideAt) {
+        hideK = clamp(hideK + (hidden ? dt * 2.6 : -dt * 3.2), 0, 1);
+        const e = hideK * hideK * (3 - 2 * hideK);         // smoothstep, so it eases at both ends
+        px = hideFrom.x + (hideAt.x - hideFrom.x) * e;
+        py = hideFrom.y + (hideAt.y - hideFrom.y) * e;
+        if (hidden && hideK >= 1 && mv) hidden = false;    // once you're tucked in, any push scrambles you out
+        if (!hidden && hideK <= 0) {                       // fully out: hand control back
+          const o = pushOut(px, py, PLAYER_R);             // belt and braces
+          px = o[0]; py = o[1];
+          hideAt = null; hideFrom = null; hideSfx();
+        }
       } else if ((function () {                            // ---- ladders ----
         const lad = climbing || nearLadder(0.62);
         if (!lad) { climbing = null; return false; }
@@ -3820,7 +4064,8 @@
         else { vz = 0; pz += (sup - pz) * Math.min(1, dt * 14); }
       }
       // camera height follows your feet, and drops when you're tucked under something
-      crouch += ((hidden ? 1 : 0) - crouch) * Math.min(1, dt * 7);
+      // the camera drops in step with the crawl, so the duck and the move match
+      crouch = hideAt ? hideK * hideK * (3 - 2 * hideK) : Math.max(0, crouch - dt * 5);
       // never let the camera poke out through the ceiling on the last rung
       eyeZ = Math.min(pz + EYE_H - crouch * 0.34, ceilH - 0.06);
       // how dim the room you're standing in is (smoothed so it fades on/off)
@@ -3945,7 +4190,7 @@
 
       // ---- open a door -> step through it into its kind of level ----
       for (const dr of doors) {
-        if (Math.hypot(dr.x - px, dr.y - py) < 0.65) {
+        if (Math.hypot(dr.x - px, dr.y - py) < 0.65 && Math.abs((dr.z || 0) - pz) < 0.6) {
           state = 'door'; doorT = 0.5; doorTheme = dr.theme;
           keys.fwd = keys.back = keys.left = keys.right = false; joy.active = false;
           stopAmbient(); doorSfx();
@@ -3954,7 +4199,7 @@
       }
       // ---- step onto a slide -> whoosh down into the next (random) level ----
       for (const sl of slides) {
-        if (Math.hypot(sl.x - px, sl.y - py) < 0.55) { startSlide(); return; }
+        if (Math.hypot(sl.x - px, sl.y - py) < 0.55 && Math.abs((sl.z || 0) - pz) < 0.6) { startSlide(); return; }
       }
     }
 
@@ -4008,7 +4253,7 @@
     let slideDir = 1;
     function startSlide(dir) {
       state = 'slide'; slideT = 1.0; slideDir = dir || 1;
-      climbing = null; hidden = false; hideAt = null;
+      climbing = null; hidden = false; hideAt = null; hideFrom = null; hideK = 0; crouch = 0;
       keys.fwd = keys.back = keys.left = keys.right = false; joy.active = false;
       stopAmbient();
       // falling whoosh (or the scrape of a hatch shoving open)

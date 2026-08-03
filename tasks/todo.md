@@ -1051,3 +1051,31 @@ and change-making incl. the wrong-change shake + flub penalty); save/load round-
 build-mode validity on floor vs rock; 300s hands-off with a full brigade now lands
 consistently at 19-37 covers and 4.1-4.3 stars with zero timeout reviews. No console
 errors. All paths relative + classic scripts, so it runs from file://.
+
+## Scroot Rooms follow-up — smoother hiding, a finer Clark, walkways that lead somewhere
+- [x] Getting out from under furniture is now a scripted crawl along a fixed line
+      between where you ducked down from and the spot underneath, camera easing
+      in step. No physics runs during it, so nothing can shove you out through a
+      wall, and coming out puts you back exactly where you started (verified:
+      3 hide/unhide cycles return to the same coords to 0.02; mashing the button
+      mid-crawl still ends somewhere valid and non-solid).
+- [x] Captain Clark rebuilt at ~75 parts with three levels of detail: tapered
+      limbs, a hunched spine (everything above the hip leans further forward the
+      higher it goes), waistcoat with buttons and coat tails, cuffs, individual
+      fingers with nails, brow ridge/cheekbones/temple hollows, sunken sockets,
+      broken teeth, mustache, and a tricorn built from three separately cocked
+      brim segments. Lighting gained a fill light and a vertical falloff; face
+      outlines now only draw on large faces.
+- [x] Perf work to pay for it: skip the canvas clip entirely when no wall cuts
+      him (a clip region made every one of ~200 face fills dearer), clip to at
+      most the two widest visible runs, drop sub-2px and offscreen faces, and
+      shed detail by distance. Measured 45 fps with him filling the screen and
+      33 fps in normal level-20 play — the same as before the model existed.
+- [x] Walkways now go somewhere: up to 19 tiles with a spur, a ladder at BOTH
+      ends (a shortcut clean over the level), full-tile decks so you only fall at
+      the edges, rails that open where a ladder lands, the ceiling hatch hung
+      over the walkway where there is one, and one of the level's exit doors
+      moved up onto it. Doors and slides are height-aware — standing under a
+      raised door does nothing, you have to get up there.
+- Verified: 52 theme x depth level-sims clean (25 rolled a walkway, every one of
+  those with a door upstairs), no console errors.
