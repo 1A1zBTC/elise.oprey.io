@@ -28,9 +28,11 @@ const ASSETS = [
   'fonts/fonts.css', 'fonts/nunito.woff2', 'fonts/pacifico.woff2',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-512-maskable.png',
   'icons/apple-touch-icon.png', 'icons/favicon.png',
-  // Pet Vet (grindy-vet) loads its logic from an external classic script that
-  // the page precache won't fetch on its own, so list it here.
-  'grindy-vet/js/main.js'
+  // Games that load their logic from an external classic script need it listed
+  // here — the page precache won't fetch it on its own. Add a line whenever a
+  // new game uses a js/main.js, or a regen will silently drop it from offline.
+  'grindy-vet/js/main.js',
+  'smeeches-lasagna/js/main.js'
 ];
 
 // Every top-level directory containing an index.html is a game page.
