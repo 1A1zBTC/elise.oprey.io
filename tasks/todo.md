@@ -1131,3 +1131,32 @@ All done, verified headless (localhost:8931 + __sr harness, zero console errors)
 - sw.js v93 -> v94 via tools/build-sw.mjs.
 - NOT committed / NOT deployed (Dan: commit + aws s3 sync scroot-rooms/ + sw.js +
   CloudFront invalidation EDR208IJW4SS7).
+
+## Review (Phasmophobia)
+Shipped & live at https://elise.oprey.io/phasmophobia/ (commit 3c7bd18, targeted S3
+deploy — full deploy.sh skipped because a concurrent instance had uncommitted
+hog-ball/scroot-rooms work). All 4 chunks done in phasmophobia/index.html (single
+classic script, ~1870 lines). Headless QA verified via localhost + dedicated browse
+tab (shared-daemon interference hit again — tab 11 + chain [[tab],[js]] pattern):
+all 6 evidence paths through real observation (box/uv/writing on a Poltergeist,
+emf/freezing/orb on a Jinn), EMF caps at 4 for non-EMF ghosts, hunt + wardrobe
+hide survival, jumpscare→results (half pay when caught), journal filtering +
+correct-guess payout ($30+$50+$10), sanity drain. Smoke suite: 34 pages, 0 failed.
+
+### Review round 2 — Scroot Rooms: de-phase + rounded Clark (2026-08-09)
+- Phasing/glitch system fully removed: generation block in genLevel, glitchImgs art,
+  render loop, `phasing`/`glitches` vars, banner "it's unstable here", __sr.glitchInfo.
+  33 theme x level gens sweep clean, zero console errors.
+- clarkParts rebuilt "in the round": oct() helper gives every chunky volume a 45deg-yawed
+  twin (octagonal silhouette, LOD-gated); torso is a 5-slice barrel, thigh/shin/peg/arms
+  multi-slice tapered runs, head a 7-slice stacked egg, rounded hat crown with curled
+  2-layer brim cocks, 3-segment feather, chin beard, iris rings, toe-capped boot with
+  strap+buckle. FIXED pre-existing bug: buttons/cravat/belt buckle/chest blood sat at -y
+  (his BACK) — verified +y=front with debug boxes, moved them to the front; coat tails/
+  sash knot/hump verified on the back via a behind-shot.
+- rage (chase) kept: jaw+beard drop, whites flare, pupils pinprick, head cranes. Verified.
+- Perf: software-render delta vs empty corridor ~8ms at L0 (only when he's on top of you),
+  ~0 at L1/L2.
+- sw.js: other instance advanced it to v96 (phasmophobia deploys); no manual bump needed —
+  tools/deploy.sh regenerates + bumps every run.
+- NOT committed / NOT deployed.

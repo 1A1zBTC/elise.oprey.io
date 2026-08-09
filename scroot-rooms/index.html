@@ -151,10 +151,10 @@
     let pz = 0, eyeZ = 0.5, ceilH = 1, crouch = 0;
     const EYE_H = 0.5;           // eye height above your feet when standing
     let entities, corpses;       // hunters (Captain Clark + the Bacteria), hazmat corpses
-    let doors, slides, marks, glitches;  // openable doors, slide chutes, your trail markers, phasing objects
+    let doors, slides, marks;    // openable doors, slide chutes, your trail markers
     let props;                           // scattered themed scenery that sells each place
     let structProps;                     // structural obstacles (trees/shelves/cars/desks) tied to solid tiles
-    let level, bestLevel, themeName, phasing;
+    let level, bestLevel, themeName;
     let banner;                  // {text, sub, t} brief level intro
     let darkness, blackout;      // per-level mood: 0 (lit) .. 1 (pitch black + flicker)
     let jumpT = 0, jumpType = 'clark'; // jumpscare timer + which entity's face lunges
@@ -181,7 +181,7 @@
       subway: 'hall', office: 'hall', party: 'party', factory: 'hall'
     };
     let curArch = 'maze';
-    let atriumCells = [];        // open-hall cells carved by buildMaze — where glitch furniture pools
+    let atriumCells = [];        // open-hall cells carved by buildMaze
     function blankMap(w, h) { mapW = w; mapH = h; map = []; for (let y = 0; y < h; y++) map.push(new Array(w).fill(1)); }
     function carveRect(x, y, w, h) { for (let j = Math.max(1, y); j < Math.min(mapH - 1, y + h); j++) for (let i = Math.max(1, x); i < Math.min(mapW - 1, x + w); i++) map[j][i] = 0; }
     function addObst(tx, ty, img, sh, sw) { if (tx < 1 || ty < 1 || tx >= mapW - 1 || ty >= mapH - 1) return false; if (map[ty][tx] !== 0) return false; map[ty][tx] = 2; structProps.push({ img: img, x: tx + 0.5, y: ty + 0.5, sh: sh, sw: sw }); return true; }
@@ -640,39 +640,6 @@
 
       marks = [];   // fresh trail each level
 
-      // the level glitches: furniture phasing through walls AND half-sunk into
-      // the floor. The Yellow Halls are ALWAYS unstable; other maze places roll
-      // for it from level 2. Floor-phasers pool in the open atrium spaces.
-      glitches = [];
-      phasing = curArch === 'maze' && themeName !== 'pool' &&
-                (themeName === 'yellow' || (lvl >= 2 && Math.random() < 0.55));
-      if (phasing) {
-        // walls: shoved partway into the masonry
-        for (let g = 0, n = 0; g < 500 && n < 4 + (lvl % 3); g++) {
-          const ox = rint(1, mapW - 2), oy = rint(1, mapH - 2);
-          if (map[oy][ox] !== 0) continue;
-          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-          const wd = dirs[rint(0, 3)];
-          if (mapAt(ox + 0.5 + wd[0], oy + 0.5 + wd[1]) !== 1) continue;
-          if (Math.hypot(ox + 0.5 - px, oy + 0.5 - py) < 2) continue;
-          glitches.push({ mode: 'wall', x: ox + 0.5 + wd[0] * 0.55, y: oy + 0.5 + wd[1] * 0.55, kind: rint(0, 2), ph: rnd(0, 6.28) });
-          n++;
-        }
-        // floors: half-swallowed, slowly bobbing through the slab
-        const floorSpots = atriumCells.length ? atriumCells : reach.slice(0, 60);
-        const wantF = clamp(3 + (lvl >> 1), 3, 8);
-        for (let g = 0, n = 0; g < 400 && n < wantF && floorSpots.length; g++) {
-          const c = floorSpots[rint(0, floorSpots.length - 1)];
-          if (Math.hypot(c.x - px, c.y - py) < 2.5) continue;
-          if (mapAt(c.x, c.y) !== 0) continue;
-          if (doors.some(function (d) { return Math.hypot(d.x - c.x, d.y - c.y) < 1.3; })) continue;
-          if (slides.some(function (sl) { return Math.hypot(sl.x - c.x, sl.y - c.y) < 1.3; })) continue;
-          if (glitches.some(function (o) { return Math.hypot(o.x - c.x, o.y - c.y) < 1.1; })) continue;
-          glitches.push({ mode: 'floor', x: c.x + rnd(-0.25, 0.25), y: c.y + rnd(-0.25, 0.25), kind: rint(0, 2), ph: rnd(0, 6.28) });
-          n++;
-        }
-      }
-
       // scattered complementary scenery, then the structural obstacles (trees,
       // shelves, cars, desks…) that were built into the layout as solid tiles
       placeProps();
@@ -699,7 +666,7 @@
       blackout = darkness > 0.45 && lvl >= 3 && lvl % 3 === 0;   // brief flicker on dim levels
 
       updateCamera();
-      banner = { text: 'LEVEL ' + lvl, sub: THEME_NAMES[themeName] + (phasing ? ' · it\'s unstable here' : ''), t: 1.7 };
+      banner = { text: 'LEVEL ' + lvl, sub: THEME_NAMES[themeName], t: 1.7 };
       startAmbient();
     }
 
@@ -787,7 +754,6 @@
       theme: function () { return themeName; },
       doorsAt: function () { return doors.map(function (d) { return { x: d.x, y: d.y, z: d.z || 0, theme: d.theme }; }); },
       hunterInfo: function () { return entities.map(function (e) { return { type: e.type, x: Math.round(e.x * 10) / 10, y: Math.round(e.y * 10) / 10, state: e.state, alertT: Math.round(e.alertT * 100) / 100, burstT: Math.round(e.burstT * 100) / 100 }; }); },
-      glitchInfo: function () { return { atriumCells: atriumCells.length, wall: glitches.filter(function (g) { return g.mode === 'wall'; }).length, floor: glitches.filter(function (g) { return g.mode === 'floor'; }).map(function (g) { return { x: Math.round(g.x * 10) / 10, y: Math.round(g.y * 10) / 10 }; }) }; },
       doorThemes: function () { return doors.map(function (d) { return d.theme; }); },
       corpseInfo: function () {
         return corpses.map(function (b) {
@@ -878,6 +844,40 @@
       if (!ladders) return null;
       for (const l of ladders) if (Math.hypot(l.x - px, l.y - py) < r) return l;
       return null;
+    }
+
+    // Coming out from under furniture: a side only counts if the crawl line
+    // stays clear of walls (the furniture's own footprint is fine — you're
+    // crawling under/past it) and the landing spot is somewhere you could
+    // actually stand without being shoved by a wall, crate or table.
+    function hideExitOK(tx, ty, ax, ay) {
+      let r = pushOut(tx, ty, PLAYER_R);
+      r = pushOutBoxes(r[0], r[1], PLAYER_R, 0);
+      r = pushOut(r[0], r[1], PLAYER_R);
+      if (Math.hypot(r[0] - tx, r[1] - ty) > 0.04) return false;
+      const d = Math.hypot(tx - ax, ty - ay), steps = Math.ceil(d / 0.1);
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps, x = ax + (tx - ax) * t, y = ay + (ty - ay) * t;
+        if (Math.hypot(x - ax, y - ay) < 0.5) continue;    // still under the furniture itself
+        if (mapAt(x, y) !== 0) return false;
+      }
+      return true;
+    }
+    // Pick which side to crawl out on: the way you're pushing/facing first,
+    // then the way you came in, then the compass. Falls back to the entry
+    // spot, which is always reachable — you crawled in along it.
+    function pickHideExit(fwd) {
+      const ex = hideFrom.x - hideAt.x, ey = hideFrom.y - hideAt.y, entD = Math.hypot(ex, ey);
+      const dist = clamp(entD, 0.85, 1.15);
+      const cands = [];
+      if (fwd) cands.push([dirX * fwd, dirY * fwd]);
+      if (entD > 0.05) cands.push([ex / entD, ey / entD]);
+      cands.push([1, 0], [-1, 0], [0, 1], [0, -1]);
+      for (const c of cands) {
+        const tx = hideAt.x + c[0] * dist, ty = hideAt.y + c[1] * dist;
+        if (hideExitOK(tx, ty, hideAt.x, hideAt.y)) return { x: tx, y: ty };
+      }
+      return hideFrom;
     }
 
     function addPlatform(cx, cy, hw, hh, z0, z1, col, opts) {
@@ -1007,13 +1007,13 @@
       for (let i = 0; i < nTable; i++) {
         const c = take(3, 2.0); if (!c) break;
         const top = 0.52, legC = '#3a2c1c';
-        const t = addPlatform(c.x, c.y, 0.46, 0.4, top - 0.06, top, '#8a6a3c', { kind: 'table', hide: true });
+        const t = addPlatform(c.x, c.y, 0.37, 0.31, top - 0.06, top, '#8a6a3c', { kind: 'table', hide: true });
         t.z0 = 0; t.walk = true;                                  // z0 stays 0 for collision height tests
-        t.boxes = [{ x0: -0.46, y0: -0.4, x1: 0.46, y1: 0.4, z0: top - 0.06, z1: top, col: '#8a6a3c' },
-                   { x0: -0.42, y0: -0.36, x1: -0.34, y1: -0.28, z0: 0, z1: top - 0.06, col: legC },
-                   { x0: 0.34, y0: -0.36, x1: 0.42, y1: -0.28, z0: 0, z1: top - 0.06, col: legC },
-                   { x0: -0.42, y0: 0.28, x1: -0.34, y1: 0.36, z0: 0, z1: top - 0.06, col: legC },
-                   { x0: 0.34, y0: 0.28, x1: 0.42, y1: 0.36, z0: 0, z1: top - 0.06, col: legC }];
+        t.boxes = [{ x0: -0.37, y0: -0.31, x1: 0.37, y1: 0.31, z0: top - 0.06, z1: top, col: '#8a6a3c' },
+                   { x0: -0.33, y0: -0.27, x1: -0.26, y1: -0.2, z0: 0, z1: top - 0.06, col: legC },
+                   { x0: 0.26, y0: -0.27, x1: 0.33, y1: -0.2, z0: 0, z1: top - 0.06, col: legC },
+                   { x0: -0.33, y0: 0.2, x1: -0.26, y1: 0.27, z0: 0, z1: top - 0.06, col: legC },
+                   { x0: 0.26, y0: 0.2, x1: 0.33, y1: 0.27, z0: 0, z1: top - 0.06, col: legC }];
         hides.push({ x: c.x, y: c.y, what: 'table' });
       }
 
@@ -1802,6 +1802,8 @@
     // lunges and screams. `open` 0..1 tears the mouth wide; `t` drives jitter.
     function drawClarkFace(g, cx, cy, S, open, t) {
       g.save(); g.translate(cx, cy); g.scale(S, S);
+      // the whole head trembles harder the wider the scream tears open
+      g.translate(Math.sin(t * 61) * 3 * open, Math.cos(t * 47) * 2.2 * open);
       // elongated head, dark skin, volumetric shading
       const skin = g.createRadialGradient(-46, -70, 24, 0, -10, 250);
       skin.addColorStop(0, '#5f4b38'); skin.addColorStop(0.5, '#382a1c'); skin.addColorStop(1, '#130c06');
@@ -1822,6 +1824,21 @@
       // forehead creases + brow ridges
       g.strokeStyle = 'rgba(10,6,3,0.4)'; g.lineWidth = 3;
       for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(-80, -120 + i * 14); g.quadraticCurveTo(0, -134 + i * 14, 80, -120 + i * 14); g.stroke(); }
+      // dry skin split into cracks across the cheeks and brow
+      g.strokeStyle = 'rgba(14,8,4,0.55)'; g.lineWidth = 1.6;
+      for (const [x0, y0, x1, y1, x2, y2] of [[-108, 20, -96, 52, -104, 84], [96, -4, 108, 34, 100, 70],
+                                              [-34, -150, -26, -128, -38, -108], [52, -142, 62, -118, 54, -98], [-88, -60, -102, -34, -92, -8]]) {
+        g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(x1, y1, x2, y2); g.stroke();
+      }
+      // pockmarks eaten into the skin
+      g.fillStyle = 'rgba(8,5,2,0.5)';
+      for (let i = 0; i < 14; i++) { g.beginPath(); g.ellipse(Math.sin(i * 5.3) * 118, -40 + Math.cos(i * 3.1) * 120, 3.5 + (i % 3), 2.5 + ((i * 7) % 3), i, 0, 6.29); g.fill(); }
+      // the old scar, stitched shut with crude cross-marks
+      g.strokeStyle = 'rgba(74,22,16,0.85)'; g.lineWidth = 4;
+      g.beginPath(); g.moveTo(-18, -160); g.quadraticCurveTo(24, -138, 44, -104); g.stroke();
+      g.lineWidth = 2.2;
+      for (let i = 0; i < 5; i++) { const st = i / 4, sx = -18 + 60 * st, sy = -160 + 54 * st + 8 * st * st;
+        g.beginPath(); g.moveTo(sx - 7, sy - 7); g.lineTo(sx + 7, sy + 7); g.stroke(); }
       g.fillStyle = 'rgba(6,4,2,0.5)';
       g.beginPath(); g.ellipse(-64, -86, 44, 16, 0.1, 0, 6.29); g.fill();
       g.beginPath(); g.ellipse(70, -56, 40, 16, -0.1, 0, 6.29); g.fill();
@@ -1845,6 +1862,8 @@
         g.strokeStyle = 'rgba(6,4,2,0.6)'; g.lineWidth = 3;                                              // heavy lower lid
         g.beginPath(); g.ellipse(ex, ey + ry * 0.55, rx, ry * 0.7, 0, 0.08 * Math.PI, 0.92 * Math.PI); g.stroke();
       }
+      // the low eye is going blind — a milky cataract fog over the iris
+      g.fillStyle = 'rgba(196,200,184,0.5)'; g.beginPath(); g.arc(74, -20, 15, 0, 6.29); g.fill();
       // nose
       g.fillStyle = 'rgba(30,24,15,0.6)'; g.beginPath(); g.ellipse(2, 40, 14, 40, 0, 0, 6.29); g.fill();
       // gaping screaming mouth (opens with `open`)
@@ -1852,12 +1871,32 @@
       const mg = g.createRadialGradient(0, my, 6, 0, my, mh);
       mg.addColorStop(0, '#1a0606'); mg.addColorStop(0.6, '#0c0604'); mg.addColorStop(1, '#000');
       g.fillStyle = mg; g.beginPath(); g.ellipse(0, my, 52, mh, 0, 0, 6.29); g.fill();
-      // jagged teeth top + bottom
-      g.fillStyle = '#bdae87';
+      // raw receding gums, then jagged teeth top + bottom
+      g.fillStyle = 'rgba(66,14,12,0.9)'; g.fillRect(-52, my - mh - 2, 104, 10);
+      g.fillStyle = 'rgba(50,10,9,0.9)'; g.fillRect(-52, my + mh - 8, 104, 10);
       for (let i = -4; i <= 4; i++) {
-        g.beginPath(); g.moveTo(i * 12 - 5, my - mh + 2); g.lineTo(i * 12 + 5, my - mh + 2); g.lineTo(i * 12, my - mh + 18); g.closePath(); g.fill();
-        g.beginPath(); g.moveTo(i * 12 - 5, my + mh - 2); g.lineTo(i * 12 + 5, my + mh - 2); g.lineTo(i * 12, my + mh - 18); g.closePath(); g.fill();
+        g.fillStyle = (i === -2 || i === 3) ? '#5a4426' : '#bdae87';           // a couple rotted brown
+        g.beginPath(); g.moveTo(i * 12 - 5, my - mh + 2); g.lineTo(i * 12 + 5, my - mh + 2); g.lineTo(i * 12, my - mh + 18 + (i % 2) * 5); g.closePath(); g.fill();
+        if (i === 1) continue;                                                  // one knocked clean out
+        g.beginPath(); g.moveTo(i * 12 - 5, my + mh - 2); g.lineTo(i * 12 + 5, my + mh - 2); g.lineTo(i * 12, my + mh - 18 - (i % 2) * 4); g.closePath(); g.fill();
       }
+      // a fat pale tongue writhing low in the void
+      if (open > 0.25) {
+        const tg2 = g.createRadialGradient(6, my + mh * 0.45, 4, 6, my + mh * 0.45, 44);
+        tg2.addColorStop(0, '#6e2a26'); tg2.addColorStop(1, '#2c0e0c');
+        g.fillStyle = tg2;
+        g.beginPath(); g.ellipse(6 + Math.sin(t * 31) * 4, my + mh * 0.5, 34, mh * 0.3, 0.1, 0, 6.29); g.fill();
+      }
+      // strings of spit stretched between the jaws, snapping as it opens
+      g.strokeStyle = 'rgba(190,180,150,0.4)'; g.lineWidth = 2;
+      for (const sx of [-26, 2, 30]) {
+        const wob = Math.sin(t * 53 + sx) * 6;
+        g.beginPath(); g.moveTo(sx, my - mh + 14); g.quadraticCurveTo(sx + wob, my, sx + wob * 0.4, my + mh - 14); g.stroke();
+      }
+      // blood running from the mouth corners
+      g.fillStyle = 'rgba(110,10,7,0.8)';
+      g.beginPath(); g.moveTo(-50, my + 6); g.lineTo(-40, my + 2); g.lineTo(-46, my + 90 + open * 40); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(46, my + 10); g.lineTo(52, my + 4); g.lineTo(54, my + 70 + open * 30); g.closePath(); g.fill();
       // hat brim across the top
       const hg = g.createLinearGradient(0, -212, 0, -150);
       hg.addColorStop(0, '#241b10'); hg.addColorStop(1, '#0a0805');
@@ -2638,36 +2677,6 @@
       return c;
     })();
 
-    // Furniture that's clipped halfway into a wall (the "phasing" glitch rooms).
-    const glitchImgs = [
-      (function () {   // chair
-        const c = makeCanvas(70, 110), g = c.getContext('2d');
-        g.fillStyle = '#3a2c1c'; g.fillRect(16, 10, 10, 96); g.fillRect(20, 50, 34, 10);
-        g.fillRect(20, 92, 34, 8); g.fillRect(22, 60, 6, 40); g.fillRect(46, 60, 6, 40);
-        g.fillStyle = '#5a4326'; g.fillRect(16, 10, 10, 44);
-        return c;
-      })(),
-      (function () {   // crate
-        const c = makeCanvas(96, 96), g = c.getContext('2d');
-        g.fillStyle = '#4a3a22'; g.fillRect(10, 18, 76, 70);
-        g.strokeStyle = '#2c2012'; g.lineWidth = 4; g.strokeRect(10, 18, 76, 70);
-        g.beginPath(); g.moveTo(10, 18); g.lineTo(86, 88); g.moveTo(86, 18); g.lineTo(10, 88); g.stroke();
-        return c;
-      })(),
-      (function () {   // filing cabinet, drawers half-out
-        const c = makeCanvas(70, 120), g = c.getContext('2d');
-        g.fillStyle = '#5a6068'; g.fillRect(12, 8, 46, 106);
-        g.strokeStyle = '#3a3e44'; g.lineWidth = 3; g.strokeRect(12, 8, 46, 106);
-        for (let d = 0; d < 3; d++) {
-          const dy = 16 + d * 34, out = d === 1 ? 10 : 0;    // middle drawer hangs open
-          g.fillStyle = '#6a7078'; g.fillRect(16 - out, dy, 38, 26);
-          g.strokeStyle = '#3a3e44'; g.lineWidth = 2; g.strokeRect(16 - out, dy, 38, 26);
-          g.fillStyle = '#2c3036'; g.fillRect(28 - out, dy + 10, 14, 4);   // handle
-        }
-        return c;
-      })()
-    ];
-
     // A dead body in a yellow hazmat suit, slumped on the floor in a pool of
     // blood — the other people who didn't make it out of the backrooms.
     const hazmatImg = (function () {
@@ -3223,21 +3232,6 @@
         sprites.push({ fu: true, boxes: l._boxes || (l._boxes = ladderBoxes(l)), x: l.x, y: l.y, rad: 0.44,
           bright: clamp(ambient * (1.25 - d * 0.04) + (l.exit ? 0.3 : 0.14), 0.25, 1) });
       }
-      // glitch furniture: wall pieces poke through the masonry (no occlusion,
-      // flickering); floor pieces sit half-swallowed, slowly bobbing through
-      // the slab as if the level can't decide whether to keep them
-      for (const gl of glitches) {
-        const flick2 = Math.sin(perfNow * 0.02 + gl.ph) > -0.3 ? 1 : 0.25;
-        const sh = gl.kind === 0 ? 0.62 : gl.kind === 2 ? 0.72 : 0.5;
-        if (gl.mode === 'floor') {
-          const sink = 0.42 + 0.2 * Math.sin(perfNow * 0.0007 + gl.ph);   // 22%..62% swallowed
-          sprites.push({ img: glitchImgs[gl.kind] || glitchImgs[0], x: gl.x, y: gl.y, sh: sh, sw: 0.42,
-                         bob: 0, srcH: 1 - sink, bright: clamp(ambient + 0.1, 0.2, 1) * flick2 });
-        } else {
-          sprites.push({ img: glitchImgs[gl.kind] || glitchImgs[0], x: gl.x, y: gl.y, sh: sh, sw: 0.42,
-                         bob: 0, bright: clamp(ambient + 0.1, 0.2, 1) * flick2, noOcc: true });
-        }
-      }
       for (const e of entities) {
         const d = Math.hypot(e.x - px, e.y - py);
         const def = ENTITY_DEFS[e.type] || ENTITY_DEFS.clark;
@@ -3711,6 +3705,8 @@
       const PT = [];
       const L = lod || 0;                                   // 0 = close, 1 = mid, 2 = far
       const g = e.gait || 0, look = e.look || 0;
+      // when he's SEEN you the whole face comes apart: jaw drops, eyes flare
+      const rage = e.state === 'chase' ? 1 : (e.state === 'search' ? 0.35 : 0);
       const lur = e.lurchT > 0 ? Math.sin(e.lurchT * 9) * (e.lurchT / 0.5) : 0;
       const sw = Math.sin(g);                               // >0: weight on the peg, and he sinks
       const drop = Math.max(0, sw) * 0.055 + Math.abs(lur) * 0.04;
@@ -3721,183 +3717,286 @@
       const HUNCH = 0.17, sag = function (z) { return (z - 0.62) * HUNCH; };
       const bz = function (z) { return z - drop; };
       const add = function (c, h, col, o) { const q = { c: c, h: h, col: col }; if (o) for (const k in o) q[k] = o[k]; PT.push(q); };
+      // Rounder than a box: chunky volumes get a 45°-yawed twin so the
+      // silhouette reads as an octagon instead of a square. Body/head cores
+      // keep their twin out to mid distance (lim 2); limb slices only get one
+      // close up (default lim 1), where the rounding is actually visible.
+      const oct = function (c, h, col, o, lim) {
+        add(c, h, col, o);
+        if (L >= (lim == null ? 1 : lim)) return;
+        const q = { c: c, h: [h[0] * 0.83, h[1] * 0.83, h[2]], col: col };
+        if (o) for (const k in o) q[k] = o[k];
+        q.yaw = (q.yaw || 0) + 0.785;
+        PT.push(q);
+      };
 
       // ---------------- real leg (his right): a full stride ----------------
       const pr = sw * 0.78;
       const cs = Math.cos(pr), sn = Math.sin(pr);
       const hipX = -0.105;
       const kneeY = sn * 0.34, kneeZ = hipZ - cs * 0.34;
-      add([hipX, sn * 0.09, hipZ - cs * 0.09], [0.066, 0.07, 0.1], CK.pants, { pitch: pr });      // thigh, thick at the hip
-      add([hipX, sn * 0.24, hipZ - cs * 0.24], [0.056, 0.06, 0.11], CK.pants, { pitch: pr });     // tapering to the knee
-      if (L < 2) add([hipX, kneeY, kneeZ], [0.053, 0.054, 0.03], CK.pantsLo, { pitch: pr });        // knee
+      oct([hipX, sn * 0.05, hipZ - cs * 0.05], [0.069, 0.073, 0.055], CK.pants, { pitch: pr });     // thigh, thick at the hip
+      oct([hipX, sn * 0.14, hipZ - cs * 0.14], [0.062, 0.066, 0.06], CK.pants, { pitch: pr });
+      oct([hipX, sn * 0.23, hipZ - cs * 0.23], [0.055, 0.058, 0.065], CK.pants, { pitch: pr });     // tapering to the knee
+      if (L < 2) oct([hipX, kneeY, kneeZ], [0.051, 0.053, 0.03], CK.pantsLo, { pitch: pr });          // knee
       const kn2 = pr * 0.55;                                                                        // shin trails the thigh
       const sc = Math.cos(kn2), ss = Math.sin(kn2);
       const ankY = kneeY + ss * 0.26, ankZ = kneeZ - sc * 0.26;
-      add([hipX, kneeY + ss * 0.13, kneeZ - sc * 0.13], [0.047, 0.05, 0.14], CK.pants, { pitch: kn2 });
-      if (L < 2) add([hipX, ankY - ss * 0.02, ankZ + 0.03], [0.043, 0.045, 0.03], '#e7e2d2', { pitch: kn2 });   // white sock
-      add([hipX, ankY + 0.03, ankZ - 0.015], [0.053, 0.098, 0.035], CK.boot);                        // boot upper
-      add([hipX, ankY + 0.035, ankZ - 0.045], [0.056, 0.106, 0.018], CK.sole);                     // sole
-      if (L < 1) add([hipX, ankY - 0.06, ankZ - 0.035], [0.043, 0.028, 0.026], CK.sole);            // heel
+      oct([hipX, kneeY + ss * 0.08, kneeZ - sc * 0.08], [0.048, 0.051, 0.075], CK.pants, { pitch: kn2 });
+      oct([hipX, kneeY + ss * 0.19, kneeZ - sc * 0.19], [0.043, 0.046, 0.07], CK.pants, { pitch: kn2 });
+      if (L < 2) oct([hipX, ankY - ss * 0.02, ankZ + 0.03], [0.041, 0.043, 0.028], '#e7e2d2', { pitch: kn2 });   // white sock
+      oct([hipX, ankY + 0.02, ankZ - 0.012], [0.05, 0.08, 0.034], CK.boot);                          // boot upper
+      if (L < 2) add([hipX, ankY + 0.085, ankZ - 0.028], [0.046, 0.036, 0.022], CK.boot);           // toe cap
+      add([hipX, ankY + 0.035, ankZ - 0.046], [0.055, 0.108, 0.016], CK.sole);                      // sole
+      if (L < 1) {
+        add([hipX, ankY - 0.06, ankZ - 0.032], [0.042, 0.028, 0.026], CK.sole);                     // heel
+        add([hipX, ankY + 0.015, ankZ + 0.024], [0.052, 0.008, 0.01], '#1c1209');                  // boot strap
+        add([hipX + 0.045, ankY + 0.015, ankZ + 0.024], [0.009, 0.011, 0.013], CK.goldLo);          // side buckle
+      }
 
       // ---------------- peg leg (his left): stiff, no knee ----------------
       const pp = -sw * 0.56;
       const pc = Math.cos(pp), ps = Math.sin(pp);
       const pegX = 0.105;
       const P2 = function (t) { return [pegX, ps * t, hipZ - pc * t]; };
-      add(P2(0.08), [0.07, 0.074, 0.1], CK.pants, { pitch: pp });                                 // the stump, still trousered
-      add(P2(0.19), [0.06, 0.062, 0.045], CK.pantsLo, { pitch: pp });                               // trouser tied off below the knee
+      oct(P2(0.05), [0.072, 0.076, 0.055], CK.pants, { pitch: pp });                                // the stump, still trousered
+      oct(P2(0.14), [0.064, 0.068, 0.055], CK.pants, { pitch: pp });
+      oct(P2(0.205), [0.057, 0.06, 0.03], CK.pantsLo, { pitch: pp });                               // trouser tied off below the knee
       if (L < 2) {
-        add(P2(0.235), [0.053, 0.055, 0.016], '#1c1209', { pitch: pp });                           // leather strapping
-        add(P2(0.275), [0.05, 0.052, 0.014], '#1c1209', { pitch: pp });
+        add(P2(0.24), [0.052, 0.054, 0.014], '#1c1209', { pitch: pp });                             // leather strapping
+        add(P2(0.275), [0.049, 0.051, 0.013], '#1c1209', { pitch: pp });
       }
-      add(P2(0.34), [0.044, 0.044, 0.075], CK.wood, { pitch: pp });                                // the leg itself, tapering
-      add(P2(0.46), [0.034, 0.034, 0.06], CK.wood, { pitch: pp });
-      add(P2(0.56), [0.026, 0.026, 0.05], CK.woodLo, { pitch: pp });
-      add(P2(0.615), [0.03, 0.03, 0.014], CK.iron, { pitch: pp });                                 // iron ferrule, worn shiny
+      oct(P2(0.325), [0.044, 0.044, 0.045], CK.wood, { pitch: pp });                                // the leg itself, tapering
+      oct(P2(0.41), [0.037, 0.037, 0.045], CK.wood, { pitch: pp });
+      oct(P2(0.49), [0.03, 0.03, 0.04], CK.wood, { pitch: pp });
+      oct(P2(0.565), [0.024, 0.024, 0.038], CK.woodLo, { pitch: pp });
+      add(P2(0.615), [0.028, 0.028, 0.013], CK.iron, { pitch: pp });                                // iron ferrule, worn shiny
+      if (L < 1) {
+        add(P2(0.3), [0.047, 0.047, 0.007], CK.iron, { pitch: pp });                                // rusted retaining band
+        add(P2(0.42), [0.006, 0.034, 0.05], CK.woodLo, { pitch: pp });                              // a split running up the grain
+      }
 
       // ---------------- hips, waist, ribcage ----------------
-      const wz = bz(0.72);
-      add([0, sag(0.72), wz], [0.112, 0.086, 0.055], CK.pants, { roll: roll });                     // hips
-      add([0, sag(0.75) + 0.005, bz(0.75)], [0.124, 0.092, 0.038], CK.sash, { roll: roll });         // sash
+      oct([0, sag(0.70), bz(0.70)], [0.106, 0.083, 0.042], CK.pants, { roll: roll }, 2);             // hips
+      oct([0, sag(0.745), bz(0.745)], [0.122, 0.09, 0.024], CK.sash, { roll: roll }, 2);              // sash, wound twice
+      oct([0, sag(0.772), bz(0.772)], [0.117, 0.087, 0.016], CK.sashLo, { roll: roll }, 2);
       if (L < 2) {
-        add([0.06, sag(0.75) - 0.09, bz(0.74)], [0.045, 0.02, 0.05], CK.sashLo, { roll: roll });   // knotted sash tail
-        add([0.065, sag(0.72) - 0.083, bz(0.66)], [0.028, 0.014, 0.06], CK.sashLo, { roll: roll, pitch: 0.2 });
+        add([0.065, sag(0.75) - 0.088, bz(0.74)], [0.045, 0.02, 0.045], CK.sashLo, { roll: roll });  // knotted sash tail (hangs behind)
+        add([0.07, sag(0.72) - 0.083 - sw * 0.008, bz(0.66)], [0.028, 0.014, 0.055], CK.sashLo, { roll: roll, pitch: 0.2 });
+        add([0.062, sag(0.68) - 0.08 - sw * 0.014, bz(0.6)], [0.02, 0.011, 0.04], CK.sash, { roll: roll, pitch: 0.32 });
       }
-      add([0, sag(0.79), bz(0.79)], [0.119, 0.089, 0.022], '#2a1f12', { roll: roll });             // belt
-      add([0, sag(0.79) - 0.088, bz(0.79)], [0.034, 0.014, 0.026], CK.goldLo, { roll: roll });     // buckle plate
-      if (L < 2) add([0, sag(0.79) - 0.097, bz(0.79)], [0.024, 0.008, 0.017], CK.gold, { roll: roll });
-      // ribcage: narrow at the waist, wide at the chest — a proper barrel
-      add([0, sag(0.86), bz(0.86)], [0.101, 0.086, 0.05], CK.coat, { roll: roll });
-      add([0, sag(0.95), bz(0.95)], [0.116, 0.094, 0.055], CK.coat, { roll: roll });
-      add([0, sag(1.02), bz(1.02)], [0.124, 0.09, 0.032], CK.coatLo, { roll: roll });               // shoulder yoke
-      if (L < 2) {                                                                                 // waistcoat edges + buttons
-        add([-0.052, sag(0.92) - 0.097, bz(0.92)], [0.026, 0.008, 0.1], CK.coatLo, { roll: roll - 0.18 });
-        add([0.052, sag(0.92) - 0.097, bz(0.92)], [0.026, 0.008, 0.1], CK.coatLo, { roll: roll + 0.18 });
-        for (let i = 0; i < 3; i++) add([0, sag(0.84 + i * 0.07) - 0.101, bz(0.84 + i * 0.07)], [0.011, 0.006, 0.011], CK.goldLo, { roll: roll });
+      oct([0, sag(0.795), bz(0.795)], [0.119, 0.089, 0.018], '#2a1f12', { roll: roll }, 2);          // belt
+      add([0, sag(0.795) + 0.088, bz(0.795)], [0.032, 0.012, 0.024], CK.goldLo, { roll: roll });     // buckle plate — on his FRONT
+      if (L < 2) add([0, sag(0.795) + 0.094, bz(0.795)], [0.021, 0.007, 0.016], CK.gold, { roll: roll });
+      // ribcage: a proper barrel, five slices narrow at the waist, wide at the chest
+      oct([0, sag(0.80), bz(0.80)], [0.100, 0.082, 0.04], CK.coat, { roll: roll }, 2);
+      oct([0, sag(0.865), bz(0.865)], [0.110, 0.088, 0.042], CK.coat, { roll: roll }, 2);
+      oct([0, sag(0.93), bz(0.93)], [0.117, 0.092, 0.042], CK.coat, { roll: roll }, 2);
+      oct([0, sag(0.985), bz(0.985)], [0.121, 0.094, 0.036], CK.coat, { roll: roll }, 2);
+      oct([0, sag(1.03), bz(1.03)], [0.114, 0.088, 0.024], CK.coatLo, { roll: roll }, 2);            // shoulder yoke
+      add([0, sag(1.0) - 0.075, bz(1.0)], [0.082, 0.045, 0.05], CK.coatLo, { roll: roll, pitch: -0.3 });   // the hump between the shoulder blades
+      if (L < 2) {                                                                                  // waistcoat edges + brass buttons down the FRONT
+        add([-0.052, sag(0.92) + 0.093, bz(0.92)], [0.024, 0.007, 0.1], CK.coatLo, { roll: roll - 0.18 });
+        add([0.052, sag(0.92) + 0.093, bz(0.92)], [0.024, 0.007, 0.1], CK.coatLo, { roll: roll + 0.18 });
+        for (let i = 0; i < 4; i++) add([0, sag(0.82 + i * 0.06) + 0.093, bz(0.82 + i * 0.06)], [0.01, 0.006, 0.01], CK.gold, { roll: roll });
       }
-      // the coat itself hanging open, with tails behind
+      // the coat itself hanging open, tails swinging behind him
       add([-0.128, sag(0.9) - 0.02, bz(0.9)], [0.028, 0.094, 0.14], CK.shirtLo, { roll: roll - 0.1 });
       add([0.128, sag(0.9) - 0.02, bz(0.9)], [0.028, 0.094, 0.14], CK.shirtLo, { roll: roll + 0.1 });
       if (L < 2) {
-        add([-0.078, sag(0.72) + 0.104, bz(0.7)], [0.05, 0.03, 0.125], CK.shirtLo, { pitch: -0.12 });   // coat tails
-        add([0.078, sag(0.72) + 0.104, bz(0.7)], [0.05, 0.03, 0.125], CK.shirtLo, { pitch: -0.12 });
+        add([-0.078, sag(0.72) - 0.104, bz(0.7)], [0.05, 0.03, 0.125], CK.shirtLo, { pitch: 0.12 });   // coat tails
+        add([0.078, sag(0.72) - 0.104, bz(0.7)], [0.05, 0.03, 0.125], CK.shirtLo, { pitch: 0.12 });
+        // the hem hangs in torn strips that swing with his stride
+        add([-0.05, sag(0.7) + 0.098, bz(0.6)], [0.016, 0.012, 0.055], CK.shirtLo, { pitch: -0.2 + sw * 0.12 });
+        add([0.095, sag(0.7) - 0.098, bz(0.61)], [0.013, 0.01, 0.048], CK.shirtLo, { pitch: 0.15 - sw * 0.12 });
+        add([-0.1, sag(0.71) - 0.095, bz(0.63)], [0.011, 0.009, 0.04], CK.shirtLo, { pitch: 0.22 + sw * 0.1 });
       }
-      // blood, run down from the collar and dried
-      add([0.015, sag(0.92) - 0.109, bz(0.92)], [0.036, 0.006, 0.09], CK.blood, { roll: roll });
+      // blood, soaked down the FRONT of the waistcoat from the collar
+      add([0.012, sag(0.95) + 0.096, bz(0.95)], [0.034, 0.006, 0.075], CK.blood, { roll: roll });
+      add([-0.04, sag(0.99) + 0.096, bz(0.99)], [0.02, 0.005, 0.03], CK.bloodWet, { roll: roll });
       if (L < 1) {
-        add([-0.045, sag(0.86) - 0.099, bz(0.86)], [0.022, 0.005, 0.03], CK.bloodWet, { roll: roll });
-        add([0.052, sag(0.8) - 0.098, bz(0.8)], [0.016, 0.005, 0.022], CK.blood, { roll: roll });
+        add([0.05, sag(0.86) + 0.093, bz(0.86)], [0.013, 0.005, 0.028], CK.blood, { roll: roll });   // a separate dried run
+        add([-0.015, sag(0.83) + 0.092, bz(0.83)], [0.005, 0.004, 0.02], CK.blood, { roll: roll }); // thin drips reaching the belt
+        add([0.03, sag(0.825) + 0.092, bz(0.825)], [0.004, 0.004, 0.016], CK.blood, { roll: roll });
+        add([-0.07, sag(0.9) + 0.094, bz(0.9)], [0.014, 0.004, 0.02], '#6a5d3a', { roll: roll });   // ground-in grime patch
+        add([0.085, sag(0.84) + 0.093, bz(0.84)], [0.012, 0.004, 0.016], '#6a5d3a', { roll: roll });
       }
-      // collar + filthy cravat
-      add([0, sag(1.06), bz(1.06)], [0.103, 0.08, 0.028], CK.shirt, { roll: roll });
+      // collar + filthy cravat knotted at the throat (FRONT)
+      oct([0, sag(1.065), bz(1.065)], [0.104, 0.081, 0.024], CK.shirt, { roll: roll }, 2);
       if (L < 2) {
-        add([0, sag(1.05) - 0.078, bz(1.05)], [0.05, 0.02, 0.03], CK.cravat, { roll: roll });
-        add([0, sag(1.0) - 0.083, bz(1.0)], [0.032, 0.014, 0.045], CK.cravat, { roll: roll, pitch: 0.15 });
+        add([0, sag(1.06) + 0.076, bz(1.06)], [0.026, 0.014, 0.02], CK.cravat, { roll: roll });      // the knot
+        add([0, sag(1.02) + 0.09, bz(1.01)], [0.036, 0.012, 0.05], CK.cravat, { roll: roll, pitch: -0.15 });   // hanging band
+        add([0, sag(0.97) + 0.094, bz(0.96)], [0.028, 0.01, 0.04], '#b5ab88', { roll: roll, pitch: -0.1 });    // its stained tongue
       }
 
       // ---------------- arms: long, gangly, swinging against the legs -------
       for (const side of [-1, 1]) {
         const shx = side * 0.156, shz = bz(1.02), shy = sag(1.02);
-        add([shx * 1.06, shy, shz - 0.01], [0.05, 0.078, 0.062], CK.shirt, { roll: roll + side * 0.25 });     // billowing shoulder puff
-        if (L < 2) add([shx * 1.14, shy, shz - 0.07], [0.045, 0.068, 0.04], CK.shirt, { roll: roll + side * 0.3 });
+        oct([shx * 1.06, shy, shz - 0.005], [0.05, 0.078, 0.055], CK.shirt, { roll: roll + side * 0.25 });     // billowing shoulder puff
+        if (L < 2) oct([shx * 1.14, shy, shz - 0.06], [0.045, 0.068, 0.04], CK.shirt, { roll: roll + side * 0.3 });
         const aa = -sw * side * 0.44 + lur * 0.4;
         const ac = Math.cos(aa), as = Math.sin(aa);
         const A = function (t) { return [shx + side * 0.012 * t / 0.2, shy + as * t, shz - ac * t]; };
-        add(A(0.1), [0.045, 0.047, 0.105], CK.shirt, { pitch: aa });                                   // upper arm
-        add(A(0.22), [0.04, 0.042, 0.08], CK.shirt, { pitch: aa });
+        oct(A(0.08), [0.045, 0.047, 0.06], CK.shirt, { pitch: aa });                                 // upper arm
+        oct(A(0.19), [0.041, 0.043, 0.065], CK.shirt, { pitch: aa });
         const elY = shy + as * 0.29, elZ = shz - ac * 0.29;
-        if (L < 2) add([shx + side * 0.018, elY, elZ], [0.045, 0.045, 0.028], CK.shirtLo, { pitch: aa });   // elbow
+        if (L < 2) oct([shx + side * 0.018, elY, elZ], [0.043, 0.043, 0.028], CK.shirtLo, { pitch: aa });   // elbow
         const fa = aa + 0.34;                                                                       // forearm hangs a little straighter
         const fc = Math.cos(fa), fs = Math.sin(fa);
         const F = function (t) { return [shx + side * 0.02, elY + fs * t, elZ - fc * t]; };
-        add(F(0.1), [0.038, 0.04, 0.105], CK.shirt, { pitch: fa });
-        if (L < 2) add(F(0.205), [0.05, 0.05, 0.022], CK.cravat, { pitch: fa });                    // ragged cuff
+        oct(F(0.07), [0.039, 0.041, 0.06], CK.shirt, { pitch: fa });
+        oct(F(0.16), [0.036, 0.038, 0.055], CK.shirt, { pitch: fa });
+        if (L < 2) add(F(0.205), [0.049, 0.049, 0.02], CK.cravat, { pitch: fa });                   // ragged cuff
         const wY = elY + fs * 0.24, wZ = elZ - fc * 0.24;
-        add([shx + side * 0.02, wY + fs * 0.05, wZ - fc * 0.05], [0.042, 0.036, 0.05], CK.fleshLo, { pitch: fa });   // palm
-        if (L < 1) {                                                                                // long crooked fingers
+        oct([shx + side * 0.02, wY + fs * 0.05, wZ - fc * 0.05], [0.041, 0.035, 0.048], CK.fleshLo, { pitch: fa });   // palm
+        if (L < 1) {                                                                                // long crooked fingers, a knuckle joint each, hooked nails
           for (let f = 0; f < 4; f++) {
             const fx = shx + side * 0.02 + (f - 1.5) * 0.021;
-            add([fx, wY + fs * 0.13, wZ - fc * 0.13], [0.009, 0.009, 0.042], CK.fleshLo, { pitch: fa + 0.12 });
-            add([fx, wY + fs * 0.185, wZ - fc * 0.185], [0.0075, 0.0075, 0.016], CK.nail, { pitch: fa + 0.3 });
+            add([fx, wY + fs * 0.13, wZ - fc * 0.13], [0.009, 0.009, 0.044], CK.fleshLo, { pitch: fa + 0.12 });
+            add([fx, wY + fs * 0.175, wZ - fc * 0.175], [0.0105, 0.0105, 0.009], CK.flesh2, { pitch: fa + 0.25 });   // swollen knuckle
+            add([fx, wY + fs * 0.215, wZ - fc * 0.215], [0.008, 0.008, 0.028], CK.fleshLo, { pitch: fa + 0.4 });
+            add([fx, wY + fs * 0.255, wZ - fc * 0.255], [0.0068, 0.0068, 0.019], CK.nail, { pitch: fa + 0.62 });     // nail curling right under
           }
           add([shx + side * 0.06, wY + fs * 0.09, wZ - fc * 0.09], [0.02, 0.009, 0.009], CK.fleshLo, { pitch: fa, yaw: side * 0.5 });   // thumb
         }
       }
 
       // ---------------- neck ----------------
-      const nz = bz(1.11);
-      add([0, sag(1.11), nz], [0.042, 0.042, 0.045], CK.flesh, { roll: roll });
+      const nz = bz(1.1);
+      oct([0, sag(1.095), nz - 0.012], [0.044, 0.044, 0.026], CK.flesh, { roll: roll }, 2);
+      oct([0, sag(1.125), nz + 0.02], [0.04, 0.04, 0.026], CK.flesh, { roll: roll }, 2);
       if (L < 1) {                                                                                  // stretched neck cords
-        add([-0.028, sag(1.11) - 0.03, nz], [0.009, 0.012, 0.04], CK.fleshLo, { roll: roll, pitch: 0.2 });
-        add([0.028, sag(1.11) - 0.03, nz], [0.009, 0.012, 0.04], CK.fleshLo, { roll: roll, pitch: 0.2 });
+        add([-0.028, sag(1.11) + 0.026, nz + 0.005], [0.008, 0.011, 0.038], CK.fleshLo, { roll: roll, pitch: -0.15 });
+        add([0.028, sag(1.11) + 0.026, nz + 0.005], [0.008, 0.011, 0.038], CK.fleshLo, { roll: roll, pitch: -0.15 });
+        add([0, sag(1.11) + 0.04, nz + 0.008], [0.009, 0.007, 0.011], CK.flesh2, { roll: roll });   // a jutting adam's apple
+        add([-0.008, sag(1.1) + 0.036, nz - 0.016], [0.016, 0.006, 0.009], CK.blood, { roll: roll }); // dried blood ringing the collar
       }
 
-      // ---------------- head: gaunt, screaming, and it turns on its own -----
-      const hz = bz(1.24), hy = sag(1.24) + 0.03;    // carried forward of the shoulders, vulture-like
+      // ---------------- head: a gaunt egg of stacked slices, screaming ------
+      const hz = bz(1.24), hy = sag(1.24) + 0.03 + rage * 0.03;   // carried forward of the shoulders, vulture-like — and it CRANES at you when he's seen you
       const lc = Math.cos(look), ls = Math.sin(look);
       const HP = function (ox, oy, oz) { return [ox * lc - (oy + hy) * ls, ox * ls + (oy + hy) * lc, hz + oz]; };
       const Y = { yaw: look };
-      add(HP(0, -0.005, 0.028), [0.069, 0.07, 0.064], CK.flesh, Y);                                // cranium
-      add(HP(0, 0.004, -0.042), [0.062, 0.066, 0.03], CK.flesh, Y);                                  // mid-face
-      add(HP(0, -0.008, -0.086), [0.051, 0.056, 0.028], CK.flesh, Y);                               // jaw
+      const jd = rage * 0.024;                                                                      // how far the jaw has dropped
+      oct(HP(0, -0.006, 0.075), [0.046, 0.05, 0.018], CK.flesh, Y, 2);                              // crown
+      oct(HP(0, -0.004, 0.048), [0.061, 0.065, 0.026], CK.flesh, Y, 2);                             // upper cranium
+      oct(HP(0, 0.002, 0.02), [0.066, 0.068, 0.022], CK.flesh, Y, 2);                               // brow band
+      oct(HP(0, 0.004, -0.012), [0.062, 0.066, 0.024], CK.flesh, Y, 2);                             // mid-face
+      oct(HP(0, 0.0, -0.045), [0.056, 0.06, 0.022], CK.flesh, Y, 2);                                // cheeks
+      oct(HP(0, -0.006, -0.075 - jd), [0.049, 0.054, 0.02], CK.flesh, Y, 2);                        // jaw — it DROPS when he's seen you
+      oct(HP(0, -0.01, -0.102 - jd), [0.038, 0.045, 0.016], CK.flesh, Y, 2);                        // chin
       if (L < 2) {
         add(HP(0, 0.066, 0.05), [0.064, 0.014, 0.014], CK.flesh2, Y);                               // heavy brow ridge
+        add(HP(0.014, 0.069, 0.058), [0.032, 0.008, 0.005], '#4a1610', { yaw: look, roll: -0.3 });  // an old scar seamed across the brow
         add(HP(-0.062, 0.03, 0.01), [0.011, 0.05, 0.046], CK.fleshLo, Y);                            // hollow temples
         add(HP(0.062, 0.03, 0.01), [0.011, 0.05, 0.046], CK.fleshLo, Y);
         add(HP(-0.05, 0.05, -0.03), [0.018, 0.026, 0.02], CK.flesh2, Y);                           // cheekbones
         add(HP(0.05, 0.05, -0.03), [0.018, 0.026, 0.02], CK.flesh2, Y);
+        add(HP(-0.044, 0.062, -0.048), [0.005, 0.012, 0.024], CK.hollow, { yaw: look, roll: 0.22 });  // gouged nasolabial folds
+        add(HP(0.048, 0.062, -0.048), [0.005, 0.012, 0.024], CK.hollow, { yaw: look, roll: -0.22 });
         add(HP(-0.069, -0.02, -0.005), [0.012, 0.022, 0.026], CK.fleshLo, Y);                       // ears
         add(HP(0.069, -0.02, -0.005), [0.012, 0.022, 0.026], CK.fleshLo, Y);
+        add(HP(0.072, -0.018, -0.032), [0.009, 0.004, 0.011], CK.gold, Y);                         // a tarnished hoop in the torn ear
       }
-      // eyes, set in black sockets and misaligned — one rides lower than the other
-      add(HP(-0.042, 0.062, 0.026), [0.031, 0.016, 0.026], CK.hollow, Y);
-      add(HP(0.046, 0.062, 0.0), [0.029, 0.016, 0.024], CK.hollow, Y);
-      add(HP(-0.042, 0.076, 0.026), [0.026, 0.008, 0.021], CK.eye, Y);
-      add(HP(0.046, 0.076, 0.0), [0.024, 0.008, 0.019], CK.eye, Y);
-      add(HP(-0.04, 0.084, 0.024), [0.011, 0.005, 0.011], CK.pupil, Y);
-      add(HP(0.049, 0.084, -0.002), [0.01, 0.005, 0.01], CK.pupil, Y);
+      if (L < 1) {
+        add(HP(0, 0.062, 0.072), [0.05, 0.008, 0.004], CK.fleshLo, Y);                             // deep forehead furrows
+        add(HP(0, 0.064, 0.086), [0.042, 0.008, 0.004], CK.fleshLo, Y);
+        add(HP(-0.056, 0.048, 0.038), [0.004, 0.012, 0.022], '#3c4436', { yaw: look, roll: 0.3 }); // a fat worm of a vein at the temple
+        add(HP(0.024, 0.078, -0.03), [0.006, 0.006, 0.005], CK.flesh2, Y);                         // wart by the nose
+      }
+      // eyes, set in black sockets and misaligned — one rides lower than the
+      // other. When he's raging the whites flare wide and the pupils shrink
+      // to crazed pinpricks.
+      const eW = 1 + rage * 0.3, pW = 1 - rage * 0.45;
+      add(HP(-0.042, 0.062, 0.026), [0.031 * eW, 0.016, 0.026 * eW], CK.hollow, Y);
+      add(HP(0.046, 0.062, 0.0), [0.029 * eW, 0.016, 0.024 * eW], CK.hollow, Y);
+      add(HP(-0.042, 0.076, 0.026), [0.026 * eW, 0.008, 0.021 * eW], CK.eye, Y);
+      add(HP(0.046, 0.076, 0.0), [0.024 * eW, 0.008, 0.019 * eW], CK.eye, Y);
+      if (L < 2) {                                                                                  // mud-brown iris rings around the pinpricks
+        add(HP(-0.041, 0.081, 0.025), [0.016 * pW + 0.004, 0.005, 0.016 * pW + 0.004], '#5a3a18', Y);
+        add(HP(0.048, 0.081, -0.001), [0.015 * pW + 0.004, 0.005, 0.015 * pW + 0.004], '#5a3a18', Y);
+      }
+      add(HP(-0.04, 0.084, 0.024), [0.011 * pW, 0.005, 0.011 * pW], CK.pupil, Y);
+      add(HP(0.049, 0.084, -0.002), [0.01 * pW, 0.005, 0.01 * pW], CK.pupil, Y);
+      if (L < 2) {                                                                                // sagging bruised eye-bags
+        add(HP(-0.042, 0.068, 0.004), [0.026, 0.008, 0.008], CK.hollow, Y);
+        add(HP(0.046, 0.068, -0.02), [0.024, 0.008, 0.008], CK.hollow, Y);
+      }
       if (L < 1) {                                                                                  // bloodshot rims
         add(HP(-0.042, 0.081, 0.041), [0.026, 0.005, 0.005], '#6a1c14', Y);
         add(HP(0.046, 0.081, 0.015), [0.024, 0.005, 0.005], '#6a1c14', Y);
+        add(HP(-0.048, 0.079, -0.012), [0.005, 0.005, 0.026], CK.blood, Y);                       // a dried tear of blood from the low eye
+        add(HP(-0.05, 0.079, -0.044), [0.004, 0.004, 0.012], CK.bloodWet, Y);
       }
-      // nose
-      add(HP(0, 0.072, 0.0), [0.016, 0.02, 0.03], CK.flesh2, Y);
-      add(HP(0, 0.086, -0.026), [0.02, 0.022, 0.014], CK.flesh2, Y);
+      // nose: a gaunt hooked bridge
+      add(HP(0, 0.072, 0.004), [0.014, 0.018, 0.026], CK.flesh2, Y);
+      add(HP(0, 0.082, -0.016), [0.017, 0.02, 0.014], CK.flesh2, { yaw: look, pitch: 0.2 });
+      add(HP(0, 0.086, -0.03), [0.02, 0.02, 0.01], CK.flesh2, Y);
       if (L < 1) {
-        add(HP(-0.014, 0.09, -0.036), [0.006, 0.008, 0.006], CK.hollow, Y);                         // nostrils
-        add(HP(0.014, 0.09, -0.036), [0.006, 0.008, 0.006], CK.hollow, Y);
+        add(HP(-0.014, 0.09, -0.038), [0.006, 0.008, 0.006], CK.hollow, Y);                         // nostrils
+        add(HP(0.014, 0.09, -0.038), [0.006, 0.008, 0.006], CK.hollow, Y);
       }
-      // the scream: a black cavity with broken teeth top and bottom
-      add(HP(0, 0.062, -0.072), [0.042, 0.016, 0.036], CK.dark, Y);
+      // the scream: a black cavity with broken teeth top and bottom — it tears
+      // open even wider the moment he's spotted you
+      add(HP(0, 0.062, -0.072 - jd * 0.5), [0.042, 0.016, 0.036 + rage * 0.018], CK.dark, Y);
+      add(HP(0, 0.07, -0.062), [0.036, 0.006, 0.01], '#3a0c0a', Y);                                // raw dark gums above the teeth
       add(HP(0, 0.075, -0.05), [0.038, 0.006, 0.009], CK.teeth, Y);
-      add(HP(0, 0.073, -0.094), [0.034, 0.006, 0.008], CK.teeth, Y);
+      add(HP(0, 0.073, -0.094 - jd), [0.034, 0.006, 0.008], CK.teeth, Y);
       if (L < 1) {
         for (let i = -2; i <= 2; i++) if (i !== 0)                                                  // a couple of long crooked ones
           add(HP(i * 0.014, 0.077, -0.058), [0.005, 0.005, 0.012], CK.teeth, Y);
-        add(HP(0.01, 0.072, -0.102), [0.006, 0.006, 0.022], CK.bloodWet, Y);                        // drool of blood off the chin
+        add(HP(-0.007, 0.077, -0.057), [0.005, 0.005, 0.011], '#4a3a20', Y);                       // one rotted brown-black
+        add(HP(0.02, 0.075, -0.086 - jd), [0.005, 0.005, 0.014], CK.teeth, Y);                     // snaggle jutting off the lower jaw
+        add(HP(0.01, 0.072, -0.102 - jd), [0.006, 0.006, 0.022], CK.bloodWet, Y);                   // drool of blood off the chin
+        add(HP(-0.016, 0.07, -0.108 - jd), [0.004, 0.004, 0.014], CK.blood, Y);                     // and a second, dried string
       }
-      // matted mustache drooping over the top lip
+      // matted mustache drooping over the top lip + a scraggly chin beard
       add(HP(-0.026, 0.075, -0.05), [0.026, 0.012, 0.008], CK.hair, { yaw: look, roll: 0.35 });
       add(HP(0.026, 0.075, -0.05), [0.026, 0.012, 0.008], CK.hair, { yaw: look, roll: -0.35 });
+      oct(HP(0, 0.024, -0.112 - jd), [0.042, 0.038, 0.014], CK.hair, Y, 2);
+      oct(HP(0, 0.032, -0.134 - jd), [0.028, 0.028, 0.012], CK.hair, Y, 2);
+      if (L < 1) {
+        add(HP(-0.012, 0.04, -0.152 - jd), [0.006, 0.006, 0.014], CK.hair, Y);                     // straggling ends
+        add(HP(0.016, 0.038, -0.15 - jd), [0.005, 0.005, 0.011], CK.hair, Y);
+      }
       if (L < 2) {                                                                                  // lank hair under the hat
-        add(HP(-0.062, 0.0, 0.03), [0.013, 0.06, 0.05], CK.hair, Y);
-        add(HP(0.062, 0.0, 0.03), [0.013, 0.06, 0.05], CK.hair, Y);
+        add(HP(-0.063, 0.0, 0.032), [0.012, 0.058, 0.032], CK.hair, Y);
+        add(HP(0.063, 0.0, 0.032), [0.012, 0.058, 0.032], CK.hair, Y);
+        add(HP(-0.059, -0.012, -0.002), [0.011, 0.05, 0.03], CK.hair, Y);
+        add(HP(0.059, -0.012, -0.002), [0.011, 0.05, 0.03], CK.hair, Y);
         add(HP(0, -0.062, 0.02), [0.054, 0.014, 0.055], CK.hair, Y);
       }
 
-      // ---------------- tricorn hat: three cocked brim segments ------------
-      add(HP(0, -0.004, 0.11), [0.064, 0.066, 0.038], CK.hat, Y);                                  // crown
-      add(HP(0, -0.004, 0.148), [0.058, 0.06, 0.012], CK.hatLo, Y);                                // flat top
-      add(HP(0, 0.086, 0.09), [0.077, 0.05, 0.012], CK.brim, { yaw: look, pitch: -0.42 });         // front cock, swept up
-      add(HP(-0.078, -0.02, 0.088), [0.05, 0.082, 0.012], CK.brim, { yaw: look, roll: 0.46 });      // left cock
-      add(HP(0.078, -0.02, 0.088), [0.05, 0.082, 0.012], CK.brim, { yaw: look, roll: -0.46 });      // right cock
+      // ---------------- tricorn hat: rounded crown, three cocked brims ------
+      oct(HP(0, -0.004, 0.104), [0.063, 0.065, 0.02], CK.hat, Y, 2);                                // crown
+      oct(HP(0, -0.004, 0.128), [0.058, 0.06, 0.014], CK.hat, Y, 2);
+      oct(HP(0, -0.004, 0.148), [0.051, 0.053, 0.011], CK.hatLo, Y, 2);                             // domed top
+      oct(HP(0, -0.004, 0.09), [0.067, 0.069, 0.008], CK.hatLo, Y, 2);                              // hat band
+      add(HP(0, 0.086, 0.09), [0.077, 0.05, 0.011], CK.brim, { yaw: look, pitch: -0.42 });          // front cock, swept up
+      add(HP(-0.078, -0.02, 0.088), [0.05, 0.082, 0.011], CK.brim, { yaw: look, roll: 0.46 });       // left cock
+      add(HP(0.078, -0.02, 0.088), [0.05, 0.082, 0.011], CK.brim, { yaw: look, roll: -0.46 });       // right cock
       if (L < 2) {
+        add(HP(0, 0.104, 0.108), [0.068, 0.028, 0.008], CK.brim, { yaw: look, pitch: -0.6 });       // the brims CURL at their lips
+        add(HP(-0.094, -0.02, 0.108), [0.028, 0.072, 0.008], CK.brim, { yaw: look, roll: 0.68 });
+        add(HP(0.094, -0.02, 0.108), [0.028, 0.072, 0.008], CK.brim, { yaw: look, roll: -0.68 });
         add(HP(0, 0.094, 0.1), [0.07, 0.014, 0.006], CK.goldLo, { yaw: look, pitch: -0.42 });    // gold brim trim
-        add(HP(0, -0.004, 0.092), [0.067, 0.069, 0.008], CK.hatLo, Y);                               // hat band
+        // the mascot's grinning skull badge, pinned front and centre
+        add(HP(0, 0.068, 0.108), [0.013, 0.006, 0.012], '#d8d2be', Y);                             // skull
+        add(HP(-0.006, 0.072, 0.108), [0.0035, 0.003, 0.004], CK.dark, Y);                         // eye pits
+        add(HP(0.006, 0.072, 0.108), [0.0035, 0.003, 0.004], CK.dark, Y);
+        add(HP(0, 0.068, 0.09), [0.018, 0.005, 0.004], '#c4bda6', { yaw: look, roll: 0.6 });       // crossed bones beneath
+        add(HP(0, 0.068, 0.09), [0.018, 0.005, 0.004], '#c4bda6', { yaw: look, roll: -0.6 });
       }
-      // ragged crow feather stuck in the band
+      if (L < 1) {
+        add(HP(-0.062, 0.03, 0.1), [0.02, 0.012, 0.005], CK.goldLo, { yaw: look, roll: 0.4 });     // trim scraps on the side cocks
+        add(HP(0.062, 0.03, 0.1), [0.02, 0.012, 0.005], CK.goldLo, { yaw: look, roll: -0.4 });
+      }
+      // ragged crow feather stuck in the band, in three bent segments
       add(HP(0.074, -0.03, 0.146), [0.012, 0.04, 0.05], '#131318', { yaw: look, roll: 0.4, pitch: -0.25 });
-      if (L < 2) add(HP(0.1, -0.052, 0.202), [0.009, 0.03, 0.045], '#1c1c22', { yaw: look, roll: 0.55, pitch: -0.35 });
+      if (L < 2) {
+        add(HP(0.096, -0.048, 0.196), [0.01, 0.032, 0.042], '#1c1c22', { yaw: look, roll: 0.55, pitch: -0.35 });
+        add(HP(0.116, -0.062, 0.238), [0.007, 0.022, 0.03], '#26262e', { yaw: look, roll: 0.7, pitch: -0.5 });
+      }
       return PT;
     }
     const MODELS = { clark: clarkParts };
@@ -4003,15 +4102,17 @@
 
       // ---- hide: duck under a table / gurney / car. Nothing can see you under
       // there unless it walks right into you.
-      // Getting in and out is a scripted crawl along a fixed line between the
-      // spot you were standing on and the spot under the furniture — no physics
-      // runs during it, so you can never be spat out through a wall or shoved
-      // somewhere you didn't choose. Coming out puts you back exactly where you
-      // ducked down from.
+      // Getting in and out is a scripted crawl along a fixed line between a
+      // spot in the open and the spot under the furniture — no physics runs
+      // during it, so you can never be spat out through a wall or shoved
+      // somewhere you didn't choose. Coming out crawls toward the side you're
+      // facing / pushing (if it's clear), so you exit where you expect to.
       if (wantHide) {
         wantHide = false;
-        if (hidden) hidden = false;                        // start crawling out
-        else if (!climbing) {
+        if (hidden) {                                      // start crawling out
+          if (hideK >= 1) hideFrom = pickHideExit(mv < -0.15 ? -1 : 1);
+          hidden = false;
+        } else if (!climbing) {
           if (hideAt) hidden = true;                       // changed your mind mid-crawl
           else {
             let best = null, bd = 1.4;
@@ -4025,7 +4126,10 @@
         const e = hideK * hideK * (3 - 2 * hideK);         // smoothstep, so it eases at both ends
         px = hideFrom.x + (hideAt.x - hideFrom.x) * e;
         py = hideFrom.y + (hideAt.y - hideFrom.y) * e;
-        if (hidden && hideK >= 1 && mv) hidden = false;    // once you're tucked in, any push scrambles you out
+        if (hidden && hideK >= 1 && mv) {                  // once you're tucked in, any push scrambles you out
+          hideFrom = pickHideExit(mv > 0 ? 1 : -1);        // …on the side you pushed toward
+          hidden = false;
+        }
         if (!hidden && hideK <= 0) {                       // fully out: hand control back
           const o = pushOut(px, py, PLAYER_R);             // belt and braces
           px = o[0]; py = o[1];
