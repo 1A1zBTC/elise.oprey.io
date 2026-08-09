@@ -1,0 +1,1870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Phasmophobia</title>
+  <link rel="stylesheet" href="../fonts/fonts.css">
+  <link rel="stylesheet" href="../shared/game.css">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#16213e">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="E&L Games">
+  <link rel="icon" href="../icons/favicon.png">
+  <script src="../pwa.js" defer></script>
+  <style>
+    html, body { height: 100%; }
+    body {
+      font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+      background: #05060a; overflow: hidden;
+      touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    /* Full-bleed: neutralize the shared .stage box (max-width/border/radius/aspect-ratio). */
+    .stage { position: fixed; inset: 0; max-width: none; border: 0; border-radius: 0; box-shadow: none; aspect-ratio: auto; overflow: hidden; background: #05060a; }
+    canvas { position: absolute; image-rendering: auto; }
+
+    /* Floating controls layered over the game. */
+    .fab { position: absolute; z-index: 15; display: flex; gap: 8px; }
+    .fab.tl { top: 12px; left: 12px; }
+    .fab.tr { top: 12px; right: 12px; }
+    .fab a, .fab button {
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.9rem;
+      color: #9ff0c8; background: rgba(5,10,12,0.55); border: 1px solid rgba(120,240,190,0.35);
+      text-decoration: none; border-radius: 12px; padding: 7px 12px; cursor: pointer;
+      backdrop-filter: blur(3px); transition: background 0.15s ease, color 0.15s ease;
+    }
+    .fab a:hover, .fab button:hover { background: rgba(120,240,190,0.16); color: #fff; }
+    .fab.hidden-ui { display: none; }
+
+    /* Equipment belt + action buttons (touch + mouse). */
+    .belt { position: absolute; z-index: 15; left: 50%; transform: translateX(-50%); bottom: 10px; display: flex; gap: 6px; }
+    .belt button {
+      font-size: 1.15rem; line-height: 1; padding: 8px 9px; border-radius: 12px; cursor: pointer;
+      background: rgba(5,10,12,0.55); border: 1px solid rgba(120,240,190,0.3); color: #cfe9dc;
+      backdrop-filter: blur(3px);
+    }
+    .belt button.sel { background: rgba(120,240,190,0.25); border-color: #9ff0c8; box-shadow: 0 0 10px rgba(120,240,190,0.35); }
+    .acts { position: absolute; z-index: 15; right: 12px; bottom: 64px; display: flex; flex-direction: column; gap: 8px; }
+    .acts button {
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.95rem;
+      color: #9ff0c8; background: rgba(5,10,12,0.55); border: 1px solid rgba(120,240,190,0.35);
+      border-radius: 14px; padding: 10px 14px; cursor: pointer; backdrop-filter: blur(3px);
+    }
+    .acts button:active { background: rgba(120,240,190,0.25); }
+    .belt.hidden-ui, .acts.hidden-ui { display: none; }
+
+    .overlay { position: absolute; inset: 0; background: rgba(4,8,10,0.86); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; z-index: 20; }
+    .panel { width: 100%; max-width: 430px; background: #0b1416; border: 2px solid #1f5a44; border-radius: 24px; padding: 24px 20px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.7); }
+    .panel h2 { font-family: 'Pacifico', cursive; color: #9ff0c8; font-size: 1.9rem; font-weight: 400; margin-bottom: 6px; }
+    .panel .sub { color: #9cc0ae; font-size: 0.9rem; margin-bottom: 12px; line-height: 1.5; }
+    .panel .sub b { color: #e8fff3; }
+    .start-btn { margin-top: 14px; width: 100%; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 1.1rem; color: #06110c; background: #9ff0c8; border: none; border-radius: 16px; padding: 15px 20px; cursor: pointer; box-shadow: 0 6px 0 #3c8a67; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+    .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #3c8a67; }
+    .scoreline { display: flex; justify-content: center; gap: 26px; margin: 10px 0 4px; }
+    .scoreline .big { font-size: 2rem; display: block; line-height: 1.1; color: #9ff0c8; font-weight: 800; }
+    .scoreline .lbl { color: #9cc0ae; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ---------- Journal ---------- */
+    .journal-panel { max-width: 520px; text-align: left; }
+    .jr-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+    .jr-head h2 { margin-bottom: 0; }
+    .jr-hint { color: #9cc0ae; font-size: 0.78rem; }
+    .ev-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+    .ev-chip {
+      font-family: inherit; font-weight: 800; font-size: 0.74rem; text-align: center;
+      color: #9cc0ae; background: #0e1c1a; border: 2px solid #1f5a44; border-radius: 12px;
+      padding: 8px 4px; cursor: pointer; line-height: 1.25;
+    }
+    .ev-chip.found { color: #06110c; background: #9ff0c8; border-color: #9ff0c8; }
+    .ev-chip.ruled { color: #5a7466; text-decoration: line-through; opacity: 0.6; }
+    .ghost-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 44vh; overflow-y: auto; }
+    .ghost-card {
+      text-align: left; font-family: inherit; background: #0e1c1a; border: 2px solid #16352c; border-radius: 12px;
+      padding: 8px 10px; cursor: pointer; color: #cfe9dc;
+    }
+    .ghost-card .gname { font-weight: 800; font-size: 0.92rem; color: #e8fff3; }
+    .ghost-card .gev { font-size: 0.68rem; color: #7fae97; margin: 2px 0; }
+    .ghost-card .gtrait { font-size: 0.68rem; color: #9cc0ae; line-height: 1.3; }
+    .ghost-card.impossible { opacity: 0.32; }
+    .ghost-card.guessed { border-color: #9ff0c8; box-shadow: 0 0 12px rgba(120,240,190,0.35); }
+    .ghost-card.guessed .gname { color: #9ff0c8; }
+    .jr-foot { margin-top: 10px; display: flex; gap: 8px; }
+    .jr-foot .start-btn { margin-top: 0; padding: 11px 14px; font-size: 0.95rem; }
+    .jr-foot .ghost-btn { background: #16352c; color: #9ff0c8; box-shadow: 0 6px 0 #0c1f18; }
+
+    .verdict { font-weight: 800; font-size: 1.15rem; margin: 6px 0; }
+    .verdict.good { color: #9ff0c8; }
+    .verdict.bad { color: #ff8a8a; }
+    .paylines { text-align: left; display: inline-block; margin: 4px 0 2px; color: #cfe9dc; font-size: 0.88rem; }
+    .paylines b { color: #9ff0c8; }
+  </style>
+</head>
+<body>
+
+  <div class="stage">
+    <canvas id="game" width="760" height="560"></canvas>
+
+    <div class="fab tl" id="fab-left">
+      <a href="../index.html" class="back topbar">‹ Games</a>
+    </div>
+    <div class="fab tr" id="fab-right">
+      <button id="journal-btn" title="Journal (J)">📓 Journal</button>
+      <button id="full-btn" title="Fullscreen">⛶</button>
+    </div>
+
+    <div class="belt hidden-ui" id="belt">
+      <button data-item="0" title="Hands">✋</button>
+      <button data-item="1" title="EMF Reader">📟</button>
+      <button data-item="2" title="Spirit Box">📻</button>
+      <button data-item="3" title="Thermometer">🌡️</button>
+      <button data-item="4" title="UV Light">🔦</button>
+      <button data-item="5" title="Ghost Writing Book">📖</button>
+      <button data-item="6" title="Video Camera">📹</button>
+    </div>
+    <div class="acts hidden-ui" id="acts">
+      <button id="act-use">USE · E</button>
+      <button id="act-light">LIGHT · F</button>
+      <button id="act-hide">HIDE · H</button>
+    </div>
+
+    <div class="overlay" id="setup">
+      <div class="panel">
+        <h2>Phasmophobia</h2>
+        <div class="sub">You're a <b>ghost hunter</b>. 👻 A ghost is haunting this house — figure out <b>which kind</b> and get out alive.<br><br>
+          Take equipment from your belt: the <b>EMF reader</b> 📟, <b>spirit box</b> 📻, <b>thermometer</b> 🌡️, <b>UV light</b> 🔦, <b>ghost writing book</b> 📖 and <b>video camera</b> 📹. Each ghost leaves exactly <b>3 kinds of evidence</b> — find them, open your <b>journal</b> 📓, pick the ghost that matches, then walk back to the <b>van</b> and hit <b>LEAVE</b>.<br><br>
+          Stay in the dark too long and your <b>sanity</b> drops. Low sanity means the ghost will <b>hunt</b> — if the lights start flashing, <b>run and hide in a wardrobe</b> (H) until it stops.<br><br>
+          <b>Move</b> WASD / drag left &nbsp;·&nbsp; <b>Look</b> A&nbsp;D / drag right &nbsp;·&nbsp; <b>Use / switches</b> E &nbsp;·&nbsp; <b>Torch</b> F &nbsp;·&nbsp; <b>Journal</b> J &nbsp;·&nbsp; <b>Items</b> 1–7</div>
+        <button class="start-btn" id="start-btn">Start the investigation</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="journal" hidden>
+      <div class="panel journal-panel">
+        <div class="jr-head"><h2>Journal</h2><div class="jr-hint">Evidence found so far is ticked ✓</div></div>
+        <div class="ev-grid" id="ev-grid"></div>
+        <div class="ghost-list" id="ghost-list"></div>
+        <div class="jr-foot">
+          <button class="start-btn ghost-btn" id="journal-close">Close · J</button>
+          <button class="start-btn" id="journal-leave" hidden>LEAVE — end the job</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="results" hidden>
+      <div class="panel">
+        <h2 id="res-title">Job complete</h2>
+        <div class="verdict" id="res-verdict"></div>
+        <div class="sub" id="res-reveal"></div>
+        <div class="paylines" id="res-pay"></div>
+        <div class="scoreline">
+          <div><span class="big" id="res-money">$0</span><span class="lbl">Total money</span></div>
+          <div><span class="big" id="res-streak">0</span><span class="lbl">Streak</span></div>
+        </div>
+        <button class="start-btn" id="again-btn">Next investigation</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // ---------- tiny helpers ----------
+    const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const rint = (a, b) => Math.floor(rnd(a, b + 1));
+    const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+    const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+
+    // ?test → separate save keys so headless QA never touches real progress
+    const TEST_MODE = /(^|[?&])test\b/.test(location.search);
+    const SAVE_PREFIX = TEST_MODE ? 'phasmo.test.' : 'phasmo.';
+    function loadNum(k) { const v = parseFloat(localStorage.getItem(SAVE_PREFIX + k)); return isFinite(v) ? v : 0; }
+    function saveNum(k, v) { try { localStorage.setItem(SAVE_PREFIX + k, String(v)); } catch (e) {} }
+
+    // ---------- canvas + low-res scene buffer ----------
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;           // 760x560 letterboxed to the window
+    const RW = 304, RH = 224;                            // raycast buffer (same 19:14 aspect)
+    const sceneCanvas = document.createElement('canvas');
+    sceneCanvas.width = RW; sceneCanvas.height = RH;
+    const sceneCtx = sceneCanvas.getContext('2d');
+    const sceneImg = sceneCtx.createImageData(RW, RH);
+    const buf32 = new Uint32Array(sceneImg.data.buffer);
+    const zbuf = new Float32Array(RW);
+
+    function resize() {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const s = Math.min(vw / W, vh / H);
+      canvas.style.width = (W * s) + 'px';
+      canvas.style.height = (H * s) + 'px';
+      canvas.style.left = ((vw - W * s) / 2) + 'px';
+      canvas.style.top = ((vh - H * s) / 2) + 'px';
+    }
+    window.addEventListener('resize', resize); resize();
+
+    // ---------- procedural 32x32 textures ----------
+    const TW = 32, TH = 32, TMASK = 31;
+    function makeTex(fn) {
+      const c = document.createElement('canvas'); c.width = TW; c.height = TH;
+      const g = c.getContext('2d'); fn(g);
+      return g.getImageData(0, 0, TW, TH).data;
+    }
+    function speckle(g, col, n, a) {
+      g.fillStyle = col; g.globalAlpha = a == null ? 0.25 : a;
+      for (let i = 0; i < n; i++) g.fillRect((Math.random() * TW) | 0, (Math.random() * TH) | 0, 1, 1);
+      g.globalAlpha = 1;
+    }
+    const TEX = {
+      // interior wall: faded striped wallpaper
+      wallpaper: makeTex(g => {
+        g.fillStyle = '#6d6656'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#7a7462';
+        for (let x = 0; x < TW; x += 8) g.fillRect(x, 0, 4, TH);
+        g.fillStyle = '#5d5748';
+        for (let y = 0; y < TH; y += 16) g.fillRect(0, y, TW, 1);
+        speckle(g, '#4a4437', 60, 0.35);
+      }),
+      // bathroom / kitchen wall tile
+      tilewall: makeTex(g => {
+        g.fillStyle = '#7d8a86'; g.fillRect(0, 0, TW, TH);
+        g.strokeStyle = '#5a6a66'; g.lineWidth = 1;
+        for (let y = 0; y <= TH; y += 8) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(TW, y + 0.5); g.stroke(); }
+        for (let x = 0; x <= TW; x += 8) { g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, TH); g.stroke(); }
+        speckle(g, '#93a09b', 40, 0.4);
+      }),
+      // exterior brick
+      brick: makeTex(g => {
+        g.fillStyle = '#4a3630'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#5c443b';
+        for (let y = 0; y < TH; y += 8) {
+          const off = (y / 8) % 2 ? 8 : 0;
+          for (let x = -8; x < TW; x += 16) g.fillRect(x + off + 1, y + 1, 14, 6);
+        }
+        speckle(g, '#3a2a24', 70, 0.4);
+      }),
+      // van interior: ribbed metal
+      metal: makeTex(g => {
+        g.fillStyle = '#3d4650'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#49545f';
+        for (let x = 0; x < TW; x += 4) g.fillRect(x, 0, 2, TH);
+        g.fillStyle = '#2e353d'; g.fillRect(0, 28, TW, 4);
+        speckle(g, '#59646f', 30, 0.5);
+      }),
+      // floors
+      wood: makeTex(g => {
+        g.fillStyle = '#5a4632'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#66513b';
+        for (let y = 0; y < TH; y += 8) g.fillRect(0, y, TW, 6);
+        g.strokeStyle = '#3f3022'; g.lineWidth = 1;
+        for (let y = 0; y <= TH; y += 8) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(TW, y + 0.5); g.stroke(); }
+        g.fillStyle = '#463726'; g.fillRect(10, 2, 1, 4); g.fillRect(24, 12, 1, 4); g.fillRect(5, 20, 1, 4);
+        speckle(g, '#6e593f', 40, 0.4);
+      }),
+      tilefloor: makeTex(g => {
+        g.fillStyle = '#8b948e'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#79837d'; g.fillRect(0, 0, 16, 16); g.fillRect(16, 16, 16, 16);
+        g.strokeStyle = '#616a65'; g.lineWidth = 1;
+        g.strokeRect(0.5, 0.5, 16, 16); g.strokeRect(16.5, 16.5, 16, 16);
+        speckle(g, '#9aa39d', 30, 0.4);
+      }),
+      carpet: makeTex(g => {
+        g.fillStyle = '#4c3e52'; g.fillRect(0, 0, TW, TH);
+        speckle(g, '#5a4a62', 220, 0.5); speckle(g, '#3e3244', 160, 0.5);
+      }),
+      grass: makeTex(g => {
+        g.fillStyle = '#1c2417'; g.fillRect(0, 0, TW, TH);
+        speckle(g, '#26301e', 200, 0.6); speckle(g, '#141a10', 140, 0.6);
+        speckle(g, '#31401f', 40, 0.5);
+      }),
+      path: makeTex(g => {
+        g.fillStyle = '#3a3a38'; g.fillRect(0, 0, TW, TH);
+        g.strokeStyle = '#2b2b29'; g.lineWidth = 1;
+        g.strokeRect(0.5, 0.5, 16, 16); g.strokeRect(16.5, 16.5, 16, 16);
+        speckle(g, '#484846', 60, 0.5);
+      }),
+      vanfloor: makeTex(g => {
+        g.fillStyle = '#32393f'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#3c444b';
+        for (let y = 0; y < TH; y += 8) for (let x = 0; x < TW; x += 8) g.fillRect(x + 1, y + 1, 6, 6);
+      }),
+      // ceilings
+      plaster: makeTex(g => {
+        g.fillStyle = '#8a877d'; g.fillRect(0, 0, TW, TH);
+        speckle(g, '#7b786f', 120, 0.5); speckle(g, '#969389', 80, 0.5);
+      }),
+      nightsky: makeTex(g => {
+        g.fillStyle = '#05070f'; g.fillRect(0, 0, TW, TH);
+        g.fillStyle = '#cdd6ff'; g.globalAlpha = 0.9;
+        g.fillRect(4, 6, 1, 1); g.fillRect(17, 3, 1, 1); g.fillRect(26, 12, 1, 1);
+        g.fillRect(9, 22, 1, 1); g.fillRect(22, 27, 1, 1); g.fillRect(30, 20, 1, 1);
+        g.globalAlpha = 1;
+      })
+    };
+    // wall texture per map cell value (1=interior 2=brick 3=van 4=tile wall)
+    const WALLTEX = [null, TEX.wallpaper, TEX.brick, TEX.metal, TEX.tilewall];
+
+    // ---------- procedural sprite art ----------
+    function makeImg(w, h, fn) {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      fn(c.getContext('2d'), w, h); return c;
+    }
+    // The ghost: a pale, smoky figure with hollow eyes. 3 drift frames.
+    function ghostFrame(fi, dark) {
+      return makeImg(64, 96, (g, w, h) => {
+        const sway = Math.sin(fi * 2.1) * 3;
+        g.translate(w / 2 + sway, 0);
+        const body = dark ? 'rgba(30,34,40,' : 'rgba(225,235,240,';
+        // wispy tail
+        for (let i = 0; i < 3; i++) {
+          g.fillStyle = body + (0.16 - i * 0.04) + ')';
+          g.beginPath();
+          g.ellipse(0, 62 + i * 9, 20 - i * 3, 26 - i * 4, 0, 0, Math.PI * 2);
+          g.fill();
+        }
+        // torso + head
+        g.fillStyle = body + '0.55)';
+        g.beginPath(); g.ellipse(0, 46, 16, 30, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = body + '0.75)';
+        g.beginPath(); g.arc(0, 20, 13, 0, Math.PI * 2); g.fill();
+        // arms
+        g.fillStyle = body + '0.4)';
+        g.beginPath(); g.ellipse(-16, 44 + sway, 5, 14, 0.5, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.ellipse(16, 44 - sway, 5, 14, -0.5, 0, Math.PI * 2); g.fill();
+        // hollow face
+        g.fillStyle = 'rgba(8,10,14,0.95)';
+        g.beginPath(); g.ellipse(-4.5, 18, 2.6, 4, 0, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.ellipse(4.5, 18, 2.6, 4, 0, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.ellipse(0, 27, 3, 4.5, 0, 0, Math.PI * 2); g.fill();
+      });
+    }
+    const GHOST_FRAMES = [ghostFrame(0, false), ghostFrame(1, false), ghostFrame(2, false)];
+    const SHADOW_FRAMES = [ghostFrame(0, true), ghostFrame(1, true), ghostFrame(2, true)];
+
+    // UV fingerprints: a glowing handprint decal
+    const handImg = makeImg(32, 32, (g) => {
+      g.fillStyle = 'rgba(150,255,190,0.95)';
+      g.beginPath(); g.ellipse(16, 20, 7, 8, 0, 0, Math.PI * 2); g.fill();   // palm
+      const fx = [7, 11.5, 16, 20.5, 25], fl = [7, 10, 11, 10, 6];
+      for (let i = 0; i < 5; i++) { g.beginPath(); g.ellipse(fx[i], 12 - fl[i] * 0.35, 2.1, fl[i] * 0.62, (i - 2) * 0.12, 0, Math.PI * 2); g.fill(); }
+    });
+    // Ghost writing book: clean page vs scrawled page
+    function bookImg(written) {
+      return makeImg(36, 26, (g) => {
+        g.fillStyle = '#2a2118'; g.fillRect(0, 8, 36, 16);
+        g.fillStyle = '#e8e0cc'; g.fillRect(2, 10, 15, 12); g.fillRect(19, 10, 15, 12);
+        g.strokeStyle = '#b8b09c'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(18, 10); g.lineTo(18, 22); g.stroke();
+        if (written) {
+          g.strokeStyle = '#241f18'; g.lineWidth = 1.2; g.beginPath();
+          g.moveTo(4, 13); g.quadraticCurveTo(9, 16, 15, 12);
+          g.moveTo(4, 17); g.quadraticCurveTo(10, 14, 15, 18);
+          g.moveTo(21, 12); g.quadraticCurveTo(26, 18, 32, 13);
+          g.moveTo(21, 19); g.quadraticCurveTo(27, 15, 32, 20);
+          g.stroke();
+        }
+      });
+    }
+    const bookCleanImg = bookImg(false), bookWrittenImg = bookImg(true);
+
+    // Small throwable props
+    const propImgs = {
+      cup: makeImg(18, 18, g => { g.fillStyle = '#c8dce6'; g.fillRect(4, 5, 9, 11); g.strokeStyle = '#c8dce6'; g.lineWidth = 2; g.beginPath(); g.arc(14, 10, 3.4, -1.2, 1.2); g.stroke(); }),
+      plate: makeImg(20, 20, g => { g.fillStyle = '#ded9cc'; g.beginPath(); g.ellipse(10, 13, 9, 4, 0, 0, Math.PI * 2); g.fill(); g.fillStyle = '#c4bfb2'; g.beginPath(); g.ellipse(10, 13, 5, 2.2, 0, 0, Math.PI * 2); g.fill(); }),
+      teddy: makeImg(20, 24, g => {
+        g.fillStyle = '#a67848';
+        g.beginPath(); g.arc(6, 6, 3.4, 0, Math.PI * 2); g.arc(14, 6, 3.4, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(10, 9, 5.4, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.ellipse(10, 18, 6, 6.4, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#2a1c10'; g.fillRect(8, 8, 1.6, 1.6); g.fillRect(11, 8, 1.6, 1.6);
+        g.fillStyle = '#c69a6a'; g.beginPath(); g.ellipse(10, 12, 2.4, 1.8, 0, 0, Math.PI * 2); g.fill();
+      }),
+      phone: makeImg(16, 20, g => { g.fillStyle = '#14161c'; g.fillRect(4, 3, 8, 15); g.fillStyle = '#3f76c8'; g.fillRect(5, 4, 6, 12); }),
+      bottle: makeImg(14, 22, g => { g.fillStyle = '#3f6a4a'; g.fillRect(5, 8, 5, 12); g.fillRect(6, 3, 3, 6); })
+    };
+    // Wall-mounted light switch
+    const switchImg = makeImg(14, 18, g => {
+      g.fillStyle = '#d8d4c8'; g.fillRect(2, 2, 10, 14);
+      g.strokeStyle = '#a8a498'; g.strokeRect(2.5, 2.5, 9, 13);
+      g.fillStyle = '#8a8578'; g.fillRect(5.5, 6, 3, 6);
+    });
+    // Plants / lamps as cheap billboards
+    const plantImg = makeImg(28, 40, g => {
+      g.fillStyle = '#7a4a34'; g.fillRect(9, 28, 10, 10);
+      g.fillStyle = '#2c5a34';
+      for (const [x, y, r] of [[14, 16, 9], [8, 20, 7], [20, 20, 7], [14, 8, 6]]) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = '#397244'; g.beginPath(); g.arc(12, 14, 5, 0, Math.PI * 2); g.arc(18, 17, 4, 0, Math.PI * 2); g.fill();
+    });
+    const lampImg = makeImg(24, 46, g => {
+      g.fillStyle = '#2e2a24'; g.fillRect(10, 14, 4, 28); g.fillRect(6, 42, 12, 3);
+      g.fillStyle = '#d8c890'; g.beginPath(); g.moveTo(4, 14); g.lineTo(20, 14); g.lineTo(16, 2); g.lineTo(8, 2); g.closePath(); g.fill();
+    });
+    const tvImg = makeImg(40, 30, g => {
+      g.fillStyle = '#14161a'; g.fillRect(1, 2, 38, 24);
+      g.fillStyle = '#20242c'; g.fillRect(3, 4, 34, 20);
+      g.fillStyle = '#2e2a24'; g.fillRect(16, 26, 8, 3);
+    });
+    const monitorImg = makeImg(40, 34, g => {
+      g.fillStyle = '#22262c'; g.fillRect(2, 2, 36, 26);
+      g.fillStyle = '#0d2a1d'; g.fillRect(4, 4, 32, 22);
+      g.fillStyle = '#63e6a8'; g.font = 'bold 7px monospace';
+      g.fillText('CAM 1', 7, 12); g.fillText('▓▓▒░', 7, 21);
+      g.fillStyle = '#2e2a24'; g.fillRect(16, 28, 8, 4);
+    });
+
+    // ---------- audio (procedural WebAudio, created on first gesture) ----------
+    const AudioSys = {
+      ctx: null, master: null, staticGain: null, windGain: null,
+      ensure() {
+        if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return true; }
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return false;
+        const c = this.ctx = new AC();
+        this.master = c.createGain(); this.master.gain.value = 0.5; this.master.connect(c.destination);
+        // looping filtered noise = night wind + room tone
+        const len = c.sampleRate * 2, nb = c.createBuffer(1, len, c.sampleRate), d = nb.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const wind = c.createBufferSource(); wind.buffer = nb; wind.loop = true;
+        const wf = c.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 220;
+        this.windGain = c.createGain(); this.windGain.gain.value = 0.05;
+        wind.connect(wf); wf.connect(this.windGain); this.windGain.connect(this.master); wind.start();
+        // spirit-box static bed (toggled by gain)
+        const st = c.createBufferSource(); st.buffer = nb; st.loop = true; st.playbackRate.value = 1.7;
+        const sf = c.createBiquadFilter(); sf.type = 'bandpass'; sf.frequency.value = 1400; sf.Q.value = 0.7;
+        this.staticGain = c.createGain(); this.staticGain.gain.value = 0;
+        st.connect(sf); sf.connect(this.staticGain); this.staticGain.connect(this.master); st.start();
+        return true;
+      },
+      tone(freq, dur, vol, type, slideTo) {
+        if (!this.ctx) return;
+        const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+        o.type = type || 'sine'; o.frequency.setValueAtTime(freq, c.currentTime);
+        if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, c.currentTime + dur);
+        g.gain.setValueAtTime(vol, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+        o.connect(g); g.connect(this.master); o.start(); o.stop(c.currentTime + dur + 0.02);
+      },
+      noise(dur, vol, freq) {
+        if (!this.ctx) return;
+        const c = this.ctx, len = Math.max(1, (c.sampleRate * dur) | 0);
+        const b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+        const s = c.createBufferSource(); s.buffer = b;
+        const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq || 900;
+        const g = c.createGain(); g.gain.value = vol;
+        s.connect(f); f.connect(g); g.connect(this.master); s.start();
+      },
+      whisper() {           // breathy band-passed noise, like a word almost said
+        if (!this.ctx) return;
+        const c = this.ctx, len = (c.sampleRate * 0.7) | 0;
+        const b = c.createBuffer(1, len, c.sampleRate), d = b.getChannelData(0);
+        for (let i = 0; i < len; i++) { const t = i / len; d[i] = (Math.random() * 2 - 1) * Math.sin(t * Math.PI) * (0.6 + 0.4 * Math.sin(t * 34)); }
+        const s = c.createBufferSource(); s.buffer = b;
+        const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 2.2;
+        const g = c.createGain(); g.gain.value = 0.5;
+        s.connect(f); f.connect(g); g.connect(this.master); s.start();
+      },
+      scream() {
+        if (!this.ctx) return;
+        this.noise(0.9, 0.8, 2400);
+        this.tone(880, 0.9, 0.5, 'sawtooth', 160);
+        this.tone(1310, 0.7, 0.3, 'square', 220);
+      },
+      heartbeat() { this.tone(52, 0.16, 0.55, 'sine'); setTimeout(() => this.tone(46, 0.14, 0.4, 'sine'), 170); },
+      emfBeep(level) { this.tone(520 + level * 140, 0.06, 0.16, 'square'); },
+      setStatic(on) { if (this.staticGain) this.staticGain.gain.value = on ? 0.12 : 0; },
+      setWind(v) { if (this.windGain) this.windGain.gain.value = v; }
+    };
+
+    // ---------- the house ----------
+    // Cell values: 0 floor · 1 interior wall · 2 exterior brick · 3 van metal · 4 tiled wall
+    const MW = 30, MH = 24;
+    const map = [];
+    (function buildMap() {
+      for (let y = 0; y < MH; y++) map.push(new Array(MW).fill(2));
+      const carve = (x0, y0, x1, y1) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) map[y][x] = 0; };
+      const wallH = (y, x0, x1, gaps, v) => { for (let x = x0; x <= x1; x++) if (!gaps.includes(x)) map[y][x] = v || 1; };
+      const wallV = (x, y0, y1, gaps, v) => { for (let y = y0; y <= y1; y++) if (!gaps.includes(y)) map[y][x] = v || 1; };
+      carve(1, 1, 28, 15);                       // house interior
+      carve(1, 17, 28, 22);                      // front garden
+      carve(24, 16, 25, 16);                     // front door gap
+      wallH(6, 1, 28, [4, 12, 13, 14, 15, 24]);  // north rooms | hallway
+      wallH(9, 1, 28, [3, 10, 17, 24, 25]);      // hallway | south rooms
+      wallV(8, 1, 5, []);                        // kitchen | living
+      wallV(19, 1, 5, []);                       // living | master bedroom
+      wallV(6, 10, 15, [], 4);                   // bathroom | kids (tiled)
+      wallV(14, 10, 15, []);                     // kids | study
+      wallV(21, 10, 15, []);                     // study | foyer
+      wallH(9, 1, 5, [3], 4);                    // bathroom's own top wall is tiled
+      // the van: a metal box in the garden with its door facing the house
+      wallH(18, 2, 9, [], 3); wallH(22, 2, 9, [], 3);
+      wallV(2, 18, 22, [], 3); wallV(9, 18, 22, [20], 3);
+      carve(3, 19, 8, 21);
+    })();
+    function mapAt(x, y) {
+      const mx = x | 0, my = y | 0;
+      if (mx < 0 || my < 0 || mx >= MW || my >= MH) return 2;
+      return map[my][mx];
+    }
+
+    const ROOMS = [
+      { id: 'kitchen', name: 'Kitchen',        x0: 1,  y0: 1,  x1: 7,  y1: 5,  ghostable: true },
+      { id: 'living',  name: 'Living Room',    x0: 9,  y0: 1,  x1: 18, y1: 5,  ghostable: true },
+      { id: 'master',  name: 'Master Bedroom', x0: 20, y0: 1,  x1: 28, y1: 5,  ghostable: true },
+      { id: 'hall',    name: 'Hallway',        x0: 1,  y0: 7,  x1: 28, y1: 8 },
+      { id: 'bath',    name: 'Bathroom',       x0: 1,  y0: 10, x1: 5,  y1: 15, ghostable: true },
+      { id: 'kids',    name: 'Kids Bedroom',   x0: 7,  y0: 10, x1: 13, y1: 15, ghostable: true },
+      { id: 'study',   name: 'Study',          x0: 15, y0: 10, x1: 20, y1: 15, ghostable: true },
+      { id: 'foyer',   name: 'Foyer',          x0: 22, y0: 10, x1: 28, y1: 15 },
+      { id: 'van',     name: 'The Van',        x0: 3,  y0: 19, x1: 8,  y1: 21, safe: true },
+      { id: 'outside', name: 'Outside',        x0: 0,  y0: 16, x1: 29, y1: 23, safe: true }
+    ];
+    function roomAt(x, y) {
+      for (const r of ROOMS) if (x >= r.x0 && x <= r.x1 + 1 && y >= r.y0 && y <= r.y1 + 1) return r;
+      return ROOMS[ROOMS.length - 1];
+    }
+    // Light switches: one per indoor room, mounted by the room's door.
+    const SWITCHES = [
+      { room: 'kitchen', x: 3.4,  y: 5.72 },
+      { room: 'living',  x: 11.3, y: 5.72 },
+      { room: 'master',  x: 23.4, y: 5.72 },
+      { room: 'hall',    x: 22.5, y: 8.72 },
+      { room: 'bath',    x: 2.4,  y: 10.3 },
+      { room: 'kids',    x: 9.4,  y: 10.3 },
+      { room: 'study',   x: 16.4, y: 10.3 },
+      { room: 'foyer',   x: 26.6, y: 10.3 }
+    ];
+
+    // floor + ceiling texture per cell
+    const floorTexOf = [], ceilTexOf = [];
+    (function paintFloors() {
+      const roomFloor = { kitchen: TEX.tilefloor, living: TEX.wood, master: TEX.carpet, hall: TEX.wood, bath: TEX.tilefloor, kids: TEX.carpet, study: TEX.wood, foyer: TEX.wood, van: TEX.vanfloor, outside: TEX.grass };
+      for (let y = 0; y < MH; y++) {
+        floorTexOf.push([]); ceilTexOf.push([]);
+        for (let x = 0; x < MW; x++) {
+          const r = roomAt(x + 0.5, y + 0.5);
+          floorTexOf[y].push(roomFloor[r.id] || TEX.wood);
+          ceilTexOf[y].push(r.id === 'outside' ? TEX.nightsky : (r.id === 'van' ? TEX.metal : TEX.plaster));
+        }
+      }
+      // garden path: van door → front door
+      for (let x = 10; x <= 25; x++) floorTexOf[20][x] = TEX.path;
+      for (let y = 17; y <= 20; y++) floorTexOf[y][24] = floorTexOf[y][25] = TEX.path;
+    })();
+
+    // ---------- furniture (3D boxes) + wardrobes + throwable props ----------
+    const blockCells = new Set();                 // big furniture blocks walking
+    const furns = [];                             // {x,y,rad,boxes:[{x0,x1,y0,y1,z0,z1,col}],topImg}
+    function addFurn(cx, cy, boxes, opts) {
+      furns.push(Object.assign({ x: cx, y: cy, rad: 0.7, boxes: boxes }, opts || {}));
+      if (!opts || !opts.walkable) {
+        for (const b of boxes) {
+          for (let ty = Math.floor(cy + b.y0); ty <= Math.floor(cy + b.y1 - 0.01); ty++)
+            for (let tx = Math.floor(cx + b.x0); tx <= Math.floor(cx + b.x1 - 0.01); tx++)
+              blockCells.add(tx + ',' + ty);
+        }
+      }
+    }
+    const wardrobes = [];                         // hide spots
+    function addWardrobe(cx, cy) {
+      wardrobes.push({ x: cx, y: cy });
+      addFurn(cx, cy, [
+        { x0: -0.42, x1: 0.42, y0: -0.24, y1: 0.24, z0: 0, z1: 1.05, col: '#4a3826' },
+        { x0: -0.36, x1: 0.36, y0: -0.28, y1: 0.28, z0: 1.02, z1: 1.08, col: '#3a2c1e' }
+      ], { rad: 0.55 });
+    }
+    (function furnish() {
+      // Kitchen: counters along the top wall + a small table
+      addFurn(2.5, 1.5, [{ x0: -1.4, x1: 1.4, y0: -0.45, y1: 0.45, z0: 0, z1: 0.42, col: '#7d8a86' }]);
+      addFurn(5.5, 3.5, [{ x0: -0.7, x1: 0.7, y0: -0.5, y1: 0.5, z0: 0.3, z1: 0.4, col: '#6a5136' }, { x0: -0.08, x1: 0.08, y0: -0.08, y1: 0.08, z0: 0, z1: 0.3, col: '#54402a' }], { rad: 0.85 });
+      // Living room: couch, TV cabinet
+      addFurn(12.5, 2.0, [{ x0: -1.2, x1: 1.2, y0: -0.4, y1: 0.4, z0: 0, z1: 0.42, col: '#6a3d4a' }, { x0: -1.2, x1: 1.2, y0: -0.55, y1: -0.35, z0: 0, z1: 0.7, col: '#5a3340' }], { rad: 1.35 });
+      addFurn(16.5, 4.6, [{ x0: -0.8, x1: 0.8, y0: -0.3, y1: 0.3, z0: 0, z1: 0.4, col: '#3c3228' }], { topImg: tvImg, topH: 0.55 });
+      // Master bedroom: double bed + wardrobe
+      addFurn(26.4, 2.6, [{ x0: -1.1, x1: 1.1, y0: -0.85, y1: 0.85, z0: 0, z1: 0.34, col: '#7a5a72' }, { x0: 0.85, x1: 1.15, y0: -0.9, y1: 0.9, z0: 0, z1: 0.6, col: '#54402a' }], { rad: 1.45 });
+      addWardrobe(20.7, 1.6);
+      // Kids bedroom: bed + wardrobe
+      addFurn(8.4, 11.0, [{ x0: -0.8, x1: 0.8, y0: -0.55, y1: 0.55, z0: 0, z1: 0.3, col: '#4a6a8a' }], { rad: 1.0 });
+      addWardrobe(12.5, 14.4);
+      // Study: desk + bookshelf
+      addFurn(18.0, 11.0, [{ x0: -0.9, x1: 0.9, y0: -0.4, y1: 0.4, z0: 0.34, z1: 0.44, col: '#5c4630' }, { x0: -0.8, x1: -0.65, y0: -0.3, y1: 0.3, z0: 0, z1: 0.34, col: '#4a3826' }, { x0: 0.65, x1: 0.8, y0: -0.3, y1: 0.3, z0: 0, z1: 0.34, col: '#4a3826' }], { rad: 1.1 });
+      addFurn(15.4, 14.5, [{ x0: -0.35, x1: 0.35, y0: -0.35, y1: 0.35, z0: 0, z1: 1.1, col: '#54402a' }], { rad: 0.6 });
+      addWardrobe(19.6, 14.4);
+      // Bathroom: tub + sink
+      addFurn(2.2, 14.6, [{ x0: -1.0, x1: 1.0, y0: -0.35, y1: 0.35, z0: 0, z1: 0.4, col: '#c8d4d6' }], { rad: 1.15 });
+      addFurn(1.4, 10.6, [{ x0: -0.28, x1: 0.28, y0: -0.28, y1: 0.28, z0: 0, z1: 0.5, col: '#b8c4c6' }], { rad: 0.5 });
+      // Foyer: side table
+      addFurn(27.5, 14.3, [{ x0: -0.4, x1: 0.4, y0: -0.3, y1: 0.3, z0: 0.28, z1: 0.36, col: '#5c4630' }], { rad: 0.6 });
+      // Hallway wardrobe (a hide spot mid-house)
+      addWardrobe(1.5, 7.5);
+      // The van: tech desk with monitor
+      addFurn(3.6, 20.0, [{ x0: -0.5, x1: 0.5, y0: -0.9, y1: 0.9, z0: 0.36, z1: 0.46, col: '#2e3640' }], { topImg: monitorImg, topH: 0.5 });
+    })();
+    // decorative billboards {img,x,y,sh(world height),z0}
+    const decos = [
+      { img: plantImg, x: 9.6,  y: 5.3,  sh: 0.55 }, { img: plantImg, x: 22.5, y: 14.5, sh: 0.55 },
+      { img: lampImg,  x: 18.4, y: 1.5,  sh: 0.72 }, { img: lampImg,  x: 28.4, y: 4.5,  sh: 0.72 },
+      { img: plantImg, x: 26.5, y: 17.5, sh: 0.6 }
+    ];
+    // throwable props the ghost can fling {img,x,y,z,vx,vy,vz,rest}
+    let throwables = [];
+    function placeThrowables() {
+      throwables = [
+        { img: propImgs.cup,    x: 2.6,  y: 1.75, z: 0.42 }, { img: propImgs.plate, x: 3.4, y: 1.75, z: 0.42 },
+        { img: propImgs.plate,  x: 5.3,  y: 3.4,  z: 0.4  }, { img: propImgs.phone, x: 12.3, y: 2.1, z: 0.42 },
+        { img: propImgs.bottle, x: 16.3, y: 4.5,  z: 0.4  }, { img: propImgs.teddy, x: 8.5, y: 11.0, z: 0.3 },
+        { img: propImgs.phone,  x: 17.7, y: 11.1, z: 0.44 }, { img: propImgs.cup,   x: 26.0, y: 2.4, z: 0.34 },
+        { img: propImgs.bottle, x: 1.4,  y: 10.5, z: 0.5  }
+      ];
+      for (const t of throwables) { t.vx = t.vy = t.vz = 0; t.rest = true; t.homeZ = t.z; }
+    }
+
+    // ---------- the ghosts ----------
+    // Evidence: emf=EMF Level 5 · box=Spirit Box · freezing=Freezing Temps ·
+    //           orb=Ghost Orb · writing=Ghost Writing · uv=Fingerprints
+    const EVIDENCE = [
+      { id: 'emf',      label: '📟 EMF Level 5' },
+      { id: 'box',      label: '📻 Spirit Box' },
+      { id: 'freezing', label: '❄️ Freezing Temps' },
+      { id: 'orb',      label: '🟢 Ghost Orb' },
+      { id: 'writing',  label: '📖 Ghost Writing' },
+      { id: 'uv',       label: '🖐️ Fingerprints' }
+    ];
+    const GHOSTS = [
+      { name: 'Spirit',      ev: ['emf', 'box', 'writing'],      trait: 'An everyday ghost. No strange habits — just find the evidence.' },
+      { name: 'Wraith',      ev: ['emf', 'box', 'uv'],           trait: 'A silent drifter — you will almost never hear its footsteps.' },
+      { name: 'Phantom',     ev: ['emf', 'box', 'freezing'],     trait: 'Looking straight at it drains your sanity extra fast.' },
+      { name: 'Poltergeist', ev: ['box', 'uv', 'writing'],       trait: 'Loves throwing things around. Listen for crashes.' },
+      { name: 'Banshee',     ev: ['emf', 'orb', 'uv'],           trait: 'Impatient — it can start hunting even at high sanity.' },
+      { name: 'Jinn',        ev: ['emf', 'orb', 'freezing'],     trait: 'Very fast when it is far away from you.' },
+      { name: 'Mare',        ev: ['box', 'orb', 'writing'],      trait: 'Hates light — it keeps switching lights back off.' },
+      { name: 'Revenant',    ev: ['orb', 'writing', 'freezing'], trait: 'Slow… until it spots you in a hunt. Then it is terrifying.' },
+      { name: 'Shade',       ev: ['emf', 'writing', 'freezing'], trait: 'Shy — very little activity while you stand nearby.' },
+      { name: 'Demon',       ev: ['box', 'uv', 'freezing'],      trait: 'Aggressive — hunts earlier and more often than anything else.' },
+      { name: 'Yurei',       ev: ['orb', 'uv', 'freezing'],      trait: 'Its ghost events drain extra sanity.' },
+      { name: 'Oni',         ev: ['emf', 'uv', 'writing'],       trait: 'A show-off — constant activity when people are close.' }
+    ];
+
+    // ---------- state ----------
+    const PLAYER_R = 0.26, EYE = 0.5, CEILH = 1.12;
+    let px, py, dir, dirX, dirY, planeX, planeY;
+    let state = 'setup';            // setup | playing | caught | done
+    let ghost;                      // the round's ghost
+    let lights;                     // {roomId: bool}
+    let sanity, tSinceStart, hidden, walkBob = 0, bobAmp = 0;
+    let flashOn, item;              // item: 0 hands 1 emf 2 box 3 thermo 4 uv 5 book 6 cam
+    let evidenceFound;              // Set of evidence ids observed this round
+    let manualEv;                   // Set of evidence ids ticked by hand in the journal
+    let guessName;                  // journal ghost pick
+    let emfSpots;                   // [{x,y,level,t}] recent ghost activity
+    let prints;                     // [{x,y,t}] UV fingerprints
+    let book;                       // {placed,x,y,written}
+    let orbs;                       // [{x,y,z,ph}] in the ghost room (only real if evidence)
+    let toasts;                     // [{msg,t}]
+    let boxResponseT, lastBoxTry;   // spirit box
+    let heartT = 0, footT = 0;
+    let money = loadNum('money'), streak = loadNum('streak');
+    let caughtT = 0, doorSlamT = 0, whisperCd = 8;
+    let perfNow = 0;
+
+    function setDir(a) {
+      dir = a;
+      dirX = Math.cos(a); dirY = Math.sin(a);
+      planeX = -dirY * 0.66; planeY = dirX * 0.66;
+    }
+
+    function newRound() {
+      px = 5.5; py = 20.5; setDir(0);           // in the van, facing its door
+      const def = pick(GHOSTS);
+      const room = pick(ROOMS.filter(r => r.ghostable));
+      ghost = {
+        def: def, room: room,
+        x: (room.x0 + room.x1) / 2 + 0.5, y: (room.y0 + room.y1) / 2 + 0.5,
+        tx: null, ty: null, path: null,
+        state: 'idle',                          // idle | manifest | hunt
+        eventT: rnd(10, 18),                    // next ghost-event timer
+        huntCd: 45,                             // no hunts for the first while
+        huntT: 0, alpha: 0, speed: 1.0,
+        stepT: 0
+      };
+      lights = {};
+      for (const s of SWITCHES) lights[s.room] = false;
+      lights.foyer = true; lights.hall = true;
+      sanity = 100; tSinceStart = 0; hidden = false;
+      flashOn = true; item = 0;
+      evidenceFound = new Set(); manualEv = new Set(); guessName = null;
+      emfSpots = []; prints = []; toasts = [];
+      book = { placed: false, x: 0, y: 0, written: false };
+      orbs = [];
+      if (def.ev.includes('orb')) {
+        for (let i = 0; i < 3; i++) orbs.push({
+          x: rnd(room.x0 + 0.8, room.x1 + 0.2), y: rnd(room.y0 + 0.8, room.y1 + 0.2),
+          z: rnd(0.45, 0.8), ph: rnd(0, 7)
+        });
+      }
+      boxResponseT = 0; lastBoxTry = 0;
+      placeThrowables();
+      caughtT = 0; doorSlamT = 0; whisperCd = 8;
+      syncBelt(); buildJournal();
+    }
+
+    // ---------- movement + line of sight ----------
+    function passable(x, y) {
+      if (mapAt(x, y) !== 0) return false;
+      if (blockCells.has((x | 0) + ',' + (y | 0))) return false;
+      return true;
+    }
+    function tryMove(nx, ny) {
+      if (passable(nx + PLAYER_R, py) && passable(nx - PLAYER_R, py) &&
+          passable(nx, py + PLAYER_R) && passable(nx, py - PLAYER_R)) px = nx;
+      if (passable(px, ny + PLAYER_R) && passable(px, ny - PLAYER_R) &&
+          passable(px + PLAYER_R, ny) && passable(px - PLAYER_R, ny)) py = ny;
+    }
+    function hasLOS(ax, ay, bx, by) {
+      const d = dist(ax, ay, bx, by), steps = Math.ceil(d * 4);
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        if (mapAt(ax + (bx - ax) * t, ay + (by - ay) * t) !== 0) return false;
+      }
+      return true;
+    }
+    // BFS over walkable tiles (walls only; the ghost drifts through furniture)
+    function findPath(sx, sy, txx, tyy) {
+      const s = (sx | 0) + (sy | 0) * MW, t = (txx | 0) + (tyy | 0) * MW;
+      if (s === t) return [];
+      const prev = new Int32Array(MW * MH).fill(-1);
+      const q = [s]; prev[s] = s;
+      while (q.length) {
+        const c = q.shift(), cx = c % MW, cy = (c / MW) | 0;
+        for (const [dx2, dy2] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx2, ny = cy + dy2;
+          if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
+          const n = nx + ny * MW;
+          if (prev[n] !== -1 || map[ny][nx] !== 0) continue;
+          prev[n] = c; if (n === t) { q.length = 0; break; }
+          q.push(n);
+        }
+      }
+      if (prev[t] === -1) return null;
+      const path = [];
+      for (let c = t; c !== s; c = prev[c]) path.push({ x: (c % MW) + 0.5, y: ((c / MW) | 0) + 0.5 });
+      return path.reverse();
+    }
+
+    // ---------- DOM ----------
+    const $ = id => document.getElementById(id);
+    const setupEl = $('setup'), journalEl = $('journal'), resultsEl = $('results');
+    const beltEl = $('belt'), actsEl = $('acts');
+    const ITEM_NAMES = ['Hands', 'EMF Reader', 'Spirit Box', 'Thermometer', 'UV Light', 'Ghost Writing Book', 'Video Camera'];
+
+    function toast(msg) { toasts.push({ msg: msg, t: 4 }); }
+    function syncBelt() {
+      beltEl.querySelectorAll('button').forEach(b => b.classList.toggle('sel', +b.dataset.item === item));
+    }
+    function setItem(i) {
+      if (i === item) return;
+      item = i; syncBelt();
+      AudioSys.tone(300, 0.05, 0.1, 'square');
+      AudioSys.setStatic(state === 'playing' && item === 2);
+    }
+
+    // ---------- evidence ----------
+    function foundEvidence(id) {
+      if (evidenceFound.has(id)) return;
+      evidenceFound.add(id);
+      const ev = EVIDENCE.find(e => e.id === id);
+      toast('Evidence found: ' + ev.label + ' — it’s in your journal!');
+      AudioSys.tone(660, 0.12, 0.2, 'sine', 990);
+      refreshJournal();
+    }
+    function checkedEvidence() {                  // auto-found ∪ hand-ticked
+      const s = new Set(evidenceFound);
+      for (const id of manualEv) s.add(id);
+      return s;
+    }
+
+    // EMF: reads recent ghost activity nearby, plus the ghost itself.
+    function emfLevel() {
+      let lv = 1;
+      for (const s of emfSpots) {
+        const d = dist(px, py, s.x, s.y);
+        if (d < 3.2) lv = Math.max(lv, s.level);
+      }
+      const gd = dist(px, py, ghost.x, ghost.y);
+      if (gd < 2.5 && (ghost.state !== 'idle' || ghost.alpha > 0)) lv = Math.max(lv, 3);
+      return lv;
+    }
+    function dropEmf(x, y, big) {
+      const five = big && ghost.def.ev.includes('emf') && Math.random() < 0.65;
+      emfSpots.push({ x: x, y: y, level: five ? 5 : rint(2, 4), t: 20 });
+    }
+
+    // Thermometer: the ghost room is cold; freezing-evidence ghosts go sub-zero.
+    function tempAt(x, y) {
+      const r = roomAt(x, y);
+      if (r.id === 'outside') return 4;
+      if (r.id === 'van') return 12;
+      let t = lights[r.id] ? 13 : 9;
+      if (r === ghost.room) t = ghost.def.ev.includes('freezing') ? -4 : 1.5;
+      return t;
+    }
+    let thermoRead = 10, freezeSeen = 0;
+
+    // ---------- ghost brain ----------
+    function ghostHome() { return ghost.room; }
+    function ghostSpeedNow() {
+      const n = ghost.def.name, d = dist(px, py, ghost.x, ghost.y);
+      const sees = !hidden && hasLOS(ghost.x, ghost.y, px, py);
+      if (ghost.state !== 'hunt') return 1.0;
+      if (n === 'Revenant') return sees ? 2.7 : 0.9;
+      if (n === 'Jinn') return d > 5 ? 2.3 : 1.55;
+      return 1.55;
+    }
+    function huntThreshold() {
+      const n = ghost.def.name;
+      if (n === 'Banshee') return 85;
+      if (n === 'Demon') return 75;
+      if (n === 'Shade') return 40;
+      return 60;
+    }
+    function eventInterval() {
+      const n = ghost.def.name;
+      let iv = rnd(11, 22);
+      if (n === 'Oni' || n === 'Poltergeist') iv *= 0.6;
+      if (n === 'Shade') iv *= 1.8;
+      return iv;
+    }
+    function ghostWanderTarget() {
+      const r = ghostHome();
+      // mostly pace its favourite room, sometimes roam the house
+      if (Math.random() < 0.75) return { x: rnd(r.x0 + 0.6, r.x1 + 0.4), y: rnd(r.y0 + 0.6, r.y1 + 0.4) };
+      const any = pick(ROOMS.filter(rr => !rr.safe));
+      return { x: rnd(any.x0 + 0.6, any.x1 + 0.4), y: rnd(any.y0 + 0.6, any.y1 + 0.4) };
+    }
+    function ghostStepAlong(dt) {
+      if (!ghost.path || !ghost.path.length) return;
+      const n = ghost.path[0], sp = ghostSpeedNow() * dt;
+      const d = dist(ghost.x, ghost.y, n.x, n.y);
+      if (d < 0.15) { ghost.path.shift(); return; }
+      ghost.x += (n.x - ghost.x) / d * Math.min(sp, d);
+      ghost.y += (n.y - ghost.y) / d * Math.min(sp, d);
+    }
+    function nearestDoorway() {                    // a wall gap near the ghost, for slams/prints
+      let best = null, bd = 1e9;
+      for (const s of SWITCHES) {
+        const d = dist(ghost.x, ghost.y, s.x, s.y);
+        if (d < bd) { bd = d; best = s; }
+      }
+      return best;
+    }
+
+    function doGhostEvent(forceKind) {
+      const shy = ghost.def.name === 'Shade' && roomAt(px, py) === ghost.room;
+      const kinds = ['flicker', 'throw', 'whisper', 'slam', 'manifest'];
+      let kind = pick(kinds);
+      if (ghost.def.name === 'Poltergeist' && Math.random() < 0.5) kind = 'throw';
+      if (ghost.def.name === 'Mare' && Math.random() < 0.4) kind = 'lightsout';
+      if (shy) kind = pick(['flicker', 'whisper']);
+      if (forceKind) kind = forceKind;
+      const gr = ghostHome();
+      if (kind === 'flicker') {
+        flickerRoom = gr.id; flickerT = rnd(1.2, 2.4);
+        dropEmf(ghost.x, ghost.y, true);
+      } else if (kind === 'lightsout') {
+        for (const id in lights) if (lights[id] && Math.random() < 0.6) lights[id] = false;
+        toast('The lights just went out…');
+        AudioSys.tone(180, 0.3, 0.2, 'sine', 60);
+        dropEmf(ghost.x, ghost.y, true);
+      } else if (kind === 'throw') {
+        let best = null, bd = 1e9;
+        for (const t of throwables) {
+          const d = dist(ghost.x, ghost.y, t.x, t.y);
+          if (t.rest && d < bd) { bd = d; best = t; }
+        }
+        if (best && bd < 7) {
+          best.rest = false;
+          const a = rnd(0, Math.PI * 2);
+          best.vx = Math.cos(a) * rnd(1.5, 3); best.vy = Math.sin(a) * rnd(1.5, 3); best.vz = rnd(1.2, 2.2);
+          dropEmf(best.x, best.y, true);
+          if (ghost.def.ev.includes('uv') && Math.random() < 0.5) prints.push({ x: best.x, y: best.y, t: 60 });
+        }
+      } else if (kind === 'slam') {
+        const dw = nearestDoorway();
+        doorSlamT = 0.4;
+        AudioSys.noise(0.25, 0.6, 400); AudioSys.tone(90, 0.2, 0.4, 'sine', 50);
+        if (dw) {
+          dropEmf(dw.x, dw.y, true);
+          if (ghost.def.ev.includes('uv') && Math.random() < 0.75) prints.push({ x: dw.x, y: dw.y + (dw.y < 9 ? -0.12 : 0.12), t: 60 });
+        }
+      } else if (kind === 'whisper') {
+        AudioSys.whisper();
+        sanityHit(2);
+        dropEmf(ghost.x, ghost.y, false);
+      } else if (kind === 'manifest') {
+        ghost.state = 'manifest';
+        ghost.manifestT = rnd(2, 3.5);
+        // drift toward the player if they're in the house
+        const pr = roomAt(px, py);
+        if (!pr.safe) ghost.path = findPath(ghost.x, ghost.y, px, py) || [];
+        AudioSys.whisper(); AudioSys.tone(140, 0.8, 0.25, 'sine', 70);
+        sanityHit(ghost.def.name === 'Yurei' ? 12 : 6);
+        dropEmf(ghost.x, ghost.y, true);
+      }
+    }
+
+    function sanityHit(n) { sanity = clamp(sanity - n, 0, 100); }
+
+    function updateGhost(dt) {
+      // book writing: the book must rest in the ghost's room
+      if (book.placed && !book.written && ghost.def.ev.includes('writing')) {
+        if (roomAt(book.x, book.y) === ghostHome() && Math.random() < dt / 18) {
+          book.written = true;
+          AudioSys.noise(0.3, 0.3, 1400);
+          dropEmf(book.x, book.y, true);
+        }
+      }
+      if (ghost.state === 'hunt') {
+        ghost.huntT -= dt;
+        ghost.alpha = 0.35 + 0.45 * Math.abs(Math.sin(perfNow * 0.006));
+        // chase: head for the player when it can sense them
+        const sees = !hidden && hasLOS(ghost.x, ghost.y, px, py);
+        ghost.repathT -= dt;
+        if (ghost.repathT <= 0) {
+          ghost.repathT = 0.7;
+          if (sees && !roomAt(px, py).safe) ghost.path = findPath(ghost.x, ghost.y, px, py) || ghost.path;
+          else if (!ghost.path || !ghost.path.length) {
+            const t = ghostWanderTarget();
+            ghost.path = findPath(ghost.x, ghost.y, t.x, t.y) || [];
+          }
+        }
+        ghostStepAlong(dt);
+        // footsteps you can track (Wraith is silent)
+        ghost.stepT -= dt;
+        if (ghost.stepT <= 0 && ghost.def.name !== 'Wraith') {
+          ghost.stepT = 0.42;
+          const d = dist(px, py, ghost.x, ghost.y);
+          if (d < 9) AudioSys.tone(70, 0.08, clamp(0.5 - d * 0.05, 0.05, 0.4), 'sine');
+        }
+        if (!hidden && dist(px, py, ghost.x, ghost.y) < 0.55 && !roomAt(px, py).safe) caught();
+        if (ghost.huntT <= 0) {
+          ghost.state = 'idle'; ghost.alpha = 0;
+          ghost.huntCd = rnd(20, 35);
+          toast('The ghost has calmed down… for now.');
+          AudioSys.setWind(0.05);
+        }
+        return;
+      }
+      if (ghost.state === 'manifest') {
+        ghost.manifestT -= dt;
+        ghost.alpha = clamp(ghost.manifestT, 0, 1) * 0.8;
+        ghostStepAlong(dt);
+        // Phantom: looking at a manifested ghost hurts
+        if (ghost.def.name === 'Phantom' && ghost.alpha > 0.2) {
+          const a = Math.atan2(ghost.y - py, ghost.x - px);
+          let off = a - dir; while (off > Math.PI) off -= 2 * Math.PI; while (off < -Math.PI) off += 2 * Math.PI;
+          if (Math.abs(off) < 0.6 && hasLOS(px, py, ghost.x, ghost.y)) sanityHit(dt * 5);
+        }
+        if (ghost.manifestT <= 0) { ghost.state = 'idle'; ghost.alpha = 0; }
+        return;
+      }
+      // idle: pace around, fire events, decide to hunt
+      ghost.alpha = 0;
+      ghost.repathT = (ghost.repathT || 0) - dt;
+      if (!ghost.path || !ghost.path.length) {
+        const t = ghostWanderTarget();
+        ghost.path = findPath(ghost.x, ghost.y, t.x, t.y) || [];
+      }
+      ghostStepAlong(dt * 0.55);
+      ghost.eventT -= dt;
+      if (ghost.eventT <= 0 && tSinceStart > 8) { ghost.eventT = eventInterval(); doGhostEvent(); }
+      ghost.huntCd -= dt;
+      if (ghost.huntCd <= 0 && sanity < huntThreshold() && !roomAt(px, py).safe) {
+        if (Math.random() < 0.4) startHunt();
+        else ghost.huntCd = 8;                     // roll again soon
+      }
+    }
+    function startHunt() {
+      ghost.state = 'hunt';
+      ghost.huntT = rnd(18, 26);
+      ghost.repathT = 0; ghost.path = [];
+      toast('⚠ The ghost is HUNTING — run and hide!');
+      AudioSys.setWind(0.16);
+      AudioSys.tone(220, 1.2, 0.3, 'sawtooth', 55);
+    }
+    function caught() {
+      state = 'caught'; caughtT = 0;
+      AudioSys.scream();
+    }
+
+    // ---------- flicker state ----------
+    let flickerRoom = null, flickerT = 0;
+
+    // ---------- per-frame update ----------
+    const keys = { fwd: false, back: false, left: false, right: false, sleft: false, sright: false, run: false };
+    let joy = null, lookDrag = null;
+
+    function update(dt) {
+      perfNow += dt * 1000;
+      tSinceStart += dt;
+      if (flickerT > 0) flickerT -= dt;
+      if (doorSlamT > 0) doorSlamT -= dt;
+      for (let i = toasts.length - 1; i >= 0; i--) { toasts[i].t -= dt; if (toasts[i].t <= 0) toasts.splice(i, 1); }
+      for (let i = emfSpots.length - 1; i >= 0; i--) { emfSpots[i].t -= dt; if (emfSpots[i].t <= 0) emfSpots.splice(i, 1); }
+      for (let i = prints.length - 1; i >= 0; i--) { prints[i].t -= dt; if (prints[i].t <= 0) prints.splice(i, 1); }
+
+      // thrown props fly + settle
+      for (const t of throwables) {
+        if (t.rest) continue;
+        t.x += t.vx * dt; t.y += t.vy * dt; t.z += t.vz * dt; t.vz -= 6 * dt;
+        if (mapAt(t.x, t.y) !== 0) { t.x -= t.vx * dt; t.y -= t.vy * dt; t.vx *= -0.4; t.vy *= -0.4; }
+        if (t.z <= 0.06) { t.z = 0.06; t.rest = true; AudioSys.noise(0.12, 0.25, 1600); }
+      }
+
+      // --- player movement ---
+      if (state === 'playing') {
+        const turn = 2.6 * dt;
+        if (keys.left) setDir(dir - turn);
+        if (keys.right) setDir(dir + turn);
+        if (lookDrag && lookDrag.dx) { setDir(dir + lookDrag.dx * 0.0045); lookDrag.dx = 0; }
+        let mx = 0, my = 0;
+        if (keys.fwd) { mx += dirX; my += dirY; }
+        if (keys.back) { mx -= dirX; my -= dirY; }
+        if (keys.sleft) { mx += dirY; my -= dirX; }
+        if (keys.sright) { mx -= dirY; my += dirX; }
+        if (joy) { mx += dirX * joy.fy + dirY * joy.fx; my += dirY * joy.fy - dirX * joy.fx; }
+        const ml = Math.hypot(mx, my);
+        if (ml > 0.01 && !hidden) {
+          const sp = (keys.run ? 3.1 : 2.2) * dt / Math.max(1, ml);
+          tryMove(px + mx * sp, py + my * sp);
+          walkBob += dt * (keys.run ? 11 : 8); bobAmp = Math.min(1, bobAmp + dt * 4);
+          footT -= dt;
+          if (footT <= 0) { footT = keys.run ? 0.3 : 0.42; AudioSys.tone(95, 0.05, 0.06, 'sine'); }
+        } else bobAmp = Math.max(0, bobAmp - dt * 4);
+        if (ml > 0.01) hidden = false;             // stepping out of the wardrobe
+      }
+
+      const pr = roomAt(px, py);
+
+      // --- sanity ---
+      if (state === 'playing' && !pr.safe) {
+        sanity = clamp(sanity - (lights[pr.id] ? 0.05 : 0.55) * dt, 0, 100);
+      }
+      // heartbeat when things are bad
+      const scared = ghost.state === 'hunt' || sanity < 25;
+      if (scared) {
+        heartT -= dt;
+        if (heartT <= 0) { heartT = ghost.state === 'hunt' ? 0.65 : 1.0; AudioSys.heartbeat(); }
+      }
+      // stray whispers in the dark keep the pressure on
+      whisperCd -= dt;
+      if (whisperCd <= 0) {
+        whisperCd = rnd(14, 30);
+        if (!pr.safe && !lights[pr.id] && Math.random() < 0.5) AudioSys.whisper();
+      }
+
+      // --- equipment ---
+      // EMF evidence: the reader must be in hand and showing a 5
+      if (item === 1) {
+        const lv = emfLevel();
+        if (lv >= 2 && Math.random() < dt * 2) AudioSys.emfBeep(lv);
+        if (lv === 5) foundEvidence('emf');
+      }
+      // thermometer: smooth toward the true temp, log freezing after a beat
+      if (item === 3) {
+        thermoRead = lerp(thermoRead, tempAt(px, py) + Math.sin(perfNow * 0.002) * 0.6, dt * 1.5);
+        if (thermoRead < 0) { freezeSeen += dt; if (freezeSeen > 1.2) foundEvidence('freezing'); }
+        else freezeSeen = 0;
+      } else thermoRead = lerp(thermoRead, 10, dt);
+      // spirit box: auto-asks every few seconds — needs dark + the ghost close
+      if (item === 2 && state === 'playing') {
+        if (boxResponseT > 0) boxResponseT -= dt;
+        lastBoxTry -= dt;
+        if (lastBoxTry <= 0) {
+          lastBoxTry = 5;
+          const gd = dist(px, py, ghost.x, ghost.y);
+          if (ghost.def.ev.includes('box') && gd < 4.5 && !lights[pr.id] && !pr.safe) {
+            boxResponseT = 2.8;
+            boxWords = pick(['…BEHIND…', '…HERE…', '…LEAVE…', '…COLD…', '…MINE…', '…CLOSE…']);
+            AudioSys.whisper(); AudioSys.tone(500, 0.3, 0.12, 'square', 200);
+            foundEvidence('box');
+          }
+        }
+      }
+      // UV light: fingerprints glow when lit up close
+      if (item === 4) {
+        for (const p of prints) {
+          if (dist(px, py, p.x, p.y) < 3.2 && hasLOS(px, py, p.x, p.y)) {
+            const a = Math.atan2(p.y - py, p.x - px);
+            let off = a - dir; while (off > Math.PI) off -= 2 * Math.PI; while (off < -Math.PI) off += 2 * Math.PI;
+            if (Math.abs(off) < 0.7) { p.seen = true; foundEvidence('uv'); }
+          }
+        }
+      }
+      // written book: reading it up close logs the evidence
+      if (book.placed && book.written && dist(px, py, book.x, book.y) < 1.6) foundEvidence('writing');
+      // video camera: orbs must drift on screen for a moment
+      if (item === 6) {
+        let seeing = false;
+        for (const o of orbs) {
+          const d = dist(px, py, o.x, o.y);
+          if (d < 8 && hasLOS(px, py, o.x, o.y)) {
+            const a = Math.atan2(o.y - py, o.x - px);
+            let off = a - dir; while (off > Math.PI) off -= 2 * Math.PI; while (off < -Math.PI) off += 2 * Math.PI;
+            if (Math.abs(off) < 0.55) seeing = true;
+          }
+        }
+        orbSeen = seeing ? orbSeen + dt : 0;
+        if (orbSeen > 0.8) foundEvidence('orb');
+      } else orbSeen = 0;
+
+      if (state === 'playing') updateGhost(dt);
+
+      // caught: jumpscare, then the report
+      if (state === 'caught') {
+        caughtT += dt;
+        if (caughtT > 1.7) endRound(true);
+      }
+    }
+    let boxWords = '', orbSeen = 0;
+
+    // ---------- interactions ----------
+    function interact() {
+      if (state !== 'playing') return;
+      // light switch?
+      for (const s of SWITCHES) {
+        if (dist(px, py, s.x, s.y) < 1.1) {
+          lights[s.room] = !lights[s.room];
+          AudioSys.tone(lights[s.room] ? 700 : 420, 0.05, 0.15, 'square');
+          if (ghost.def.ev.includes('uv') && Math.random() < 0.25) prints.push({ x: s.x, y: s.y, t: 60 });
+          return;
+        }
+      }
+      // book: place from the belt / pick a placed one back up
+      if (item === 5 && !book.placed) {
+        book.placed = true; book.written = false;
+        book.x = px + dirX * 0.8; book.y = py + dirY * 0.8;
+        if (mapAt(book.x, book.y) !== 0) { book.x = px; book.y = py; }
+        toast('Ghost writing book placed. Leave it in the ghost’s room…');
+        AudioSys.tone(240, 0.08, 0.15, 'sine');
+        return;
+      }
+      if (book.placed && dist(px, py, book.x, book.y) < 1.4) {
+        book.placed = false;
+        toast(book.written ? 'The ghost WROTE in the book!' : 'Picked the book back up.');
+        return;
+      }
+      // van monitor: open the journal (LEAVE lives there)
+      if (roomAt(px, py).id === 'van') { openJournal(); return; }
+    }
+    function toggleHide() {
+      if (state !== 'playing') return;
+      if (hidden) { hidden = false; return; }
+      for (const w of wardrobes) {
+        if (dist(px, py, w.x, w.y) < 1.25) {
+          hidden = true;
+          px = w.x + (px > w.x ? 0.55 : -0.55); py = w.y + (py > w.y ? 0.4 : -0.4);
+          AudioSys.tone(180, 0.1, 0.12, 'sine');
+          toast('Hidden. Stay still until the hunt ends…');
+          return;
+        }
+      }
+      toast('No wardrobe close enough to hide in!');
+    }
+
+    // ---------- journal ----------
+    function buildJournal() {
+      const evg = $('ev-grid');
+      evg.innerHTML = '';
+      for (const ev of EVIDENCE) {
+        const b = document.createElement('button');
+        b.className = 'ev-chip'; b.textContent = ev.label; b.dataset.ev = ev.id;
+        b.addEventListener('click', () => {
+          if (evidenceFound.has(ev.id)) return;      // hard evidence can't be unticked
+          if (manualEv.has(ev.id)) manualEv.delete(ev.id); else manualEv.add(ev.id);
+          refreshJournal();
+        });
+        evg.appendChild(b);
+      }
+      const gl = $('ghost-list');
+      gl.innerHTML = '';
+      for (const g of GHOSTS) {
+        const b = document.createElement('button');
+        b.className = 'ghost-card'; b.dataset.g = g.name;
+        b.innerHTML = '<div class="gname">' + g.name + '</div><div class="gev">' +
+          g.ev.map(id => EVIDENCE.find(e => e.id === id).label).join(' · ') +
+          '</div><div class="gtrait">' + g.trait + '</div>';
+        b.addEventListener('click', () => { guessName = guessName === g.name ? null : g.name; refreshJournal(); });
+        gl.appendChild(b);
+      }
+      refreshJournal();
+    }
+    function refreshJournal() {
+      const checked = checkedEvidence();
+      journalEl.querySelectorAll('.ev-chip').forEach(b => {
+        const id = b.dataset.ev;
+        b.classList.toggle('found', checked.has(id));
+        b.textContent = (evidenceFound.has(id) ? '✓ ' : '') + EVIDENCE.find(e => e.id === id).label;
+      });
+      journalEl.querySelectorAll('.ghost-card').forEach(b => {
+        const g = GHOSTS.find(x => x.name === b.dataset.g);
+        const possible = [...checked].every(id => g.ev.includes(id));
+        b.classList.toggle('impossible', !possible);
+        b.classList.toggle('guessed', guessName === g.name);
+      });
+      $('journal-leave').hidden = !(roomAt(px, py).id === 'van' || state !== 'playing');
+    }
+    let journalOpen = false;
+    function openJournal() {
+      if (state !== 'playing') return;
+      journalOpen = true; refreshJournal(); journalEl.hidden = false;
+    }
+    function closeJournal() { journalOpen = false; journalEl.hidden = true; }
+    function toggleJournal() { if (journalOpen) closeJournal(); else openJournal(); }
+
+    // ---------- round end ----------
+    function endRound(died) {
+      state = 'done';
+      closeJournal();
+      AudioSys.setStatic(false); AudioSys.setWind(0.05);
+      const correct = guessName === ghost.def.name;
+      let pay = 0;
+      const lines = [];
+      const evPay = evidenceFound.size * 10;
+      pay += evPay;
+      lines.push('Evidence found (' + evidenceFound.size + ' × $10): <b>$' + evPay + '</b>');
+      if (correct) { pay += 50; lines.push('Correct ghost — ' + ghost.def.name + ': <b>$50</b>'); }
+      else lines.push(guessName ? ('Wrong guess (' + guessName + '): <b>$0</b>') : 'No guess made: <b>$0</b>');
+      if (!died) { pay += 10; lines.push('Made it back alive: <b>$10</b>'); }
+      else { pay = Math.ceil(pay / 2); lines.push('…but the ghost got you: <b>half pay</b>'); }
+      streak = correct ? streak + 1 : 0;
+      money += pay;
+      saveNum('money', money); saveNum('streak', streak);
+      $('res-title').textContent = died ? 'You got caught!' : 'Job complete';
+      const v = $('res-verdict');
+      v.textContent = correct ? '✓ It really was the ' + ghost.def.name + '!' : '✗ It was actually the ' + ghost.def.name + '.';
+      v.className = 'verdict ' + (correct ? 'good' : 'bad');
+      $('res-reveal').innerHTML = 'Its evidence: ' + ghost.def.ev.map(id => '<b>' + EVIDENCE.find(e => e.id === id).label + '</b>').join(' · ') +
+        '<br>Ghost room: <b>' + ghost.room.name + '</b>';
+      $('res-pay').innerHTML = lines.join('<br>') + '<br>Total this job: <b>$' + pay + '</b>';
+      $('res-money').textContent = '$' + money;
+      $('res-streak').textContent = streak;
+      resultsEl.hidden = false;
+    }
+
+    // ---------- lighting grid (per frame) ----------
+    const roomIdOf = [];
+    (function precomputeRooms() {
+      for (let y = 0; y < MH; y++) {
+        roomIdOf.push([]);
+        for (let x = 0; x < MW; x++) roomIdOf[y].push(roomAt(x + 0.5, y + 0.5).id);
+      }
+    })();
+    const lightVal = [];
+    for (let y = 0; y < MH; y++) lightVal.push(new Float32Array(MW));
+    function refreshLightGrid() {
+      const roomLv = {};
+      let huntFlick = 1;
+      if (ghost && ghost.state === 'hunt') {
+        const n = Math.sin(perfNow * 0.021) + Math.sin(perfNow * 0.047);
+        huntFlick = n < -0.6 ? 0.25 : 1;
+      }
+      for (const r of ROOMS) {
+        let v;
+        if (r.id === 'van') v = 1.0;
+        else if (r.id === 'outside') v = 0.3;
+        else v = lights && lights[r.id] ? 0.95 : 0.2;
+        if (flickerRoom === r.id && flickerT > 0) v *= (Math.random() < 0.4 ? 0.15 : 1);
+        if (r.id !== 'van' && r.id !== 'outside') v *= huntFlick;
+        roomLv[r.id] = v;
+      }
+      for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) lightVal[y][x] = roomLv[roomIdOf[y][x]];
+    }
+
+    // ---------- renderer ----------
+    const flCol = new Float32Array(RW);
+    for (let x = 0; x < RW; x++) {
+      const cameraX = 2 * x / RW - 1;
+      flCol[x] = Math.max(0, 1 - cameraX * cameraX * 3.4);
+    }
+    function lightSample(x, y) {
+      const mx = x | 0, my = y | 0;
+      if (mx < 0 || my < 0 || mx >= MW || my >= MH) return 0.25;
+      return lightVal[my][mx];
+    }
+    // camera-space depth + projection for box furniture
+    function camDepth(wx, wy) {
+      const sx = wx - px, sy = wy - py, invDet = 1 / (planeX * dirY - dirX * planeY);
+      return invDet * (-planeY * sx + planeX * sy);
+    }
+    function projP(wx, wy, z) {
+      const sx = wx - px, sy = wy - py, invDet = 1 / (planeX * dirY - dirX * planeY);
+      const tX = invDet * (dirY * sx - dirX * sy), tY = invDet * (-planeY * sx + planeX * sy);
+      if (tY <= 0.06) return null;
+      const lineH = H / tY;
+      return { x: (W / 2) * (1 + tX / tY), y: H / 2 + (EYE - z) * lineH };
+    }
+    function shadeC(hex, f) {
+      const n = parseInt(hex.slice(1), 16);
+      const r = Math.min(255, ((n >> 16) & 255) * f) | 0, g2 = Math.min(255, ((n >> 8) & 255) * f) | 0, b = Math.min(255, (n & 255) * f) | 0;
+      return 'rgb(' + r + ',' + g2 + ',' + b + ')';
+    }
+    function fillFace(pts, fill) {
+      for (const p of pts) if (!p) return;
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+    }
+    function drawFurn(f, bright) {
+      const dN = camDepth(f.x, f.y);
+      if (dN <= 0.1) return;
+      const R = f.rad, xr = RW / W, near = dN - R;
+      let minX = 1e9, maxX = -1e9, topZ = 0;
+      for (const b of f.boxes) if (b.z1 > topZ) topZ = b.z1;
+      for (const ox of [-R, R]) for (const oy of [-R, R]) for (const z of [0, topZ]) {
+        const p = projP(f.x + ox, f.y + oy, z); if (!p) continue;
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      }
+      if (maxX < 0 || minX > W) return;
+      ctx.save(); ctx.beginPath();
+      let run = -1;
+      const lo = Math.max(0, minX | 0), hi = Math.min(W - 1, Math.ceil(maxX));
+      for (let x = lo; x <= hi; x++) {
+        const vis = near < zbuf[clamp((x * xr) | 0, 0, RW - 1)];
+        if (vis && run < 0) run = x;
+        if ((!vis || x === hi) && run >= 0) { ctx.rect(run, 0, (vis ? x : x - 1) - run + 1, H); run = -1; }
+      }
+      ctx.clip();
+      for (const b of f.boxes) {
+        const x0 = f.x + b.x0, x1 = f.x + b.x1, y0 = f.y + b.y0, y1 = f.y + b.y1;
+        const sides = [];
+        if (px < x0) sides.push({ c: [[x0, y0, b.z0], [x0, y1, b.z0], [x0, y1, b.z1], [x0, y0, b.z1]], sh: 0.62, d: camDepth(x0, (y0 + y1) / 2) });
+        if (px > x1) sides.push({ c: [[x1, y1, b.z0], [x1, y0, b.z0], [x1, y0, b.z1], [x1, y1, b.z1]], sh: 0.62, d: camDepth(x1, (y0 + y1) / 2) });
+        if (py < y0) sides.push({ c: [[x1, y0, b.z0], [x0, y0, b.z0], [x0, y0, b.z1], [x1, y0, b.z1]], sh: 0.8, d: camDepth((x0 + x1) / 2, y0) });
+        if (py > y1) sides.push({ c: [[x0, y1, b.z0], [x1, y1, b.z0], [x1, y1, b.z1], [x0, y1, b.z1]], sh: 0.8, d: camDepth((x0 + x1) / 2, y1) });
+        sides.sort((a, b2) => b2.d - a.d);
+        for (const s of sides) fillFace(s.c.map(q => projP(q[0], q[1], q[2])), shadeC(b.col, s.sh * bright));
+        if (EYE > b.z1) fillFace([[x0, y0, b.z1], [x1, y0, b.z1], [x1, y1, b.z1], [x0, y1, b.z1]].map(q => projP(q[0], q[1], q[2])), shadeC(b.col, 1.05 * bright));
+      }
+      if (f.topImg) {
+        let tz = 0; for (const b of f.boxes) if (b.z1 > tz) tz = b.z1;
+        const p = projP(f.x, f.y, tz);
+        if (p) {
+          const lineH = H / camDepth(f.x, f.y);
+          const sh = lineH * (f.topH || 0.5), sw = sh * (f.topImg.width / f.topImg.height);
+          ctx.globalAlpha = clamp(bright + 0.25, 0.3, 1);
+          ctx.drawImage(f.topImg, p.x - sw / 2, p.y - sh, sw, sh);
+          ctx.globalAlpha = 1;
+        }
+      }
+      ctx.restore();
+    }
+    function drawSprite(s) {
+      const sx = s.x - px, sy = s.y - py;
+      const invDet = 1 / (planeX * dirY - dirX * planeY);
+      const tX = invDet * (dirY * sx - dirX * sy);
+      const tY = s.tY;
+      if (tY <= 0.10) return;
+      const screenX = (W / 2) * (1 + tX / tY);
+      const lineH = H / tY;
+      const spH = lineH * s.sh, spW = spH * (s.img.width / s.img.height);
+      const bottomY = H / 2 + (EYE - (s.z0 || 0)) * lineH;
+      const topY = bottomY - spH + (s.bob || 0);
+      const startX = Math.floor(screenX - spW / 2), endX = Math.ceil(screenX + spW / 2);
+      const xr = RW / W;
+      if (s.alpha !== undefined) ctx.globalAlpha = s.alpha;
+      let runStart = -1;
+      for (let x = startX; x <= endX; x++) {
+        const vis = x >= 0 && x < W && tY < zbuf[clamp((x * xr) | 0, 0, RW - 1)] && x < endX;
+        if (vis && runStart < 0) runStart = x;
+        if ((!vis || x === endX) && runStart >= 0) {
+          const runEnd = vis ? x : x - 1;
+          const srcX = ((runStart - startX) / spW) * s.img.width;
+          const srcW = ((runEnd - runStart + 1) / spW) * s.img.width;
+          ctx.drawImage(s.img, srcX, 0, Math.max(0.01, srcW), s.img.height, runStart, topY, runEnd - runStart + 1, spH);
+          runStart = -1;
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function render() {
+      refreshLightGrid();
+      const nv = item === 6;                     // camera night vision
+      const fog = 0.055;
+      const minSh = nv ? 0.34 : 0.05;
+      // flashlight strength (flickers off in bursts during a hunt)
+      let flashK = flashOn ? 1 : 0;
+      if (ghost && ghost.state === 'hunt' && flashK) {
+        const n = Math.sin(perfNow * 0.033) + Math.sin(perfNow * 0.017);
+        if (n < -0.5) flashK = 0.15;
+      }
+      const halfH = RH / 2;
+      const rd0x = dirX - planeX, rd0y = dirY - planeY;
+      const rd1x = dirX + planeX, rd1y = dirY + planeY;
+      const buf = buf32;
+
+      // floor
+      for (let y = (halfH | 0) + 1; y < RH; y++) {
+        const rowDist = EYE * RH / (y - halfH);
+        const stepX = rowDist * (rd1x - rd0x) / RW, stepY = rowDist * (rd1y - rd0y) / RW;
+        let fx = px + rowDist * rd0x, fy = py + rowDist * rd0y;
+        const fogK = 1 - rowDist * fog;
+        const flRow = flashK * Math.max(0, 1.15 - rowDist * 0.16);
+        const fr = y * RW;
+        for (let x = 0; x < RW; x++) {
+          const cx = fx | 0, cy = fy | 0;
+          let fd = TEX.grass, amb = 0.25;
+          if (cx >= 0 && cy >= 0 && cx < MW && cy < MH) { fd = floorTexOf[cy][cx]; amb = lightVal[cy][cx]; }
+          let sh = amb * fogK + flRow * flCol[x];
+          sh = sh < minSh ? minSh : (sh > 1 ? 1 : sh);
+          const tx = ((fx - Math.floor(fx)) * TW) & TMASK, ty = ((fy - Math.floor(fy)) * TH) & TMASK;
+          const ti = (ty * TW + tx) << 2;
+          buf[fr + x] = (0xff000000 | (((fd[ti + 2] * sh) | 0) << 16) | (((fd[ti + 1] * sh) | 0) << 8) | ((fd[ti] * sh) | 0)) >>> 0;
+          fx += stepX; fy += stepY;
+        }
+      }
+      // ceiling / night sky
+      const headroom = Math.max(0.05, CEILH - EYE);
+      for (let y = 0; y <= (halfH | 0); y++) {
+        const rowDist = headroom * RH / Math.max(0.5, halfH - y);
+        const stepX = rowDist * (rd1x - rd0x) / RW, stepY = rowDist * (rd1y - rd0y) / RW;
+        let fx = px + rowDist * rd0x, fy = py + rowDist * rd0y;
+        const fogK = (1 - rowDist * fog) * 0.9;
+        const flRow = flashK * Math.max(0, 0.9 - rowDist * 0.16);
+        const cr = y * RW;
+        for (let x = 0; x < RW; x++) {
+          const cx = fx | 0, cy = fy | 0;
+          let cd = TEX.nightsky, amb = 0.9;      // sky ignores room lighting
+          let sky = true;
+          if (cx >= 0 && cy >= 0 && cx < MW && cy < MH) {
+            cd = ceilTexOf[cy][cx]; sky = cd === TEX.nightsky;
+            if (!sky) amb = lightVal[cy][cx];
+          }
+          let sh = sky ? 1 : amb * fogK + flRow * flCol[x];
+          sh = sh < (sky ? 0.9 : minSh) ? (sky ? 0.9 : minSh) : (sh > 1 ? 1 : sh);
+          const tx = ((fx - Math.floor(fx)) * TW) & TMASK, ty = ((fy - Math.floor(fy)) * TH) & TMASK;
+          const ti = (ty * TW + tx) << 2;
+          buf[cr + x] = (0xff000000 | (((cd[ti + 2] * sh) | 0) << 16) | (((cd[ti + 1] * sh) | 0) << 8) | ((cd[ti] * sh) | 0)) >>> 0;
+          fx += stepX; fy += stepY;
+        }
+      }
+      // walls (DDA)
+      for (let x = 0; x < RW; x++) {
+        const cameraX = 2 * x / RW - 1;
+        const rdx = dirX + planeX * cameraX, rdy = dirY + planeY * cameraX;
+        let mx = px | 0, my = py | 0;
+        const ddx = Math.abs(1 / rdx), ddy = Math.abs(1 / rdy);
+        let stepX, stepY, sdx, sdy;
+        if (rdx < 0) { stepX = -1; sdx = (px - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - px) * ddx; }
+        if (rdy < 0) { stepY = -1; sdy = (py - my) * ddy; } else { stepY = 1; sdy = (my + 1 - py) * ddy; }
+        let side = 0, hitVal = 0, guard = 0;
+        while (!hitVal && guard++ < 80) {
+          if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; }
+          if (mx < 0 || my < 0 || mx >= MW || my >= MH) { hitVal = 2; break; }
+          if (map[my][mx] !== 0) hitVal = map[my][mx];
+        }
+        const perp = side === 0 ? (sdx - ddx) : (sdy - ddy);
+        zbuf[x] = perp;
+        const wd = WALLTEX[hitVal] || TEX.brick;
+        const lineH = RH / perp;
+        const botF = halfH + EYE * lineH, topF = botF - CEILH * lineH;
+        const drawStartF = botF - lineH;
+        let wallX = side === 0 ? (py + perp * rdy) : (px + perp * rdx);
+        wallX -= Math.floor(wallX);
+        let texX = (wallX * TW) | 0;
+        if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = TW - 1 - texX;
+        // light the wall by the cell just in front of it
+        const amb = lightSample(px + rdx * perp * 0.96, py + rdy * perp * 0.96);
+        let sh = amb * (1 - perp * fog) + flashK * flCol[x] * Math.max(0, 1.15 - perp * 0.16);
+        sh = (sh < minSh ? minSh : (sh > 1 ? 1 : sh)) * (side === 1 ? 0.72 : 1);
+        const y0 = Math.max(0, Math.ceil(topF)), y1 = Math.min(RH - 1, botF | 0);
+        const tStep = TH / lineH;
+        let tPos = (y0 - drawStartF) * tStep;
+        for (let y = y0; y <= y1; y++) {
+          const ty = (tPos | 0) & TMASK;
+          const ti = ((ty * TW + texX) << 2);
+          buf[y * RW + x] = (0xff000000 | (((wd[ti + 2] * sh) | 0) << 16) | (((wd[ti + 1] * sh) | 0) << 8) | ((wd[ti] * sh) | 0)) >>> 0;
+          tPos += tStep;
+        }
+      }
+
+      sceneCtx.putImageData(sceneImg, 0, 0);
+      ctx.save();
+      ctx.translate(Math.sin(walkBob) * W * 0.004 * bobAmp, Math.abs(Math.sin(walkBob * 2)) * H * 0.007 * bobAmp);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sceneCanvas, 0, 0, RW, RH, 0, 0, W, H);
+      ctx.imageSmoothingEnabled = true;
+
+      // ---- billboards & furniture, far → near ----
+      const sprites = [];
+      for (const f of furns) {
+        const d = dist(f.x, f.y, px, py);
+        if (d > 18) continue;
+        const amb = lightSample(f.x, f.y);
+        sprites.push({ furn: f, x: f.x, y: f.y, bright: clamp(amb * (1.15 - d * 0.045) + (flashK ? 0.22 : 0.04), nv ? 0.5 : 0.1, 1) });
+      }
+      for (const dco of decos) {
+        const d = dist(dco.x, dco.y, px, py);
+        if (d > 16) continue;
+        sprites.push({ img: dco.img, x: dco.x, y: dco.y, sh: dco.sh, alpha: clamp(lightSample(dco.x, dco.y) + (flashK ? 0.3 : 0.06), nv ? 0.55 : 0.12, 1) });
+      }
+      for (const s of SWITCHES) sprites.push({ img: switchImg, x: s.x, y: s.y, sh: 0.16, z0: 0.42, alpha: clamp(lightSample(s.x, s.y) + 0.25, 0.25, 1) });
+      for (const t of throwables) sprites.push({ img: t.img, x: t.x, y: t.y, sh: 0.14, z0: t.z, alpha: clamp(lightSample(t.x, t.y) + (flashK ? 0.35 : 0.1), nv ? 0.6 : 0.15, 1) });
+      if (book.placed) sprites.push({ img: book.written ? bookWrittenImg : bookCleanImg, x: book.x, y: book.y, sh: 0.1, z0: 0.02, alpha: 1 });
+      if (item === 4) for (const p of prints) sprites.push({ img: handImg, x: p.x, y: p.y, sh: 0.24, z0: 0.5, alpha: 0.55 + 0.35 * Math.sin(perfNow * 0.01), bob: 0 });
+      if (ghost.alpha > 0.02) {
+        const fi = ((perfNow / 140) | 0) % GHOST_FRAMES.length;
+        const frames = lightSample(ghost.x, ghost.y) > 0.5 ? SHADOW_FRAMES : GHOST_FRAMES;
+        sprites.push({ img: frames[fi], x: ghost.x, y: ghost.y, sh: 1.12, alpha: ghost.alpha, bob: Math.sin(perfNow * 0.003) * 4 });
+      }
+      const invDet = 1 / (planeX * dirY - dirX * planeY);
+      for (const s of sprites) {
+        const sx = s.x - px, sy = s.y - py;
+        s.tY = invDet * (-planeY * sx + planeX * sy);
+      }
+      sprites.sort((a, b) => b.tY - a.tY);
+      for (const s of sprites) { if (s.furn) drawFurn(s.furn, s.bright); else drawSprite(s); }
+
+      // ghost orbs — visible only through the camera
+      if (nv) {
+        for (const o of orbs) {
+          const p = projP(o.x + Math.sin(perfNow * 0.0011 + o.ph) * 0.35, o.y + Math.cos(perfNow * 0.0009 + o.ph) * 0.35, o.z + Math.sin(perfNow * 0.0014 + o.ph) * 0.1);
+          if (!p) continue;
+          const d = camDepth(o.x, o.y);
+          if (d < 0.2 || d > zbuf[clamp(((p.x * RW / W) | 0), 0, RW - 1)]) continue;
+          const r = clamp(3.5 / d * 2.2, 2, 9);
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+          g.addColorStop(0, 'rgba(190,255,200,0.95)'); g.addColorStop(1, 'rgba(120,255,150,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.restore();
+
+      // ---- post & HUD ----
+      if (nv) {                                   // camcorder night vision
+        ctx.fillStyle = 'rgba(40,255,130,0.13)'; ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = 'rgba(20,80,40,0.35)'; ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.07;
+        for (let i = 0; i < 40; i++) ctx.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(200,255,210,0.7)'; ctx.lineWidth = 2;
+        ctx.strokeRect(24, 20, W - 48, H - 40);
+        ctx.fillStyle = '#ff5a5a'; ctx.beginPath(); ctx.arc(44, 38, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#d8ffe4'; ctx.font = 'bold 15px monospace';
+        ctx.fillText('REC', 56, 43); ctx.fillText('NIGHT VISION', W - 150, 43);
+      }
+      if (item === 4) {                           // UV wash
+        const g = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, H * 0.62);
+        g.addColorStop(0, 'rgba(150,90,255,0.16)'); g.addColorStop(1, 'rgba(60,20,120,0.05)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      }
+      // vignette
+      const dark = ghost.state === 'hunt' ? 0.5 : 0.3;
+      const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, 'rgba(' + (ghost.state === 'hunt' ? '40,0,0,' : '0,0,0,') + (0.5 + dark * 0.3) + ')');
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+      // hidden: peeking through wardrobe slats
+      if (hidden) {
+        ctx.fillStyle = 'rgba(8,6,3,0.92)';
+        const slat = H / 9;
+        for (let i = 0; i < 9; i += 2) ctx.fillRect(0, i * slat, W, slat * 1.35);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W * 0.08, H); ctx.fillRect(W * 0.92, 0, W * 0.08, H);
+      }
+      drawDevice();
+      drawHUD();
+      if (state === 'caught') drawJumpscare();
+    }
+
+    // hand-held device panel, bottom middle
+    function drawDevice() {
+      if (item === 0 || hidden) return;
+      const dw = 210, dh = 84, dx = W / 2 - dw / 2, dy = H - dh - 46;
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = '#181d22'; ctx.strokeStyle = '#3a444e'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(dx, dy, dw, dh, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#8ea2b0'; ctx.font = 'bold 11px Nunito, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(ITEM_NAMES[item].toUpperCase(), W / 2, dy + 16);
+      if (item === 1) {                            // EMF: 5 LEDs
+        const lv = emfLevel();
+        for (let i = 0; i < 5; i++) {
+          const on = i < lv;
+          ctx.fillStyle = !on ? '#2a3138' : (i < 2 ? '#57d977' : i < 4 ? '#e8c14a' : '#f05050');
+          ctx.beginPath(); ctx.arc(dx + 45 + i * 30, dy + 46, 10, 0, Math.PI * 2); ctx.fill();
+          if (on && i === 4) { ctx.strokeStyle = '#ff9090'; ctx.stroke(); }
+        }
+        ctx.fillStyle = '#cfe0ea'; ctx.font = 'bold 13px monospace';
+        ctx.fillText('LEVEL ' + lv, W / 2, dy + 74);
+      } else if (item === 2) {                     // spirit box
+        ctx.fillStyle = '#0d1f16'; ctx.fillRect(dx + 20, dy + 26, dw - 40, 34);
+        ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#63e6a8';
+        if (boxResponseT > 0) ctx.fillText(boxWords, W / 2, dy + 48);
+        else {
+          const n = ((perfNow / 260) | 0) % 4;
+          ctx.fillText('SCANNING' + '.'.repeat(n), W / 2, dy + 48);
+        }
+        ctx.fillStyle = '#2f5a46';
+        for (let i = 0; i < 14; i++) {
+          const h2 = 4 + Math.abs(Math.sin(perfNow * 0.02 + i * 1.7)) * 12;
+          ctx.fillRect(dx + 26 + i * 12, dy + 58 - h2 * 0.4, 6, h2 * 0.4);
+        }
+        ctx.fillStyle = '#8ea2b0'; ctx.font = 'bold 9px Nunito, sans-serif';
+        ctx.fillText('needs: close to the ghost · lights off', W / 2, dy + 78);
+      } else if (item === 3) {                     // thermometer
+        const t = thermoRead;
+        ctx.fillStyle = '#101c20'; ctx.fillRect(dx + 45, dy + 24, dw - 90, 36);
+        ctx.font = 'bold 24px monospace';
+        ctx.fillStyle = t < 0 ? '#7ad9ff' : t < 4 ? '#bde3f0' : '#e8e0c8';
+        ctx.fillText(t.toFixed(1) + '°C', W / 2, dy + 50);
+        if (t < 0) { ctx.font = 'bold 11px Nunito, sans-serif'; ctx.fillStyle = '#7ad9ff'; ctx.fillText('❄ FREEZING', W / 2, dy + 74); }
+      } else if (item === 4) {                     // UV wand
+        ctx.fillStyle = '#241a38'; ctx.fillRect(dx + 30, dy + 30, dw - 60, 24);
+        ctx.fillStyle = '#b48aff'; ctx.font = 'bold 12px Nunito, sans-serif';
+        ctx.fillText('shine at doors & thrown things', W / 2, dy + 46);
+      } else if (item === 5) {                     // book
+        ctx.drawImage(book.placed ? bookWrittenImg : bookCleanImg, W / 2 - 36, dy + 24, 72, 52);
+        ctx.fillStyle = '#cfe0ea'; ctx.font = 'bold 11px Nunito, sans-serif';
+        ctx.fillText(book.placed ? 'book is on the floor' : 'E — put it down', W / 2, dy + 80);
+      } else if (item === 6) {                     // camera: HUD is the nightvision frame
+        ctx.fillStyle = '#cfe0ea'; ctx.font = 'bold 11px Nunito, sans-serif';
+        ctx.fillText('watch for green orbs', W / 2, dy + 46);
+      }
+      ctx.restore(); ctx.textAlign = 'left';
+    }
+
+    function nearestInteractHint() {
+      if (state !== 'playing') return null;
+      for (const s of SWITCHES) if (dist(px, py, s.x, s.y) < 1.1) return 'E — light switch';
+      if (book.placed && dist(px, py, book.x, book.y) < 1.4) return book.written ? 'E — take the written book' : 'E — pick up book';
+      if (item === 5 && !book.placed) return 'E — place the book here';
+      for (const w of wardrobes) if (dist(px, py, w.x, w.y) < 1.25) return hidden ? 'H — come out' : 'H — hide in the wardrobe';
+      if (roomAt(px, py).id === 'van') return 'E — van monitor (journal & LEAVE)';
+      return null;
+    }
+
+    function drawHUD() {
+      // sanity bar, top centre
+      const bw = 170, bx = W / 2 - bw / 2, by = 16;
+      ctx.fillStyle = 'rgba(5,10,12,0.6)'; ctx.beginPath(); ctx.roundRect(bx - 10, by - 6, bw + 20, 34, 10); ctx.fill();
+      ctx.fillStyle = '#8ea2b0'; ctx.font = 'bold 10px Nunito, sans-serif';
+      ctx.fillText('SANITY', bx, by + 4);
+      ctx.fillStyle = '#222b31'; ctx.fillRect(bx, by + 9, bw, 10);
+      const sc = sanity > 55 ? '#57d977' : sanity > 25 ? '#e8c14a' : '#f05050';
+      ctx.fillStyle = sc; ctx.fillRect(bx, by + 9, bw * sanity / 100, 10);
+      ctx.fillStyle = '#e8fff3'; ctx.font = 'bold 11px Nunito, sans-serif';
+      ctx.fillText((sanity | 0) + '%', bx + bw - 28, by + 4);
+      // room + money, under the bar
+      ctx.fillStyle = '#9cc0ae'; ctx.font = 'bold 11px Nunito, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(roomAt(px, py).name + '  ·  $' + money + (streak > 1 ? '  ·  streak ' + streak : ''), W / 2, by + 44);
+      ctx.textAlign = 'left';
+      // evidence pips, top left under fab
+      let ey = 64;
+      for (const ev of EVIDENCE) {
+        if (!evidenceFound.has(ev.id)) continue;
+        ctx.fillStyle = 'rgba(5,10,12,0.55)'; ctx.beginPath(); ctx.roundRect(14, ey, 150, 20, 7); ctx.fill();
+        ctx.fillStyle = '#9ff0c8'; ctx.font = 'bold 11px Nunito, sans-serif';
+        ctx.fillText('✓ ' + ev.label, 22, ey + 14);
+        ey += 24;
+      }
+      // interact hint above the device
+      const hint = nearestInteractHint();
+      if (hint) {
+        ctx.textAlign = 'center'; ctx.font = 'bold 13px Nunito, sans-serif';
+        ctx.fillStyle = 'rgba(5,10,12,0.6)';
+        const tw = ctx.measureText(hint).width + 24;
+        ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2, H - 168, tw, 26, 9); ctx.fill();
+        ctx.fillStyle = '#e8fff3'; ctx.fillText(hint, W / 2, H - 150);
+        ctx.textAlign = 'left';
+      }
+      // toasts
+      let ty = H - 200;
+      ctx.textAlign = 'center';
+      for (const t of toasts) {
+        ctx.globalAlpha = clamp(t.t, 0, 1);
+        ctx.font = 'bold 14px Nunito, sans-serif';
+        const tw = ctx.measureText(t.msg).width + 28;
+        ctx.fillStyle = 'rgba(5,10,12,0.7)';
+        ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2, ty - 18, tw, 27, 9); ctx.fill();
+        ctx.fillStyle = '#ffe8b0'; ctx.fillText(t.msg, W / 2, ty);
+        ty -= 34;
+      }
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+      // crosshair
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(W / 2 - 1, H / 2 - 1, 3, 3);
+      // hunt banner
+      if (ghost.state === 'hunt' && (perfNow / 400 | 0) % 2 === 0) {
+        ctx.textAlign = 'center'; ctx.font = 'bold 22px Nunito, sans-serif';
+        ctx.fillStyle = '#ff6060'; ctx.fillText('⚠ HUNT — HIDE ⚠', W / 2, 96);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    function drawJumpscare() {
+      const t = clamp(caughtT / 0.5, 0, 1);
+      ctx.fillStyle = 'rgba(0,0,0,' + (0.5 + t * 0.4) + ')';
+      ctx.fillRect(0, 0, W, H);
+      const sc = 3 + t * 9;
+      const img = GHOST_FRAMES[((perfNow / 90) | 0) % 3];
+      const gw = 64 * sc, gh = 96 * sc;
+      const shx = rnd(-14, 14) * t, shy = rnd(-10, 10) * t;
+      ctx.globalAlpha = clamp(t * 1.6, 0, 1);
+      ctx.drawImage(img, W / 2 - gw / 2 + shx, H / 2 - gh * 0.32 + shy, gw, gh);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(180,0,0,' + (0.12 + 0.1 * Math.sin(perfNow * 0.05)) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // ---------- input ----------
+    function setKey(e, down) {
+      const k = e.key ? e.key.toLowerCase() : '';
+      let used = true;
+      if (k === 'w' || k === 'arrowup') keys.fwd = down;
+      else if (k === 's' || k === 'arrowdown') keys.back = down;
+      else if (k === 'a' || k === 'arrowleft') keys.left = down;
+      else if (k === 'd' || k === 'arrowright') keys.right = down;
+      else if (k === 'q') keys.sleft = down;
+      else if (k === 'z') keys.sright = down;
+      else if (k === 'shift') keys.run = down;
+      else if (down && k >= '1' && k <= '7') setItem(+k - 1);
+      else if (down && k === 'e') interact();
+      else if (down && k === 'f') { flashOn = !flashOn; AudioSys.tone(500, 0.04, 0.12, 'square'); }
+      else if (down && k === 'h') toggleHide();
+      else if (down && k === 'j') toggleJournal();
+      else if (down && k === 'escape') closeJournal();
+      else used = false;
+      if (used) e.preventDefault();
+    }
+    window.addEventListener('keydown', e => { if (!e.repeat) setKey(e, true); else if (['w', 'a', 's', 'd'].includes((e.key || '').toLowerCase())) e.preventDefault(); });
+    window.addEventListener('keyup', e => setKey(e, false));
+
+    // touch: left half = move stick, right half = look
+    const pointers = new Map();
+    canvas.addEventListener('pointerdown', e => {
+      AudioSys.ensure();
+      if (state !== 'playing') return;
+      canvas.setPointerCapture(e.pointerId);
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (x < rect.width / 2 && !joy) {
+        pointers.set(e.pointerId, 'joy');
+        joy = { sx: e.clientX, sy: e.clientY, fx: 0, fy: 0 };
+      } else {
+        pointers.set(e.pointerId, 'look');
+        lookDrag = { lx: e.clientX, dx: 0 };
+      }
+    });
+    canvas.addEventListener('pointermove', e => {
+      const role = pointers.get(e.pointerId);
+      if (role === 'joy' && joy) {
+        joy.fx = clamp((e.clientX - joy.sx) / 55, -1, 1);
+        joy.fy = clamp((joy.sy - e.clientY) / 55, -1, 1);
+      } else if (role === 'look' && lookDrag) {
+        lookDrag.dx += e.clientX - lookDrag.lx;
+        lookDrag.lx = e.clientX;
+      }
+    });
+    function endPointer(e) {
+      const role = pointers.get(e.pointerId);
+      if (role === 'joy') joy = null;
+      if (role === 'look') lookDrag = null;
+      pointers.delete(e.pointerId);
+    }
+    canvas.addEventListener('pointerup', endPointer);
+    canvas.addEventListener('pointercancel', endPointer);
+
+    // buttons
+    beltEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { AudioSys.ensure(); setItem(+b.dataset.item); }));
+    $('act-use').addEventListener('click', () => { AudioSys.ensure(); interact(); });
+    $('act-light').addEventListener('click', () => { AudioSys.ensure(); flashOn = !flashOn; });
+    $('act-hide').addEventListener('click', () => { AudioSys.ensure(); toggleHide(); });
+    $('journal-btn').addEventListener('click', toggleJournal);
+    $('journal-close').addEventListener('click', closeJournal);
+    $('journal-leave').addEventListener('click', () => endRound(false));
+    $('full-btn').addEventListener('click', () => {
+      const el = document.documentElement;
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (el.requestFullscreen) el.requestFullscreen();
+    });
+    function startPlaying() {
+      AudioSys.ensure(); AudioSys.setWind(0.05);
+      setupEl.hidden = true; resultsEl.hidden = true;
+      beltEl.classList.remove('hidden-ui'); actsEl.classList.remove('hidden-ui');
+      state = 'playing';
+      AudioSys.setStatic(item === 2);
+    }
+    $('start-btn').addEventListener('click', startPlaying);
+    $('again-btn').addEventListener('click', () => { newRound(); startPlaying(); });
+
+    // ---------- main loop ----------
+    let lastTs = 0;
+    function frame(ts) {
+      const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0.016);
+      lastTs = ts;
+      if (state === 'playing' || state === 'caught') update(dt);
+      else perfNow += dt * 1000;
+      render();
+      requestAnimationFrame(frame);
+    }
+    newRound();
+    requestAnimationFrame(frame);
+
+    // ---------- headless test API ----------
+    window.__t = {
+      state: () => state,
+      play: () => { startPlaying(); return state; },
+      step: (n, dt) => { for (let i = 0; i < (n || 1); i++) update(dt || 0.016); return { px: px, py: py, sanity: sanity, gs: ghost.state }; },
+      ghost: () => ({ name: ghost.def.name, ev: ghost.def.ev.slice(), room: ghost.room.id, x: Math.round(ghost.x * 10) / 10, y: Math.round(ghost.y * 10) / 10, state: ghost.state, alpha: Math.round(ghost.alpha * 100) / 100 }),
+      pos: () => ({ x: Math.round(px * 100) / 100, y: Math.round(py * 100) / 100, dir: Math.round(dir * 100) / 100, room: roomAt(px, py).id }),
+      tp: (x, y, d) => { px = x; py = y; if (d != null) setDir(d); return passable(x, y); },
+      sanity: v => { if (v != null) sanity = v; return sanity; },
+      item: i => { if (i != null) setItem(i); return item; },
+      light: (id, on) => { if (on != null) lights[id] = !!on; return lights[id]; },
+      lightsAll: () => Object.assign({}, lights),
+      evidence: () => Array.from(evidenceFound),
+      emf: () => emfLevel(),
+      temp: () => Math.round(tempAt(px, py) * 10) / 10,
+      thermo: () => Math.round(thermoRead * 10) / 10,
+      forceEvent: k => { doGhostEvent(k); return true; },
+      forceHunt: () => { startHunt(); return ghost.state; },
+      endHunt: () => { ghost.state = 'idle'; ghost.alpha = 0; ghost.huntT = 0; ghost.huntCd = 999; return true; },
+      calm: () => { ghost.eventT = 9999; ghost.huntCd = 9999; return true; },
+      placeBook: (x, y) => { book.placed = true; book.x = x == null ? px : x; book.y = y == null ? py : y; return true; },
+      writeBook: () => { book.written = true; return true; },
+      book: () => Object.assign({}, book),
+      prints: () => prints.map(p => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })),
+      orbs: () => orbs.map(o => ({ x: Math.round(o.x * 10) / 10, y: Math.round(o.y * 10) / 10 })),
+      emfSpots: () => emfSpots.map(s => ({ x: Math.round(s.x * 10) / 10, y: Math.round(s.y * 10) / 10, level: s.level })),
+      throwablesResting: () => throwables.filter(t => t.rest).length,
+      hide: () => { toggleHide(); return hidden; },
+      hidden: () => hidden,
+      interact: () => { interact(); return true; },
+      journal: open => { if (open === false) closeJournal(); else openJournal(); return journalOpen; },
+      guess: name => { guessName = name; refreshJournal(); return guessName; },
+      leave: died => { endRound(!!died); return { money: money, streak: streak }; },
+      money: () => money,
+      map: () => map.map(row => row.join('')),
+      rooms: () => ROOMS.map(r => r.id),
+      solid: (x, y) => !passable(x, y),
+      newRound: () => { newRound(); return window.__t.ghost(); },
+      setGhost: name => {
+        const def = GHOSTS.find(g => g.name === name);
+        if (!def) return false;
+        ghost.def = def;
+        orbs = [];
+        if (def.ev.includes('orb')) for (let i = 0; i < 3; i++) orbs.push({ x: rnd(ghost.room.x0 + 0.8, ghost.room.x1 + 0.2), y: rnd(ghost.room.y0 + 0.8, ghost.room.y1 + 0.2), z: rnd(0.45, 0.8), ph: rnd(0, 7) });
+        return true;
+      },
+      key: (k, down) => { setKey({ key: k, preventDefault: function () {} }, down !== false); return true; },
+      view: () => { render(); return true; }
+    };
+  })();
+  </script>
+</body>
+</html>

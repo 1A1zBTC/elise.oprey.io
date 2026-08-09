@@ -1079,3 +1079,55 @@ errors. All paths relative + classic scripts, so it runs from file://.
       raised door does nothing, you have to get up there.
 - Verified: 52 theme x depth level-sims clean (25 rolled a walkway, every one of
   those with a door upstairs), no console errors.
+
+## Scroot Rooms: Clark detail + smaller/cleaner hiding (2026-08-09)
+- [ ] clarkParts: more detail parts + chase "rage" (gaping jaw, flared eyes, head thrust)
+- [ ] drawClarkFace jumpscare: more gore/detail, use the unused `t` jitter param
+- [ ] Tables you hide under: smaller footprint (0.46x0.40 -> ~0.37x0.31 half-extents)
+- [ ] Hide exit: crawl out on the side you're pushing/facing, validated clear of walls+boxes+props; fall back to entry side
+- [ ] sw.js cache bump (re-check version right before)
+- [ ] Headless QA via localhost + __sr harness
+
+---
+
+# Phasmophobia — first-person ghost-hunt (new game, 2026-08-09)
+
+## Spec
+Faithful single-player browser Phasmophobia: explore a haunted house from a van at night,
+gather 3-of-6 evidence types (EMF 5, Spirit Box, Freezing Temps, Ghost Orb, Ghost Writing,
+UV Fingerprints) with switchable equipment, watch your sanity, survive hunts (hide in
+wardrobes), identify the ghost from a 12-ghost journal, return to the van and cash out.
+Raycast first-person engine in the Scroot Rooms style: single classic-script index.html,
+relative paths, works via file://, touch + keyboard.
+
+## Tasks
+- [ ] Chunk 1: HTML/CSS shell, overlays (setup/journal/results), canvas, helpers, textures, sprite art, audio
+- [ ] Chunk 2: house map + rooms + lights + props + ghost roster/state + round reset
+- [ ] Chunk 3: update loop — movement, equipment logic, ghost AI/events/hunts, sanity, evidence, journal
+- [ ] Chunk 4: renderer (walls/floor/sprites/devices/HUD), input (keys/touch), main loop, window.__t test API
+- [ ] Launcher card + build-sw + syntax check + headless QA via localhost (evidence, hunt, guess flow)
+- [ ] Commit + deploy (tools/deploy.sh) + verify live
+
+### Review (Clark detail + hiding, 2026-08-09)
+All done, verified headless (localhost:8931 + __sr harness, zero console errors):
+- clarkParts: +~30 detail parts (brow scar, gouged folds, eye-bags, blood tear, gold
+  earring, gums + rotted/snaggle teeth, second blood string, forehead furrows, temple
+  vein, wart, hunchback swell, torn hem strips that swing with stride, peg-leg iron
+  band + wood split, knuckled 2-joint fingers w/ curled nails, adam's apple, collar
+  blood, hat skull-and-crossbones badge) + a `rage` factor (state==='chase'): jaw
+  drops ~2.5x, eye whites flare 1.3x, pupils shrink to pinpricks, head cranes forward.
+  Screenshot-confirmed in wander AND chase (hunterInfo state=chase).
+- drawClarkFace jumpscare: head tremor driven by the previously-unused `t`, skin
+  cracks, pockmarks, stitched scar, cataract over the low eye, receding gums, rotted
+  + missing teeth, writhing tongue, spit strings between jaws, mouth-corner blood.
+- Tables: 0.46x0.40 -> 0.37x0.31 half-extents (legs pulled in to match). Verified
+  standOn: top 0.52 at +0.30, gone at +0.40.
+- Hide exit rework: pickHideExit() crawls out toward the side you push/face,
+  validated by hideExitOK (pushOut + pushOutBoxes stable at target, crawl line
+  clear of walls beyond the furniture's own 0.5 radius); falls back entry-side then
+  compass. Tested: face-east exit east, face-west exit west, H-key exit toward
+  facing, blocked side falls back cleanly, prop hides (solid tile 2) crawl through,
+  never lands in a wall/solid.
+- sw.js v93 -> v94 via tools/build-sw.mjs.
+- NOT committed / NOT deployed (Dan: commit + aws s3 sync scroot-rooms/ + sw.js +
+  CloudFront invalidation EDR208IJW4SS7).
