@@ -408,6 +408,19 @@
       g.fillStyle = '#20242c'; g.fillRect(3, 4, 34, 20);
       g.fillStyle = '#2e2a24'; g.fillRect(16, 26, 8, 3);
     });
+    // framed pictures for the walls
+    const paintingImg = makeImg(30, 22, g => {
+      g.fillStyle = '#8a6a2c'; g.fillRect(0, 0, 30, 22);
+      g.fillStyle = '#1a2438'; g.fillRect(3, 3, 24, 16);
+      g.fillStyle = '#2c3e28'; g.beginPath(); g.moveTo(3, 19); g.lineTo(12, 9); g.lineTo(18, 15); g.lineTo(27, 19); g.closePath(); g.fill();
+      g.fillStyle = '#d8d8b0'; g.beginPath(); g.arc(21, 8, 2.6, 0, Math.PI * 2); g.fill();
+    });
+    const painting2Img = makeImg(22, 28, g => {
+      g.fillStyle = '#5a4a34'; g.fillRect(0, 0, 22, 28);
+      g.fillStyle = '#3a3040'; g.fillRect(3, 3, 16, 22);
+      g.fillStyle = '#c8b498'; g.beginPath(); g.arc(11, 11, 4.4, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#4a3a50'; g.fillRect(6, 15, 10, 8);
+    });
     const monitorImg = makeImg(40, 34, g => {
       g.fillStyle = '#22262c'; g.fillRect(2, 2, 36, 26);
       g.fillStyle = '#0d2a1d'; g.fillRect(4, 4, 32, 22);
@@ -582,7 +595,7 @@
       addFurn(2.5, 1.5, [{ x0: -1.4, x1: 1.4, y0: -0.45, y1: 0.45, z0: 0, z1: 0.42, col: '#7d8a86' }]);
       addFurn(5.5, 3.5, [{ x0: -0.7, x1: 0.7, y0: -0.5, y1: 0.5, z0: 0.3, z1: 0.4, col: '#6a5136' }, { x0: -0.08, x1: 0.08, y0: -0.08, y1: 0.08, z0: 0, z1: 0.3, col: '#54402a' }], { rad: 0.85 });
       // Living room: couch, TV cabinet
-      addFurn(12.5, 2.0, [{ x0: -1.2, x1: 1.2, y0: -0.4, y1: 0.4, z0: 0, z1: 0.42, col: '#6a3d4a' }, { x0: -1.2, x1: 1.2, y0: -0.55, y1: -0.35, z0: 0, z1: 0.7, col: '#5a3340' }], { rad: 1.35 });
+      addFurn(12.5, 2.0, [{ x0: -1.2, x1: 1.2, y0: -0.4, y1: 0.4, z0: 0, z1: 0.36, col: '#6a3d4a' }, { x0: -1.2, x1: 1.2, y0: -0.55, y1: -0.35, z0: 0, z1: 0.55, col: '#5a3340' }], { rad: 1.35 });
       addFurn(16.5, 4.6, [{ x0: -0.8, x1: 0.8, y0: -0.3, y1: 0.3, z0: 0, z1: 0.4, col: '#3c3228' }], { topImg: tvImg, topH: 0.55 });
       // Master bedroom: double bed + wardrobe
       addFurn(26.4, 2.6, [{ x0: -1.1, x1: 1.1, y0: -0.85, y1: 0.85, z0: 0, z1: 0.34, col: '#7a5a72' }, { x0: 0.85, x1: 1.15, y0: -0.9, y1: 0.9, z0: 0, z1: 0.6, col: '#54402a' }], { rad: 1.45 });
@@ -591,7 +604,7 @@
       addFurn(8.4, 11.0, [{ x0: -0.8, x1: 0.8, y0: -0.55, y1: 0.55, z0: 0, z1: 0.3, col: '#4a6a8a' }], { rad: 1.0 });
       addWardrobe(12.5, 14.4);
       // Study: desk + bookshelf
-      addFurn(18.0, 11.0, [{ x0: -0.9, x1: 0.9, y0: -0.4, y1: 0.4, z0: 0.34, z1: 0.44, col: '#5c4630' }, { x0: -0.8, x1: -0.65, y0: -0.3, y1: 0.3, z0: 0, z1: 0.34, col: '#4a3826' }, { x0: 0.65, x1: 0.8, y0: -0.3, y1: 0.3, z0: 0, z1: 0.34, col: '#4a3826' }], { rad: 1.1 });
+      addFurn(18.2, 11.6, [{ x0: -0.9, x1: 0.9, y0: -0.38, y1: 0.38, z0: 0.34, z1: 0.44, col: '#5c4630' }, { x0: -0.8, x1: -0.65, y0: -0.3, y1: 0.3, z0: 0, z1: 0.34, col: '#4a3826' }, { x0: 0.65, x1: 0.8, y0: -0.3, y1: 0.3, z0: 0, z1: 0.34, col: '#4a3826' }], { rad: 1.1 });
       addFurn(15.4, 14.5, [{ x0: -0.35, x1: 0.35, y0: -0.35, y1: 0.35, z0: 0, z1: 1.1, col: '#54402a' }], { rad: 0.6 });
       addWardrobe(19.6, 14.4);
       // Bathroom: tub + sink
@@ -603,20 +616,65 @@
       addWardrobe(1.5, 7.5);
       // The van: tech desk with monitor
       addFurn(3.6, 20.0, [{ x0: -0.5, x1: 0.5, y0: -0.9, y1: 0.9, z0: 0.36, z1: 0.46, col: '#2e3640' }], { topImg: monitorImg, topH: 0.5 });
+
+      // --- making it feel like someone's actual home ---
+      const chair = (x, y, col) => addFurn(x, y, [
+        { x0: -0.16, x1: 0.16, y0: -0.16, y1: 0.16, z0: 0, z1: 0.26, col: col || '#54402a' },
+        { x0: -0.16, x1: 0.16, y0: 0.1, y1: 0.18, z0: 0.26, z1: 0.55, col: col || '#4a3826' }
+      ], { rad: 0.3 });
+      // Kitchen: fridge, stove, chairs at the table
+      addFurn(6.6, 1.5, [
+        { x0: -0.32, x1: 0.32, y0: -0.3, y1: 0.3, z0: 0, z1: 0.95, col: '#c2c8cc' },
+        { x0: -0.3, x1: 0.3, y0: -0.32, y1: -0.28, z0: 0.5, z1: 0.54, col: '#8a9094' }
+      ], { rad: 0.5 });
+      addFurn(4.7, 1.45, [
+        { x0: -0.3, x1: 0.3, y0: -0.28, y1: 0.28, z0: 0, z1: 0.44, col: '#9aa0a6' },
+        { x0: -0.24, x1: 0.24, y0: -0.22, y1: 0.22, z0: 0.44, z1: 0.47, col: '#2a2e32' }
+      ], { rad: 0.45 });
+      chair(4.6, 3.5); chair(6.4, 3.5);
+      // Living room: coffee table, armchair, dining table + chairs
+      addFurn(12.5, 3.7, [{ x0: -0.55, x1: 0.55, y0: -0.3, y1: 0.3, z0: 0, z1: 0.24, col: '#5c4630' }], { rad: 0.75 });
+      addFurn(10.2, 3.9, [
+        { x0: -0.3, x1: 0.3, y0: -0.3, y1: 0.3, z0: 0, z1: 0.34, col: '#6a3d4a' },
+        { x0: -0.3, x1: 0.3, y0: 0.18, y1: 0.32, z0: 0.34, z1: 0.6, col: '#5a3340' }
+      ], { rad: 0.5 });
+      addFurn(15.3, 2.0, [{ x0: -0.85, x1: 0.85, y0: -0.42, y1: 0.42, z0: 0.32, z1: 0.42, col: '#6a5136' }], { rad: 1.05 });
+      chair(14.4, 2.8); chair(16.2, 1.3);
+      // Master bedroom: dresser + nightstand
+      addFurn(24.3, 1.45, [{ x0: -0.5, x1: 0.5, y0: -0.26, y1: 0.26, z0: 0, z1: 0.52, col: '#54402a' }], { rad: 0.65 });
+      addFurn(27.9, 4.4, [{ x0: -0.2, x1: 0.2, y0: -0.2, y1: 0.2, z0: 0, z1: 0.36, col: '#4a3826' }], { rad: 0.35 });
+      // Kids bedroom: toy chest + dresser
+      addFurn(7.6, 13.6, [{ x0: -0.34, x1: 0.34, y0: -0.24, y1: 0.24, z0: 0, z1: 0.32, col: '#4a6a8a' }], { rad: 0.5 });
+      addFurn(11.6, 10.45, [{ x0: -0.45, x1: 0.45, y0: -0.24, y1: 0.24, z0: 0, z1: 0.5, col: '#54402a' }], { rad: 0.6 });
+      // Study: desk chair + second bookshelf
+      chair(18.2, 12.6, '#3c3228');
+      addFurn(15.35, 11.5, [{ x0: -0.3, x1: 0.3, y0: -0.35, y1: 0.35, z0: 0, z1: 1.05, col: '#4a3826' }], { rad: 0.55 });
+      // Bathroom: toilet
+      addFurn(4.4, 10.55, [
+        { x0: -0.2, x1: 0.2, y0: -0.22, y1: 0.22, z0: 0, z1: 0.32, col: '#d8e0e2' },
+        { x0: -0.18, x1: 0.18, y0: 0.12, y1: 0.24, z0: 0.32, z1: 0.66, col: '#c8d0d2' }
+      ], { rad: 0.4 });
     })();
     // decorative billboards {img,x,y,sh(world height),z0}
     const decos = [
       { img: plantImg, x: 9.6,  y: 5.3,  sh: 0.55 }, { img: plantImg, x: 22.5, y: 14.5, sh: 0.55 },
       { img: lampImg,  x: 18.4, y: 1.5,  sh: 0.72 }, { img: lampImg,  x: 28.4, y: 4.5,  sh: 0.72 },
-      { img: plantImg, x: 26.5, y: 17.5, sh: 0.6 }
+      { img: plantImg, x: 26.5, y: 17.5, sh: 0.6 },
+      // pictures on the walls make it a home
+      { img: paintingImg,  x: 11.5, y: 1.16,  sh: 0.34, z0: 0.5 },
+      { img: painting2Img, x: 23.0, y: 1.16,  sh: 0.4,  z0: 0.48 },
+      { img: paintingImg,  x: 10.5, y: 7.14,  sh: 0.32, z0: 0.5 },
+      { img: painting2Img, x: 18.5, y: 8.86,  sh: 0.38, z0: 0.48 },
+      { img: paintingImg,  x: 27.0, y: 10.14, sh: 0.34, z0: 0.5 },
+      { img: painting2Img, x: 3.0,  y: 7.14,  sh: 0.36, z0: 0.48 }
     ];
     // throwable props the ghost can fling {img,x,y,z,vx,vy,vz,rest}
     let throwables = [];
     function placeThrowables() {
       throwables = [
         { img: propImgs.cup,    x: 2.6,  y: 1.75, z: 0.42 }, { img: propImgs.plate, x: 3.4, y: 1.75, z: 0.42 },
-        { img: propImgs.plate,  x: 5.3,  y: 3.4,  z: 0.4  }, { img: propImgs.phone, x: 12.3, y: 2.1, z: 0.42 },
-        { img: propImgs.bottle, x: 16.3, y: 4.5,  z: 0.4  }, { img: propImgs.teddy, x: 8.5, y: 11.0, z: 0.3 },
+        { img: propImgs.plate,  x: 5.3,  y: 3.4,  z: 0.4  }, { img: propImgs.phone, x: 12.3, y: 2.1, z: 0.37 },
+        { img: propImgs.bottle, x: 16.3, y: 4.5,  z: 0.4  }, { img: propImgs.teddy, x: 8.5, y: 11.0, z: 0.32 },
         { img: propImgs.phone,  x: 17.7, y: 11.1, z: 0.44 }, { img: propImgs.cup,   x: 26.0, y: 2.4, z: 0.34 },
         { img: propImgs.bottle, x: 1.4,  y: 10.5, z: 0.5  }
       ];
@@ -692,8 +750,7 @@
         stepT: 0
       };
       lights = {};
-      for (const s of SWITCHES) lights[s.room] = false;
-      lights.foyer = true; lights.hall = true;
+      for (const s of SWITCHES) lights[s.room] = false;   // the whole house starts dark
       sanity = 100; tSinceStart = 0; hidden = false;
       flashOn = true; item = 0;
       evidenceFound = new Set(); manualEv = new Set(); guessName = null;
@@ -906,7 +963,7 @@
         dropEmf(ghost.x, ghost.y, false);
       } else if (kind === 'manifest') {
         ghost.state = 'manifest';
-        ghost.manifestT = rnd(2, 3.5);
+        ghost.manifestT = rnd(1.2, 2);
         // drift toward the player if they're in the house
         const pr = roomAt(px, py);
         if (!pr.safe) ghost.path = findPath(ghost.x, ghost.y, px, py) || [];
@@ -929,7 +986,9 @@
       }
       if (ghost.state === 'hunt') {
         ghost.huntT -= dt;
-        ghost.alpha = 0.35 + 0.45 * Math.abs(Math.sin(perfNow * 0.006));
+        // The ghost stays UNSEEN: only rare, split-second flickers give it away.
+        const bl = Math.sin(perfNow * 0.013) + Math.sin(perfNow * 0.006);
+        ghost.alpha = bl > 1.45 ? 0.4 : 0;
         // chase: head for the player when it can sense them
         const sees = !hidden && hasLOS(ghost.x, ghost.y, px, py);
         ghost.repathT -= dt;
@@ -949,18 +1008,17 @@
           const d = dist(px, py, ghost.x, ghost.y);
           if (d < 9) AudioSys.tone(70, 0.08, clamp(0.5 - d * 0.05, 0.05, 0.4), 'sine');
         }
-        if (!hidden && dist(px, py, ghost.x, ghost.y) < 0.55 && !roomAt(px, py).safe) caught();
+        if (!hidden && dist(px, py, ghost.x, ghost.y) < 0.72 && !roomAt(px, py).safe) caught();
         if (ghost.huntT <= 0) {
           ghost.state = 'idle'; ghost.alpha = 0;
           ghost.huntCd = rnd(20, 35);
-          toast('The ghost has calmed down… for now.');
           AudioSys.setWind(0.05);
         }
         return;
       }
       if (ghost.state === 'manifest') {
         ghost.manifestT -= dt;
-        ghost.alpha = clamp(ghost.manifestT, 0, 1) * 0.8;
+        ghost.alpha = clamp(ghost.manifestT, 0, 1) * 0.35;   // barely-there shimmer, never a clear look
         ghostStepAlong(dt);
         // Phantom: looking at a manifested ghost hurts
         if (ghost.def.name === 'Phantom' && ghost.alpha > 0.2) {
@@ -987,13 +1045,13 @@
         else ghost.huntCd = 8;                     // roll again soon
       }
     }
+    // No announcement: the only tells are flickering lights, your torch dying,
+    // the heartbeat and footsteps getting closer.
     function startHunt() {
       ghost.state = 'hunt';
       ghost.huntT = rnd(18, 26);
       ghost.repathT = 0; ghost.path = [];
-      toast('⚠ The ghost is HUNTING — run and hide!');
       AudioSys.setWind(0.16);
-      AudioSys.tone(220, 1.2, 0.3, 'sawtooth', 55);
     }
     function caught() {
       state = 'caught'; caughtT = 0;
@@ -1049,9 +1107,9 @@
 
       const pr = roomAt(px, py);
 
-      // --- sanity ---
+      // --- sanity: always ticking down inside the house, faster in the dark ---
       if (state === 'playing' && !pr.safe) {
-        sanity = clamp(sanity - (lights[pr.id] ? 0.05 : 0.55) * dt, 0, 100);
+        sanity = clamp(sanity - (lights[pr.id] ? 0.28 : 0.62) * dt, 0, 100);
       }
       // heartbeat when things are bad
       const scared = ghost.state === 'hunt' || sanity < 25;
@@ -1123,10 +1181,10 @@
 
       if (state === 'playing') updateGhost(dt);
 
-      // caught: jumpscare, then the report
+      // caught: instant kill — a snap of a jumpscare, then the report
       if (state === 'caught') {
         caughtT += dt;
-        if (caughtT > 1.7) endRound(true);
+        if (caughtT > 0.9) endRound(true);
       }
     }
     let boxWords = '', orbSeen = 0;
@@ -1165,10 +1223,11 @@
       if (hidden) { hidden = false; return; }
       for (const w of wardrobes) {
         if (dist(px, py, w.x, w.y) < 1.25) {
+          // No teleport: snapping the player against the wardrobe could wedge
+          // them into its blocked cell and jam movement. Just duck where you are.
           hidden = true;
-          px = w.x + (px > w.x ? 0.55 : -0.55); py = w.y + (py > w.y ? 0.4 : -0.4);
           AudioSys.tone(180, 0.1, 0.12, 'sine');
-          toast('Hidden. Stay still until the hunt ends…');
+          toast('Hidden. Stay still…');
           return;
         }
       }
@@ -1427,7 +1486,9 @@
           fx += stepX; fy += stepY;
         }
       }
-      // ceiling / night sky
+      // ceiling / night sky. Indoors, rays that overshoot the walls land on
+      // outdoor cells — draw those as dark plaster, not stars leaking inside.
+      const indoors = !roomAt(px, py).safe;
       const headroom = Math.max(0.05, CEILH - EYE);
       for (let y = 0; y <= (halfH | 0); y++) {
         const rowDist = headroom * RH / Math.max(0.5, halfH - y);
@@ -1444,6 +1505,7 @@
             cd = ceilTexOf[cy][cx]; sky = cd === TEX.nightsky;
             if (!sky) amb = lightVal[cy][cx];
           }
+          if (sky && indoors) { cd = TEX.plaster; sky = false; amb = 0.16; }
           let sh = sky ? 1 : amb * fogK + flRow * flCol[x];
           sh = sh < (sky ? 0.9 : minSh) ? (sky ? 0.9 : minSh) : (sh > 1 ? 1 : sh);
           const tx = ((fx - Math.floor(fx)) * TW) & TMASK, ty = ((fy - Math.floor(fy)) * TH) & TMASK;
@@ -1469,7 +1531,16 @@
         }
         const perp = side === 0 ? (sdx - ddx) : (sdy - ddy);
         zbuf[x] = perp;
-        const wd = WALLTEX[hitVal] || TEX.brick;
+        let wd = WALLTEX[hitVal] || TEX.brick;
+        // Brick is the OUTSIDE of the house. Seen from an indoor room, the same
+        // wall shows wallpaper — that's what makes it read as a home.
+        if (hitVal === 2) {
+          const fxc = (px + rdx * (perp - 0.05)) | 0, fyc = (py + rdy * (perp - 0.05)) | 0;
+          if (fxc >= 0 && fyc >= 0 && fxc < MW && fyc < MH) {
+            const rid = roomIdOf[fyc][fxc];
+            if (rid !== 'outside' && rid !== 'van') wd = (rid === 'bath' || rid === 'kitchen') ? TEX.tilewall : TEX.wallpaper;
+          }
+        }
         const lineH = RH / perp;
         const botF = halfH + EYE * lineH, topF = botF - CEILH * lineH;
         const drawStartF = botF - lineH;
@@ -1564,11 +1635,10 @@
         g.addColorStop(0, 'rgba(150,90,255,0.16)'); g.addColorStop(1, 'rgba(60,20,120,0.05)');
         ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       }
-      // vignette
-      const dark = ghost.state === 'hunt' ? 0.5 : 0.3;
+      // vignette (constant — it must never betray what the ghost is doing)
       const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.75);
       vig.addColorStop(0, 'rgba(0,0,0,0)');
-      vig.addColorStop(1, 'rgba(' + (ghost.state === 'hunt' ? '40,0,0,' : '0,0,0,') + (0.5 + dark * 0.3) + ')');
+      vig.addColorStop(1, 'rgba(0,0,0,0.6)');
       ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
       // hidden: peeking through wardrobe slats
       if (hidden) {
@@ -1698,12 +1768,6 @@
       ctx.globalAlpha = 1; ctx.textAlign = 'left';
       // crosshair
       ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(W / 2 - 1, H / 2 - 1, 3, 3);
-      // hunt banner
-      if (ghost.state === 'hunt' && (perfNow / 400 | 0) % 2 === 0) {
-        ctx.textAlign = 'center'; ctx.font = 'bold 22px Nunito, sans-serif';
-        ctx.fillStyle = '#ff6060'; ctx.fillText('⚠ HUNT — HIDE ⚠', W / 2, 96);
-        ctx.textAlign = 'left';
-      }
     }
 
     function drawJumpscare() {
