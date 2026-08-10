@@ -158,3 +158,49 @@ runs. Catching it needed a *time-series* probe (pantry levels every 50s), not an
 end-state assertion — the end state looked merely "bad", the series showed `veg=0`
 frozen while crates sat on the floor. When testing a sim, sample the resource
 counters over time and look for a value that never moves.
+
+## Tune game-feel with a headless self-play harness, not by eyeballing it
+- 2026-08-09: Reworking Hog Ball's steals/pacing, every intuition I had about the
+  numbers was wrong until I could measure. Adding `HB.demo()` (both benches AI) +
+  `HB.sim(frames)` (synchronous update() loop, no RAF) + event counters turned a
+  guessing game into arithmetic: full 6-minute games ran in seconds, so a 24-game
+  balance sweep was cheap.
+- What it caught that watching never would have: 26% of ALL passes were being
+  intercepted (passes peaked at z≈23 under a z<26 catch ceiling, so they never once
+  cleared a defender's head); a shot-selection rule that pinned the ball-handler at
+  a fixed radius and produced 5 shots per GAME; off-ball players stacking on the
+  same spacing spot; 6-12 over-and-back turnovers a game.
+- Rule: before tuning a simulation's feel, build the self-play harness and count
+  events per game. State a target from the real sport (NBA ~47% FG, ~15 steals,
+  ~1.85 FGA/min/team), then tune until the numbers land. Screenshot only to confirm
+  the picture matches the numbers.
+- Corollary — beware small-sample balance claims. Intermediate runs read 1-11, 2-10
+  and 3-13 (all "obviously" a side bias) and 7-7 and 5-5 from the same code. Only a
+  24-game run settled it at 12-12. Low-scoring games have huge variance: compare
+  TOTAL POINTS (low variance per unit compute), not win counts.
+- Corollary — an asymmetry hunt should start by deleting the asymmetry's *hiding
+  places*: three separate `side === 0 ? x > ... : x < ...` half-court tests were
+  rewritten to derive from `attackDir(side)`. Even when that turned out not to be
+  the bug, it removed a whole class of suspects for free.
+
+## Shared browse daemon: other Claude instances will steal your tab
+- 2026-08-09: Mid-QA, `HB.hoop` started throwing — the daemon's active tab had been
+  navigated to a different game by a concurrent instance. Symptom is confusing: every
+  `js` call fails, including trivial ones, and `console` shows no errors (it's a
+  different page).
+- Rule: for any multi-step browser session, claim a dedicated tab up front with
+  `browse newtab <url> --json`, keep the returned tabId, and prefix each command with
+  `browse tab <id>`. Check `browse url` first when JS calls start failing for no reason.
+
+## shared/game.css forces `canvas { width:100%; height:100% }` — pin every non-stage canvas
+- 2026-08-09: Building Hog Ball's My Team card screens, the upgrade button under each
+  card was in the DOM with a real 105x22 rect but invisible on screen. Cause: the shared
+  stylesheet sizes the responsive game canvas with `canvas { display:block; width:100%;
+  height:100% }`, which also caught every little card canvas — a 92x129 card rendered
+  105x191, overflowing its parent so the siblings below it drew outside the visible box.
+- Rule: any `<canvas>` created for UI (cards, previews, thumbnails, sparklines) in these
+  games must set `cv.style.width`/`cv.style.height` to its intrinsic size, or carry an
+  explicit CSS rule. Setting only the `width`/`height` attributes is not enough.
+- Diagnostic that found it fast: compare `getBoundingClientRect()` of the container and
+  each child. When a child's `bottom` exceeds the parent's `bottom`, something is
+  stretching it — don't keep re-screenshotting, measure the boxes.

@@ -111,7 +111,45 @@
     .pr-cards { display: flex; gap: 10px; justify-content: center; margin: 12px 0; }
     .pr-cards canvas { border-radius: 10px; cursor: pointer; box-shadow: 0 8px 22px rgba(0,0,0,0.5); transition: transform 0.12s ease; }
     .pr-cards canvas:active { transform: scale(0.95); }
-    .cr-slot canvas { display: block; margin: 0 auto 3px; border-radius: 6px; }
+    .cr-slot canvas { display: block; margin: 0 auto 3px; border-radius: 6px; width: 74px; height: 104px; }
+    .pr-cards canvas { width: 110px; height: 154px; }
+
+    /* ---------- My Team ---------- */
+    .start-btn.mt { background: linear-gradient(135deg, #7d6bff, #d4265e); border-color: #b06bff; }
+    .mt-strip { display: flex; gap: 8px; justify-content: center; margin: 10px 0 4px; }
+    .mt-strip .slot { flex: 0 0 auto; text-align: center; }
+    .mt-strip canvas { display: block; border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,0.45); }
+    .mt-strip .empty { width: 84px; height: 118px; border: 2px dashed #3a4870; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; color: #5a648a; font-weight: 800; font-size: 0.75rem; }
+    .mt-banner { background: #16213e; border: 2px solid #0f3460; border-radius: 10px; padding: 8px 10px;
+      font-weight: 800; font-size: 0.82rem; margin: 8px 0; }
+    .mt-row2 { display: flex; gap: 8px; }
+    .mt-row2 .secondary-btn { flex: 1; }
+    .mt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+      max-height: 46vh; overflow-y: auto; padding: 4px; }
+    .mt-card { background: #16213e; border: 2px solid #0f3460; border-radius: 10px; padding: 5px; text-align: center; }
+    .mt-card.starting { border-color: #46c46a; box-shadow: 0 0 0 2px rgba(70,196,106,0.25); }
+    .mt-card canvas { display: block; margin: 0 auto 4px; border-radius: 6px; cursor: pointer; }
+    .mt-card .up { width: 100%; background: #2c7a4f; border: none; border-radius: 6px; color: #fff;
+      font-family: inherit; font-weight: 800; font-size: 0.62rem; padding: 4px 2px; cursor: pointer; }
+    .mt-card .up:disabled { background: #2a3350; color: #6a7594; cursor: default; }
+    .mt-card .lbl { font-size: 0.6rem; color: #9fb0d0; font-weight: 800; margin-bottom: 3px; }
+    .mt-prize { min-height: 22px; font-weight: 800; font-size: 0.85rem; margin: 8px 0; color: #ffd23f; }
+    .mt-rounds { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+    .mt-round { display: flex; align-items: center; gap: 8px; background: #16213e; border: 2px solid #0f3460;
+      border-radius: 10px; padding: 7px 10px; font-weight: 800; font-size: 0.8rem; }
+    .mt-round.now { border-color: #ffd23f; }
+    .mt-round.won { border-color: #46c46a; }
+    .mt-round.lost { border-color: #e94560; opacity: 0.75; }
+    .mt-round .rr { margin-left: auto; font-size: 0.72rem; color: #9fb0d0; }
+    .draft-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin: 10px 0;
+      max-height: 46vh; overflow-y: auto; padding: 2px; }
+    .draft-cell { aspect-ratio: 1 / 0.78; background: linear-gradient(135deg, #23408a, #16213e);
+      border: 2px solid #2f4a8c; border-radius: 8px; color: #fff; font-family: inherit; font-weight: 800;
+      font-size: 0.7rem; cursor: pointer; padding: 2px; line-height: 1.15; }
+    .draft-cell:active { transform: scale(0.94); }
+    .draft-cell.taken { background: #0f1830; border-color: #1d2a4d; cursor: default; font-size: 0.58rem; color: #ffd23f; }
+    .draft-cell.taken.dud { color: #7b86a8; }
   </style>
 </head>
 <body>
@@ -165,6 +203,7 @@
         </div>
         <div class="legend" id="legend"></div>
         <button class="start-btn" id="start-btn">Tip Off!</button>
+        <button class="start-btn mt" id="myteam-btn">🃏 MY TEAM — collect cards &amp; win the playoffs</button>
         <button class="start-btn gold" id="season-btn">🏆 Season Mode</button>
         <button class="secondary-btn" id="menu-shop-btn">🛍 Card Shop — packs, spinner &amp; boosts</button>
       </div>
@@ -186,7 +225,7 @@
         <h2>Season Mode</h2>
         <div class="sub" id="cr-status">Loading…</div>
         <div class="cr-stats">
-          <div class="cr-stat"><div class="v money" id="cr-money">$0M</div><div class="k">Budget</div></div>
+          <div class="cr-stat"><div class="v money" id="cr-money">🪙 0</div><div class="k">Coins</div></div>
           <div class="cr-stat"><div class="v" id="cr-record">0–0</div><div class="k">Record</div></div>
           <div class="cr-stat"><div class="v" id="cr-troph">–</div><div class="k">Trophy case</div></div>
         </div>
@@ -204,7 +243,7 @@
     <div class="overlay" id="market" hidden>
       <div class="panel">
         <h2>Transfer Market</h2>
-        <div class="sub">Budget: <span class="money" id="mk-money">$0M</span> &nbsp;·&nbsp; sign anyone you can afford — any position, any team!</div>
+        <div class="sub">Coins: <span class="money" id="mk-money">🪙 0</span> &nbsp;·&nbsp; sign anyone you can afford — any position, any team!</div>
         <div class="cr-list" id="mk-list"></div>
         <button class="secondary-btn" id="mk-refresh">🔄 Scout different players</button>
         <button class="secondary-btn" id="mk-back">‹ Back</button>
@@ -231,11 +270,11 @@
     <div class="overlay" id="shop" hidden>
       <div class="panel">
         <h2>Card Shop</h2>
-        <div class="sub">Budget: <span class="money" id="sh-money">$0M</span> · rip packs, spin the wheel, unlock boosts!</div>
+        <div class="sub">Coins: <span class="money" id="sh-money">🪙 0</span> · rip packs, spin the wheel, unlock boosts!</div>
         <div class="group-label">Card Packs</div>
         <div class="pack-grid" id="sh-packs"></div>
         <div class="group-label">Superstar Spinner</div>
-        <button class="start-btn gold" id="sh-spin-btn" style="margin-top:0">🎡 Superstar Spinner — $10M a spin</button>
+        <button class="start-btn gold" id="sh-spin-btn" style="margin-top:0">🎡 Superstar Spinner — 🪙 1,000 a spin</button>
         <div class="group-label">Boosts</div>
         <div id="sh-boosts"></div>
         <button class="secondary-btn" id="sh-back">‹ Back</button>
@@ -256,10 +295,84 @@
     <div class="overlay" id="spinwheel" hidden>
       <div class="panel">
         <h2>Superstar Spinner</h2>
-        <div class="sub" id="sp-sub">$10M a spin — land on a LEGEND for the rarest cards in the game!</div>
+        <div class="sub" id="sp-sub">🪙 1,000 a spin — land on a LEGEND for the rarest cards in the game!</div>
         <canvas id="sp-cv" width="260" height="280" style="display:block;margin:0 auto"></canvas>
-        <button class="start-btn gold" id="sp-go">SPIN — $10M</button>
+        <button class="start-btn gold" id="sp-go">SPIN — 🪙 1,000</button>
         <button class="secondary-btn" id="sp-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- ============ MY TEAM ============ -->
+    <div class="overlay" id="mt" hidden>
+      <div class="panel">
+        <h2>My Team</h2>
+        <div class="sub">Coins: <span class="money" id="mt-coins">🪙 0</span> · Team OVR <b id="mt-ovr">–</b> · <span id="mt-count">0</span> cards collected</div>
+        <div class="mt-strip" id="mt-strip"></div>
+        <div class="mt-banner" id="mt-banner"></div>
+        <button class="start-btn mt" id="mt-play">🏆 Enter the Playoffs</button>
+        <div class="mt-row2">
+          <button class="secondary-btn" id="mt-coll-btn">🃏 Collection</button>
+          <button class="secondary-btn" id="mt-store-btn">🛍 Store</button>
+        </div>
+        <button class="secondary-btn" id="mt-reset">↺ Start over</button>
+        <button class="secondary-btn" id="mt-close">‹ Menu</button>
+      </div>
+    </div>
+
+    <!-- My Team: card collection + upgrades -->
+    <div class="overlay" id="mtcoll" hidden>
+      <div class="panel">
+        <h2>Collection</h2>
+        <div class="sub">Coins: <span class="money" id="mc-coins">🪙 0</span> · tap a card to <b style="color:#ffd23f">start or bench</b> it. Upgrading adds a ★ and <b>+2 OVR</b>.</div>
+        <div class="mt-grid" id="mc-grid"></div>
+        <button class="secondary-btn" id="mc-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- My Team: store -->
+    <div class="overlay" id="mtstore" hidden>
+      <div class="panel">
+        <h2>Store</h2>
+        <div class="sub">Coins: <span class="money" id="ms-coins">🪙 0</span></div>
+        <div class="group-label">Card Packs — 3 cards each</div>
+        <div class="pack-grid" id="ms-packs"></div>
+        <div class="group-label">Superstar Spinner</div>
+        <button class="start-btn gold" id="ms-spin-btn" style="margin-top:0">🎰 Superstar Spinner</button>
+        <button class="secondary-btn" id="ms-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- My Team: 3-reel superstar spinner -->
+    <div class="overlay" id="mtspin" hidden>
+      <div class="panel">
+        <h2>Superstar Spinner</h2>
+        <div class="sub" id="mp-sub">Three reels: <b>TIER</b>, <b>POSITION</b> and <b>★ STARS</b>. Whatever they land on is the card you take home.</div>
+        <canvas id="mp-cv" width="360" height="190" style="display:block;margin:0 auto;max-width:100%"></canvas>
+        <div class="mt-prize" id="mp-prize"></div>
+        <button class="start-btn gold" id="mp-go">SPIN</button>
+        <button class="secondary-btn" id="mp-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- My Team: playoff bracket -->
+    <div class="overlay" id="mtbracket" hidden>
+      <div class="panel">
+        <h2 id="mb-title">The Playoffs</h2>
+        <div class="sub" id="mb-sub">Win three rounds and the draft board is yours.</div>
+        <div class="mt-rounds" id="mb-rounds"></div>
+        <button class="start-btn mt" id="mb-play">Play the game ▶</button>
+        <button class="secondary-btn" id="mb-back">‹ Back</button>
+      </div>
+    </div>
+
+    <!-- My Team: 4x10 draft board -->
+    <div class="overlay" id="mtdraft" hidden>
+      <div class="panel">
+        <h2>🏆 Draft Board</h2>
+        <div class="sub" id="md-sub">You have <b id="md-picks">10</b> picks. Every square hides a different prize — choose wisely!</div>
+        <div class="draft-board" id="md-board"></div>
+        <div class="mt-prize" id="md-last"></div>
+        <button class="start-btn" id="md-done">Done — back to My Team</button>
       </div>
     </div>
 
@@ -276,10 +389,12 @@
   </div>
 
   <p class="hint">
-    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release in the <b style="color:#7ed37e">green at the top</b>; a quick <i>tap</i> = <b>pump fake</b> 🎣) / <b>jump-block</b> / <b>steal try</b>: Q / 4 &nbsp;·&nbsp; <b>Turbo:</b> hold Shift / 5 💨 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
+    <b>Move:</b> P1 = WASD, P2 = arrows (or drag) &nbsp;·&nbsp; <b>Shoot</b> (hold, release in the <b style="color:#7ed37e">green at the top</b>; a quick <i>tap</i> = <b>pump fake</b> 🎣) / <b>jump-block</b> / <b>reach in</b>: Q / 4 &nbsp;·&nbsp; <b>Turbo:</b> hold Shift / 5 💨 &nbsp;·&nbsp; <b>E / 3:</b> hold to auto-defend, tap <i>with</i> the ball for a <b>crossover</b> &nbsp;·&nbsp; <b>Pass:</b> R / 2 &nbsp;·&nbsp; <b>Switch:</b> F / 1
   </p>
   <p class="hint" style="margin-top:4px">
-    <b style="color:#7ed37e">GREEN = automatic bucket</b> — the sliver shrinks when you're guarded, deep or <b>gassed</b> (turbo drains your legs!) &nbsp;·&nbsp; free throws use the <b>same timing bar</b> — tap to stop it in the green (3 shots if fouled on a three, <b>and-one</b> if the bucket dropped!) &nbsp;·&nbsp; 3 straight makes = <b style="color:#ffb300">TAKEOVER 🔥</b> (bigger green + faster legs, a miss cools you off) &nbsp;·&nbsp; 5 team fouls a quarter = <b>bonus</b> &nbsp;·&nbsp; dribble moves (E/3) can <b>break ankles</b> 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b>
+    <b style="color:#7ed37e">GREEN = automatic bucket</b> — the sliver shrinks when you're guarded, deep or <b>gassed</b> (turbo drains your legs!) &nbsp;·&nbsp; free throws use the <b>same timing bar</b> — tap to stop it in the green (3 shots if fouled on a three, <b>and-one</b> if the bucket dropped!) &nbsp;·&nbsp; 3 straight makes = <b style="color:#ffb300">TAKEOVER 🔥</b> (bigger green + faster legs, a miss cools you off) &nbsp;·&nbsp; 5 team fouls a quarter = <b>bonus</b> &nbsp;·&nbsp; dribble moves (E/3) can <b>break ankles</b> 😵 &nbsp;·&nbsp; 1P starts with a <b>jump ball — mash Space!</b><br>
+    <b style="color:#c9a6ff">MY TEAM</b> is its own mode: pull cards, spend <b>🪙 coins</b> to upgrade a card's <b>OVERALL</b>, then win three knockout rounds to earn <b>ten picks on the draft board</b>.<br>
+    <b>Reaching in (Q/4) is a gamble</b> — you throw a hand at the ball and the outcome lands half a second later, so a handler who <i>pulls it back or crosses over</i> beats you. Clean strips are rare; usually you <b style="color:#ffe066">knock it loose</b> for a scramble. Whiff and you're off balance while they go past; reach from a bad angle and it's a <b style="color:#ff9d9d">foul</b>. Quarters are 90 seconds with a 24-second shot clock — <b>work the ball</b>, crash the glass and take the good look.
   </p>
 
   <script src="../shared/game.js"></script>
@@ -303,8 +418,9 @@
     const GRAV_Z = 0.55;
     const SHOT_MAX = 900;                          // legacy base — real bar speed comes from shotMaxFor(shooter)
     const OVERFILL = 1.25;                         // meter keeps creeping past the top, then auto-bricks
-    const QTR_MS = 45000;                          // four 45-second quarters, sim-style
-    const OT_MS = 30000;                           // timed OT periods; keep playing extra ones while tied
+    const QTR_MS = 90000;                          // four 90-second quarters — long enough for real possessions
+    const OT_MS = 40000;                           // timed OT periods; keep playing extra ones while tied
+    const REACH_T = 15, REACH_HIT = 8;             // a steal is a committed lunge, judged mid-swipe
     const PERIOD_NAMES = ['1st', '2nd', '3rd', '4th'];
     const FORMATION = [ { fx: 0.30, fy: 0.50 }, { fx: 0.55, fy: 0.28 }, { fx: 0.55, fy: 0.72 } ];
 
@@ -354,7 +470,8 @@
     // how contested the shooter is right now (0 = wide open)
     function contestOn(o, side) {
       let d0 = Infinity, defAir = false;
-      for (const q of teams[1 - side].onPitch) { const d = Math.hypot(q.x - o.x, q.y - o.y); if (d < d0) { d0 = d; defAir = q.z > 8; } }
+      // fouled-out mobs sit near the baseline — they must not contest anything
+      for (const q of teams[1 - side].onPitch) { if (q.ejected) continue; const d = Math.hypot(q.x - o.x, q.y - o.y); if (d < d0) { d0 = d; defAir = q.z > 8; } }
       return d0 < 70 ? (1 - d0 / 70) * 0.40 * (defAir ? 1.6 : 1) : 0;
     }
     // The green SLIVER: sized by shooter skill, shrunk by distance and by how
@@ -365,27 +482,41 @@
       const contest = contestOn(o, side);
       const fatigue = 0.7 + 0.3 * (o.stamina / 100);   // gassed legs shrink the window
       const take = o.takeT > 0 ? 1.6 : 1;              // takeover: a fatter green while you're rolling
-      return clamp((0.05 + (o.shoot3 - 0.9) * 0.10) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009) * fatigue * take, 0.015, 0.14);
+      return clamp((0.11 + (o.shoot3 - 0.9) * 0.18) * (1 - clamp(contest, 0, 0.4) * 1.5) * (1 - D * 0.0009) * fatigue * take, 0.04, 0.26);
     }
-    // 2K bar speed at 1.5x — elite shooters ~0.5s to the top, big men ~0.24s.
-    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 2.25; }
+    // A FAT green that goes past in a blink: the bar is quick, so the target is
+    // big but the reaction window is still tight. Elite shooters ~0.35s to the
+    // top, big men ~0.16s.
+    function shotMaxFor(o) { return clamp(520 + (o.shoot3 - 0.85) * 1400, 450, 1300) / 3.2; }
 
     const setupEl = document.getElementById('setup');
     const overEl = document.getElementById('over');
     const ctlEls = {};
     ['shoot1', 'pass1', 'sw1', 'def1', 'turbo1', 'shoot2', 'pass2', 'sw2', 'def2', 'turbo2'].forEach(function (id) { ctlEls[id] = document.getElementById(id); });
 
-    function attackHoop(side) { return HOOP[side === 0 ? 1 : 0]; }
-    function ownHoop(side) { return HOOP[side === 0 ? 0 : 1]; }
+    let sideFlip = false;   // harness-only: swap which end each bench attacks
+    function attackHoop(side) { return HOOP[(side === 0) !== sideFlip ? 1 : 0]; }
+    function ownHoop(side) { return HOOP[(side === 0) !== sideFlip ? 0 : 1]; }
+    // +1 when this team attacks to the right. Every half-court test derives from
+    // this rather than hardcoding "side 0 goes right", so the two ends stay
+    // provably mirror images of each other.
+    function attackDir(side) { return -attackHoop(side).dir; }
 
     function mkPlayer(side, key, slot, st) {
       const s = st || MOBS[key];
       return { side: side, key: key, slot: slot,
         x: 0, y: 0, vx: 0, vy: 0, z: 0, vz: 0, fx: side === 0 ? 1 : -1, fy: 0, r: s.r,
         accel: s.accel, maxSpd: s.maxSpd, mass: s.mass, shoot3: s.shoot3, steal: s.steal,
+        // ball security: quick, light mobs protect the dribble; heavy bigs don't
+        handle: clamp(0.75 + (s.accel - 0.33) * 3.0 - (s.mass - 1.5) * 0.10, 0.55, 1.25),
         pName: s.pName || null, stars: s.stars || 0, fouls: 0, ejected: false, stamina: 100, fit: s.fit || 1, pts: 0,
         heat: 0, takeT: 0, sprinting: false, fakeCD: 0,
         aiShootCD: 0, aiPassCD: 0, aiJumpCD: 0, stealCD: 0, stunT: 0, crossT: 0, crossCD: 0,
+        // the reach + its aftermath, screens and box-outs
+        reachT: 0, reachDone: true, reachTgt: null, recoverT: 0, cutT: 0, cutRim: 0,
+        screenT: 0, screenT2: 0, screenCD: 0, scrFx: 0, boxFx: 0,
+        // animation timers: shot follow-through, landing squash, celebration hop
+        shotT: 0, landT: 0, celT: 0, dribPhase: 0,
         flash: 0, legPhase: 0, mark: null, dunk: null };
     }
     function benchSeat(side, j) { return { x: side === 0 ? 30 : VW - 30, y: 150 + j * 46 }; }
@@ -410,7 +541,10 @@
       return t;
     }
     function activePlayer(t) { return t.onPitch[t.active]; }
-    function isHumanTeam(side) { return side === 0 || (side === 1 && numPlayers === 2); }
+    // demoMode hands BOTH benches to the AI — used by the headless balance harness
+    let demoMode = false, paused = false;   // paused: harness-only, freezes the RAF loop for screenshots
+    const dbg = { reach: 0, strip: 0, knock: 0, foul: 0, whiff: 0, protect: 0, pass: 0, to: {} };
+    function isHumanTeam(side) { return demoMode ? false : (side === 0 || (side === 1 && numPlayers === 2)); }
 
     function homePos(side, slot) {
       const f = FORMATION[slot];
@@ -478,7 +612,7 @@
     }
 
     function beginGame() {
-      careerMatch = null; lastCareer = false;
+      careerMatch = null; lastCareer = false; mtMatch = null; lastMt = false;
       numPlayers = selectedCount();
       teams = [ buildTeam(0, pickL), buildTeam(1, pickR) ];
       applyDiff(teams[1]);
@@ -509,6 +643,8 @@
       bucket: ['{p} with the smooth finish!', 'Count it! {p} gets it to drop.', '{p} rises and fires… good!', 'Silky stuff from {p}!'],
       dunk:   ['{p} THROWS IT DOWN! 💥', 'Get out of the way — {p} with the hammer!', 'POSTERIZED! {p} with authority!'],
       steal:  ['Picked! {p} with the takeaway!', '{p} with lightning hands!', 'Cookies snatched by {p}!'],
+      loose:  ['{p} pokes it free — loose ball!', 'Knocked away! Everybody dive!', 'It is on the floor and it is anybody\'s!'],
+      board:  ['{p} rips down the rebound!', 'Boards belong to {p}!', '{p} goes up and takes it!'],
       block:  ['REJECTED! {p} says not today!', '{p} sends it back!', 'Swatted into the cheap seats by {p}!'],
       take:   ['{p} is TAKING OVER this game! 🔥', 'You cannot leave {p} open right now! 🔥'],
       buzzer: ['AT THE BUZZER! Are you kidding?!', 'BANG! Right at the horn!'],
@@ -537,6 +673,9 @@
       crowdHype = 55;
       const h = attackHoop(side);
       const buzzer = halfPending;
+      shakeRim(h, pts === 3 ? 0.5 : 0.8);                 // the net snaps
+      if (shooter) shooter.celT = 62;                     // the scorer bounces away from it
+      for (const m of teams[side].onPitch) if (m !== shooter && !m.ejected) m.celT = 44;
       pops.push({ x: h.x + h.dir * 60, y: h.y - 70, txt: buzzer ? 'BUZZER BEATER! +' + pts : (label || (pts === 3 ? 'BANG! +3' : 'SWISH! +2')), color: SIDE_COLOR[side], t: 0, big: true });
       if (label && label.indexOf('DUNK') >= 0) sfx.dunk();
       else if (buzzer || pts === 3) sfx.three();
@@ -577,7 +716,8 @@
       document.getElementById('over-l2').textContent = sideName(1);
       document.getElementById('over-s1').textContent = score[0];
       document.getElementById('over-s2').textContent = score[1];
-      if (careerMatch) careerFinish(winner);
+      if (mtMatch) mtFinish(winner);
+      else if (careerMatch) careerFinish(winner);
       else document.getElementById('again-btn').textContent = 'Play Again';
       let star = null;
       for (const t of teams) for (const p of t.onPitch.concat(t.bench || [])) { if ((p.pts || 0) > (star ? star.pts : 0)) star = p; }
@@ -650,8 +790,11 @@
     function setOwner(p) {
       const intercepted = ball.passTo && ball.passTo.side !== p.side;
       if (ball.lastSide !== p.side) { shotClock = 24000; possFront = false; paintT = 0; }
+      const wasLoose = ball.loose;
+      if (ball.lastSide !== p.side) dbg.poss = (dbg.poss || 0) + 1;
       ball.owner = p; ball.lastSide = p.side; ball.vx = p.vx; ball.vy = p.vy; ball.z = 0; ball.vz = 0; ball.freeCD = 0; possCD = 10;
-      ball.passTo = null; ball.shot = null;
+      ball.passTo = null; ball.shot = null; ball.loose = false;
+      if (wasLoose) pops.push({ x: p.x, y: p.y - p.r - 24, txt: 'RECOVERED!', color: SIDE_COLOR[p.side], t: 0 });
       ball.settle = 10;
       p.flash = 18;
       if (intercepted) pops.push({ x: p.x, y: p.y - p.r - 22, txt: 'INTERCEPTED!', color: SIDE_COLOR[p.side], t: 0 });
@@ -662,6 +805,12 @@
       ball.x = clamp(o.x + o.fx * (o.r + ball.r + 2), X0 + ball.r, X1 - ball.r);
       ball.y = clamp(o.y + o.fy * (o.r + ball.r + 2), Y0 + ball.r, Y1 - ball.r);
     }
+    // Once you've crossed half court you can't pass it back over — so a teammate
+    // trailing in the backcourt is not a legal outlet, however open they look.
+    function passable(side, m) {
+      if (!possFront) return true;
+      return (m.x - VW / 2) * attackDir(side) > 14;
+    }
     // Bounce pass to the most open teammate, led so it arrives on the move.
     function passFrom(side, o, forcedTgt) {
       const t = teams[side], h = attackHoop(side);
@@ -669,6 +818,7 @@
       if (!tgt) {
         for (let i = 0; i < t.onPitch.length; i++) {
           const m = t.onPitch[i]; if (m === o || m.ejected) continue;
+          if (!passable(side, m)) continue;
           const dm = Math.hypot(m.x - o.x, m.y - o.y); if (dm > 520) continue;
           let open = Infinity;
           for (const q of teams[1 - side].onPitch) open = Math.min(open, Math.hypot(q.x - m.x, q.y - m.y));
@@ -685,11 +835,16 @@
         dy = tgt.y + tgt.vy * flight * 0.7 - o.y;
       } else { dx = o.fx; dy = o.fy; }
       const dl = Math.hypot(dx, dy) || 1, speed = clamp(dl * 0.05, 6, 11);
-      kickBall(o, dx / dl * speed, dy / dl * speed, 5, 9);   // lofted so the pass visibly bounces over
+      // Loft it over the defence. The old flat pass topped out at z≈23, under the
+      // 26-high catch ceiling for its whole flight, so a quarter of all passes got
+      // picked off by whoever happened to be standing in the lane. Arc it by
+      // distance and it clears their heads until it drops in on the receiver —
+      // a defender now has to JUMP into the lane to take it.
+      kickBall(o, dx / dl * speed, dy / dl * speed, clamp(3.6 + dl * 0.014, 4.4, 8), 9);
       ball.passTo = tgt;
       if (tgt && isHumanTeam(side)) setActive(t, t.onPitch.indexOf(tgt));
       pops.push({ x: o.x, y: o.y - o.r - 18, txt: 'PASS', color: SIDE_COLOR[side], t: 0 });
-      sfx.pass();
+      sfx.pass(); dbg.pass++;
     }
     function passBall(side) {
       if (state !== 'playing') return;
@@ -717,8 +872,8 @@
       let make;
       if (green) make = true;                       // a green is AUTOMATIC
       else {
-        // NBA-ish base percentages: ~85% at the rim, ~55% at the arc before timing
-        let P0 = 0.88 - D * 0.0013;
+        // NBA-ish base percentages before timing: ~73% at the rim, ~36% from deep
+        let P0 = 0.80 - D * 0.0018;
         if (three) P0 *= 0.92 * o.shoot3;
         const tim = Math.max(0, 1 - err * 1.7);
         const P = clamp(P0 * tim - contestOn(o, side), 0.02, 0.90);
@@ -739,6 +894,7 @@
       ball.freeCD = T + 10;
       ball.shot = { make: make, airball: airball, pts: three ? 3 : 2, side: side, t: 0, T: T, hoop: h, shooter: o, blockTried: false };
       if (o.z <= 0) o.vz = 6;    // jump shot
+      o.shotT = 26;              // arm stays extended in the follow-through
       sfx.shoot();
       // release feedback: timing grade + how contested the look was
       const cov = contest > 0.25 ? 'SMOTHERED' : contest > 0.08 ? 'CONTESTED' : 'OPEN';
@@ -749,13 +905,22 @@
       pops.push({ x: sx, y: sy - o.r - 24, txt: green ? 'GREEN!' : tim + ' · ' + cov, color: tcol, t: 0 });
     }
 
+    // Dunk: a gather step, a long takeoff, the cocked arm, then the hammer down
+    // and a hang on the rim. `t` runs 0..T; phases are read by the renderer.
     function startDunk(side, o, h) {
-      o.dunk = { t: 0, T: 12, sx: o.x, sy: o.y, hx: h.x, hy: h.y };
+      o.dunk = { t: 0, T: 30, sx: o.x, sy: o.y, hx: h.x, hy: h.y, hang: 0, style: pick(['tomahawk', 'windmill', 'twohand']) };
       pops.push({ x: o.x, y: o.y - o.r - 24, txt: 'DUNK! 💥', color: '#ffe066', t: 0 });
+    }
+    // rim / net / floor reactions — purely cosmetic, driven by the draw pass
+    let rimFx = [null, null];      // per hoop: {t, power}
+    let shocks = [];               // expanding floor rings from dunks and big landings
+    function shakeRim(h, power) {
+      const i = HOOP.indexOf(h); if (i >= 0) rimFx[i] = { t: 0, power: power || 1 };
     }
 
     // generic whistle-violation turnover: ball to the other team where it stands
     function deadBallTurnover(toSide, label) {
+      dbg.to[label] = (dbg.to[label] || 0) + 1;
       ball.shot = null; ball.passTo = null; ball.vx = ball.vy = ball.vz = 0; ball.z = 0;
       ball.x = clamp(ball.x, X0 + 22, X1 - 22); ball.y = clamp(ball.y, Y0 + 22, Y1 - 22);
       pops.push({ x: ball.x, y: ball.y - 30, txt: label, color: '#fff', t: 0, big: true });
@@ -805,8 +970,8 @@
     // it in the green at the top. Shooting fouls award 2 (or 3 behind the arc),
     // an and-one awards 1. A made last FT is a dead ball (other team inbounds);
     // a missed last FT comes off the rim LIVE — anyone can grab the rebound.
-    function ftGreen(o) { return clamp(0.06 + (o.shoot3 - 0.9) * 0.12, 0.03, 0.13); }
-    function ftMaxFor(o) { return shotMaxFor(o) * 1.5; }   // calmer than a live jumper
+    function ftGreen(o) { return clamp(0.13 + (o.shoot3 - 0.9) * 0.20, 0.07, 0.26); }
+    function ftMaxFor(o) { return shotMaxFor(o) * 1.9; }   // calmer than a live jumper
     function startFT(shooter, n) {
       ft = { side: shooter.side, shooter: shooter, total: n || 2, taken: 0, ms: 0, lastMade: false };
       stageFTScene();
@@ -837,7 +1002,7 @@
         state = 'score'; freeze = 46; inboundSide = 1 - side;
       } else {
         ball.x = h.x + h.dir * rnd(4, 14); ball.y = h.y + rnd(-12, 12); ball.z = RIM_Z + 4;
-        ball.vx = h.dir * rnd(1.5, 3.2); ball.vy = rnd(-2.2, 2.2); ball.vz = 1.4; ball.freeCD = 12;
+        ball.vx = h.dir * rnd(1.5, 3.2); ball.vy = rnd(-2.2, 2.2); ball.vz = 1.4; ball.freeCD = 12; ball.loose = true;
         pops.push({ x: h.x + h.dir * 40, y: h.y - 60, txt: 'REBOUND!', color: '#ffe066', t: 0 });
         state = 'playing'; freeze = 0;
       }
@@ -867,34 +1032,85 @@
       ftAftermath(o.side, last);
     }
 
-    // Stealing is an ATTEMPT with a risk: whiff, win the ball, or get whistled
-    // for a reach-in foul (stunned + a free throw for the offense).
+    // ---------- the reach: a steal is a COMMITMENT, not a coin flip ----------
+    // Throwing a hand at the ball starts a ~15-frame lunge. The outcome is judged
+    // HALFWAY THROUGH, on where everybody actually is by then — so a handler who
+    // pulls it back, crosses over or turns their shoulder beats the reach. Clean
+    // strips are rare; the usual reward is a DEFLECTION that squirts the ball
+    // loose for a scramble. Gamble from a bad angle and you foul, or you whiff
+    // and spend half a second off balance while they blow past you.
+    function reachRangeFor(p) { return p.r + 18 + 10 * p.steal; }
+    // windows where the ball simply can't be taken
+    function canBeStolen(o) {
+      if (!o || ball.owner !== o) return false;
+      return !(o.crossT > 0 || o.z > 4 || o.dunk || (ball.settle || 0) > 0 || possCD > 0);
+    }
     function attemptSteal(p, o) {
-      if (p.stealCD > 0 || p.stunT > 0 || possCD > 0) return;
-      p.stealCD = 50;
-      const d = Math.hypot(p.x - o.x, p.y - o.y);
-      if (d > p.r + o.r + 22 * p.steal) { pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 }); return; }
+      if (p.stealCD > 0 || p.stunT > 0 || p.reachT > 0 || p.dunk) return;
+      if (!o || ball.owner !== o) return;
+      p.stealCD = 58; p.reachT = REACH_T; p.reachTgt = o; p.reachDone = false; dbg.reach++;
+      // you commit your body to the swipe — that momentum is what costs you
+      const dx = o.x - p.x, dy = o.y - p.y, dl = Math.hypot(dx, dy) || 1;
+      p.vx += dx / dl * p.maxSpd * 0.5; p.vy += dy / dl * p.maxSpd * 0.5;
+      p.fx = dx / dl; p.fy = dy / dl;
+    }
+    // 0..1 read on how well this defender is placed to take the ball
+    function reachPosition(p, o) {
+      const h = attackHoop(o.side);
+      const gx = h.x - o.x, gy = h.y - o.y, gl = Math.hypot(gx, gy) || 1;
+      const dx = p.x - o.x, dy = p.y - o.y, dl = Math.hypot(dx, dy) || 1;
+      const goalSide = clamp((dx * gx + dy * gy) / (dl * gl), -1, 1) * 0.5 + 0.5;   // cutting off the rim
+      const ol = Math.hypot(o.vx, o.vy);                                            // dribbling INTO you?
+      const into = ol > 0.4 ? clamp((o.vx * -dx + o.vy * -dy) / (ol * dl), 0, 1) : 0.4;
+      const control = clamp(1 - Math.hypot(p.vx, p.vy) / (p.maxSpd * 1.6), 0.15, 1); // flying past strips nobody
+      return clamp(goalSide * 0.5 + into * 0.3 + control * 0.2, 0, 1);
+    }
+    function resolveReach(p) {
+      p.reachDone = true;
+      const o = p.reachTgt; p.reachTgt = null;
+      if (p.stunT > 0) { p.reachT = 0; return; }
+      const whiff = function (txt) { pops.push({ x: p.x, y: p.y - 34, txt: txt, color: '#cfd6ea', t: 0 }); p.recoverT = 30; dbg.whiff++; };
+      if (!o || ball.owner !== o) { whiff('SWIPE!'); return; }
+      if (Math.hypot(p.x - o.x, p.y - o.y) > reachRangeFor(p) + o.r) { whiff('SWIPE!'); return; }
+      if (!canBeStolen(o)) { dbg.protect++; whiff('BALL PROTECTED!'); return; }
+      const pos = reachPosition(p, o);
+      const sec = clamp(o.handle * (0.75 + 0.25 * (o.stamina / 100)), 0.5, 1.3);   // tired handlers get loose
+      const pStrip = clamp(0.13 * p.steal * pos / sec, 0.01, 0.20);
+      const pKnock = clamp(0.30 * p.steal * pos / sec, 0.03, 0.34);
+      const pFoul  = clamp(0.09 + 0.16 * (1 - pos), 0.07, 0.25);
       const roll = Math.random();
-      // NBA-realistic: most reaches are whiffs — clean steals are rare, fouls hurt
-      if (roll < 0.16 * p.steal) {
-        setOwner(p); pops.push({ x: p.x, y: p.y - 34, txt: 'STEAL!', color: SIDE_COLOR[p.side], t: 0 });
+      if (roll < pStrip) {
+        setOwner(p); possCD = 16; dbg.strip++;           // clean take — still has to gather it
+        pops.push({ x: p.x, y: p.y - 34, txt: 'STEAL!', color: SIDE_COLOR[p.side], t: 0, big: true });
         sfx.steal(); say('steal', p);
-      } else if (roll < 0.16 * p.steal + 0.22) {
-        p.stunT = 70;
-        pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
-        sfx.whistle();
-        const bonus = chargeFoul(p);
-        if (bonus) {
-          // 5 team fouls this quarter: the fouled team shoots the BONUS
-          pops.push({ x: o.x, y: o.y - 40, txt: 'BONUS — 2 SHOTS!', color: SIDE_COLOR[o.side], t: 0 });
-          if (isHumanTeam(o.side)) startFT(o, 2); else cpuFTs(o, 2);
-        } else {
-          // no free throws yet — just a whistle and the ball stays with them
-          pops.push({ x: o.x, y: o.y - 40, txt: 'SIDE BALL', color: '#cfd6ea', t: 0 });
-          possCD = 45; freeze = 26;
-        }
+      } else if (roll < pStrip + pKnock) { dbg.knock++; knockLoose(p, o); }
+      else if (roll < pStrip + pKnock + pFoul) { dbg.foul++; reachInFoul(p, o); }
+      else whiff('SWIPE!');
+    }
+    // deflection: the ball squirts away and NOBODY owns it — go win it on the floor
+    function knockLoose(p, o) {
+      const ang = Math.atan2(o.y - p.y, o.x - p.x) + rnd(-1.2, 1.2);
+      const sp = rnd(3.2, 5.4);
+      kickBall(o, Math.cos(ang) * sp, Math.sin(ang) * sp, 2.2, 12);
+      // a defensive touch wipes the backcourt count — whoever wins it starts fresh
+      ball.passTo = null; ball.loose = true; possFront = false;
+      pops.push({ x: p.x, y: p.y - 38, txt: 'KNOCKED LOOSE!', color: '#ffe066', t: 0, big: true });
+      sfx.steal(); say('loose', p);
+      p.recoverT = 14;
+    }
+    function reachInFoul(p, o) {
+      p.stunT = 60; p.reachT = 0; p.recoverT = 0;
+      pops.push({ x: p.x, y: p.y - 44, txt: 'REACH-IN FOUL!', color: '#ff9d9d', t: 0, big: true });
+      sfx.whistle();
+      const bonus = chargeFoul(p);
+      if (bonus) {
+        // 5 team fouls this quarter: the fouled team shoots the BONUS
+        pops.push({ x: o.x, y: o.y - 40, txt: 'BONUS — 2 SHOTS!', color: SIDE_COLOR[o.side], t: 0 });
+        if (isHumanTeam(o.side)) startFT(o, 2); else cpuFTs(o, 2);
       } else {
-        pops.push({ x: p.x, y: p.y - 34, txt: 'SWIPE!', color: '#cfd6ea', t: 0 });
+        // no free throws yet — just a whistle and the ball stays with them
+        pops.push({ x: o.x, y: o.y - 40, txt: 'SIDE BALL', color: '#cfd6ea', t: 0 });
+        possCD = 45; freeze = 26;
       }
     }
 
@@ -914,23 +1130,27 @@
       p.vx += (ax / l) * p.maxSpd * 2.6; p.vy += (ay / l) * p.maxSpd * 2.6;
       let vic = null, vd = Infinity;
       for (const q of teams[1 - side].onPitch) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < vd) { vd = d; vic = q; } }
-      if (vic && vd < 55 && vic.z <= 0) {
-        vic.stunT = 50;
+      if (vic && vd < 42 && vic.z <= 0 && Math.random() < 0.45) {
+        vic.stunT = 34;
         pops.push({ x: vic.x, y: vic.y - 40, txt: 'ANKLES! 😵', color: '#ffe066', t: 0 });
       }
     }
 
-    // F / 4 without the ball: jump to block a shot, attempt a steal, or grab a loose ball
+    // F / 4 without the ball: reach in on a grounded ball-handler, or leave your
+    // feet to contest a shot / go up for a loose ball. You never do both — the
+    // reach keeps you on the floor, which is exactly what makes it a gamble.
     function jumpAction(side) {
       if (state !== 'playing') return;
       const p = activePlayer(teams[side]);
       if (ball.owner === p || p.dunk || p.stunT > 0) return;
+      const carrier = ball.owner;
+      if (carrier && carrier.side !== side && carrier.z <= 4) { attemptSteal(p, carrier); return; }
+      if (p.reachT > 0) return;
       if (p.z <= 0) { p.vz = 7.5; p.stamina = Math.max(0, p.stamina - 2); }
       const dx = ball.x - p.x, dy = ball.y - p.y, dl = Math.hypot(dx, dy) || 1;
       p.vx += (dx / dl) * p.maxSpd * 1.3; p.vy += (dy / dl) * p.maxSpd * 1.3;
-      if (ball.owner && ball.owner.side !== side) {
-        attemptSteal(p, ball.owner);
-      } else if (!ball.owner && !ball.shot && ball.z < 20 && Math.hypot(p.x - ball.x, p.y - ball.y) < p.r + ball.r + 26) {
+      if (carrier && carrier.side !== side) attemptSteal(p, carrier);
+      else if (!ball.owner && !ball.shot && ball.z < 20 && Math.hypot(p.x - ball.x, p.y - ball.y) < p.r + ball.r + 26) {
         setOwner(p);
       }
     }
@@ -974,14 +1194,16 @@
       if (actx && actx.state === 'suspended') actx.resume();
       if (state === 'select') {
         // don't launch a quick match while the season overlays are open
-        const seasonOpen = ['career', 'market', 'lineup', 'jersey', 'shop', 'packrev', 'spinwheel'].some(function (id) { return !document.getElementById(id).hidden; });
+        const seasonOpen = ['career', 'market', 'lineup', 'jersey', 'shop', 'packrev', 'spinwheel',
+          'mt', 'mtcoll', 'mtstore', 'mtspin', 'mtbracket', 'mtdraft'].some(function (id) { return !document.getElementById(id).hidden; });
         if (!seasonOpen && (e.code === 'Space' || e.code === 'Enter')) { e.preventDefault(); beginGame(); }
         return;
       }
       if (state === 'over') {
         if (e.code === 'Space' || e.code === 'Enter') {
           e.preventDefault();
-          if (lastCareer) { lastCareer = false; overEl.hidden = true; openCareer(); }
+          if (lastMt) { lastMt = false; overEl.hidden = true; openMt(); }
+          else if (lastCareer) { lastCareer = false; overEl.hidden = true; openCareer(); }
           else showSelect();
         }
         return;
@@ -1144,16 +1366,40 @@
     buildPickers();
     document.getElementById('start-btn').addEventListener('click', beginGame);
     document.getElementById('again-btn').addEventListener('click', function () {
-      if (lastCareer) { lastCareer = false; overEl.hidden = true; openCareer(); }
+      if (lastMt) { lastMt = false; overEl.hidden = true; openMt(); }
+      else if (lastCareer) { lastCareer = false; overEl.hidden = true; openCareer(); }
       else showSelect();
     });
 
     // ---------- Season mode: franchise, market, calendar ----------
     // Signing/trading works like the soccer career: everyone has a value in $M,
     // a star rating and a position — and you can start anyone anywhere.
+    // ---------- card tiers: rarity sets the base overall, stars upgrade it ----------
+    const TIERS = [
+      { key: 'bronze',  name: 'Bronze',  ovr: 60, cols: ['#f0c69a', '#a06a38', '#4a2a12'], ink: '#3a1f0c' },
+      { key: 'silver',  name: 'Silver',  ovr: 70, cols: ['#f2f6fc', '#9aa8bd', '#3f4a60'], ink: '#28303f' },
+      { key: 'gold',    name: 'Gold',    ovr: 79, cols: ['#ffe89a', '#d9a01a', '#6b4600'], ink: '#4a3000' },
+      { key: 'ruby',    name: 'Ruby',    ovr: 86, cols: ['#ffb3c8', '#d4265e', '#4d0c23'], ink: '#42081d' },
+      { key: 'diamond', name: 'Diamond', ovr: 92, cols: ['#cdf3ff', '#3aa9d6', '#0d3348'], ink: '#0a2536' },
+      { key: 'legend',  name: 'Legend',  ovr: 96, cols: ['#ffe9a8', '#b06bff', '#241356'], ink: '#1a0e40' }
+    ];
+    const TIER_BY = {}; TIERS.forEach(function (t, i) { t.idx = i; TIER_BY[t.key] = t; });
+    const MAX_STARS = 5;
+    function tierOf(c) { return TIER_BY[c.tier] || TIERS[0]; }
+    // Overall: tier floor plus 2 per upgrade star. Bronze 1* = 60, Legend 5* = 100.
+    function ovrOf(c) {
+      if (c.tier) return Math.min(100, tierOf(c).ovr + (c.stars - 1) * 2);
+      return c.foil ? 99 : [62, 70, 78, 86, 94][c.stars - 1];   // legacy season cards
+    }
+    function upCost(c) { return Math.round(150 * (tierOf(c).idx + 1) * Math.pow(1.8, c.stars - 1) / 10) * 10; }
+    function canUpgrade(c) { return !!c.tier && c.stars < MAX_STARS; }
+
+    // every price and payout in the game is coins
+    function coinStr(n) { return '\ud83e\ude99 ' + Math.round(n).toLocaleString('en-US'); }
+
     const CAREER_KEY = 'hogball.career.v1';
-    const VALUES = [4, 10, 20, 34, 55];                 // $M by star rating
-    function valueOf(c) { return c.foil ? 70 : VALUES[c.stars - 1]; }
+    const VALUES = [400, 1000, 2000, 3400, 5500];       // coin value by star rating
+    function valueOf(c) { return c.foil ? 7000 : VALUES[c.stars - 1]; }
     function starStr(n) { return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n); }
 
     const ROSTER = [
@@ -1168,17 +1414,20 @@
 
     // card → on-court stats. Guards are quick sharpshooters, centres are slow bruisers.
     // Legend foil cards carry a little extra shine in every column.
+    // A card's OVERALL is the single number every stat hangs off, so buying an
+    // upgrade genuinely changes how that mob plays. Position shapes the build.
     function cardStats(c) {
-      const g = c.pos === 'G' ? 1 : 0, ctr = c.pos === 'C' ? 1 : 0, lg = c.foil ? 1 : 0;
+      const g = c.pos === 'G' ? 1 : 0, ctr = c.pos === 'C' ? 1 : 0;
+      const k = clamp((ovrOf(c) - 56) / 44, 0, 1.05);   // 0 = raw rookie, 1 = superstar
       return {
-        pName: c.name, stars: c.stars,
-        accel: 0.26 + c.stars * 0.03 + g * 0.03 + lg * 0.03,
-        maxSpd: 1.7 + c.stars * 0.16 + g * 0.2 - ctr * 0.2 + lg * 0.15,
+        pName: c.name, stars: c.stars, ovr: ovrOf(c),
+        accel: 0.26 + k * 0.17 + g * 0.03,
+        maxSpd: 1.70 + k * 0.78 + g * 0.20 - ctr * 0.20,
         mass: ctr ? 2.4 : (c.pos === 'F' ? 1.7 : 1.2),
         r: ctr ? 18 : (c.pos === 'F' ? 16 : 14),
-        shoot3: 0.82 + c.stars * 0.09 + g * 0.05 - ctr * 0.05 + lg * 0.06,
-        steal: 0.82 + c.stars * 0.06 + g * 0.08 + lg * 0.08,
-        fit: 0.72 + c.stars * 0.07 + g * 0.05 - ctr * 0.06 + lg * 0.08
+        shoot3: 0.82 + k * 0.50 + g * 0.05 - ctr * 0.05,
+        steal: 0.82 + k * 0.38 + g * 0.08,
+        fit: 0.72 + k * 0.42 + g * 0.05 - ctr * 0.06
       };
     }
 
@@ -1232,7 +1481,7 @@
       if (career && career.totalWins == null) career.totalWins = career.wins || 0;
     }
     function newCareer() {
-      career = { season: 1, money: 40, wins: 0, losses: 0, totalWins: 0, gameIdx: 0, phase: 'regular', cupDone: false, cups: 0, titles: 0,
+      career = { season: 1, money: 4000, wins: 0, losses: 0, totalWins: 0, gameIdx: 0, phase: 'regular', cupDone: false, cups: 0, titles: 0,
         items: { fcp: false, fcpOn: true },
         owned: [
           { id: 'k0', name: 'Rookie Rex', key: 'pig', pos: 'G', stars: 2 },
@@ -1253,40 +1502,40 @@
     function nextGameDesc() {
       const c = career;
       if (c.phase === 'cup-semi') return { label: 'Mob Cup SEMIFINAL vs ' + FRANCHISES[1].name, opp: 1, boost: 0.2 };
-      if (c.phase === 'cup-final') return { label: 'MOB CUP FINAL vs ' + FRANCHISES[3].name + ' — win a $15M bonus!', opp: 3, boost: 0.3 };
+      if (c.phase === 'cup-final') return { label: 'MOB CUP FINAL vs ' + FRANCHISES[3].name + ' — win a \ud83e\ude99 1,500 bonus!', opp: 3, boost: 0.3 };
       if (c.phase === 'po-semi') return { label: 'PLAYOFF semifinal vs ' + FRANCHISES[2].name, opp: 2, boost: 0.25 };
-      if (c.phase === 'po-final') return { label: 'THE MOB FINALS vs ' + FRANCHISES[3].name + ' — win a $30M bonus!', opp: 3, boost: 0.5 };
+      if (c.phase === 'po-final') return { label: 'THE MOB FINALS vs ' + FRANCHISES[3].name + ' — win a \ud83e\ude99 3,000 bonus!', opp: 3, boost: 0.5 };
       return { label: 'Season game ' + (c.gameIdx + 1) + ' of 8 vs ' + FRANCHISES[c.gameIdx % 4].name, opp: c.gameIdx % 4, boost: 0 };
     }
     function newSeason() {
       career.season++; career.gameIdx = 0; career.wins = 0; career.losses = 0;
       career.cupDone = false; career.phase = 'regular';
-      career.money += 10;   // new TV deal
+      career.money += 1000;   // new TV deal
     }
     function careerFinish(winner) {
       const won = winner === 0, c = career;
       if (won) c.totalWins = (c.totalWins || 0) + 1;
       let reward = 0, head = '';
       if (c.phase === 'regular') {
-        reward = won ? 6 : 2; if (won) c.wins++; else c.losses++; c.gameIdx++;
+        reward = won ? 600 : 200; if (won) c.wins++; else c.losses++; c.gameIdx++;
         if (c.gameIdx === 4 && !c.cupDone) { c.phase = 'cup-semi'; head = '🏆 The Mob Cup begins! '; }
         else if (c.gameIdx >= 8) { c.phase = 'po-semi'; head = '🔥 Playoff time! '; }
       } else if (c.phase === 'cup-semi') {
-        if (won) { reward = 4; c.phase = 'cup-final'; head = 'Into the Cup final! '; }
-        else { reward = 1; c.cupDone = true; c.phase = 'regular'; head = 'Out of the Cup. '; }
+        if (won) { reward = 400; c.phase = 'cup-final'; head = 'Into the Cup final! '; }
+        else { reward = 100; c.cupDone = true; c.phase = 'regular'; head = 'Out of the Cup. '; }
       } else if (c.phase === 'cup-final') {
         c.cupDone = true; c.phase = 'regular';
-        if (won) { reward = 15; c.cups++; head = '🏆 MOB CUP CHAMPIONS! $15M bonus! '; } else { reward = 3; head = 'Cup runners-up. '; }
+        if (won) { reward = 1500; c.cups++; head = '🏆 MOB CUP CHAMPIONS! \ud83e\ude99 1,500 bonus! '; } else { reward = 300; head = 'Cup runners-up. '; }
       } else if (c.phase === 'po-semi') {
-        if (won) { reward = 8; c.phase = 'po-final'; head = 'You made THE FINALS! '; }
-        else { reward = 3; head = 'Season over — run it back! '; newSeason(); }
+        if (won) { reward = 800; c.phase = 'po-final'; head = 'You made THE FINALS! '; }
+        else { reward = 300; head = 'Season over — run it back! '; newSeason(); }
       } else if (c.phase === 'po-final') {
-        if (won) { reward = 30; c.titles++; head = '🏆🏆 MOB FINALS CHAMPIONS! $30M bonus! '; } else { reward = 8; head = 'So close! '; }
+        if (won) { reward = 3000; c.titles++; head = '🏆🏆 MOB FINALS CHAMPIONS! \ud83e\ude99 3,000 bonus! '; } else { reward = 800; head = 'So close! '; }
         newSeason();
       }
       c.money += reward;
       saveCareer();
-      document.getElementById('over-sub').textContent = head + 'Earned $' + reward + 'M · budget $' + c.money + 'M · Next: ' + nextGameDesc().label;
+      document.getElementById('over-sub').textContent = head + 'Earned ' + coinStr(reward) + ' · you have ' + coinStr(c.money) + ' · Next: ' + nextGameDesc().label;
       document.getElementById('again-btn').textContent = 'Continue ▶';
       lastCareer = true; careerMatch = null;
     }
@@ -1326,7 +1575,7 @@
     function renderCareer() {
       const c = career;
       document.getElementById('cr-status').textContent = 'Season ' + c.season + ' · Next: ' + nextGameDesc().label;
-      document.getElementById('cr-money').textContent = '$' + c.money + 'M';
+      document.getElementById('cr-money').textContent = coinStr(c.money);
       document.getElementById('cr-record').textContent = c.wins + '–' + c.losses;
       document.getElementById('cr-troph').textContent = '🏆 ' + c.titles + ' · 🥇 ' + c.cups;
       const ok = !lineupCards().some(function (x) { return !x; });
@@ -1335,15 +1584,15 @@
       play.textContent = ok ? '▶ Play next game' : 'Set your lineup first!';
     }
     function renderMarket() {
-      document.getElementById('mk-money').textContent = '$' + career.money + 'M';
+      document.getElementById('mk-money').textContent = coinStr(career.money);
       const list = document.getElementById('mk-list'); list.innerHTML = '';
       career.stock.forEach(function (id) {
         const r = ROSTER.find(function (x) { return x.id === id; }); if (!r) return;
         const row = document.createElement('div'); row.className = 'cr-row';
         row.innerHTML = '<span class="em">' + MOBS[r.key].emoji + '</span><div class="cr-info"><div class="cr-nm">' + r.name + '</div>' +
-          '<div class="cr-meta"><span class="pos">' + r.pos + '</span> · <span class="stars">' + starStr(r.stars) + '</span> · $' + valueOf(r) + 'M</div></div>';
+          '<div class="cr-meta"><span class="pos">' + r.pos + '</span> · <span class="stars">' + starStr(r.stars) + '</span> · ' + coinStr(valueOf(r)) + '</div></div>';
         const btn = document.createElement('button'); btn.className = 'cr-btn';
-        btn.textContent = 'Sign $' + valueOf(r) + 'M';
+        btn.textContent = 'Sign ' + coinStr(valueOf(r));
         btn.disabled = career.money < valueOf(r);
         btn.addEventListener('click', function () {
           if (career.money < valueOf(r)) return;
@@ -1378,7 +1627,7 @@
         const row = document.createElement('div'); row.className = 'cr-row' + (inL ? ' inlineup' : '');
         const rare = o.foil ? '<span style="color:#ffb300">★ LEGEND ★</span>' : '<span class="stars">' + starStr(o.stars) + '</span>';
         row.innerHTML = '<span class="em">' + MOBS[o.key].emoji + '</span><div class="cr-info"><div class="cr-nm">' + o.name + '</div>' +
-          '<div class="cr-meta"><span class="pos">' + o.pos + '</span> · ' + rare + ' · worth $' + valueOf(o) + 'M</div></div>';
+          '<div class="cr-meta"><span class="pos">' + o.pos + '</span> · ' + rare + ' · worth ' + coinStr(valueOf(o)) + '</div></div>';
         const tog = document.createElement('button'); tog.className = 'cr-btn' + (inL ? ' bench' : '');
         tog.textContent = inL ? 'Bench' : 'Start';
         tog.disabled = !inL && career.lineup.indexOf(null) < 0 && career.lineup.filter(function (id) { return career.owned.find(function (x) { return x.id === id; }); }).length >= 3;
@@ -1394,7 +1643,7 @@
         });
         const sell = document.createElement('button'); sell.className = 'cr-btn sell';
         const price = Math.round(valueOf(o) * 0.85);
-        sell.textContent = 'Sell $' + price + 'M';
+        sell.textContent = 'Sell ' + coinStr(price);
         sell.disabled = career.owned.length <= 3;
         sell.addEventListener('click', function () {
           if (career.owned.length <= 3) return;
@@ -1530,14 +1779,13 @@
     ];
     // pack tiers: price in $M, 3 cards each, star odds as weights
     const PACKS = [
-      { key: 'starter', name: 'Starter Pack',  emoji: '📦', price: 8,  odds: { 1: 50, 2: 35, 3: 15 },          legendPct: 0 },
-      { key: 'pro',     name: 'Pro Pack',      emoji: '🥈', price: 18, odds: { 2: 45, 3: 35, 4: 18, 5: 2 },    legendPct: 0 },
-      { key: 'elite',   name: 'Elite Pack',    emoji: '🥇', price: 32, odds: { 3: 40, 4: 40, 5: 20 },          legendPct: 5,  min4: true },
-      { key: 'legend',  name: 'Legend Pack',   emoji: '💎', price: 55, odds: { 4: 55, 5: 45 },                 legendPct: 25 }
+      { key: 'starter', name: 'Starter Pack',  emoji: '📦', price: 800,  odds: { 1: 50, 2: 35, 3: 15 },          legendPct: 0 },
+      { key: 'pro',     name: 'Pro Pack',      emoji: '🥈', price: 1800, odds: { 2: 45, 3: 35, 4: 18, 5: 2 },    legendPct: 0 },
+      { key: 'elite',   name: 'Elite Pack',    emoji: '🥇', price: 3200, odds: { 3: 40, 4: 40, 5: 20 },          legendPct: 5,  min4: true },
+      { key: 'legend',  name: 'Legend Pack',   emoji: '💎', price: 5500, odds: { 4: 55, 5: 45 },                 legendPct: 25 }
     ];
-    const FCP_PRICE = 25, FCP_WINS = 3, SPIN_PRICE = 10;
+    const FCP_PRICE = 2500, FCP_WINS = 3, SPIN_PRICE = 1000;
 
-    function ovrOf(c) { return c.foil ? 99 : [62, 70, 78, 86, 94][c.stars - 1]; }
     function totalWinsAll() { return (career ? (career.totalWins || 0) : 0) + bestWins.load(); }
 
     // ---- card artwork: every card is painted, foils get full special designs ----
@@ -1579,13 +1827,27 @@
         g.fillStyle = '#b8b0a0'; g.fillRect(cx - 12 * u, cy - 9 * u, 3 * u, 5 * u); g.fillRect(cx + 9 * u, cy - 9 * u, 3 * u, 5 * u);
       }
     }
-    // paints a full card (or its back) into rect (x,y,w,h) on any canvas
+    // ---------------------------------------------------------------------
+    // Card art. Real trading-card furniture: a tier-coloured foil ground, a
+    // die-cut portrait window, the OVERALL in the corner, a position chip, a
+    // star rail for upgrades and a name plate across the bottom.
+    // ---------------------------------------------------------------------
+    function tierGrad(g, x, y, w, h, c) {
+      const t = c.tier ? tierOf(c) : null;
+      const gr = g.createLinearGradient(x, y, x + w * 0.4, y + h);
+      if (t) { gr.addColorStop(0, t.cols[0]); gr.addColorStop(0.5, t.cols[1]); gr.addColorStop(1, t.cols[2]); return gr; }
+      return cardBG(g, x, y, w, h, c);
+    }
     function drawCard(g, x, y, w, h, c, faceDown) {
       g.save();
-      const rr = function () { g.beginPath(); g.moveTo(x + 8, y); g.arcTo(x + w, y, x + w, y + h, 8); g.arcTo(x + w, y + h, x, y + h, 8); g.arcTo(x, y + h, x, y, 8); g.arcTo(x, y, x + w, y, 8); g.closePath(); };
-      rr(); g.clip();
+      const R = Math.max(6, w * 0.075);
+      const rr = function (rx, ry, rw, rh, r) {
+        g.beginPath(); g.moveTo(rx + r, ry); g.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
+        g.arcTo(rx + rw, ry + rh, rx, ry + rh, r); g.arcTo(rx, ry + rh, rx, ry, r);
+        g.arcTo(rx, ry, rx + rw, ry, r); g.closePath();
+      };
+      rr(x, y, w, h, R); g.clip();
       if (faceDown) {
-        // card back: house design
         g.fillStyle = '#16213e'; g.fillRect(x, y, w, h);
         g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 6;
         for (let d = -h; d < w + h; d += 16) { g.beginPath(); g.moveTo(x + d, y); g.lineTo(x + d + h, y + h); g.stroke(); }
@@ -1597,33 +1859,71 @@
         g.fillText('HOG BALL', x + w / 2, y + h - 14);
         g.restore(); return;
       }
-      g.fillStyle = cardBG(g, x, y, w, h, c); g.fillRect(x, y, w, h);
-      // foil sparkles
-      if (c.foil) {
-        g.fillStyle = 'rgba(255,255,255,0.8)';
-        [[0.2, 0.18], [0.82, 0.3], [0.15, 0.62], [0.75, 0.75], [0.5, 0.08]].forEach(function (p, i) {
-          const sx = x + w * p[0], sy = y + h * p[1], r2 = 2 + (i % 2);
-          g.beginPath(); g.moveTo(sx, sy - r2); g.lineTo(sx + r2 * 0.5, sy); g.lineTo(sx, sy + r2); g.lineTo(sx - r2 * 0.5, sy); g.closePath(); g.fill();
-        });
+      const t = c.tier ? tierOf(c) : null;
+      const S = w / 110;                       // everything is authored at 110px wide
+      // --- foil ground + diagonal sheen ---
+      g.fillStyle = tierGrad(g, x, y, w, h, c); g.fillRect(x, y, w, h);
+      g.save();
+      g.globalAlpha = 0.20; g.fillStyle = '#fff';
+      g.beginPath(); g.moveTo(x - w * 0.1, y + h); g.lineTo(x + w * 0.45, y - 2);
+      g.lineTo(x + w * 0.72, y - 2); g.lineTo(x + w * 0.17, y + h); g.closePath(); g.fill();
+      g.globalAlpha = 0.10;
+      g.beginPath(); g.moveTo(x + w * 0.62, y + h); g.lineTo(x + w * 1.05, y - 2);
+      g.lineTo(x + w * 1.2, y - 2); g.lineTo(x + w * 0.78, y + h); g.closePath(); g.fill();
+      g.restore();
+      // --- portrait window: darkened panel with a court arc behind the mob ---
+      const pw = w - 12 * S, ph = h * 0.50, px = x + 6 * S, py = y + h * 0.155;
+      g.save();
+      rr(px, py, pw, ph, 5 * S); g.clip();
+      const bg = g.createLinearGradient(px, py, px, py + ph);
+      bg.addColorStop(0, 'rgba(8,14,32,0.20)'); bg.addColorStop(1, 'rgba(8,14,32,0.62)');
+      g.fillStyle = bg; g.fillRect(px, py, pw, ph);
+      g.strokeStyle = 'rgba(255,255,255,0.30)'; g.lineWidth = 2 * S;
+      g.beginPath(); g.arc(px + pw / 2, py + ph + 6 * S, pw * 0.44, Math.PI, 0); g.stroke();
+      drawCardFace(g, px + pw / 2, py + ph * 0.46, w / 46, c.key);
+      g.restore();
+      rr(px, py, pw, ph, 5 * S); g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 1.5 * S; g.stroke();
+      // --- OVERALL badge, top-left ---
+      const ov = ovrOf(c);
+      g.fillStyle = 'rgba(8,14,32,0.86)';
+      rr(x + 4 * S, y + 4 * S, 30 * S, 30 * S, 6 * S); g.fill();
+      g.strokeStyle = t ? t.cols[0] : '#ffe27a'; g.lineWidth = 1.5 * S; g.stroke();
+      g.textAlign = 'center';
+      g.fillStyle = '#fff'; g.font = "800 " + Math.round(17 * S) + "px 'Nunito', sans-serif";
+      g.fillText(String(ov), x + 19 * S, y + 22 * S);
+      g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = "800 " + Math.round(6 * S) + "px 'Nunito', sans-serif";
+      g.fillText('OVR', x + 19 * S, y + 29 * S);
+      // --- position chip, top-right ---
+      g.fillStyle = 'rgba(8,14,32,0.86)';
+      rr(x + w - 26 * S, y + 4 * S, 22 * S, 17 * S, 5 * S); g.fill();
+      g.fillStyle = '#9fc6ff'; g.font = "800 " + Math.round(11 * S) + "px 'Nunito', sans-serif";
+      g.fillText(c.pos, x + w - 15 * S, y + 16 * S);
+      // --- tier banner down the right edge ---
+      if (t) {
+        g.save();
+        g.translate(x + w - 9 * S, y + h * 0.55); g.rotate(Math.PI / 2);
+        g.fillStyle = 'rgba(8,14,32,0.55)';
+        g.fillRect(-h * 0.20, -6 * S, h * 0.40, 12 * S);
+        g.fillStyle = t.cols[0]; g.font = "800 " + Math.round(7.5 * S) + "px 'Nunito', sans-serif";
+        g.fillText(t.name.toUpperCase(), 0, 3 * S);
+        g.restore();
       }
-      // portrait window
-      g.fillStyle = 'rgba(10,16,34,0.35)';
-      g.fillRect(x + 6, y + h * 0.16, w - 12, h * 0.5);
-      drawCardFace(g, x + w / 2, y + h * 0.40, w / 46, c.key);
-      // OVR badge
-      g.fillStyle = 'rgba(10,16,34,0.75)'; g.beginPath(); g.arc(x + 15, y + 15, 12, 0, 6.28); g.fill();
-      g.fillStyle = c.foil ? '#ffe27a' : '#fff'; g.font = "800 11px 'Nunito', sans-serif"; g.textAlign = 'center';
-      g.fillText(String(ovrOf(c)), x + 15, y + 19);
-      // position badge
-      g.fillStyle = 'rgba(10,16,34,0.75)'; g.fillRect(x + w - 24, y + 6, 18, 15);
-      g.fillStyle = '#9fc6ff'; g.font = "800 10px 'Nunito', sans-serif";
-      g.fillText(c.pos, x + w - 15, y + 17);
-      // name plate + stars
-      g.fillStyle = 'rgba(10,16,34,0.78)'; g.fillRect(x, y + h - 34, w, 34);
-      g.fillStyle = '#fff'; g.font = "800 " + Math.round(w * 0.095) + "px 'Nunito', sans-serif";
-      g.fillText(c.name, x + w / 2, y + h - 20);
-      g.fillStyle = '#ffd23f'; g.font = "800 9px 'Nunito', sans-serif";
-      g.fillText(c.foil ? '★ LEGEND ★' : starStr(c.stars), x + w / 2, y + h - 8);
+      // --- name plate ---
+      const npH = 30 * S, npY = y + h - npH;
+      g.fillStyle = 'rgba(8,14,32,0.86)'; g.fillRect(x, npY, w, npH);
+      g.fillStyle = t ? t.cols[0] : '#ffd23f'; g.fillRect(x, npY, w, 2 * S);
+      let nm = c.name || '';
+      g.fillStyle = '#fff'; g.font = "800 " + Math.round(10.5 * S) + "px 'Nunito', sans-serif";
+      while (nm.length > 4 && g.measureText(nm).width > w - 10 * S) nm = nm.slice(0, -1);
+      if (nm !== c.name) nm = nm.slice(0, -1) + '…';
+      g.fillText(nm, x + w / 2, npY + 13 * S);
+      // --- star rail: filled pips are upgrades you've bought ---
+      const n = c.tier ? MAX_STARS : 5, filled = c.stars;
+      const pipR = 2.6 * S, gap = 9 * S, x0 = x + w / 2 - (n - 1) * gap / 2;
+      for (let i = 0; i < n; i++) {
+        g.beginPath(); g.arc(x0 + i * gap, npY + 22 * S, pipR, 0, 6.28);
+        g.fillStyle = i < filled ? (t ? t.cols[0] : '#ffd23f') : 'rgba(255,255,255,0.22)'; g.fill();
+      }
       g.restore();
     }
 
@@ -1662,7 +1962,7 @@
           career.stock = career.stock.filter(function (x) { return x !== card.id; });
           out.push({ card: card, cash: 0 });
         } else {
-          const cash = 12;   // full club! duplicates convert to cold hard cash
+          const cash = 1200;   // full club! duplicates convert to cold hard cash
           career.money += cash;
           out.push({ card: null, cash: cash });
         }
@@ -1683,7 +1983,7 @@
       renderShop(); setControls();
     }
     function renderShop() {
-      document.getElementById('sh-money').textContent = '$' + career.money + 'M';
+      document.getElementById('sh-money').textContent = coinStr(career.money);
       const pg = document.getElementById('sh-packs'); pg.innerHTML = '';
       PACKS.forEach(function (pk) {
         const b = document.createElement('button');
@@ -1692,7 +1992,7 @@
         if (pk.legendPct) odds += ' · LEGEND ' + pk.legendPct + '%';
         b.innerHTML = '<span style="font-size:1.6rem">' + pk.emoji + '</span><span class="pk-name">' + pk.name + '</span>' +
           '<span class="pk-odds">3 cards · ' + odds + (pk.min4 ? ' · 4★+ guaranteed' : '') + '</span>' +
-          '<span class="pk-price">$' + pk.price + 'M</span>';
+          '<span class="pk-price">' + coinStr(pk.price) + '</span>';
         b.disabled = career.money < pk.price;
         b.addEventListener('click', function () { buyPack(pk.key); });
         pg.appendChild(b);
@@ -1705,14 +2005,14 @@
       row.className = 'boost-row' + (owned ? ' owned' : (locked ? ' locked' : ''));
       row.innerHTML = '<span class="em">🗜️</span><div class="cr-info"><div class="cr-nm">Full Court Press</div>' +
         '<div class="cr-meta">' + (owned ? 'OWNED — your mobs hound the ball ALL over the court' :
-          (locked ? 'Unlocks after 3 wins — you have ' + wins : 'Defenders press the full court every Season game — $' + FCP_PRICE + 'M')) + '</div></div>';
+          (locked ? 'Unlocks after 3 wins — you have ' + wins : 'Defenders press the full court every Season game — ' + coinStr(FCP_PRICE))) + '</div></div>';
       const btn = document.createElement('button'); btn.className = 'cr-btn';
       if (owned) {
         btn.textContent = career.items.fcpOn ? 'ON' : 'OFF';
         btn.className += career.items.fcpOn ? '' : ' bench';
         btn.addEventListener('click', function () { career.items.fcpOn = !career.items.fcpOn; saveCareer(); renderShop(); });
       } else {
-        btn.textContent = locked ? '🔒 ' + wins + '/' + FCP_WINS : 'Buy $' + FCP_PRICE + 'M';
+        btn.textContent = locked ? '🔒 ' + wins + '/' + FCP_WINS : 'Buy ' + coinStr(FCP_PRICE);
         btn.disabled = locked || career.money < FCP_PRICE;
         btn.addEventListener('click', function () {
           if (career.money < FCP_PRICE || totalWinsAll() < FCP_WINS) return;
@@ -1737,7 +2037,7 @@
       out.forEach(function (o) {
         const cv = document.createElement('canvas'); cv.width = 110; cv.height = 154;
         const g = cv.getContext('2d');
-        const c = o.card || { name: '+$' + o.cash + 'M', key: 'pig', pos: '$', stars: 1 };
+        const c = o.card || { name: coinStr(o.cash), key: 'pig', pos: '\ud83e\ude99', stars: 1 };
         drawCard(g, 0, 0, 110, 154, c, true);
         let open = false;
         cv.addEventListener('click', function () {
@@ -1748,7 +2048,7 @@
           else {
             g.fillStyle = '#1c3a2c'; g.fillRect(0, 0, 110, 154);
             g.fillStyle = '#7be39a'; g.font = "800 20px 'Nunito', sans-serif"; g.textAlign = 'center';
-            g.fillText('+$' + o.cash + 'M', 55, 74);
+            g.fillText('+' + coinStr(o.cash), 55, 74);
             g.font = "800 11px 'Nunito', sans-serif"; g.fillText('full club bonus!', 55, 94);
           }
           if (o.card && o.card.foil) sfx.three(); else sfx.ding();
@@ -1757,15 +2057,18 @@
         wrap.appendChild(cv);
       });
     }
-    document.getElementById('pr-done').addEventListener('click', function () { packrevEl.hidden = true; openShop(); });
+    document.getElementById('pr-done').addEventListener('click', function () {
+      packrevEl.hidden = true;
+      if (mtPackDone) { const f = mtPackDone; mtPackDone = null; f(); } else openShop();
+    });
 
     // ---- superstar spinner ----
     const SPIN_SEGS = [
-      { t: 'cash', v: 2,  label: '$2M',  col: '#3a5580' },
+      { t: 'cash', v: 200,  label: '\ud83e\ude99 200',  col: '#3a5580' },
       { t: 'card', st: 2, label: '2★',   col: '#5a6a85' },
-      { t: 'cash', v: 6,  label: '$6M',  col: '#2c7a4f' },
+      { t: 'cash', v: 600,  label: '\ud83e\ude99 600',  col: '#2c7a4f' },
       { t: 'card', st: 3, label: '3★',   col: '#7a8aa0' },
-      { t: 'cash', v: 15, label: '$15M', col: '#1f9e57' },
+      { t: 'cash', v: 1500, label: '\ud83e\ude99 1500', col: '#1f9e57' },
       { t: 'card', st: 4, label: '4★',   col: '#c98f00' },
       { t: 'card', st: 5, label: '5★',   col: '#7d6bff' },
       { t: 'legend',      label: 'LEGEND', col: '#d4265e' }
@@ -1783,8 +2086,8 @@
         g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 2; g.stroke();
         g.save();
         g.translate(cx, cy); g.rotate(a0 + arc / 2);
-        g.fillStyle = '#fff'; g.font = "800 13px 'Nunito', sans-serif"; g.textAlign = 'right';
-        g.fillText(SPIN_SEGS[i].label, R - 10, 5);
+        g.fillStyle = '#fff'; g.font = "800 11px 'Nunito', sans-serif"; g.textAlign = 'right';
+        g.fillText(SPIN_SEGS[i].label, R - 8, 5);
         g.restore();
       }
       g.fillStyle = '#16213e'; g.beginPath(); g.arc(cx, cy, 26, 0, 6.28); g.fill();
@@ -1801,11 +2104,11 @@
       else if (seg.t === 'legend') {
         const l = unownedLegend();
         if (l) { career.owned.push({ id: l.id, name: l.name, key: l.key, pos: l.pos, stars: 5, foil: l.foil }); msg = '🎆 LEGEND! ' + l.name + ' joins your club!'; sfx.three(); }
-        else { career.money += 30; msg = 'All legends owned — $30M instead!'; }
+        else { career.money += 3000; msg = 'All legends owned — \ud83e\ude99 3,000 instead!'; }
       } else {
         const c = rollCard(seg.st);
         if (c) { career.owned.push({ id: c.id, name: c.name, key: c.key, pos: c.pos, stars: c.stars }); msg = c.name + ' (' + starStr(c.stars) + ') joins your club!'; }
-        else { career.money += 12; msg = 'Full club — $12M instead!'; }
+        else { career.money += 1200; msg = 'Full club — \ud83e\ude99 1,200 instead!'; }
       }
       saveCareer();
       document.getElementById('sp-sub').textContent = msg;
@@ -1836,7 +2139,7 @@
     }
     document.getElementById('sh-spin-btn').addEventListener('click', function () {
       shopEl.hidden = true; spinEl.hidden = false;
-      document.getElementById('sp-sub').textContent = '$' + SPIN_PRICE + 'M a spin — land on a LEGEND for the rarest cards in the game!';
+      document.getElementById('sp-sub').textContent = coinStr(SPIN_PRICE) + ' a spin — land on a LEGEND for the rarest cards in the game!';
       document.getElementById('sp-go').disabled = career.money < SPIN_PRICE;
       drawSpinner();
     });
@@ -1848,12 +2151,515 @@
 
     loadCareer();
 
+    // =====================================================================
+    // MY TEAM — a card-collecting mode of its own. You build a squad from
+    // cards you pull, upgrade their OVERALL with coins, then take them into
+    // a knockout playoff. Win the whole thing and you get ten picks on the
+    // draft board. Wallet is shared with Season mode.
+    // =====================================================================
+    const MT_KEY = 'hogball.myteam.v1';
+    let mt = null;
+
+    const MT_FIRST = ['Trotter', 'Bacon', 'Snout', 'Moo', 'Clover', 'Rumble', 'Hex', 'Gizmo', 'Pickle',
+      'Turbo', 'Nacho', 'Waffle', 'Biscuit', 'Comet', 'Fizz', 'Rocket', 'Bolt', 'Ziggy', 'Truffle',
+      'Marble', 'Sprout', 'Dusty', 'Pepper', 'Blaze', 'Noodle', 'Boulder', 'Whisker', 'Jelly'];
+    const MT_LAST = ['Hamhock', 'McTrough', 'Von Oink', 'Hoofman', 'Grazer', 'Bramble', 'Nightshade',
+      'Boomstick', 'Fizzwick', 'Gravely', 'Stampede', 'Mudlark', 'Thunderhoof', 'Creepwell',
+      'Barnaby', 'Sizzler', 'Ironhide', 'Quickstep', 'Marrow', 'Tumbleweed'];
+    const MT_POS = ['G', 'F', 'C'];
+
+    function mtName() { return pick(MT_FIRST) + ' ' + pick(MT_LAST); }
+    let mtIdSeq = 0;
+    function mtId() { mtIdSeq++; return 'm' + Date.now().toString(36) + mtIdSeq.toString(36); }
+    function makeCard(tierKey, pos, stars) {
+      return { id: mtId(), name: mtName(), key: pick(MOB_KEYS), pos: pos || pick(MT_POS),
+        tier: tierKey, stars: clamp(stars || 1, 1, MAX_STARS) };
+    }
+    function rollTier(odds) {
+      let tot = 0; for (const k in odds) tot += odds[k];
+      let r = Math.random() * tot;
+      for (const k in odds) { r -= odds[k]; if (r <= 0) return k; }
+      return 'bronze';
+    }
+
+    const MT_PACKS = [
+      { key: 'bronze', name: 'Bronze Pack', emoji: '📦', price: 600,
+        odds: { bronze: 70, silver: 26, gold: 4 } },
+      { key: 'silver', name: 'Silver Pack', emoji: '🥈', price: 1500,
+        odds: { bronze: 28, silver: 48, gold: 20, ruby: 4 } },
+      { key: 'gold',   name: 'Gold Pack',   emoji: '🥇', price: 3200,
+        odds: { silver: 30, gold: 44, ruby: 19, diamond: 7 } },
+      { key: 'elite',  name: 'Elite Pack',  emoji: '💎', price: 7000,
+        odds: { gold: 28, ruby: 38, diamond: 26, legend: 8 } }
+    ];
+    const MT_SPIN_PRICE = 1200;
+
+    // ---- save / load ----
+    function mtSave() { try { localStorage.setItem(MT_KEY, JSON.stringify(mt)); } catch (e) {} }
+    function mtLoad() {
+      try { const d = JSON.parse(localStorage.getItem(MT_KEY)); if (d && d.cards) mt = d; } catch (e) {}
+      if (mt && !mt.tourn) mt.tourn = null;
+      if (mt && mt.trophies == null) mt.trophies = 0;
+    }
+    function mtNew() {
+      mt = { cards: [], lineup: [null, null, null], trophies: 0, tourn: null, draft: null, played: 0 };
+      // a starter squad so you can play immediately
+      const seed = [['bronze', 'G', 2], ['bronze', 'F', 2], ['bronze', 'C', 2], ['bronze', 'G', 1], ['silver', 'F', 1]];
+      seed.forEach(function (sd, i) {
+        const c = makeCard(sd[0], sd[1], sd[2]);
+        mt.cards.push(c); if (i < 3) mt.lineup[i] = c.id;
+      });
+      mtSave();
+    }
+    function mtEnsure() { if (!mt) { mtLoad(); if (!mt) mtNew(); } if (!career) { loadCareer(); if (!career) newCareer(); } }
+    function mtCoins() { return career.money; }
+    function mtSpend(n) { if (career.money < n) return false; career.money -= n; saveCareer(); return true; }
+    function mtEarn(n) { career.money += n; saveCareer(); }
+    function mtCardById(id) { return mt.cards.find(function (c) { return c.id === id; }) || null; }
+    function mtLineupCards() { return mt.lineup.map(mtCardById); }
+    function mtTeamOvr() {
+      const cs = mtLineupCards().filter(Boolean);
+      if (!cs.length) return 0;
+      return Math.round(cs.reduce(function (a, c) { return a + ovrOf(c); }, 0) / cs.length);
+    }
+    function mtLineupReady() { return mtLineupCards().every(Boolean); }
+    function mtAddCard(c) { mt.cards.push(c); for (let i = 0; i < 3; i++) if (!mt.lineup[i]) { mt.lineup[i] = c.id; break; } mtSave(); }
+
+    // ---- the playoff bracket ----
+    const MT_ROUNDS = [
+      { name: 'Quarterfinal', emoji: '🔹', gap: -4, coins: 500 },
+      { name: 'Semifinal',    emoji: '🔶', gap: 0,  coins: 1200 },
+      { name: 'FINAL',        emoji: '🏆', gap: 5,  coins: 3000 }
+    ];
+    function mtStartTourn() {
+      mt.tourn = { round: 0, results: [], seedOvr: mtTeamOvr() };
+      mtSave();
+    }
+    // opponent cards are built to sit a fixed OVR gap from your squad
+    function mtOppCards(round) {
+      const target = clamp(mt.tourn.seedOvr + MT_ROUNDS[round].gap, 58, 100);
+      return MT_POS.map(function (pos) {
+        let best = TIERS[0], bs = 1;
+        for (const t of TIERS) for (let st = 1; st <= MAX_STARS; st++) {
+          if (Math.abs(Math.min(100, t.ovr + (st - 1) * 2) - target) < Math.abs(Math.min(100, best.ovr + (bs - 1) * 2) - target)) { best = t; bs = st; }
+        }
+        return makeCard(best.key, pos, bs);
+      });
+    }
+    const MT_OPPS = [
+      { name: 'Trough City Titans', emoji: '🐷' }, { name: 'Pasture Kings', emoji: '🐮' },
+      { name: 'Graveyard Ghouls', emoji: '🧟' }, { name: 'Emerald Fuse', emoji: '🟩' },
+      { name: 'Hollow Hills', emoji: '⛰️' }, { name: 'Neon Hogs', emoji: '⚡' }
+    ];
+
+    let mtMatch = null;    // set while a My Team playoff game is being played
+    function mtPlayRound() {
+      mtEnsure();
+      if (!mt.tourn || !mtLineupReady()) return;
+      const rd = mt.tourn.round;
+      const opp = MT_OPPS[(rd * 2 + mt.trophies) % MT_OPPS.length];
+      const oppCards = mtOppCards(rd);
+      mtMatch = { round: rd, oppName: opp.name, oppEmoji: opp.emoji };
+      careerMatch = { oppName: opp.name, oppEmoji: opp.emoji };   // drives the HUD naming
+      lastCareer = false;
+      numPlayers = 1;
+      const mine = mtLineupCards();
+      const bench = mt.cards.filter(function (c) { return mt.lineup.indexOf(c.id) < 0; }).slice(0, 3);
+      teams = [ buildCustomTeam(0, mine[0].key, mine, bench),
+                buildCustomTeam(1, oppCards[0].key, oppCards, mtOppCards(rd).slice(0, 2)) ];
+      applyDiff(teams[1]);
+      score = [0, 0]; pops = []; freeze = 0;
+      clockMs = QTR_MS; period = 1; otMode = false; teamFouls = [0, 0]; halfPending = false; comm = null;
+      stats = [ { fgm: 0, fga: 0 }, { fgm: 0, fga: 0 } ];
+      shootHeld[0] = shootHeld[1] = false; chargeT[0] = chargeT[1] = 0;
+      defendHeld[0] = defendHeld[1] = false; turboHeld[0] = turboHeld[1] = false;
+      ['mt', 'mtcoll', 'mtstore', 'mtspin', 'mtbracket', 'mtdraft', 'setup', 'over'].forEach(function (id) { document.getElementById(id).hidden = true; });
+      placeTip(); setControls();
+    }
+    // called from endGame when a My Team playoff game finishes
+    function mtFinish(winner) {
+      if (!mt || !mt.tourn) { mtMatch = null; lastMt = true; return; }   // stale match, nothing to score
+      const won = winner === 0, rd = mt.tourn.round, R = MT_ROUNDS[rd];
+      mt.tourn.results.push(won);
+      mt.played++;
+      let head;
+      if (won) {
+        mtEarn(R.coins);
+        if (rd >= MT_ROUNDS.length - 1) {
+          mt.trophies++;
+          mt.tourn = null;
+          mt.draft = mtNewDraft();
+          head = '🏆 YOU WIN THE PLAYOFFS! ' + coinStr(R.coins) + ' — and TEN draft picks!';
+        } else {
+          mt.tourn.round++;
+          head = R.emoji + ' ' + R.name + ' won! ' + coinStr(R.coins) + ' — on to the ' + MT_ROUNDS[rd + 1].name + '.';
+        }
+      } else {
+        mtEarn(200);
+        mt.tourn = null;
+        head = 'Knocked out in the ' + R.name + '. ' + coinStr(200) + ' for the run — go again!';
+      }
+      mtSave();
+      document.getElementById('over-sub').textContent = head;
+      document.getElementById('again-btn').textContent = 'Continue ▶';
+      lastMt = true; mtMatch = null; careerMatch = null;
+    }
+    let lastMt = false;   // routes the over-panel Continue back into My Team
+
+    // ---- the 4x10 draft board ----
+    function mtNewDraft() {
+      const cells = [];
+      const coinPrizes = [250, 300, 400, 500, 600, 750, 900, 1000, 1200, 1500, 1800, 2200, 2600, 3500];
+      coinPrizes.forEach(function (v) { cells.push({ t: 'coins', v: v }); });
+      [['bronze', 4], ['silver', 6], ['gold', 6], ['ruby', 4], ['diamond', 2], ['legend', 1]]
+        .forEach(function (p) { for (let i = 0; i < p[1]; i++) cells.push({ t: 'card', tier: p[0] }); });
+      cells.push({ t: 'star' }, { t: 'star' }, { t: 'star' });      // +1 star on your best card
+      return { cells: EL.shuffle(cells), taken: [], picks: 10 };
+    }
+    function mtDraftTake(i) {
+      const d = mt.draft;
+      if (!d || d.picks <= 0 || d.taken.indexOf(i) >= 0) return null;
+      d.taken.push(i); d.picks--;
+      const cell = d.cells[i];
+      let label;
+      if (cell.t === 'coins') { mtEarn(cell.v); label = '+' + coinStr(cell.v); }
+      else if (cell.t === 'card') {
+        const c = makeCard(cell.tier, null, cell.tier === 'legend' ? 3 : 1);
+        mtAddCard(c);
+        label = tierOf(c).name.toUpperCase() + ' card — ' + c.name + ' (' + ovrOf(c) + ' OVR)';
+      } else {
+        // upgrade the best upgradable card you own
+        const up = mt.cards.filter(canUpgrade).sort(function (a, b) { return ovrOf(b) - ovrOf(a); })[0];
+        if (up) { up.stars++; label = '★ UPGRADE — ' + up.name + ' is now ' + ovrOf(up) + ' OVR'; }
+        else { mtEarn(1500); label = 'No card to upgrade — +' + coinStr(1500) + ' instead'; }
+      }
+      cell.label = label;
+      if (d.picks <= 0) { /* board closes */ }
+      mtSave();
+      return label;
+    }
+
+    // ---- screens ----
+    const mtEl = document.getElementById('mt'), mtCollEl = document.getElementById('mtcoll'),
+          mtStoreEl = document.getElementById('mtstore'), mtSpinEl = document.getElementById('mtspin'),
+          mtBrEl = document.getElementById('mtbracket'), mtDraftEl = document.getElementById('mtdraft');
+    const MT_PANELS = ['mt', 'mtcoll', 'mtstore', 'mtspin', 'mtbracket', 'mtdraft'];
+    function mtHideAll() { MT_PANELS.forEach(function (id) { document.getElementById(id).hidden = true; }); }
+    function openMt() {
+      mtEnsure(); state = 'select';
+      setupEl.hidden = true; overEl.hidden = true;
+      ['career', 'market', 'lineup', 'jersey', 'shop', 'packrev', 'spinwheel'].forEach(function (id) { document.getElementById(id).hidden = true; });
+      mtHideAll(); mtEl.hidden = false; renderMt(); setControls();
+    }
+    // shared/game.css forces `canvas { width:100%; height:100% }` for the game
+    // stage, so every card canvas must pin its own CSS size or it stretches.
+    function miniCard(c, w) {
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = Math.round(w * 1.4);
+      cv.style.width = w + 'px'; cv.style.height = cv.height + 'px';
+      if (c) drawCard(cv.getContext('2d'), 0, 0, cv.width, cv.height, c, false);
+      return cv;
+    }
+    function renderMt() {
+      document.getElementById('mt-coins').textContent = coinStr(mtCoins());
+      document.getElementById('mt-ovr').textContent = mtLineupReady() ? mtTeamOvr() : '–';
+      document.getElementById('mt-count').textContent = mt.cards.length;
+      const strip = document.getElementById('mt-strip'); strip.innerHTML = '';
+      mtLineupCards().forEach(function (c) {
+        const slot = document.createElement('div'); slot.className = 'slot';
+        if (c) slot.appendChild(miniCard(c, 84));
+        else { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'EMPTY'; slot.appendChild(e); }
+        strip.appendChild(slot);
+      });
+      const ban = document.getElementById('mt-banner');
+      const play = document.getElementById('mt-play');
+      if (mt.draft && mt.draft.picks > 0) {
+        ban.innerHTML = '🏆 You have <b style="color:#ffd23f">' + mt.draft.picks + ' draft picks</b> waiting!';
+        play.textContent = '🏁 Open the Draft Board';
+      } else if (!mtLineupReady()) {
+        ban.innerHTML = '<span style="color:#ff9d9d">Pick three starters in your Collection before you can play.</span>';
+        play.textContent = '🏆 Enter the Playoffs';
+      } else if (mt.tourn) {
+        ban.innerHTML = 'In the playoffs — next up: <b style="color:#ffd23f">' + MT_ROUNDS[mt.tourn.round].name + '</b>';
+        play.textContent = '▶ Continue the Playoffs';
+      } else {
+        ban.innerHTML = 'Trophies: <b style="color:#ffd23f">' + mt.trophies + '</b> · three knockout rounds, then the draft board.';
+        play.textContent = '🏆 Enter the Playoffs';
+      }
+      play.disabled = !mtLineupReady() && !(mt.draft && mt.draft.picks > 0);
+    }
+    document.getElementById('mt-play').addEventListener('click', function () {
+      mtEnsure();
+      if (mt.draft && mt.draft.picks > 0) { mtHideAll(); mtDraftEl.hidden = false; renderDraft(); return; }
+      if (!mtLineupReady()) return;
+      if (!mt.tourn) mtStartTourn();
+      mtHideAll(); mtBrEl.hidden = false; renderBracket();
+    });
+    document.getElementById('mt-coll-btn').addEventListener('click', function () { mtHideAll(); mtCollEl.hidden = false; renderColl(); });
+    document.getElementById('mt-store-btn').addEventListener('click', function () { mtHideAll(); mtStoreEl.hidden = false; renderStore(); });
+    document.getElementById('mt-close').addEventListener('click', function () { mtHideAll(); showSelect(); });
+    document.getElementById('mt-reset').addEventListener('click', function () {
+      if (!confirm('Start My Team over? Every card you have collected is lost.')) return;
+      mtNew(); renderMt();
+    });
+    document.getElementById('myteam-btn').addEventListener('click', openMt);
+
+    // ---- collection ----
+    function renderColl() {
+      document.getElementById('mc-coins').textContent = coinStr(mtCoins());
+      const grid = document.getElementById('mc-grid'); grid.innerHTML = '';
+      const sorted = mt.cards.slice().sort(function (a, b) { return ovrOf(b) - ovrOf(a); });
+      sorted.forEach(function (c) {
+        const starting = mt.lineup.indexOf(c.id) >= 0;
+        const box = document.createElement('div'); box.className = 'mt-card' + (starting ? ' starting' : '');
+        const cv = miniCard(c, 92);
+        cv.title = starting ? 'Bench' : 'Start';
+        cv.addEventListener('click', function () {
+          const at = mt.lineup.indexOf(c.id);
+          if (at >= 0) mt.lineup[at] = null;
+          else { let slot = mt.lineup.indexOf(null); if (slot < 0) slot = 2; mt.lineup[slot] = c.id; }
+          mtSave(); renderColl();
+        });
+        box.appendChild(cv);
+        const lbl = document.createElement('div'); lbl.className = 'lbl';
+        lbl.textContent = starting ? 'STARTING' : 'bench';
+        box.appendChild(lbl);
+        const up = document.createElement('button'); up.className = 'up';
+        if (canUpgrade(c)) {
+          const cost = upCost(c);
+          up.textContent = '★ ' + coinStr(cost);
+          up.disabled = mtCoins() < cost;
+          up.addEventListener('click', function () {
+            if (!mtSpend(upCost(c))) return;
+            c.stars++; mtSave(); sfx.ding(); renderColl();
+          });
+        } else { up.textContent = c.tier ? 'MAX ★' : '—'; up.disabled = true; }
+        box.appendChild(up);
+        grid.appendChild(box);
+      });
+      if (!mt.cards.length) grid.innerHTML = '<div class="sub">No cards yet — rip a pack in the Store!</div>';
+    }
+    document.getElementById('mc-back').addEventListener('click', function () { mtHideAll(); mtEl.hidden = false; renderMt(); });
+
+    // ---- store ----
+    function renderStore() {
+      document.getElementById('ms-coins').textContent = coinStr(mtCoins());
+      const wrap = document.getElementById('ms-packs'); wrap.innerHTML = '';
+      MT_PACKS.forEach(function (pk) {
+        const b = document.createElement('button');
+        b.className = 'pack-btn pk-' + (pk.key === 'elite' ? 'legend' : pk.key === 'gold' ? 'elite' : pk.key === 'silver' ? 'pro' : 'starter');
+        const best = Object.keys(pk.odds).filter(function (k) { return pk.odds[k] > 0; }).pop();
+        b.innerHTML = '<div style="font-size:1.6rem">' + pk.emoji + '</div>' +
+          '<span class="pk-name">' + pk.name + '</span>' +
+          '<span class="pk-odds">up to ' + TIER_BY[best].name + '</span>' +
+          '<span class="pk-price">' + coinStr(pk.price) + '</span>';
+        b.disabled = mtCoins() < pk.price;
+        b.addEventListener('click', function () { mtBuyPack(pk.key); });
+        wrap.appendChild(b);
+      });
+      document.getElementById('ms-spin-btn').textContent = '🎰 Superstar Spinner — ' + coinStr(MT_SPIN_PRICE);
+      document.getElementById('ms-spin-btn').disabled = mtCoins() < MT_SPIN_PRICE;
+    }
+    document.getElementById('ms-back').addEventListener('click', function () { mtHideAll(); mtEl.hidden = false; renderMt(); });
+    function mtBuyPack(key) {
+      const pk = MT_PACKS.find(function (p) { return p.key === key; });
+      if (!pk || !mtSpend(pk.price)) return;
+      const got = [];
+      for (let i = 0; i < 3; i++) { const c = makeCard(rollTier(pk.odds), null, 1); mtAddCard(c); got.push(c); }
+      mtRevealCards(pk.name + '!', got, function () { mtHideAll(); mtStoreEl.hidden = false; renderStore(); });
+    }
+    // shared reveal screen: face-down cards you tap to flip
+    function mtRevealCards(title, cards, onDone) {
+      mtHideAll();
+      const rev = document.getElementById('packrev');
+      document.getElementById('pr-title').textContent = title;
+      document.getElementById('pr-sub').textContent = 'Tap each card to flip it over!';
+      const wrap = document.getElementById('pr-cards'); wrap.innerHTML = '';
+      let left = cards.length;
+      const done = document.getElementById('pr-done');
+      done.disabled = true; done.textContent = 'Flip all the cards first…';
+      cards.forEach(function (c) {
+        const cv = document.createElement('canvas'); cv.width = 110; cv.height = 154;
+        cv.style.width = '110px'; cv.style.height = '154px';
+        const g = cv.getContext('2d');
+        drawCard(g, 0, 0, 110, 154, c, true);
+        let flipped = false;
+        cv.addEventListener('click', function () {
+          if (flipped) return; flipped = true;
+          drawCard(g, 0, 0, 110, 154, c, false);
+          if (tierOf(c).idx >= 3) sfx.three(); else sfx.ding();
+          if (--left <= 0) { done.disabled = false; done.textContent = 'Nice — back to the Store'; }
+        });
+        wrap.appendChild(cv);
+      });
+      rev.hidden = false;
+      mtPackDone = onDone;
+    }
+    let mtPackDone = null;
+
+    // ---- 3-reel superstar spinner: TIER / POSITION / STARS ----
+    const MT_TIER_REEL = [
+      { k: 'bronze', w: 34 }, { k: 'silver', w: 28 }, { k: 'gold', w: 20 },
+      { k: 'ruby', w: 11 }, { k: 'diamond', w: 5 }, { k: 'legend', w: 2 }
+    ];
+    const MT_STAR_REEL = [{ v: 1, w: 40 }, { v: 2, w: 28 }, { v: 3, w: 18 }, { v: 4, w: 10 }, { v: 5, w: 4 }];
+    function pickWeighted(list) {
+      let tot = 0; for (const o of list) tot += o.w;
+      let r = Math.random() * tot;
+      for (const o of list) { r -= o.w; if (r <= 0) return o; }
+      return list[0];
+    }
+    let mtSpinState = null;   // {t, stop:[f,f,f], res:[tierIdx,posIdx,starIdx], anim}
+    function drawReels() {
+      const cv = document.getElementById('mp-cv'), g = cv.getContext('2d');
+      const W = cv.width, H = cv.height, rw = (W - 32) / 3, rh = 120, top = 44;
+      g.clearRect(0, 0, W, H);
+      const heads = ['TIER', 'POSITION', 'STARS'];
+      const st = mtSpinState;
+      for (let i = 0; i < 3; i++) {
+        const x = 8 + i * (rw + 8);
+        g.fillStyle = '#9fb0d0'; g.font = "800 11px 'Nunito', sans-serif"; g.textAlign = 'center';
+        g.fillText(heads[i], x + rw / 2, 20);
+        g.fillStyle = '#0d1428'; roundRectOn(g, x, top, rw, rh, 8); g.fill();
+        g.strokeStyle = st && st.stop[i] <= st.t ? '#ffd23f' : '#2f4a8c'; g.lineWidth = 2; g.stroke();
+        g.save(); roundRectOn(g, x, top, rw, rh, 8); g.clip();
+        // what does this reel show right now?
+        let items, label, sub, col;
+        if (i === 0) items = TIERS.map(function (t) { return { label: t.name, col: t.cols[0] }; });
+        else if (i === 1) items = MT_POS.map(function (p) { return { label: p, col: '#9fc6ff' }; });
+        else items = [1, 2, 3, 4, 5].map(function (v) { return { label: '★'.repeat(v), col: '#ffd23f' }; });
+        let idx;
+        if (st && st.stop[i] <= st.t) idx = st.res[i];
+        else idx = Math.floor((animT * (0.55 + i * 0.13) + i * 3)) % items.length;
+        const spinning = !(st && st.stop[i] <= st.t);
+        const off = spinning ? ((animT * 9 * (1 + i * 0.2)) % 40) - 20 : 0;
+        for (let d = -1; d <= 1; d++) {
+          const it = items[((idx + d) % items.length + items.length) % items.length];
+          const yy = top + rh / 2 + d * 40 + off;
+          g.globalAlpha = d === 0 ? 1 : 0.28;
+          g.fillStyle = it.col;
+          g.font = "800 " + (i === 2 ? 15 : 17) + "px 'Nunito', sans-serif";
+          g.fillText(it.label, x + rw / 2, yy + 6);
+        }
+        g.globalAlpha = 1; g.restore();
+      }
+      // centre line
+      g.strokeStyle = 'rgba(255,210,63,0.5)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(6, top + rh / 2); g.lineTo(W - 6, top + rh / 2); g.stroke();
+    }
+    function roundRectOn(g, x, y, w, h, r) {
+      g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r);
+      g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+    }
+    function openMtSpin() {
+      mtHideAll(); mtSpinEl.hidden = false;
+      document.getElementById('mp-prize').textContent = '';
+      document.getElementById('mp-go').textContent = 'SPIN — ' + coinStr(MT_SPIN_PRICE);
+      document.getElementById('mp-go').disabled = mtCoins() < MT_SPIN_PRICE;
+      mtSpinState = null; drawReels();
+      if (!mtReelLoop) { mtReelLoop = setInterval(function () { if (!mtSpinEl.hidden) drawReels(); }, 50); }
+    }
+    let mtReelLoop = null;
+    document.getElementById('ms-spin-btn').addEventListener('click', openMtSpin);
+    document.getElementById('mp-back').addEventListener('click', function () { mtHideAll(); mtStoreEl.hidden = false; renderStore(); });
+    document.getElementById('mp-go').addEventListener('click', function () { mtDoSpin(); });
+    function mtDoSpin(force) {
+      if (mtSpinState && !mtSpinState.settled) return;
+      if (!mtSpend(MT_SPIN_PRICE)) return;
+      const tier = force ? force[0] : pickWeighted(MT_TIER_REEL).k;
+      const pos = force ? force[1] : pick(MT_POS);
+      const stars = force ? force[2] : pickWeighted(MT_STAR_REEL).v;
+      const res = [TIER_BY[tier].idx, MT_POS.indexOf(pos), stars - 1];
+      mtSpinState = { t: 0, stop: [34, 58, 86], res: res, settled: false };
+      document.getElementById('mp-prize').textContent = '';
+      document.getElementById('mp-go').disabled = true;
+      const tick = function () {
+        mtSpinState.t += 1;
+        if (mtSpinState.t === 34 || mtSpinState.t === 58) sfx.tick();
+        if (mtSpinState.t >= 86) {
+          mtSpinState.settled = true;
+          const c = makeCard(tier, pos, stars);
+          mtAddCard(c);
+          sfx.three();
+          document.getElementById('mp-prize').textContent =
+            TIER_BY[tier].name.toUpperCase() + ' ' + pos + ' ★' + stars + ' — ' + c.name + ' (' + ovrOf(c) + ' OVR)';
+          document.getElementById('mp-go').textContent = 'SPIN AGAIN — ' + coinStr(MT_SPIN_PRICE);
+          document.getElementById('mp-go').disabled = mtCoins() < MT_SPIN_PRICE;
+          drawReels();
+          return;
+        }
+        drawReels();
+        mtSpinTimer = setTimeout(tick, 34);
+      };
+      tick();
+    }
+    let mtSpinTimer = null;
+
+    // ---- bracket ----
+    function renderBracket() {
+      const wrap = document.getElementById('mb-rounds'); wrap.innerHTML = '';
+      const t = mt.tourn;
+      MT_ROUNDS.forEach(function (R, i) {
+        const row = document.createElement('div');
+        const res = t ? t.results[i] : null;
+        row.className = 'mt-round' + (res === true ? ' won' : res === false ? ' lost' : (t && t.round === i ? ' now' : ''));
+        row.innerHTML = '<span>' + R.emoji + '</span><span>' + R.name + '</span>' +
+          '<span class="rr">' + (res === true ? 'WON' : res === false ? 'OUT' : (t && t.round === i ? 'NEXT UP' : 'locked')) +
+          ' · ' + coinStr(R.coins) + '</span>';
+        wrap.appendChild(row);
+      });
+      document.getElementById('mb-sub').textContent = t
+        ? 'Your squad: ' + mtTeamOvr() + ' OVR · win all three rounds to reach the draft board.'
+        : 'Win three rounds and the draft board is yours.';
+      document.getElementById('mb-play').textContent = t ? 'Play the ' + MT_ROUNDS[t.round].name + ' ▶' : 'Start the playoffs ▶';
+    }
+    document.getElementById('mb-play').addEventListener('click', function () { mtPlayRound(); });
+    document.getElementById('mb-back').addEventListener('click', function () { mtHideAll(); mtEl.hidden = false; renderMt(); });
+
+    // ---- draft board ----
+    function renderDraft() {
+      const d = mt.draft;
+      document.getElementById('md-picks').textContent = d ? d.picks : 0;
+      const b = document.getElementById('md-board'); b.innerHTML = '';
+      if (!d) return;
+      d.cells.forEach(function (cell, i) {
+        const btn = document.createElement('button');
+        const taken = d.taken.indexOf(i) >= 0;
+        btn.className = 'draft-cell' + (taken ? ' taken' : '') + (taken && cell.t === 'coins' && cell.v < 700 ? ' dud' : '');
+        btn.textContent = taken ? (cell.t === 'coins' ? coinStr(cell.v) : cell.t === 'star' ? '★ UP' : TIER_BY[cell.tier].name) : '?';
+        btn.disabled = taken || d.picks <= 0;
+        btn.addEventListener('click', function () {
+          const label = mtDraftTake(i);
+          if (label) { document.getElementById('md-last').textContent = label; sfx.ding(); renderDraft(); }
+        });
+        b.appendChild(btn);
+      });
+      document.getElementById('md-done').textContent = d.picks > 0 ? 'Save the rest for later' : 'Done — back to My Team';
+      document.getElementById('md-sub').innerHTML = d.picks > 0
+        ? 'You have <b id="md-picks">' + d.picks + '</b> picks. Every square hides a different prize — choose wisely!'
+        : 'All picks used. Everything you won is in your Collection.';
+    }
+    document.getElementById('md-done').addEventListener('click', function () {
+      if (mt.draft && mt.draft.picks <= 0) mt.draft = null;
+      mtSave(); mtHideAll(); mtEl.hidden = false; renderMt();
+    });
+
+
     // ---------- movement / AI ----------
     function airFactor(m) { return m.z > 0 ? 0.45 : 1; }
     // tired legs: a gassed mob moves at 60% pace until they rest (or get subbed)
     function staminaFactor(m) { return 0.6 + 0.4 * (m.stamina / 100); }
+    // reaching, recovering from a whiffed reach, or getting caught on a screen all
+    // cost you a step — this is where a gamble actually hurts
+    function agility(m) {
+      let f = 1;
+      if (m.reachT > 0) f *= 0.35;
+      if (m.recoverT > 0) f *= 0.55;
+      if (m.screenT > 0) f *= 0.5;
+      return f;
+    }
     function steer(p, tx, ty, gain) {
-      const dx = tx - p.x, dy = ty - p.y, dl = Math.hypot(dx, dy) || 1, f = airFactor(p) * staminaFactor(p);
+      const dx = tx - p.x, dy = ty - p.y, dl = Math.hypot(dx, dy) || 1, f = airFactor(p) * staminaFactor(p) * agility(p);
       p.vx += (dx / dl) * p.accel * 2.4 * gain * f * dtf;
       p.vy += (dy / dl) * p.accel * 2.4 * gain * f * dtf;
     }
@@ -1866,49 +2672,106 @@
       // turbo: a real burst while the tank holds out — it torches stamina
       m.sprinting = turboHeld[side] && m.stamina > 8;
       const spr = m.sprinting ? 1.5 : 1;
-      const l = Math.hypot(ax, ay) || 1, f = airFactor(m) * staminaFactor(m);
+      const l = Math.hypot(ax, ay) || 1, f = airFactor(m) * staminaFactor(m) * agility(m);
       m.vx += (ax / l) * m.accel * 2.4 * spr * f * dtf;
       m.vy += (ay / l) * m.accel * 2.4 * spr * f * dtf;
     }
     function driveChase(p) { steer(p, ball.x, ball.y, 0.98); }
 
+    // How good is this look? An EXPECTED-POINTS read, not just a make chance —
+    // a 38% three is a better shot than a 45% long two, and the offence should
+    // know that. Normalised so ~0.9 is a wide-open layup. Both the shot decision
+    // and the pass decision are graded against it.
+    function shotQuality(o, side) {
+      const h = attackHoop(side);
+      const D = Math.hypot(h.x - o.x, h.y - o.y);
+      const three = D > THREE_R;
+      let q = D < 70 ? 0.90 : clamp(0.88 - (D - 70) * 0.0026, 0.20, 0.88);
+      if (three) q *= clamp(0.80 + (o.shoot3 - 1) * 0.45, 0.45, 1.05);
+      q *= 1 - clamp(contestOn(o, side), 0, 0.4) * 1.7;
+      q *= 0.88 + 0.12 * (o.stamina / 100);
+      if (o.takeT > 0) q *= 1.15;
+      return clamp(q * (three ? 1.5 : 1), 0, 1.4);
+    }
+    // Would a teammate be a better place for the ball right now?
+    function betterLook(side, o) {
+      const t = teams[side];
+      const openOf = function (m) {
+        let d = Infinity;
+        for (const q of teams[1 - side].onPitch) if (!q.ejected) d = Math.min(d, Math.hypot(q.x - m.x, q.y - m.y));
+        return Math.min(d, 200);
+      };
+      const mine = openOf(o) + shotQuality(o, side) * 90;
+      let best = null, bs = mine + 34;   // only give it up for a clearly better look
+      for (const m of t.onPitch) {
+        if (m === o || m.ejected) continue;
+        if (!passable(side, m)) continue;
+        if (Math.hypot(m.x - o.x, m.y - o.y) > 420) continue;
+        const sc = openOf(m) + shotQuality(m, side) * 90;
+        if (sc > bs) { bs = sc; best = m; }
+      }
+      return best;
+    }
     function driveCarrierAI(p, side) {
       const h = attackHoop(side);
       let nd = null, ndd = Infinity;
-      for (const q of teams[1 - side].onPitch) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < ndd) { ndd = d; nd = q; } }
-      // is the on-ball defender set squarely in the driving lane?
+      for (const q of teams[1 - side].onPitch) { if (q.ejected) continue; const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < ndd) { ndd = d; nd = q; } }
       const hx = h.x - p.x, hy = h.y - p.y, hl = Math.hypot(hx, hy) || 1;
-      let walled = false, sideSign = 1;
-      if (nd && ndd < 64) {
-        const ax = nd.x - p.x, ay = nd.y - p.y, al = Math.hypot(ax, ay) || 1;
-        if ((ax * hx + ay * hy) / (al * hl) > 0.72) { walled = true; sideSign = (hx * ay - hy * ax) >= 0 ? -1 : 1; }
-      }
-      if (walled && p.crossCD <= 0 && ndd < 52 && Math.random() < 0.012) {
-        // the CPU shakes loose with a dribble move of its own — ankles beware
-        aiDribbleMove(p, side);
-      } else if (walled && Math.hypot(hx, hy) > 110) {
-        // probe sideways like a real point guard instead of plowing into the chest
-        steer(p, p.x + (-hy / hl) * sideSign * 70, p.y + (hx / hl) * sideSign * 70, 0.7);
-      } else {
-        let tx = h.x + h.dir * 30, ty = h.y;
-        if (nd && ndd < 80) ty += (p.y - nd.y >= 0 ? 1 : -1) * 70;
-        steer(p, tx, ty, 0.85);
-      }
+      const D = hl;
       p.aiShootCD -= dtf; p.aiPassCD -= dtf;
-      const D = Math.hypot(h.x - p.x, h.y - p.y);
-      if (p.aiShootCD <= 0 && (D < 90 || (D < 200 && ndd > 55) || (D < THREE_R + 20 && D > THREE_R && ndd > 80 && p.shoot3 > 1))) {
+
+      // ---- where to go ----
+      if (!possFront) {
+        // push it up the floor and get into the offence before the 8 runs out
+        steer(p, h.x + h.dir * (THREE_R + 24), CY + (p.y >= CY ? 34 : -34), 0.95);
+      } else {
+        // is the on-ball defender set squarely in the driving lane?
+        let walled = false, sideSign = 1;
+        if (nd && ndd < 64) {
+          const ax = nd.x - p.x, ay = nd.y - p.y, al = Math.hypot(ax, ay) || 1;
+          if ((ax * hx + ay * hy) / (al * hl) > 0.72) { walled = true; sideSign = (hx * ay - hy * ax) >= 0 ? -1 : 1; }
+        }
+        if (walled && p.crossCD <= 0 && ndd < 52 && Math.random() < 0.004 * dtf) {
+          // the CPU shakes loose with a dribble move of its own — ankles beware
+          aiDribbleMove(p, side);
+        } else if (walled && D > 110) {
+          // probe sideways like a real point guard instead of plowing into the chest
+          steer(p, p.x + (-hy / hl) * sideSign * 70, p.y + (hx / hl) * sideSign * 70, 0.7);
+        } else {
+          let tx = h.x + h.dir * 30, ty = h.y;
+          if (nd && ndd < 80) ty += (p.y - nd.y >= 0 ? 1 : -1) * 70;
+          steer(p, tx, ty, 0.85);
+        }
+      }
+
+      // ---- what to do with it ----
+      // Patience curve: early in the clock only a great look gets up; as it winds
+      // down the bar drops until anything goes. That is what makes possessions
+      // play out instead of every touch becoming a shot.
+      const need = shotClock > 15000 ? 0.60 : shotClock > 9500 ? 0.46 : shotClock > 5000 ? 0.34 : 0.16;
+      const q = shotQuality(p, side);
+      const settled = possFront && (24000 - shotClock) > 1400;
+      if (p.aiShootCD <= 0 && settled && q >= need) {
         // release sampled near the top; elite shooters have far tighter timing,
         // scaled by the chosen computer difficulty
-        const spr = clamp(0.22 - (p.shoot3 - 0.85) * 0.25, 0.08, 0.22) * (isHumanTeam(side) ? 1 : cpuDiff().spr);
+        // widened alongside the fatter green so the CPU still misses like a human
+        const spr = clamp(0.44 - (p.shoot3 - 0.85) * 0.40, 0.17, 0.44) * (isHumanTeam(side) ? 1 : cpuDiff().spr);
         releaseShot(side, 1 + rnd(-spr, spr * 0.6), p);
-        p.aiShootCD = 140;
-      } else if (ndd < 48 && p.aiPassCD <= 0) {
-        passFrom(side, p);
-        p.aiPassCD = 120;
+        p.aiShootCD = 100;
+      } else if (p.aiPassCD <= 0) {
+        // Swing it when you're genuinely picked up, or occasionally just to move
+        // the defence. Keep this tight — a team that passes on every touch turns
+        // the game into ping-pong and hands the defence interceptions.
+        const pressured = ndd < 38;
+        if (pressured || (shotClock > 9000 && Math.random() < 0.005 * dtf)) {
+          const tgt = betterLook(side, p);
+          if (tgt) { passFrom(side, p, tgt); p.aiPassCD = 130; }
+          else if (pressured && ndd < 30) { passFrom(side, p); p.aiPassCD = 150; }
+        }
       }
     }
     function aiDribbleMove(p, side) {
-      p.crossCD = 160; p.crossT = 22;
+      p.crossCD = 240; p.crossT = 22;
       p.stamina = Math.max(0, p.stamina - 5);
       p.moveType = pick(['cross', 'spin', 'btb']);
       const h = attackHoop(side);
@@ -1916,8 +2779,8 @@
       p.vx += (hx / hl) * p.maxSpd * 2.4; p.vy += (hy / hl) * p.maxSpd * 2.4;
       let vic = null, vd = Infinity;
       for (const q of teams[1 - side].onPitch) { if (q.ejected) continue; const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < vd) { vd = d; vic = q; } }
-      if (vic && vd < 55 && vic.z <= 0) {
-        vic.stunT = 50;
+      if (vic && vd < 42 && vic.z <= 0 && Math.random() < 0.45) {
+        vic.stunT = 34;
         pops.push({ x: vic.x, y: vic.y - 40, txt: 'ANKLES! 😵', color: '#ffe066', t: 0 });
       }
     }
@@ -1926,16 +2789,83 @@
     // Off-ball mobs periodically CUT to a different spot like real players relocating.
     function driveOffBall(p, side) {
       const h = attackHoop(side);
-      const spots = [
-        { x: h.x + h.dir * THREE_R * 0.95, y: CY },
-        { x: h.x + h.dir * 56, y: Y0 + 46 },
-        { x: h.x + h.dir * 56, y: Y1 - 46 },
-      ];
+      const carrier = ball.owner;
+      // BALL SCREEN: step into the on-ball defender's path and make him fight over
+      // your body. Heavy mobs (cows, zombies) set the screens that actually stick.
+      if (carrier && carrier !== p && possFront && p.screenT2 <= 0 && p.screenCD <= 0
+          && Math.hypot(carrier.x - p.x, carrier.y - p.y) < 200 && Math.random() < 0.005 * dtf) {
+        p.screenT2 = 80; p.screenCD = 600;
+      }
+      if (carrier && carrier !== p && p.screenT2 > 0) {
+        let g = null, gd = Infinity;
+        for (const q of teams[1 - side].onPitch) { if (q.ejected) continue; const d = Math.hypot(q.x - carrier.x, q.y - carrier.y); if (d < gd) { gd = d; g = q; } }
+        if (g && gd < 140) {
+          const ax = g.x - carrier.x, ay = g.y - carrier.y, al = Math.hypot(ax, ay) || 1;
+          steer(p, g.x + ax / al * (p.r + g.r), g.y + ay / al * (p.r + g.r), 0.9);
+          if (Math.hypot(p.x - g.x, p.y - g.y) < p.r + g.r + 6) {
+            g.screenT = Math.max(g.screenT, 18 * clamp(p.mass / g.mass, 0.5, 1.6));
+            if (p.scrFx <= 0) { p.scrFx = 40; pops.push({ x: p.x, y: p.y - 40, txt: 'SCREEN!', color: SIDE_COLOR[side], t: 0 }); }
+            p.screenT2 = Math.min(p.screenT2, 10);   // contact made — now roll away
+          }
+          return;
+        }
+        p.screenT2 = 0;
+      }
+      // BASKET CUT: every so often an off-ball mob dives to the rim instead of
+      // standing on the arc. It's what makes the offence look alive.
       p.cutT = (p.cutT || 0) - dtf;
-      if (p.spotIdx == null) p.spotIdx = p.slot % 3;
-      if (p.cutT <= 0) { p.spotIdx = (p.spotIdx + (Math.random() < 0.5 ? 1 : 2)) % 3; p.cutT = 240 + rnd(0, 200); }
-      const sp = spots[p.spotIdx];
-      if (Math.hypot(sp.x - p.x, sp.y - p.y) > 26) steer(p, sp.x, sp.y, 0.6);
+      if (p.cutT <= 0 && carrier && carrier !== p && possFront && Math.random() < 0.006 * dtf) { p.cutRim = 55; p.cutT = 280 + rnd(0, 220); }
+      if (p.cutRim > 0) { p.cutRim -= dtf; steer(p, h.x + h.dir * 26, h.y, 0.9); return; }
+      // Spacing spots — wings and the top of the arc. Claimed greedily so two
+      // mates can never end up standing on the same one.
+      const spots = [
+        { x: h.x + h.dir * 235, y: CY },
+        { x: h.x + h.dir * 120, y: Y0 + 44 },
+        { x: h.x + h.dir * 120, y: Y1 - 44 },
+      ];
+      const mates = teams[side].onPitch.filter(function (m) { return !m.ejected && m !== carrier; });
+      const taken = [];
+      let mine = spots[0];
+      for (const m of mates) {
+        let bi = -1, bd = Infinity;
+        for (let i = 0; i < spots.length; i++) {
+          if (taken.indexOf(i) >= 0) continue;
+          const d = Math.hypot(spots[i].x - m.x, spots[i].y - m.y);
+          if (d < bd) { bd = d; bi = i; }
+        }
+        if (bi < 0) bi = 0;
+        taken.push(bi);
+        if (m === p) { mine = spots[bi]; break; }
+      }
+      if (Math.hypot(mine.x - p.x, mine.y - p.y) > 20) steer(p, mine.x, mine.y, 0.75);
+    }
+    // A shot is up: everyone plays the miss. Defenders take inside position and
+    // lean their man out of the way; the offence crashes from the wings. When the
+    // ball starts coming down they read the flight and go up after it.
+    function driveRebound(p, side) {
+      const sh = ball.shot, h = sh.hoop;
+      const defending = sh.side !== side;
+      if (sh.t > sh.T * 0.55) {
+        steer(p, ball.x + ball.vx * 6, ball.y + ball.vy * 6, defending ? 0.95 : 0.88);
+        const d = Math.hypot(p.x - ball.x, p.y - ball.y);
+        if (p.z <= 0 && p.aiJumpCD <= 0 && d < 44 && ball.vz < 0 && ball.z > 22 && ball.z < 78) { p.vz = 7.2; p.aiJumpCD = 45; }
+      } else {
+        const ring = defending ? 50 : 88;
+        const ang = [-0.9, 0, 0.9][(p.slot != null ? p.slot : 0) % 3];
+        steer(p, h.x + h.dir * (12 + ring * Math.cos(ang)), h.y + ring * Math.sin(ang), 0.8);
+      }
+      // BOX OUT: beat your man to the spot and put your back into him
+      if (defending && p.mark && !p.mark.ejected) {
+        const m = p.mark;
+        if (Math.hypot(m.x - p.x, m.y - p.y) < p.r + m.r + 12
+            && Math.hypot(p.x - h.x, p.y - h.y) < Math.hypot(m.x - h.x, m.y - h.y)) {
+          const ax = m.x - h.x, ay = m.y - h.y, al = Math.hypot(ax, ay) || 1;
+          const push = 0.22 * clamp(p.mass / m.mass, 0.5, 1.7) * dtf;
+          m.vx += ax / al * push; m.vy += ay / al * push;
+          m.screenT = Math.max(m.screenT, 6);
+          if (p.boxFx <= 0) { p.boxFx = 60; pops.push({ x: p.x, y: p.y - 38, txt: 'BOX OUT', color: '#cfd6ea', t: 0 }); }
+        }
+      }
     }
     function assignMarks(t) {
       const opps = teams[1 - t.side].onPitch.filter(function (q) { return !q.ejected; });
@@ -1959,7 +2889,6 @@
       const own = ownHoop(side);
       const isCarrier = ball.owner === mark;
       const press = pressing(side);
-      p.aiJumpCD -= dtf; p.stealCD -= dtf;
       if (isCarrier) {
         // real man defense: sit GOAL-SIDE with an arm's-length cushion and mirror
         // the drive — close out tight only when they're shooting or at the rim
@@ -1973,8 +2902,16 @@
           const d = Math.hypot(p.x - mark.x, p.y - mark.y);
           // contest shots with a jump (sharper CPUs contest more often)
           if (p.aiJumpCD <= 0 && d < 60 && (charging || nearHoop)) { if (p.z <= 0) p.vz = 7; p.aiJumpCD = 90 / iq; }
-          // the rare disciplined reach — mostly they just guard
-          if (d < p.r + mark.r + 18 && Math.random() < 0.004 * iq) attemptSteal(p, mark);
+          // Gamble for the ball only when it is genuinely a good idea: goal-side,
+          // the handler isn't in a move, and either the clock is dying or they are
+          // pinned near a line. Anyone in foul trouble just sits down and guards.
+          if (p.stealCD <= 0 && p.reachT <= 0 && d < reachRangeFor(p) + mark.r && canBeStolen(mark)) {
+            const pinned = mark.x < X0 + 74 || mark.x > X1 - 74 || mark.y < Y0 + 62 || mark.y > Y1 - 62;
+            const trouble = p.fouls >= 4 || (teamFouls[p.side] >= 4 && p.fouls >= 2);
+            const rate = (reachPosition(p, mark) > 0.55 ? 0.0040 : 0.0008)
+                       * (pinned ? 1.7 : 1) * (shotClock < 6000 ? 2.2 : 1) * iq * (trouble ? 0.25 : 1);
+            if (Math.random() < rate * dtf) attemptSteal(p, mark);
+          }
         }
       } else {
         // off-ball: deny goal-side, a third of the way back to our hoop —
@@ -1985,7 +2922,14 @@
     }
 
     function moveMob(m) {
-      if (m.z > 0 || m.vz > 0) { m.vz -= GRAV_Z * dtf; m.z += m.vz * dtf; if (m.z <= 0) { m.z = 0; m.vz = 0; } }
+      if (m.z > 0 || m.vz > 0) {
+        const wasFalling = m.vz;
+        m.vz -= GRAV_Z * dtf; m.z += m.vz * dtf;
+        // touchdown: squash on impact, harder the further you fell
+        if (m.z <= 0) { m.z = 0; m.vz = 0; m.landT = Math.min(14, 4 + Math.abs(wasFalling) * 1.6); }
+      }
+      // live dribble phase — keeps the ball bouncing at a believable cadence
+      m.dribPhase += (0.16 + Math.hypot(m.vx, m.vy) * 0.05) * dtf;
       m.vx *= Math.pow(0.84, dtf); m.vy *= Math.pow(0.84, dtf);
       const cap = m.maxSpd * (m.crossT > 0 ? 2.4 : (m.sprinting ? 1.4 : 1)) * (m.takeT > 0 ? 1.08 : 1) * staminaFactor(m), sp = Math.hypot(m.vx, m.vy);
       if (sp > cap) { const k = cap / sp; m.vx *= k; m.vy *= k; }
@@ -2038,7 +2982,7 @@
         if (ball.z <= 0 && ball.vz < 0) {
           ball.z = 0; ball.vz = -ball.vz * 0.55;
           if (Math.abs(ball.vz) < 1.2) ball.vz = 0;
-          if (ball.shot) { pops.push({ x: ball.x, y: ball.y - 26, txt: ball.shot.airball ? 'AIRBALL!' : 'BRICK!', color: '#ff9d9d', t: 0 }); coolOff(ball.shot.shooter); ball.shot = null; }
+          if (ball.shot) { pops.push({ x: ball.x, y: ball.y - 26, txt: ball.shot.airball ? 'AIRBALL!' : 'BRICK!', color: '#ff9d9d', t: 0 }); coolOff(ball.shot.shooter); ball.shot = null; ball.loose = true; possFront = false; }
         }
       }
       ball.vx *= Math.pow(0.99, dtf); ball.vy *= Math.pow(0.99, dtf);
@@ -2060,7 +3004,7 @@
               if (r < 0.15) {
                 pops.push({ x: q.x, y: q.y - q.r - 26, txt: 'BLOCKED!', color: SIDE_COLOR[q.side], t: 0, big: true });
                 sfx.block(); say('block', q); coolOff(sh.shooter);
-                ball.shot = null; ball.vx = -ball.vx * 0.35 + rnd(-2, 2); ball.vy = -ball.vy * 0.35 + rnd(-2, 2); ball.vz = -2; ball.freeCD = 8;
+                ball.shot = null; ball.loose = true; possFront = false; ball.vx = -ball.vx * 0.35 + rnd(-2, 2); ball.vy = -ball.vy * 0.35 + rnd(-2, 2); ball.vz = -2; ball.freeCD = 8;
               } else if (r < 0.30) {
                 // caught the arm — SHOOTING FOUL. If the shot was going in anyway
                 // the bucket COUNTS plus one FT (and-one); otherwise it's 2 free
@@ -2111,7 +3055,7 @@
             ball.vy = (ball.vy - 2 * vn * ny) * 0.45 + ny * 1.5;
             ball.vz = Math.abs(ball.vz) * 0.35;
             coolOff(sh.shooter);
-            ball.shot = null; ball.freeCD = 6; shotClock = 24000;
+            ball.shot = null; ball.freeCD = 6; ball.loose = true; shotClock = 24000; possFront = false;
             pops.push({ x: h.x, y: h.y - RIM_Z - 16, txt: 'CLANG!', color: '#ffbd6b', t: 0 });
             sfx.clang();
             return;
@@ -2219,13 +3163,14 @@
       }
       // over-and-back, 8-second backcourt + offensive 3-seconds, judged on the ball-handler
       if (live && state === 'playing' && ball.owner) {
-        const o = ball.owner, s2 = o.side;
-        const inFront = s2 === 0 ? o.x > VW / 2 + 6 : o.x < VW / 2 - 6;
-        const inBack = s2 === 0 ? o.x < VW / 2 - 6 : o.x > VW / 2 + 6;
+        const o = ball.owner, s2 = o.side, ad = attackDir(s2);
+        const inFront = (o.x - VW / 2) * ad > 6;
+        const inBack = (o.x - VW / 2) * ad < -6;
         if (inFront) possFront = true;
         else if (possFront && inBack) deadBallTurnover(1 - s2, 'OVER & BACK!');
         else if (!possFront && shotClock < 24000 - 8000) deadBallTurnover(1 - s2, '8 SECONDS!');
-        const inPaint = s2 === 0 ? (o.x > X1 - KEY_W && Math.abs(o.y - CY) < KEY_H / 2) : (o.x < X0 + KEY_W && Math.abs(o.y - CY) < KEY_H / 2);
+        const ah = attackHoop(s2);
+        const inPaint = (ah.dir === 1 ? o.x < X0 + KEY_W : o.x > X1 - KEY_W) && Math.abs(o.y - CY) < KEY_H / 2;
         if (inPaint) { paintT += dtf; if (paintT > 180) deadBallTurnover(1 - s2, '3 SECONDS!'); }
         else paintT = 0;
       }
@@ -2241,31 +3186,71 @@
         } else { shootHeld[s] = false; chargeT[s] = 0; }
       }
 
-      // scripted dunk animation
+      // scripted dunk: gather (0-.18) → soar (.18-.62) → hammer (.62-.74) → hang (.74-1)
       for (const t of teams) for (const p of t.onPitch) {
         if (!p.dunk) continue;
         const d = p.dunk; d.t += dtf; const k = Math.min(d.t / d.T, 1);
-        p.x = d.sx + (d.hx - d.sx) * k; p.y = d.sy + (d.hy - d.sy) * k;
-        p.z = Math.sin(k * Math.PI) * 42; p.vx = p.vy = 0;
+        p.vx = p.vy = 0;
+        if (k < 0.18) {                        // gather: dip and load, barely moving
+          const g = k / 0.18;
+          p.x = d.sx + (d.hx - d.sx) * g * 0.10; p.y = d.sy + (d.hy - d.sy) * g * 0.10;
+          p.z = -3 * Math.sin(g * Math.PI);     // crouch (drawn as a squash)
+        } else if (k < 0.74) {                 // soar up to the rim and throw it down
+          const g = (k - 0.18) / 0.56, e = g * g * (3 - 2 * g);
+          p.x = d.sx + (d.hx - d.sx) * (0.10 + 0.90 * e);
+          p.y = d.sy + (d.hy - d.sy) * (0.10 + 0.90 * e);
+          p.z = 62 * Math.sin(Math.min(g / 0.86, 1) * Math.PI * 0.5);
+          if (g >= 1 && !d.hit) { d.hit = true; shakeRim(HOOP[p.side === 0 ? 1 : 0], 1.3); shocks.push({ x: d.hx, y: d.hy + 26, t: 0 }); sfx.dunk(); crowdHype = 60; }
+        } else {                               // hang on the rim, then drop off
+          const g = (k - 0.74) / 0.26;
+          p.x = d.hx; p.y = d.hy; p.z = 62 * (1 - g * g);
+          d.hang = 1 - g;
+        }
         if (d.t >= d.T) {
-          p.dunk = null; p.z = 0; p.vz = 0;
+          p.dunk = null; p.z = 0; p.vz = 0; p.landT = 12;
           ball.owner = null; ball.x = d.hx; ball.y = d.hy; ball.z = RIM_Z; ball.vz = -2; ball.vx = ball.vy = 0; ball.freeCD = 20;
           basket(p.side, 2, 'DUNK! 💥 +2', p);
         }
       }
+      // rim wobble + floor shockwaves decay
+      for (let i = 0; i < 2; i++) if (rimFx[i]) { rimFx[i].t += dtf; if (rimFx[i].t > 34) rimFx[i] = null; }
+      for (let i = shocks.length - 1; i >= 0; i--) { shocks[i].t += dtf; if (shocks[i].t > 26) shocks.splice(i, 1); }
 
-      for (const t of teams) {
+      // Alternate which bench thinks first each frame. Whoever goes second reads
+      // the other team's velocities already updated for this tick, which is a real
+      // (small) edge — flipping it every frame keeps the two sides honest.
+      const think = (Math.floor(animT) % 2) ? [teams[1], teams[0]] : [teams[0], teams[1]];
+      for (const t of think) {
         const s = t.side, human = isHumanTeam(s);
         const weOwn = ball.owner && ball.owner.side === s;
         if (!weOwn) assignMarks(t);
-        let chaser = -1, cd = Infinity;
-        for (let i = 0; i < t.onPitch.length; i++) { const p = t.onPitch[i]; if (p.ejected) continue; if (human && i === t.active) continue; if (ball.owner === p) continue; const d = Math.hypot(p.x - ball.x, p.y - ball.y); if (d < cd) { cd = d; chaser = i; } }
+        // a knocked-loose ball is a scramble — the two nearest bodies go after it
+        let chaser = -1, cd = Infinity, chaser2 = -1, cd2 = Infinity;
+        for (let i = 0; i < t.onPitch.length; i++) {
+          const p = t.onPitch[i]; if (p.ejected) continue; if (human && i === t.active) continue; if (ball.owner === p) continue;
+          const d = Math.hypot(p.x - ball.x, p.y - ball.y);
+          if (d < cd) { cd2 = cd; chaser2 = chaser; cd = d; chaser = i; }
+          else if (d < cd2) { cd2 = d; chaser2 = i; }
+        }
         for (let i = 0; i < t.onPitch.length; i++) {
           const p = t.onPitch[i];
           if (p.ejected) continue;
           if (p.crossT > 0) p.crossT -= dtf;
           if (p.crossCD > 0) p.crossCD -= dtf;
           if (p.fakeCD > 0) p.fakeCD -= dtf;
+          if (p.stealCD > 0) p.stealCD -= dtf;
+          if (p.aiJumpCD > 0) p.aiJumpCD -= dtf;
+          if (p.recoverT > 0) p.recoverT -= dtf;
+          if (p.screenT > 0) p.screenT -= dtf;
+          if (p.screenT2 > 0) p.screenT2 -= dtf;
+          if (p.screenCD > 0) p.screenCD -= dtf;
+          if (p.scrFx > 0) p.scrFx -= dtf;
+          if (p.boxFx > 0) p.boxFx -= dtf;
+          if (p.shotT > 0) p.shotT -= dtf;
+          if (p.landT > 0) p.landT -= dtf;
+          if (p.celT > 0) p.celT -= dtf;
+          // the committed reach resolves halfway through the swipe, on live geometry
+          if (p.reachT > 0) { p.reachT -= dtf; if (!p.reachDone && p.reachT <= REACH_T - REACH_HIT) resolveReach(p); }
           if (p.takeT > 0) { p.takeT -= dtf; if (p.takeT <= 0) p.heat = 0; }
           p.sprinting = false;                              // driveHuman re-sets it while turbo is held
           if (p.stunT > 0) { p.stunT -= dtf; continue; }   // dazed: no driving, just coast
@@ -2279,10 +3264,13 @@
           }
           else if (ball.owner === p) driveCarrierAI(p, s);
           else if (!ball.owner && ball.passTo === p) steer(p, ball.x + ball.vx * 8, ball.y + ball.vy * 8, 0.95);
+          // shot in the air: crash the glass / box out instead of standing around
+          else if (ball.shot && ball.shot.shooter !== p) driveRebound(p, s);
           else if (weOwn) driveOffBall(p, s);
-          // chase only genuinely loose balls (rebounds/fumbles) — defenders don't
-          // teleport-read passes; interceptions only happen when a pass hits them
-          else if (!ball.owner && !ball.shot && !ball.passTo && i === chaser) driveChase(p);
+          // chase genuinely loose balls (rebounds/deflections) — defenders don't
+          // teleport-read passes; interceptions only happen when a pass hits them.
+          // A deflection is a scramble: the two nearest bodies both dive for it.
+          else if (!ball.owner && !ball.shot && !ball.passTo && (i === chaser || (ball.loose && i === chaser2))) driveChase(p);
           else driveDefense(p, s);
         }
       }
@@ -2296,7 +3284,8 @@
       for (const m of court) if (m.flash > 0) m.flash -= dtf;
       for (const t of teams) if (t.swFx && t.swFx.t < 1) t.swFx.t += dtf / 9;
 
-      if (live) updateBall();
+      // a whistle raised mid-loop (reach-in foul → free throws) stops the ball
+      if (live && state === 'playing' && freeze <= 0) updateBall();
     }
 
     // ---------- drawing ----------
@@ -2386,31 +3375,89 @@
       ctx.fillStyle = '#e8ecf3'; roundRect(bx - 6, h.y - 134, 12, 78, 4); ctx.fill();
       ctx.strokeStyle = '#8b93b0'; ctx.lineWidth = 2; roundRect(bx - 6, h.y - 134, 12, 78, 4); ctx.stroke();
       const ry = h.y - RIM_Z;
-      // net
+      // rim + net WOBBLE after a bucket or a dunk — decaying spring
+      const fx = rimFx[HOOP.indexOf(h)];
+      let wob = 0, netStretch = 0;
+      if (fx) {
+        const dec = Math.max(0, 1 - fx.t / 34);
+        wob = Math.sin(fx.t * 0.55) * 3.2 * fx.power * dec;
+        netStretch = 9 * fx.power * dec;
+      }
+      // net: strands sway with the rim and stretch when the ball goes through
       ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5;
-      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(h.x + i * 6, ry + 3); ctx.lineTo(h.x + i * 3.5, ry + 18); ctx.stroke(); }
-      ctx.beginPath(); ctx.moveTo(h.x - 7, ry + 18); ctx.lineTo(h.x + 7, ry + 18); ctx.stroke();
+      const nb = ry + 18 + netStretch;
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath(); ctx.moveTo(h.x + i * 6 + wob * 0.3, ry + 3);
+        ctx.quadraticCurveTo(h.x + i * 5 + wob, ry + 11, h.x + i * 3.5 + wob * 1.3, nb); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.moveTo(h.x - 7 + wob * 1.3, nb); ctx.lineTo(h.x + 7 + wob * 1.3, nb); ctx.stroke();
       // rim
       ctx.strokeStyle = '#e2731d'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.ellipse(h.x, ry, RIM_R, RIM_R * 0.45, 0, 0, 6.28); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(h.x + wob * 0.5, ry + Math.abs(wob) * 0.25, RIM_R, RIM_R * 0.45, 0, 0, 6.28); ctx.stroke();
+    }
+    // expanding rings on the hardwood from dunks and heavy landings
+    function drawShocks() {
+      for (const s of shocks) {
+        const k = s.t / 26;
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.45 * (1 - k)).toFixed(3) + ')';
+        ctx.lineWidth = 3 * (1 - k) + 1;
+        ctx.beginPath(); ctx.ellipse(s.x, s.y, 12 + k * 58, (12 + k * 58) * 0.34, 0, 0, 6.28); ctx.stroke();
+      }
     }
 
+    // nearest opponent close enough that the handler shields the ball from them
+    function guardedBy(p) {
+      if (!teams[1 - p.side]) return null;
+      let best = null, bd = 58;
+      for (const q of teams[1 - p.side].onPitch) {
+        if (q.ejected) continue;
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d < bd) { bd = d; best = q; }
+      }
+      return best;
+    }
     function drawMob(p, isActiveHuman) {
       const s = MOBS[p.key], x = p.x;
       const t = teams[p.side];
       const carrying = ball && ball.owner === p;
       const charging = carrying && isHumanTeam(p.side) && t.onPitch[t.active] === p && shootHeld[p.side];
-      const armsUp = charging || p.dunk || p.z > 2;
-      // gentle idle bob so mobs never stand statue-still
-      const bob = Math.sin(animT * 0.07 + p.slot * 2 + p.side * 3) * 1.4;
-      const yb = p.y - p.z - (p.z > 0 ? 0 : 0);
+      // --- pose read: what is this mob doing right now? ---
+      const dnk = p.dunk;
+      const dk = dnk ? Math.min(dnk.t / dnk.T, 1) : 0;
+      const dunkGather = dnk && dk < 0.18;                       // dipped, loading up
+      const dunkFly = dnk && dk >= 0.18 && dk < 0.74;            // in the air, arm cocked
+      const dunkHang = dnk && dk >= 0.74;                        // hanging off the rim
+      const shooting = p.shotT > 0;                              // follow-through
+      const celebrating = p.celT > 0 && !dnk;
+      const armsUp = charging || dnk || shooting || p.z > 2;
+      // guarding: someone else has the ball and you're right up on them
+      const guarding = !carrying && !dnk && p.z <= 2 && p.stunT <= 0 && ball && ball.owner
+        && ball.owner.side !== p.side && Math.hypot(ball.owner.x - p.x, ball.owner.y - p.y) < 84;
+      // charge dip: you sink into your legs as the meter climbs, then spring
+      const chargeK = charging ? Math.min(chargeT[p.side] / shotMaxFor(p), 1) : 0;
+      // squash & stretch: crouch on the charge/gather, compress on landing,
+      // stretch out at the top of a jump. sx/sy scale the whole sprite.
+      let sqY = 1, sqX = 1;
+      if (p.landT > 0) { const k = p.landT / 14; sqY = 1 - 0.26 * k; sqX = 1 + 0.20 * k; }
+      else if (dunkGather) { sqY = 0.80; sqX = 1.14; }
+      else if (charging) { sqY = 1 - 0.14 * chargeK; sqX = 1 + 0.10 * chargeK; }
+      else if (p.z > 6) { sqY = 1 + Math.min(0.14, p.z * 0.0022); sqX = 1 - Math.min(0.10, p.z * 0.0016); }
+      // gentle idle bob so mobs never stand statue-still (plus a celebration hop)
+      let bob = Math.sin(animT * 0.07 + p.slot * 2 + p.side * 3) * 1.4;
+      if (celebrating) bob += Math.abs(Math.sin(p.celT * 0.30)) * 7;
+      const yb = p.y - p.z;
       // whole sprite drawn at SC scale around the feet — keeps the court big
       ctx.save();
-      ctx.translate(p.x, p.y); ctx.scale(SC, SC); ctx.translate(-p.x, -p.y);
+      ctx.translate(p.x, p.y); ctx.scale(SC * sqX, SC * sqY); ctx.translate(-p.x, -p.y);
       if (p.ejected) ctx.globalAlpha = 0.4;   // sulking on the bench
       // spin move: the whole mob pirouettes through the dribble move
       if (p.crossT > 0 && p.moveType === 'spin') {
         ctx.translate(p.x, p.y - 24); ctx.rotate((1 - p.crossT / 22) * 6.283); ctx.translate(-p.x, -(p.y - 24));
+      }
+      // caught reaching: an off-balance stumble while you get your feet back
+      if (p.recoverT > 0 && !p.dunk && p.stunT <= 0) {
+        const w = Math.sin(p.recoverT * 0.55) * 0.11 * clamp(p.recoverT / 30, 0, 1);
+        ctx.translate(p.x, p.y); ctx.rotate(w); ctx.translate(-p.x, -p.y);
       }
       // takeover: a pulsing golden aura under a player who's caught fire
       if (p.takeT > 0 && !p.ejected) {
@@ -2445,13 +3492,70 @@
       if (p.key !== 'creeper') {
         ctx.fillStyle = p.key === 'zombie' ? s.color : s.color;
         const swing = p.z > 0 ? 0 : Math.sin(p.legPhase) * 3;
-        if (armsUp) {
+        // --- DUNK: one arm cocked way back, then hammered down through the rim ---
+        if (dnk) {
+          const back = dunkGather ? -0.5 : (dunkFly ? -1.5 + (dk - 0.18) / 0.56 * 0.7 : 0.5);
+          const dir = p.fx >= 0 ? 1 : -1;
+          ctx.save(); ctx.translate(x + dir * 7, yb - 44 - bob); ctx.rotate(dir * back);
+          roundRect(dir > 0 ? 0 : -6, -3, 6, dnk.style === 'twohand' ? 16 : 21, 2); ctx.fill();
+          ctx.restore();
+          // trailing arm: joins in on a two-hander, swings free otherwise
+          ctx.save(); ctx.translate(x - dir * 7, yb - 44 - bob);
+          ctx.rotate(-dir * (dnk.style === 'twohand' ? back : back * 0.35 + 0.4));
+          roundRect(dir > 0 ? -6 : 0, -3, 6, 16, 2); ctx.fill();
+          ctx.restore();
+        }
+        // --- SHOT: elbow under, then the follow-through hangs with the wrist snapped ---
+        else if (shooting) {
+          const k = 1 - p.shotT / 26;                        // 0 at release → 1 at the end
+          const snap = Math.min(1, k * 3.2);                 // wrist flicks over fast
+          const dir = p.fx >= 0 ? 1 : -1;
+          ctx.save(); ctx.translate(x + dir * 4, yb - 52 - bob); ctx.rotate(dir * (-0.25 + snap * 0.55));
+          roundRect(dir > 0 ? 0 : -5, -18, 5, 20, 2); ctx.fill();               // shooting arm up
+          roundRect(dir > 0 ? -1 : -4, -22 - snap * 3, 6, 5, 2); ctx.fill();    // flicked hand
+          ctx.restore();
+          roundRect(x - dir * 15 - (dir > 0 ? 0 : 5), yb - 48 - bob, 5, 14, 2); ctx.fill();   // guide hand falls away
+        }
+        else if (charging) {
+          // loading the shot: ball at the set point, elbow tucked under it
+          const lift = chargeK * 6;
+          roundRect(x - 15, yb - 44 - lift - bob, 5, 17, 2); ctx.fill();
+          roundRect(x + 10, yb - 44 - lift - bob, 5, 17, 2); ctx.fill();
+        }
+        else if (celebrating) {
+          // both fists pumped at the roof
+          const pump = Math.abs(Math.sin(p.celT * 0.30)) * 6;
+          roundRect(x - 16, yb - 58 - pump - bob, 5, 16, 2); ctx.fill();
+          roundRect(x + 11, yb - 58 - pump - bob, 5, 16, 2); ctx.fill();
+        }
+        else if (armsUp) {
           roundRect(x - 15, yb - 56 - bob, 5, 15, 2); ctx.fill();
           roundRect(x + 10, yb - 56 - bob, 5, 15, 2); ctx.fill();
+        } else if (p.reachT > 0) {
+          // one arm thrown right out at the ball — you are committed now
+          const k = 1 - p.reachT / REACH_T, len = 16 + k * 12;
+          ctx.save();
+          ctx.translate(x, yb - 28 - bob); ctx.rotate(Math.atan2(p.fy, p.fx) * 0.45);
+          roundRect(p.fx >= 0 ? 6 : -6 - len, -2.5, len, 5, 2); ctx.fill();
+          ctx.restore();
+          roundRect(p.fx >= 0 ? x - 15 : x + 10, yb - 30 - bob, 5, 13, 2); ctx.fill();
+        } else if (guarding) {
+          // defensive stance: arms out wide and low, mirroring the handler
+          const sway = Math.sin(animT * 0.11 + p.slot) * 2;
+          ctx.save(); ctx.translate(x - 13, yb - 32 - bob); ctx.rotate(-0.75 + sway * 0.03);
+          roundRect(-5, 0, 5, 15, 2); ctx.fill(); ctx.restore();
+          ctx.save(); ctx.translate(x + 13, yb - 32 - bob); ctx.rotate(0.75 - sway * 0.03);
+          roundRect(0, 0, 5, 15, 2); ctx.fill(); ctx.restore();
         } else {
           roundRect(x - 15, yb - 30 - bob + swing, 5, 13, 2); ctx.fill();
           roundRect(x + 10, yb - 30 - bob - swing, 5, 13, 2); ctx.fill();
         }
+      }
+      // the swipe arc — reads at a glance, and creepers have no arms to show it with
+      if (p.reachT > 0) {
+        const k = 1 - p.reachT / REACH_T, a0 = Math.atan2(p.fy, p.fx);
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(x, yb - 28 - bob, 24 + k * 10, a0 - 1.0 + k * 1.9, a0 - 0.45 + k * 1.9); ctx.stroke();
       }
       // head
       const hy = yb - 40 - bob;      // head centre
@@ -2485,25 +3589,51 @@
       // carried ball: held overhead when shooting/dunking, otherwise a live dribble
       // bouncing between hand and hardwood (keeps going even standing still)
       if (carrying) {
-        let bx2, by2;
-        if (charging || p.dunk || armsUp) {
+        let bx2, by2, ballR = 6.5;
+        if (dnk) {
+          // cradled overhead through the whole dunk, then slammed at the rim
+          const dir = p.fx >= 0 ? 1 : -1;
+          bx2 = x + (dunkHang ? 0 : dir * (dunkFly ? 14 - (dk - 0.18) / 0.56 * 12 : 10));
+          by2 = yb - (dunkGather ? 34 : 66) - bob;
+          ballR = 7;
+        } else if (charging) {
+          // the set point: ball rises to the forehead as the meter fills
+          bx2 = x + p.fx * 3; by2 = yb - 46 - chargeK * 18 - bob;
+        } else if (armsUp) {
           bx2 = x; by2 = yb - 62 - bob;
         } else {
-          // dribble moves: crossover whips hand-to-hand, behind-the-back loops
-          // around the body; plain dribble bounces at the lead hand
-          const dphase = p.crossT > 0 ? animT * 0.5 : animT * 0.13 + p.legPhase * 0.3;
-          const bounce = Math.abs(Math.sin(dphase));
-          if (p.crossT > 0 && p.moveType === 'btb') bx2 = x - Math.sin((1 - p.crossT / 22) * 3.14) * p.fx * 16;
-          else bx2 = p.crossT > 0 ? x + Math.sin(animT * 0.5) * 15 : x + p.fx * 14;
-          const floorY = p.y + 4, handY = yb - 22 - bob;
+          // A real dribble: the ball leaves the hand, hits the floor and comes
+          // back up. Moves reshape where it goes — crossover whips it hand to
+          // hand, between-the-legs threads it under you, spin hides it behind.
+          const bounce = Math.abs(Math.sin(p.dribPhase));
+          const mv = p.crossT > 0 ? p.moveType : null;
+          const mk = mv ? 1 - p.crossT / 22 : 0;
+          if (mv === 'btb') bx2 = x - Math.sin(mk * 3.14) * p.fx * 18;
+          else if (mv === 'cross') bx2 = x + Math.sin(mk * 6.28) * 17;
+          else if (mv === 'spin') bx2 = x - p.fx * 8 * Math.sin(mk * 3.14);
+          else {
+            // protect the ball on your outside hip when a defender is close
+            const threat = guardedBy(p);
+            const side2 = threat ? (p.x - threat.x >= 0 ? 1 : -1) : p.fx;
+            bx2 = x + (threat ? side2 * 15 : p.fx * 13);
+          }
+          const low = guardedBy(p) ? 0.62 : 1;              // keep it low under pressure
+          const floorY = p.y + 4, handY = yb - (22 + (mv === 'btb' ? -4 : 0)) * low - bob;
           by2 = floorY + (handY - floorY) * bounce;
+          ballR = 6.5 - bounce * 0.4;
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
           ctx.beginPath(); ctx.ellipse(bx2, p.y + 6, 5.5 * (1 - bounce * 0.4), 2.4, 0, 0, 6.28); ctx.fill();
+          // the dribbling hand follows the ball down and back up
+          if (p.key !== 'creeper') {
+            ctx.fillStyle = s.color;
+            const hx2 = x + (bx2 - x) * 0.72, hy2 = yb - 30 - bob + (1 - bounce) * 9;
+            roundRect(hx2 - 2.5, hy2, 5, 12, 2); ctx.fill();
+          }
         }
-        ctx.fillStyle = '#e2731d'; ctx.beginPath(); ctx.arc(bx2, by2, 6.5, 0, 6.28); ctx.fill();
+        ctx.fillStyle = '#e2731d'; ctx.beginPath(); ctx.arc(bx2, by2, ballR, 0, 6.28); ctx.fill();
         ctx.strokeStyle = '#8a3d0f'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(bx2 - 6.5, by2); ctx.lineTo(bx2 + 6.5, by2); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(bx2, by2 - 6.5); ctx.lineTo(bx2, by2 + 6.5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx2 - ballR, by2); ctx.lineTo(bx2 + ballR, by2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx2, by2 - ballR); ctx.lineTo(bx2, by2 + ballR); ctx.stroke();
       }
       // active-player marker
       if (isActiveHuman) {
@@ -2585,17 +3715,22 @@
     function drawMeter(p, side) {
       const c = Math.min(chargeT[side] / shotMaxFor(p), OVERFILL);
       const gw = greenWindowFor(p, side);
-      const w = 9, hgt = 54, mx = p.x + p.r * SC + 12, myTop = p.y - p.z - 80;
+      const w = 12, hgt = 62, mx = p.x + p.r * SC + 12, myTop = p.y - p.z - 88;
       const yFor = function (cc) { return myTop + hgt * (1 - Math.min(cc, 1)); };
       // casing
-      ctx.fillStyle = 'rgba(0,0,0,0.65)'; roundRect(mx - 2, myTop - 2, w + 4, hgt + 4, 4); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'; roundRect(mx - 3, myTop - 3, w + 6, hgt + 6, 5); ctx.fill();
+      // the GREEN AREA, drawn under the fill so you can see the target coming
+      const gTop = yFor(1), gBot = yFor(1 - gw);
+      ctx.fillStyle = 'rgba(47,191,47,0.55)';
+      ctx.fillRect(mx, gTop, w, Math.max(3, gBot - gTop));
       // fill from the bottom (turns red once you've blown past the top)
       const green = c >= 1 - gw && c <= 1 + gw * 0.4;
       ctx.fillStyle = green ? '#eaffea' : (c > 1 + gw * 0.4 ? '#ff5a5a' : '#ffd23f');
       ctx.fillRect(mx, yFor(c), w, yFor(0) - yFor(c));
-      // the tiny green area at the very top of the bar
-      ctx.fillStyle = '#2fbf2f';
-      ctx.fillRect(mx, yFor(1), w, Math.max(2, yFor(1 - gw) - yFor(1)));
+      // bright rails marking the green zone so it reads at a glance
+      ctx.strokeStyle = green ? '#eaffea' : '#4be04b'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(mx - 3, gBot); ctx.lineTo(mx + w + 3, gBot); ctx.stroke();
+      if (green) { ctx.shadowColor = '#7ed37e'; ctx.shadowBlur = 10; ctx.strokeRect(mx - 2, gTop - 1, w + 4, gBot - gTop + 2); ctx.shadowBlur = 0; }
     }
 
     // dashed line to the attacked hoop while charging — shows which basket you're aiming at
@@ -2668,6 +3803,7 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, VW, VH);
       drawCourt();
+      drawShocks();
       for (let s = 0; s < 2; s++) { const ap = activePlayer(teams[s]); if (shootHeld[s] && ball.owner === ap) drawAimGuide(ap, s); }
       for (let s = 0; s < 2; s++) for (const pl of teams[s].onPitch) if (pl.flash > 0) drawFlash(pl);
       // the bench squads watch from the sidelines
@@ -2785,7 +3921,8 @@
       if (ts == null) ts = lastTs + 16.7;
       dtMs = Math.min(Math.max(ts - lastTs, 1), 100);
       dtf = dtMs / 16.6667; lastTs = ts;
-      update(); draw();
+      if (!paused) update();
+      draw();
       requestAnimationFrame(loop);
     }
 
@@ -2827,8 +3964,55 @@
       startFT: function (side, n) { startFT(activePlayer(teams[side]), n); },
       ftFill: function (ms) { if (ft && ms != null) ft.ms = ms; return ft ? ft.ms : null; },
       turbo: function (side, on) { turboHeld[side] = !!on; },
+      // balance harness: hand both benches to the AI and run frames synchronously
+      demo: function (on) { demoMode = !!on; setControls(); return demoMode; },
+      pause: function (on) { paused = !!on; return paused; },
+      flip: function (on) { sideFlip = !!on; return sideFlip; },
+      dbg: function (reset) {
+        const c = Object.assign({}, dbg); c.to = Object.assign({}, dbg.to);
+        if (reset) { for (const k in dbg) dbg[k] = 0; dbg.to = {}; }
+        return c;
+      },
+      pops: function () { return pops.map(function (q) { return q.txt; }); },
+      poss: function () {
+        const o = ball && ball.owner;
+        const h = o ? attackHoop(o.side) : null;
+        return { possFront: possFront, shotClock: Math.round(shotClock), paintT: Math.round(paintT),
+          carrier: o ? o.side + ':' + o.slot : null,
+          D: o ? Math.round(Math.hypot(h.x - o.x, h.y - o.y)) : null,
+          q: o ? +shotQuality(o, o.side).toFixed(2) : null,
+          contest: o ? +contestOn(o, o.side).toFixed(2) : null };
+      },
+      sim: function (frames) {
+        const oldDt = dtMs, oldF = dtf;
+        dtMs = 16.6667; dtf = 1;
+        for (let i = 0; i < frames; i++) {
+          update();
+          // the harness plays free throws too, otherwise a whistle stalls the sim
+          if (state === 'ft' && ft) { ft.ms = ftMaxFor(ft.shooter) * (0.9 + Math.random() * 0.14); ftPress(); }
+        }
+        dtMs = oldDt; dtf = oldF;
+        return { state: state, score: score.slice(), period: period, clockMs: Math.round(clockMs) };
+      },
       pump: function (side) { pumpFake(side, activePlayer(teams[side])); },
       career: function () { return career; },
+      // ---- My Team harness ----
+      mt: function () { mtEnsure(); return mt; },
+      openMt: openMt,
+      mtNew: function () { mtEnsure(); mtNew(); renderMt(); return mt; },
+      mtCoins: function (n) { mtEnsure(); if (n != null) { career.money = n; saveCareer(); } return career.money; },
+      mtGive: function (tier, pos, stars) { mtEnsure(); const c = makeCard(tier, pos, stars); mtAddCard(c); return c; },
+      mtPack: mtBuyPack,
+      mtSpin: function (tier, pos, stars) { mtEnsure(); mtDoSpin(tier ? [tier, pos, stars] : null); return mtSpinState; },
+      mtSpinState: function () { return mtSpinState; },
+      mtStartTourn: function () { mtEnsure(); mtStartTourn(); return mt.tourn; },
+      mtPlay: mtPlayRound,
+      mtFinish: function (w) { mtFinish(w); return mt; },
+      mtDraftTake: function (i) { return mtDraftTake(i); },
+      mtOvr: function () { mtEnsure(); return mtTeamOvr(); },
+      ovrOf: ovrOf, upCost: upCost, tiers: TIERS, mtPacks: MT_PACKS,
+      drawCard: drawCard,
+
       startCareer: startCareerMatch,
       openCareer: openCareer,
       openShop: openShop,
